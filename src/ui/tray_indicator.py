@@ -21,6 +21,7 @@ from gi.repository import Gtk, AppIndicator3, GObject, GLib
 # Import local modules
 from speech_recognition.recognition_manager import SpeechRecognitionManager, RecognitionState
 from text_injection.text_injector import TextInjector
+from ui.keyboard_shortcuts import KeyboardShortcutManager
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,9 @@ class TrayIndicator:
         self.speech_engine = speech_engine
         self.text_injector = text_injector
         
+        # Initialize keyboard shortcut manager
+        self.shortcut_manager = KeyboardShortcutManager()
+        
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
         
@@ -62,6 +66,10 @@ class TrayIndicator:
         
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
+        
+        # Set up keyboard shortcuts
+        self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
+        self.shortcut_manager.start()
     
     def _init_icons(self):
         """Initialize the icon files for the tray indicator."""
@@ -107,6 +115,13 @@ class TrayIndicator:
         self._update_ui(RecognitionState.IDLE)
         
         return False  # Remove idle callback
+    
+    def _toggle_recognition(self):
+        """Toggle the recognition state between IDLE and LISTENING."""
+        if self.speech_engine.state == RecognitionState.IDLE:
+            self.speech_engine.start_recognition()
+        else:
+            self.speech_engine.stop_recognition()
     
     def _add_menu_item(self, label: str, callback: Callable):
         """
@@ -215,6 +230,10 @@ class TrayIndicator:
     def _quit(self):
         """Quit the application."""
         logger.info("Quitting application")
+        
+        # Stop the keyboard shortcut manager
+        self.shortcut_manager.stop()
+        
         Gtk.main_quit()
     
     def run(self):

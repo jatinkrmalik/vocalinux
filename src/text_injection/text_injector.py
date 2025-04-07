@@ -19,6 +19,7 @@ class DesktopEnvironment(Enum):
     """Enum representing the desktop environment."""
     X11 = "x11"
     WAYLAND = "wayland"
+    WAYLAND_XDOTOOL = "wayland-xdotool"  # Wayland with XWayland fallback
     UNKNOWN = "unknown"
 
 
@@ -40,7 +41,7 @@ class TextInjector:
         self.environment = self._detect_environment()
         
         # Force Wayland mode if requested
-        if wayland_mode and self.environment != DesktopEnvironment.WAYLAND:
+        if wayland_mode and self.environment == DesktopEnvironment.X11:
             logger.info("Forcing Wayland compatibility mode")
             self.environment = DesktopEnvironment.WAYLAND
         
@@ -82,16 +83,24 @@ class TextInjector:
             # Check for wtype or ydotool for Wayland
             wtype_available = shutil.which("wtype") is not None
             ydotool_available = shutil.which("ydotool") is not None
+            xdotool_available = shutil.which("xdotool") is not None
             
-            if not wtype_available and not ydotool_available:
-                logger.error("Neither wtype nor ydotool found for Wayland support. "
-                           "Please install one of them:\n"
-                           "For wtype: sudo apt install wtype\n"
-                           "For ydotool: sudo apt install ydotool")
-                raise RuntimeError("Missing required dependencies for Wayland support")
-            
-            self.wayland_tool = "wtype" if wtype_available else "ydotool"
-            logger.info(f"Using {self.wayland_tool} for Wayland text injection")
+            if wtype_available:
+                self.wayland_tool = "wtype"
+                logger.info(f"Using {self.wayland_tool} for Wayland text injection")
+            elif ydotool_available:
+                self.wayland_tool = "ydotool"
+                logger.info(f"Using {self.wayland_tool} for Wayland text injection")
+            elif xdotool_available:
+                # Fallback to xdotool with XWayland
+                self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                logger.info("No native Wayland tools found. Using xdotool with XWayland as fallback")
+            else:
+                logger.error("No text injection tools found. Please install one of:\n"
+                           "- wtype: sudo apt install wtype\n"
+                           "- ydotool: sudo apt install ydotool\n"
+                           "- xdotool: sudo apt install xdotool")
+                raise RuntimeError("Missing required dependencies for text injection")
     
     def inject_text(self, text: str):
         """
@@ -109,10 +118,18 @@ class TextInjector:
         escaped_text = self._escape_text(text)
         
         try:
-            if self.environment == DesktopEnvironment.X11:
+            if self.environment == DesktopEnvironment.X11 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
                 self._inject_with_xdotool(escaped_text)
             else:
-                self._inject_with_wayland_tool(escaped_text)
+                try:
+                    self._inject_with_wayland_tool(escaped_text)
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"Wayland tool failed: {e}. Falling back to xdotool with XWayland")
+                    if shutil.which("xdotool"):
+                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                        self._inject_with_xdotool(escaped_text)
+                    else:
+                        raise
         except Exception as e:
             logger.error(f"Failed to inject text: {e}")
     
@@ -175,12 +192,20 @@ class TextInjector:
         logger.debug(f"Injecting special key: {key}")
         
         try:
-            if self.environment == DesktopEnvironment.X11:
+            if self.environment == DesktopEnvironment.X11 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
                 subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=True)
             else:
-                if self.wayland_tool == "wtype":
-                    subprocess.run(["wtype", f"-k {key}"], check=True)
-                else:  # ydotool
-                    subprocess.run(["ydotool", "key", key], check=True)
+                try:
+                    if self.wayland_tool == "wtype":
+                        subprocess.run(["wtype", f"-k {key}"], check=True)
+                    else:  # ydotool
+                        subprocess.run(["ydotool", "key", key], check=True)
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"Wayland tool failed for special key: {e}. Falling back to xdotool")
+                    if shutil.which("xdotool"):
+                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                        subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=True)
+                    else:
+                        raise
         except Exception as e:
             logger.error(f"Failed to inject special key: {e}")

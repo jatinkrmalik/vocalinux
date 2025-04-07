@@ -27,7 +27,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "ubuntu-voice-typing=ubuntu_voice_typing.main:main",
+            "ubuntu-voice-typing=main:main",
         ],
     },
     classifiers=[
