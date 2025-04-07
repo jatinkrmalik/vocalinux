@@ -11,6 +11,7 @@ Ubuntu Voice Typing provides a user-friendly speech-to-text solution for Linux u
 - Universal compatibility across applications
 - Offline operation for privacy and reliability
 - Visual indicators for microphone status
+- Audio feedback for recognition status
 
 ## Technical Foundation
 
@@ -18,6 +19,7 @@ This project leverages existing open-source technologies:
 - Speech recognition: VOSK API / Whisper
 - Text injection: xdotool (X11) / ydotool/wtype (Wayland)
 - User interface: GTK for system tray and settings
+- Audio feedback: PulseAudio for sound notifications
 
 ## Project Structure
 
@@ -26,6 +28,11 @@ ubuntu-voice-typing/
 ├── docs/                      # Documentation
 │   ├── INSTALL.md            # Installation guide
 │   └── USER_GUIDE.md         # User guide with command reference
+├── resources/                 # Resource files
+│   └── sounds/               # Audio notification sounds
+│       ├── start_recording.mp3  # Sound when recording starts
+│       ├── stop_recording.mp3   # Sound when recording stops
+│       └── error.mp3            # Sound when an error occurs
 ├── src/                       # Source code
 │   ├── __init__.py           # Package initialization
 │   ├── main.py               # Main entry point
@@ -38,6 +45,7 @@ ubuntu-voice-typing/
 │   │   └── text_injector.py  # X11/Wayland text injection
 │   └── ui/                   # User interface components
 │       ├── __init__.py
+│       ├── audio_feedback.py  # Audio notification system
 │       ├── config_manager.py  # Configuration management
 │       ├── keyboard_shortcuts.py  # Keyboard shortcut handling
 │       └── tray_indicator.py  # System tray UI
@@ -97,6 +105,14 @@ ubuntu-voice-typing --engine whisper
 ubuntu-voice-typing --model medium
 ```
 
+### Using Voice Dictation
+
+1. Press the keyboard shortcut (default: Alt+Shift+V) to start recording
+2. You'll hear a start sound when recording begins
+3. Speak clearly into your microphone
+4. Press the same shortcut again or pause speaking to stop recording
+5. You'll hear a stop sound when recording ends
+
 ### Using Voice Commands
 
 Ubuntu Voice Typing supports various voice commands for text formatting:
@@ -130,7 +146,8 @@ Configuration is stored in `~/.config/ubuntu-voice-typing/config.json` and inclu
     },
     "ui": {
         "start_minimized": false,
-        "show_notifications": true
+        "show_notifications": true,
+        "audio_feedback": true
     },
     "advanced": {
         "debug_logging": false,
@@ -138,6 +155,16 @@ Configuration is stored in `~/.config/ubuntu-voice-typing/config.json` and inclu
     }
 }
 ```
+
+### Custom Sounds
+
+You can customize the audio feedback by replacing the sound files in the `resources/sounds/` directory:
+
+- `start_recording.mp3` - Played when recording starts
+- `stop_recording.mp3` - Played when recording stops
+- `error.mp3` - Played when an error occurs
+
+Both MP3 and WAV formats are supported, with MP3 being the primary format.
 
 ## Development
 
@@ -169,15 +196,22 @@ pytest tests/
 3. **Text Injector** (`src/text_injection/text_injector.py`)
    - Injects text into active applications
    - Supports both X11 and Wayland environments
+   - Automatically falls back to XWayland when needed
 
-4. **Tray Indicator** (`src/ui/tray_indicator.py`)
+4. **Audio Feedback** (`src/ui/audio_feedback.py`)
+   - Provides audio cues for application states
+   - Supports both MP3 and WAV formats
+   - Uses system audio players (PulseAudio/ALSA)
+
+5. **Tray Indicator** (`src/ui/tray_indicator.py`)
    - Provides system tray interface
    - Shows recognition status
    - Offers menu for control
 
-5. **Keyboard Shortcut Manager** (`src/ui/keyboard_shortcuts.py`)
+6. **Keyboard Shortcut Manager** (`src/ui/keyboard_shortcuts.py`)
    - Manages global keyboard shortcuts
    - Enables activation from any application
+   - Handles modifier key normalization
 
 ### Running Tests
 
@@ -199,6 +233,8 @@ Future development plans include:
 4. Multi-language support
 5. Better integration with popular applications
 6. Improved model management
+7. Customizable keyboard shortcuts via GUI
+8. More audio feedback options
 
 ## Contributing
 
