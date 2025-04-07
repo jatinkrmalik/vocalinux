@@ -9,6 +9,7 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 from enum import Enum
 from typing import Dict, Optional
 
@@ -65,6 +66,17 @@ class TextInjector:
                         logger.error("No fallback text injection method available")
             except Exception as e:
                 logger.warning(f"Error testing wtype: {e}, will try to use it anyway")
+                
+        # Verify XWayland fallback works - perform a test injection
+        if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+            logger.info("Testing XWayland text injection fallback")
+            try:
+                # Wait a moment to ensure any error messages are displayed before test
+                time.sleep(0.5)
+                # Try xdotool in more verbose mode for better diagnostics
+                self._test_xdotool_fallback()
+            except Exception as e:
+                logger.error(f"XWayland fallback test failed: {e}")
     
     def _detect_environment(self) -> DesktopEnvironment:
         """
@@ -117,6 +129,36 @@ class TextInjector:
                            "- ydotool: sudo apt install ydotool\n"
                            "- xdotool: sudo apt install xdotool")
                 raise RuntimeError("Missing required dependencies for text injection")
+    
+    def _test_xdotool_fallback(self):
+        """Test if xdotool is working correctly with XWayland."""
+        try:
+            # Get the DISPLAY environment variable for XWayland
+            xwayland_display = os.environ.get("DISPLAY", ":0")
+            logger.debug(f"Using DISPLAY={xwayland_display} for XWayland")
+            
+            # Try using xdotool with explicit DISPLAY setting
+            test_env = os.environ.copy()
+            test_env["DISPLAY"] = xwayland_display
+            
+            # Check if we can get active window (less intrusive test)
+            window_id = subprocess.run(
+                ["xdotool", "getwindowfocus"], 
+                env=test_env, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False
+            )
+            
+            if window_id.returncode != 0 or "failed" in window_id.stderr.lower():
+                logger.warning(f"XWayland detection test failed: {window_id.stderr}")
+                # Try to force XWayland environment more explicitly
+                test_env["GDK_BACKEND"] = "x11"
+            else:
+                logger.debug("XWayland test successful")
+        except Exception as e:
+            logger.error(f"Failed to test XWayland fallback: {e}")
     
     def inject_text(self, text: str):
         """
@@ -184,9 +226,90 @@ class TextInjector:
         Args:
             text: The text to inject (already escaped)
         """
-        cmd = ["xdotool", "type", "--clearmodifiers", text]
-        subprocess.run(cmd, check=True)
-        logger.info(f"Text injected using xdotool: '{text[:20]}...' ({len(text)} chars)")
+        # Create environment with explicit X11 settings for Wayland compatibility
+        env = os.environ.copy()
+        
+        if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+            # Force X11 backend for XWayland
+            env["GDK_BACKEND"] = "x11"
+            env["QT_QPA_PLATFORM"] = "xcb"
+            # Ensure DISPLAY is set correctly for XWayland
+            if "DISPLAY" not in env or not env["DISPLAY"]:
+                env["DISPLAY"] = ":0"
+                
+            logger.debug(f"Using XWayland with DISPLAY={env['DISPLAY']}")
+            
+            # Add a small delay to ensure text is injected properly
+            time.sleep(0.3)  # Increased delay for better reliability
+            
+            # Try to ensure the window has focus using more robust approach
+            try:
+                # Get current active window
+                active_window = subprocess.run(
+                    ["xdotool", "getactivewindow"], 
+                    env=env, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False
+                )
+                
+                if active_window.returncode == 0 and active_window.stdout.strip():
+                    window_id = active_window.stdout.strip()
+                    # Focus explicitly on that window
+                    subprocess.run(
+                        ["xdotool", "windowactivate", "--sync", window_id], 
+                        env=env, 
+                        stdout=subprocess.DEVNULL, 
+                        stderr=subprocess.DEVNULL,
+                        check=False
+                    )
+                    # Wait a moment for the focus to take effect
+                    time.sleep(0.2)
+            except Exception as e:
+                logger.debug(f"Window focus command failed: {e}")
+        
+        # Inject text using xdotool
+        try:
+            max_retries = 2
+            for retry in range(max_retries + 1):
+                try:
+                    # Inject in smaller chunks to avoid issues with very long text
+                    chunk_size = 20  # Reduced chunk size for better reliability
+                    for i in range(0, len(text), chunk_size):
+                        chunk = text[i:i+chunk_size]
+                        
+                        # First try with clearmodifiers
+                        cmd = ["xdotool", "type", "--clearmodifiers", chunk]
+                        result = subprocess.run(cmd, env=env, check=True, stderr=subprocess.PIPE, text=True)
+                        
+                        # Add a larger delay between chunks
+                        if i + chunk_size < len(text):
+                            time.sleep(0.1)
+                            
+                    logger.info(f"Text injected using xdotool: '{text[:20]}...' ({len(text)} chars)")
+                    break  # Successfully injected
+                except subprocess.CalledProcessError as chunk_error:
+                    if retry < max_retries:
+                        logger.warning(f"Retrying text injection (attempt {retry+1}/{max_retries}): {chunk_error.stderr}")
+                        time.sleep(0.5)  # Wait before retry
+                    else:
+                        raise  # Re-raise on final attempt
+            
+            # Try to reset any stuck modifiers
+            try:
+                subprocess.run(
+                    ["xdotool", "key", "--clearmodifiers", "Escape"], 
+                    env=env, 
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL,
+                    check=False
+                )
+            except Exception:
+                pass  # Ignore any errors from this command
+        except subprocess.CalledProcessError as e:
+            logger.error(f"xdotool error: {e.stderr}")
+            raise
     
     def _inject_with_wayland_tool(self, text: str):
         """
@@ -199,43 +322,6 @@ class TextInjector:
             cmd = ["wtype", text]
         else:  # ydotool
             cmd = ["ydotool", "type", text]
-        
-        try:
-            result = subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
-            logger.info(f"Text injected using {self.wayland_tool}: '{text[:20]}...' ({len(text)} chars)")
-        except subprocess.CalledProcessError as e:
-            if "compositor does not support" in e.stderr.lower():
-                logger.warning("Wayland compositor does not support virtual keyboard protocol")
-            raise
-    
-    def inject_special_key(self, key: str):
-        """
-        Inject a special key or key combination.
-        
-        Args:
-            key: The key to inject (e.g., "Return", "BackSpace", etc.)
-        """
-        logger.debug(f"Injecting special key: {key}")
-        
-        try:
-            if self.environment == DesktopEnvironment.X11 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
-                subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=True)
-                logger.info(f"Special key {key} injected using xdotool")
-            else:
-                try:
-                    if self.wayland_tool == "wtype":
-                        subprocess.run(["wtype", f"-k {key}"], check=True, stderr=subprocess.PIPE, text=True)
-                    else:  # ydotool
-                        subprocess.run(["ydotool", "key", key], check=True)
-                    logger.info(f"Special key {key} injected using {self.wayland_tool}")
-                except subprocess.CalledProcessError as e:
-                    logger.warning(f"Wayland tool failed for special key: {e}. Falling back to xdotool")
-                    if "compositor does not support" in str(e).lower() and shutil.which("xdotool"):
-                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
-                        subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=True)
-                    else:
-                        raise
-        except Exception as e:
-            logger.error(f"Failed to inject special key: {e}")
-            from ..ui.audio_feedback import play_error_sound
-            play_error_sound()  # Play error sound when key injection fails
+            
+        result = subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+        logger.info(f"Text injected using {self.wayland_tool}: '{text[:20]}...' ({len(text)} chars)")

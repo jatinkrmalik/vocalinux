@@ -16,6 +16,27 @@ from typing import Callable, List, Optional
 
 from .command_processor import CommandProcessor
 
+# Fix imports to use absolute imports instead of relative imports
+try:
+    # Try absolute import first (when installed as a package)
+    from src.ui.audio_feedback import play_start_sound, play_stop_sound, play_error_sound
+except ImportError:
+    try:
+        # Fallback for development environment
+        import sys
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+        from src.ui.audio_feedback import play_start_sound, play_stop_sound, play_error_sound
+    except ImportError:
+        # Last resort fallback - define stub functions
+        def play_start_sound():
+            logging.warning("Audio feedback not available")
+            
+        def play_stop_sound():
+            logging.warning("Audio feedback not available")
+            
+        def play_error_sound():
+            logging.warning("Audio feedback not available")
+
 logger = logging.getLogger(__name__)
 
 # Define constants
@@ -206,6 +227,9 @@ class SpeechRecognitionManager:
         logger.info("Starting speech recognition")
         self._update_state(RecognitionState.LISTENING)
         
+        # Play the start sound
+        play_start_sound()
+        
         # Set recording flag
         self.should_record = True
         self.audio_buffer = []
@@ -226,6 +250,9 @@ class SpeechRecognitionManager:
             return
         
         logger.info("Stopping speech recognition")
+        
+        # Play the stop sound
+        play_stop_sound()
         
         # Clear recording flag
         self.should_record = False
@@ -269,30 +296,34 @@ class SpeechRecognitionManager:
             # Record audio while should_record is True
             silence_counter = 0
             while self.should_record:
-                data = stream.read(CHUNK, exception_on_overflow=False)
-                self.audio_buffer.append(data)
-                
-                # Simple Voice Activity Detection (VAD)
-                # TODO: Implement proper VAD using webrtcvad or similar
-                audio_data = np.frombuffer(data, dtype=np.int16)
-                volume = np.abs(audio_data).mean()
-                
-                # Threshold based on sensitivity (1-5)
-                threshold = 500 / self.vad_sensitivity
-                
-                if volume < threshold:  # Silence
-                    silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                    if silence_counter > self.silence_timeout:
-                        logger.debug("Silence detected, stopping recognition")
-                        self._update_state(RecognitionState.PROCESSING)
-                        # Process final buffer
-                        self._process_final_buffer()
-                        # Reset for next utterance
-                        self.audio_buffer = []
+                try:
+                    data = stream.read(CHUNK, exception_on_overflow=False)
+                    self.audio_buffer.append(data)
+                    
+                    # Simple Voice Activity Detection (VAD)
+                    # TODO: Implement proper VAD using webrtcvad or similar
+                    audio_data = np.frombuffer(data, dtype=np.int16)
+                    volume = np.abs(audio_data).mean()
+                    
+                    # Threshold based on sensitivity (1-5)
+                    threshold = 500 / self.vad_sensitivity
+                    
+                    if volume < threshold:  # Silence
+                        silence_counter += CHUNK / RATE  # Convert chunks to seconds
+                        if silence_counter > self.silence_timeout:
+                            logger.debug("Silence detected, stopping recognition")
+                            self._update_state(RecognitionState.PROCESSING)
+                            # Process final buffer
+                            self._process_final_buffer()
+                            # Reset for next utterance
+                            self.audio_buffer = []
+                            silence_counter = 0
+                            self._update_state(RecognitionState.LISTENING)
+                    else:  # Speech
                         silence_counter = 0
-                        self._update_state(RecognitionState.LISTENING)
-                else:  # Speech
-                    silence_counter = 0
+                except Exception as e:
+                    logger.error(f"Error reading audio data: {e}")
+                    break
             
             # Clean up
             stream.stop_stream()
@@ -302,6 +333,7 @@ class SpeechRecognitionManager:
             
         except Exception as e:
             logger.error(f"Error in audio recording: {e}")
+            play_error_sound()
             self._update_state(RecognitionState.ERROR)
     
     def _process_final_buffer(self):
