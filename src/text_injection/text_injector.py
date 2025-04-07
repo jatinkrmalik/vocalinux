@@ -49,6 +49,22 @@ class TextInjector:
         
         # Check for required tools
         self._check_dependencies()
+        
+        # Test if wtype actually works in this environment
+        if self.environment == DesktopEnvironment.WAYLAND and hasattr(self, 'wayland_tool') and self.wayland_tool == "wtype":
+            try:
+                # Try a test with wtype
+                result = subprocess.run(["wtype", "test"], stderr=subprocess.PIPE, text=True, check=False)
+                error_output = result.stderr.lower()
+                if "compositor does not support" in error_output or result.returncode != 0:
+                    logger.warning(f"Wayland compositor does not support virtual keyboard protocol: {error_output}")
+                    if shutil.which("xdotool"):
+                        logger.info("Automatically switching to XWayland fallback with xdotool")
+                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                    else:
+                        logger.error("No fallback text injection method available")
+            except Exception as e:
+                logger.warning(f"Error testing wtype: {e}, will try to use it anyway")
     
     def _detect_environment(self) -> DesktopEnvironment:
         """
@@ -124,14 +140,17 @@ class TextInjector:
                 try:
                     self._inject_with_wayland_tool(escaped_text)
                 except subprocess.CalledProcessError as e:
-                    logger.warning(f"Wayland tool failed: {e}. Falling back to xdotool with XWayland")
-                    if shutil.which("xdotool"):
+                    logger.warning(f"Wayland tool failed: {e}. Falling back to xdotool")
+                    if "compositor does not support" in str(e).lower() and shutil.which("xdotool"):
+                        logger.info("Automatically switching to XWayland fallback permanently")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         self._inject_with_xdotool(escaped_text)
                     else:
                         raise
         except Exception as e:
             logger.error(f"Failed to inject text: {e}")
+            from ..ui.audio_feedback import play_error_sound
+            play_error_sound()  # Play error sound when text injection fails
     
     def _escape_text(self, text: str) -> str:
         """
@@ -167,6 +186,7 @@ class TextInjector:
         """
         cmd = ["xdotool", "type", "--clearmodifiers", text]
         subprocess.run(cmd, check=True)
+        logger.info(f"Text injected using xdotool: '{text[:20]}...' ({len(text)} chars)")
     
     def _inject_with_wayland_tool(self, text: str):
         """
@@ -180,7 +200,13 @@ class TextInjector:
         else:  # ydotool
             cmd = ["ydotool", "type", text]
         
-        subprocess.run(cmd, check=True)
+        try:
+            result = subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+            logger.info(f"Text injected using {self.wayland_tool}: '{text[:20]}...' ({len(text)} chars)")
+        except subprocess.CalledProcessError as e:
+            if "compositor does not support" in e.stderr.lower():
+                logger.warning("Wayland compositor does not support virtual keyboard protocol")
+            raise
     
     def inject_special_key(self, key: str):
         """
@@ -194,18 +220,22 @@ class TextInjector:
         try:
             if self.environment == DesktopEnvironment.X11 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
                 subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=True)
+                logger.info(f"Special key {key} injected using xdotool")
             else:
                 try:
                     if self.wayland_tool == "wtype":
-                        subprocess.run(["wtype", f"-k {key}"], check=True)
+                        subprocess.run(["wtype", f"-k {key}"], check=True, stderr=subprocess.PIPE, text=True)
                     else:  # ydotool
                         subprocess.run(["ydotool", "key", key], check=True)
+                    logger.info(f"Special key {key} injected using {self.wayland_tool}")
                 except subprocess.CalledProcessError as e:
                     logger.warning(f"Wayland tool failed for special key: {e}. Falling back to xdotool")
-                    if shutil.which("xdotool"):
+                    if "compositor does not support" in str(e).lower() and shutil.which("xdotool"):
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=True)
                     else:
                         raise
         except Exception as e:
             logger.error(f"Failed to inject special key: {e}")
+            from ..ui.audio_feedback import play_error_sound
+            play_error_sound()  # Play error sound when key injection fails
