@@ -27,22 +27,22 @@ ERROR_SOUND = os.path.join(SOUNDS_DIR, "error.wav")
 def _get_audio_player():
     """
     Determine the best available audio player on the system.
-    
+
     Returns:
         tuple: (player_command, format_supported)
     """
     # Check for PulseAudio paplay (preferred)
     if shutil.which("paplay"):
         return "paplay", ["wav"]
-    
+
     # Check for ALSA aplay
     if shutil.which("aplay"):
         return "aplay", ["wav"]
-    
+
     # Check for play (from SoX)
     if shutil.which("play"):
         return "play", ["wav"]
-        
+
     # Check for mplayer
     if shutil.which("mplayer"):
         return "mplayer", ["wav"]
@@ -55,40 +55,48 @@ def _get_audio_player():
 def _play_sound_file(sound_path):
     """
     Play a sound file using the best available player.
-    
+
     Args:
         sound_path: Path to the sound file
     """
     if not os.path.exists(sound_path):
         logger.warning(f"Sound file not found: {sound_path}")
         return False
-    
+
     player, formats = _get_audio_player()
     if not player:
         return False
-    
-    file_ext = os.path.splitext(sound_path)[1].lower().lstrip('.')
+
+    file_ext = os.path.splitext(sound_path)[1].lower().lstrip(".")
     if file_ext not in formats:
         logger.warning(f"Format {file_ext} not supported by {player}")
         return False
-    
+
     try:
         if player == "paplay":
-            subprocess.Popen([player, sound_path], 
-                             stdout=subprocess.DEVNULL, 
-                             stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                [player, sound_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         elif player == "aplay":
-            subprocess.Popen([player, "-q", sound_path], 
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                [player, "-q", sound_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         elif player == "mplayer":
-            subprocess.Popen([player, "-really-quiet", sound_path],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                [player, "-really-quiet", sound_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         elif player == "play":
-            subprocess.Popen([player, "-q", sound_path],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                [player, "-q", sound_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         return True
     except Exception as e:
         logger.error(f"Failed to play sound {sound_path}: {e}")
