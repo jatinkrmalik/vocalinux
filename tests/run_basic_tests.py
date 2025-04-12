@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Basic test script for Ubuntu Voice Typing.
+Basic test script for Vocalinux.
 
 This script performs basic tests of individual components
 without requiring complex dependencies like GTK or VOSK.
@@ -13,7 +13,7 @@ import tempfile
 import json
 from unittest.mock import MagicMock, patch
 
-print("Starting basic tests for Ubuntu Voice Typing")
+print("Starting basic tests for Vocalinux")
 
 # Add project root to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))

@@ -1,5 +1,5 @@
 """
-Text injection module for Ubuntu Voice Typing.
+Text injection module for Vocalinux.
 
 This module is responsible for injecting recognized text into the active
 application, supporting both X11 and Wayland environments.

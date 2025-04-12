@@ -1,16 +1,16 @@
 # User Guide
 
-This guide explains how to use Ubuntu Voice Typing effectively.
+This guide explains how to use Vocalinux effectively.
 
 ## Getting Started
 
-After installing Ubuntu Voice Typing (see the [Installation Guide](INSTALL.md)), you can start the application from the terminal or add it to your startup applications.
+After installing Vocalinux (see the [Installation Guide](INSTALL.md)), you can start the application from the terminal or add it to your startup applications.
 
 ## Basic Usage
 
 ### Starting and Stopping Voice Typing
 
-1. **Launch the application**: Run `ubuntu-voice-typing` in a terminal or launch it from your application menu
+1. **Launch the application**: Run `vocalinux` in a terminal or launch it from your application menu
 2. **Find the tray icon**: Look for the microphone icon in your system tray
 3. **Start voice typing**: Click the tray icon and select "Start Voice Typing" from the menu
 4. **Speak clearly**: As you speak, your words will be transcribed into the currently focused application
@@ -24,7 +24,7 @@ After installing Ubuntu Voice Typing (see the [Installation Guide](INSTALL.md)),
 
 ## Voice Commands
 
-Ubuntu Voice Typing supports several commands that you can speak to control formatting:
+Vocalinux supports several commands that you can speak to control formatting:
 
 | Command | Action |
 |---------|--------|
@@ -46,13 +46,13 @@ Ubuntu Voice Typing supports several commands that you can speak to control form
 3. **Moderate pace**: Don't speak too quickly or too slowly
 4. **Quiet environment**: Minimize background noise when possible
 5. **Learn commands**: Familiarize yourself with voice commands for punctuation and formatting
-6. **Use larger models**: For better accuracy, use `ubuntu-voice-typing --model medium` or `--model large`
+6. **Use larger models**: For better accuracy, use `vocalinux --model medium` or `--model large`
 
 ## Customization
 
 ### Keyboard Shortcuts
 
-Ubuntu Voice Typing supports global keyboard shortcuts for starting and stopping voice typing:
+Vocalinux supports global keyboard shortcuts for starting and stopping voice typing:
 
 1. Open the application settings from the tray icon menu
 2. Go to the "Shortcuts" tab
@@ -72,7 +72,7 @@ You can change the speech recognition model for better accuracy or faster perfor
 If you encounter issues, check the [Installation Guide](INSTALL.md) troubleshooting section or run the application with debug logging:
 
 ```bash
-ubuntu-voice-typing --debug
+vocalinux --debug
 ```
 
 Check the logs for error messages and possible solutions.
