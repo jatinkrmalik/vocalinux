@@ -36,16 +36,20 @@ jobs:
           gobject-introspection \
           libcairo-gobject2 \
           gir1.2-gtk-3.0
-        
-    - name: Install Python dependencies
+    
+    - name: Set up virtual environment
       run: |
+        python -m venv venv
+        source venv/bin/activate
         python -m pip install --upgrade pip
-        # Skip the direct PyGObject installation and use system packages
-        python -m pip install -e .
-        python -m pip install pytest pytest-cov black isort flake8
+        # Install the package in development mode with dev dependencies
+        python -m pip install -e ".[dev]"
+        echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+        echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
         
     - name: Lint with flake8
       run: |
+        source venv/bin/activate
         # stop the build if there are Python syntax errors or undefined names
         flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings
@@ -53,19 +57,23 @@ jobs:
         
     - name: Check formatting with black
       run: |
+        source venv/bin/activate
         black --check src/ tests/
         
     - name: Check import sorting with isort
       run: |
+        source venv/bin/activate
         isort --check-only --profile black src/ tests/
         
     - name: Run basic tests
       run: |
+        source venv/bin/activate
         # Make sure Python can find the 'src' module
         PYTHONPATH=$PWD python tests/run_basic_tests.py
         
     - name: Run pytest suite with coverage
       run: |
+        source venv/bin/activate
         # Make sure Python can find the 'src' module
         PYTHONPATH=$PWD pytest --cov=src tests/
         
