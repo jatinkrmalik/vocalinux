@@ -87,6 +87,11 @@ class SpeechRecognitionManager:
         self.should_record = False
         self.audio_buffer = []
         
+        # Audio device availability flag
+        self.audio_input_available = self._check_audio_input_availability()
+        if not self.audio_input_available:
+            logger.warning("No audio input devices available. Speech recognition will not function.")
+        
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
         
@@ -99,6 +104,27 @@ class SpeechRecognitionManager:
             self._init_whisper()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
+
+    def _check_audio_input_availability(self):
+        """Check if there are audio input devices available."""
+        try:
+            import pyaudio
+            p = pyaudio.PyAudio()
+            
+            # Check if there's at least one input device
+            has_input_device = False
+            for i in range(p.get_device_count()):
+                device_info = p.get_device_info_by_index(i)
+                if device_info.get('maxInputChannels', 0) > 0:
+                    has_input_device = True
+                    break
+                    
+            p.terminate()
+            return has_input_device
+            
+        except Exception as e:
+            logger.error(f"Error checking audio input devices: {e}")
+            return False
     
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
@@ -224,6 +250,12 @@ class SpeechRecognitionManager:
         if self.state != RecognitionState.IDLE:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
             return
+            
+        if not self.audio_input_available:
+            logger.error("Cannot start recognition: no audio input devices available")
+            play_error_sound()
+            self._update_state(RecognitionState.ERROR)
+            return
         
         logger.info("Starting speech recognition")
         self._update_state(RecognitionState.LISTENING)
@@ -267,30 +299,86 @@ class SpeechRecognitionManager:
         
         self._update_state(RecognitionState.IDLE)
     
+    def _find_best_input_device(self):
+        """Find the best available audio input device."""
+        try:
+            import pyaudio
+            p = pyaudio.PyAudio()
+            
+            # First look for USB devices (often better quality)
+            for i in range(p.get_device_count()):
+                device_info = p.get_device_info_by_index(i)
+                if device_info.get('maxInputChannels', 0) > 0:
+                    name = device_info.get('name', '').lower()
+                    if 'usb' in name or 'headset' in name:
+                        p.terminate()
+                        return i
+            
+            # Fall back to the default device
+            default_device = p.get_default_input_device_info()
+            if default_device and default_device.get('maxInputChannels', 0) > 0:
+                p.terminate()
+                return default_device['index']
+            
+            # Last resort: use the first available input device
+            for i in range(p.get_device_count()):
+                device_info = p.get_device_info_by_index(i)
+                if device_info.get('maxInputChannels', 0) > 0:
+                    p.terminate()
+                    return i
+            
+            p.terminate()
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error finding audio input device: {e}")
+            return None
+    
     def _record_audio(self):
         """Record audio from the microphone."""
+        audio = None
+        stream = None
         try:
             import pyaudio
             import wave
             import numpy as np
             
             # PyAudio configuration
-            CHUNK = 1024
             FORMAT = pyaudio.paInt16
             CHANNELS = 1
             RATE = 16000
+            CHUNK = 1024
             
             # Initialize PyAudio
             audio = pyaudio.PyAudio()
             
-            # Open microphone stream
-            stream = audio.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=RATE,
-                input=True,
-                frames_per_buffer=CHUNK
-            )
+            # Find suitable input device
+            device_index = self._find_best_input_device()
+            if device_index is None:
+                logger.error("No audio input device found")
+                self._update_state(RecognitionState.ERROR)
+                play_error_sound()
+                return
+            
+            # Print information about the selected device
+            device_info = audio.get_device_info_by_index(device_index)
+            logger.info(f"Using audio input device: {device_info['name']}")
+            
+            # Open microphone stream with error handling
+            try:
+                stream = audio.open(
+                    format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    frames_per_buffer=CHUNK,
+                    input_device_index=device_index
+                )
+            except Exception as e:
+                logger.error(f"Failed to open audio input stream: {e}")
+                self._update_state(RecognitionState.ERROR)
+                play_error_sound()
+                return
             
             logger.info("Audio recording started")
             
@@ -299,15 +387,18 @@ class SpeechRecognitionManager:
             while self.should_record:
                 try:
                     data = stream.read(CHUNK, exception_on_overflow=False)
-                    self.audio_buffer.append(data)
+                    
+                    # Convert to numpy array for processing
+                    audio_data = np.frombuffer(data, dtype=np.int16)
                     
                     # Simple Voice Activity Detection (VAD)
-                    # TODO: Implement proper VAD using webrtcvad or similar
-                    audio_data = np.frombuffer(data, dtype=np.int16)
                     volume = np.abs(audio_data).mean()
                     
                     # Threshold based on sensitivity (1-5)
                     threshold = 500 / self.vad_sensitivity
+                    
+                    # Add data to buffer
+                    self.audio_buffer.append(data)
                     
                     if volume < threshold:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
@@ -322,20 +413,30 @@ class SpeechRecognitionManager:
                             self._update_state(RecognitionState.LISTENING)
                     else:  # Speech
                         silence_counter = 0
+                    
+                except IOError as e:
+                    # Common error with audio devices, try to recover
+                    logger.warning(f"Audio stream IOError: {e}")
+                    time.sleep(0.1)
                 except Exception as e:
                     logger.error(f"Error reading audio data: {e}")
                     break
-            
-            # Clean up
-            stream.stop_stream()
-            stream.close()
-            audio.terminate()
-            logger.info("Audio recording stopped")
             
         except Exception as e:
             logger.error(f"Error in audio recording: {e}")
             play_error_sound()
             self._update_state(RecognitionState.ERROR)
+        finally:
+            # Clean up resources in a guaranteed way
+            try:
+                if stream is not None:
+                    stream.stop_stream()
+                    stream.close()
+                if audio is not None:
+                    audio.terminate()
+                logger.info("Audio recording resources cleaned up")
+            except Exception as cleanup_error:
+                logger.error(f"Error during audio cleanup: {cleanup_error}")
     
     def _process_final_buffer(self):
         """Process the final audio buffer after silence is detected."""

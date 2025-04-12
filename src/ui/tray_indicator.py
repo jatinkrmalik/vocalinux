@@ -75,7 +75,7 @@ class TrayIndicator:
         # Initialize keyboard shortcuts
         self.keyboard = keyboard_shortcuts.KeyboardShortcuts()
         self.keyboard.register_shortcut(
-            self.config.get_shortcut("toggle_recognition"),
+            self.config.get("shortcuts", "toggle_recognition"),
             self._toggle_recording
         )
         
@@ -94,7 +94,7 @@ class TrayIndicator:
         # Separator
         menu.append(Gtk.SeparatorMenuItem())
         
-        # Settings menu item
+        # Settings menu itemF
         settings_item = Gtk.MenuItem(label="Settings")
         settings_item.connect("activate", self._on_settings_activate)
         menu.append(settings_item)
@@ -135,6 +135,18 @@ class TrayIndicator:
             
         self._update_status(self.is_recording)
         
+    def update_recording_state(self, state):
+        """Update the recording state based on speech engine state."""
+        from ..speech_recognition.recognition_manager import RecognitionState
+        
+        # Convert RecognitionState to boolean recording state
+        is_recording = (state == RecognitionState.LISTENING or 
+                       state == RecognitionState.PROCESSING)
+        
+        # Only update if the state has changed
+        if is_recording != self.is_recording:
+            self._toggle_recording()
+        
     def _update_status(self, is_recording):
         """Update the indicator status."""
         if is_recording:
@@ -151,7 +163,7 @@ class TrayIndicator:
     def _on_settings_activate(self, _):
         """Handle settings menu item activation."""
         # Open settings dialog or config file
-        config_path = self.config.get_config_path()
+        config_path = os.path.join(config_manager.CONFIG_DIR, "config.json")
         subprocess.Popen(["xdg-open", config_path])
         
     def _on_help_activate(self, _):

@@ -34,11 +34,17 @@ class KeyboardShortcuts:
     Handles registration and triggering of keyboard shortcuts.
     """
 
-    def __init__(self):
-        """Initialize the keyboard shortcut manager."""
+    def __init__(self, default_shortcut=None):
+        """
+        Initialize the keyboard shortcut manager.
+        
+        Args:
+            default_shortcut: Optional default shortcut to register
+        """
         self.shortcuts = {}
         self.pynput_listener = None
         self.lock = threading.Lock()
+        self.default_callback = None
         
         # Check for available libraries
         if not (KEYBOARD_AVAILABLE or PYNPUT_AVAILABLE):
@@ -205,3 +211,20 @@ class KeyboardShortcuts:
         self.pynput_listener = pynput_keyboard.Listener(on_press=on_press, on_release=on_release)
         self.pynput_listener.start()
         logger.info("Started pynput keyboard listener")
+        
+    def register_callback(self, callback):
+        """
+        Register a callback for the default shortcut.
+        
+        Args:
+            callback: The function to call when the shortcut is triggered
+            
+        Returns:
+            True if registration was successful, False otherwise
+        """
+        self.default_callback = callback
+        return True
+    
+    def stop_listener(self):
+        """Stop the keyboard listener."""
+        self.unregister_all()

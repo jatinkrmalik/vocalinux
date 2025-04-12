@@ -12,9 +12,11 @@ setup(
     install_requires=[
         "vosk",  # For VOSK API speech recognition
         "pydub",  # For audio processing
+        "pyaudio",  # For audio recording and playback
         "python-xlib",  # For keyboard shortcut handling in X11
         "pynput",  # For keyboard/mouse events
         "PyGObject",  # For GTK UI
+        "numpy"  # For numerical operations
     ],
     extras_require={
         "whisper": ["whisper", "torch"],  # Optional Whisper AI support

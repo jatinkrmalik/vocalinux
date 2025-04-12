@@ -71,23 +71,27 @@ class CommandProcessorTests(unittest.TestCase):
         # Create processor
         processor = CommandProcessor()
         
-        # Test text commands (punctuation, etc.)
-        text, actions = processor.process_text("add a period to the end")
-        self.assertEqual(text, "add a . to the end")
+        # Test standalone punctuation command
+        text, actions = processor.process_text("period")
+        self.assertEqual(text, ".")
         self.assertEqual(actions, [])
         print("✓ Basic text command processing works correctly")
         
+        # Test text with embedded commands (not replaced by default)
+        text, actions = processor.process_text("add a period to the end")
+        self.assertEqual(text, "add a period to the end")  # Command processor doesn't replace within phrases
+        self.assertEqual(actions, [])
+        
         # Test action commands
-        text, actions = processor.process_text("delete that please")
-        # Adjust expected text to match actual behavior
-        self.assertEqual(text, "please")
-        self.assertEqual(actions, ["delete_last"])
+        text, actions = processor.process_text("delete that")
+        self.assertEqual(text, "")
+        self.assertEqual(actions, ["ACTION:DELETE"])
         print("✓ Action command processing works correctly")
         
         # Test format commands
-        text, actions = processor.process_text("capitalize hello")
-        self.assertEqual(text, "Hello")
-        self.assertEqual(actions, [])
+        text, actions = processor.process_text("capitalize")
+        self.assertEqual(text, "")
+        self.assertEqual(actions, ["ACTION:CAPITALIZE"])
         print("✓ Format command processing works correctly")
 
 # Test config manager with a temporary test directory

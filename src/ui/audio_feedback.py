@@ -1,113 +1,209 @@
 #!/usr/bin/env python3
 """
 Audio feedback module for Vocalinux.
+
+This module provides audio feedback for various events.
 """
 
 import logging
 import os
-import subprocess
-import sys
+import threading
+import time
 from pathlib import Path
+from typing import Optional
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
-# Determine the sounds directory
-PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DEFAULT_SOUNDS_DIR = os.path.join(PACKAGE_DIR, "resources", "sounds")
-USER_SOUNDS_DIR = os.path.expanduser("~/.local/share/vocalinux/sounds")
+# Global variable to track if PyAudio is available and working
+_audio_available = False
+_pyaudio_instance = None
 
-# Sound file paths - first check user directory, then fall back to package directory
-def get_sound_path(filename):
-    """Get the path to a sound file, preferring user sounds if available."""
-    user_path = os.path.join(USER_SOUNDS_DIR, filename)
-    default_path = os.path.join(DEFAULT_SOUNDS_DIR, filename)
+# Try to initialize PyAudio once at module load time
+try:
+    import pyaudio
+    _pyaudio_instance = pyaudio.PyAudio()
     
-    if os.path.exists(user_path):
-        return user_path
-    elif os.path.exists(default_path):
-        return default_path
+    # Test if we can open an output stream
+    device_index = None
+    for i in range(_pyaudio_instance.get_device_count()):
+        device_info = _pyaudio_instance.get_device_info_by_index(i)
+        if device_info.get('maxOutputChannels', 0) > 0:
+            device_index = i
+            break
+    
+    if device_index is not None:
+        try:
+            # Try to open a test stream
+            test_stream = _pyaudio_instance.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=44100,
+                output=True,
+                output_device_index=device_index,
+                frames_per_buffer=1024
+            )
+            test_stream.close()
+            _audio_available = True
+            logger.info(f"Audio output available using device: {_pyaudio_instance.get_device_info_by_index(device_index)['name']}")
+        except Exception as e:
+            logger.warning(f"Could not open audio output stream: {e}")
     else:
-        logger.warning(f"Sound file not found: {filename}")
-        return None
+        logger.warning("No audio output devices found")
+        
+except ImportError:
+    logger.warning("PyAudio not available, audio feedback will be disabled")
+except Exception as e:
+    logger.warning(f"Error initializing PyAudio: {e}")
 
-# Files for different notification sounds
-START_SOUND = "start_recording"
-STOP_SOUND = "stop_recording"
-ERROR_SOUND = "error"
+
+def _get_sound_file_path(sound_name: str) -> Optional[str]:
+    """
+    Get the path to a sound file.
+    
+    Args:
+        sound_name: Name of the sound file without extension
+    
+    Returns:
+        Path to the sound file, or None if not found
+    """
+    # Try to find the sound file in the resources directory
+    possible_paths = [
+        # In development environment
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "resources", "sounds", f"{sound_name}.wav"),
+        # In installed package
+        os.path.join("/usr/share/vocalinux/sounds", f"{sound_name}.wav"),
+        # In user home directory
+        os.path.join(os.path.expanduser("~"), ".local", "share", "vocalinux", "sounds", f"{sound_name}.wav"),
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    logger.warning(f"Sound file '{sound_name}' not found")
+    return None
+
+
+def play_sound(sound_name: str):
+    """
+    Play a sound file.
+    
+    Args:
+        sound_name: Name of the sound file without extension
+    """
+    if not _audio_available:
+        logger.warning("Audio feedback not available")
+        return
+    
+    sound_path = _get_sound_file_path(sound_name)
+    if not sound_path:
+        return
+    
+    try:
+        # Create a thread to avoid blocking the main thread
+        threading.Thread(
+            target=_play_sound_thread,
+            args=(sound_path,),
+            daemon=True
+        ).start()
+    except Exception as e:
+        logger.error(f"Error playing sound: {e}")
+
+
+def _play_sound_thread(sound_path: str):
+    """
+    Play a sound file in a separate thread.
+    
+    Args:
+        sound_path: Path to the sound file
+    """
+    try:
+        import wave
+        
+        # Open the wave file
+        with wave.open(sound_path, 'rb') as wf:
+            # Create PyAudio stream for this file
+            if _pyaudio_instance is None:
+                logger.error("PyAudio not initialized")
+                return
+            
+            # Find a suitable output device
+            device_index = None
+            for i in range(_pyaudio_instance.get_device_count()):
+                device_info = _pyaudio_instance.get_device_info_by_index(i)
+                if device_info.get('maxOutputChannels', 0) > 0:
+                    device_index = i
+                    break
+            
+            if device_index is None:
+                logger.error("No audio output device available")
+                return
+                
+            try:
+                stream = _pyaudio_instance.open(
+                    format=_pyaudio_instance.get_format_from_width(wf.getsampwidth()),
+                    channels=wf.getnchannels(),
+                    rate=wf.getframerate(),
+                    output=True,
+                    output_device_index=device_index
+                )
+                
+                # Read and play the sound
+                chunk_size = 1024
+                data = wf.readframes(chunk_size)
+                
+                while data:
+                    stream.write(data)
+                    data = wf.readframes(chunk_size)
+                
+                # Clean up
+                stream.stop_stream()
+                stream.close()
+                
+            except Exception as e:
+                logger.error(f"PyAudio error: {e}")
+                
+    except Exception as e:
+        logger.error(f"Error playing sound: {e}")
+
+
+def play_start_sound():
+    """Play the sound for starting recording."""
+    play_sound("start_recording")
+
+
+def play_stop_sound():
+    """Play the sound for stopping recording."""
+    play_sound("stop_recording")
+
+
+def play_error_sound():
+    """Play the sound for error."""
+    play_sound("error")
+
 
 class AudioFeedback:
     """
-    Audio feedback system for application events.
+    Audio feedback manager.
     
-    Plays sounds for different application events like
-    starting/stopping recording and errors.
+    This class manages audio feedback for the application.
     """
-
+    
     def __init__(self):
-        """Initialize the audio feedback system."""
-        self.enabled = True
+        """Initialize the audio feedback manager."""
+        self.enabled = _audio_available
         
-        # Create the user sounds directory if it doesn't exist
-        os.makedirs(USER_SOUNDS_DIR, exist_ok=True)
-        
-    def enable(self):
-        """Enable audio feedback."""
-        self.enabled = True
-        
-    def disable(self):
-        """Disable audio feedback."""
-        self.enabled = False
-        
-    def play_sound(self, sound_name):
-        """
-        Play a sound.
-        
-        Args:
-            sound_name: The name of the sound to play (without extension)
-        """
         if not self.enabled:
-            return
-            
-        # Check for mp3 first, then fall back to wav
-        for ext in ["mp3", "wav"]:
-            sound_path = get_sound_path(f"{sound_name}.{ext}")
-            if sound_path:
-                break
-        
-        if not sound_path:
-            logger.error(f"No sound file found for {sound_name}")
-            return
-            
-        try:
-            # Use different players depending on platform
-            command = None
-            
-            if sys.platform == "linux":
-                # Try paplay (PulseAudio) first, then fall back to aplay (ALSA)
-                if os.path.exists("/usr/bin/paplay"):
-                    command = ["paplay", sound_path]
-                elif os.path.exists("/usr/bin/aplay"):
-                    command = ["aplay", "-q", sound_path]
-            
-            if command:
-                # Run the command in the background
-                subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                logger.debug(f"Playing sound: {sound_path}")
-            else:
-                logger.warning("No suitable audio player found")
-                
-        except Exception as e:
-            logger.error(f"Failed to play sound {sound_name}: {str(e)}")
-            
+            logger.warning("Audio feedback is disabled due to missing dependencies or device issues")
+    
     def play_start(self):
-        """Play the recording start sound."""
-        self.play_sound(START_SOUND)
-        
+        """Play the start recording sound."""
+        play_start_sound()
+    
     def play_stop(self):
-        """Play the recording stop sound."""
-        self.play_sound(STOP_SOUND)
-        
+        """Play the stop recording sound."""
+        play_stop_sound()
+    
     def play_error(self):
         """Play the error sound."""
-        self.play_sound(ERROR_SOUND)
+        play_error_sound()
