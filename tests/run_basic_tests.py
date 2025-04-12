@@ -6,11 +6,11 @@ This script performs basic tests of individual components
 without requiring complex dependencies like GTK or VOSK.
 """
 
+import json
 import os
 import sys
-import unittest
 import tempfile
-import json
+import unittest
 from unittest.mock import MagicMock, patch
 
 print("Starting basic tests for Vocalinux")
@@ -29,7 +29,7 @@ class TextInjectorTests(unittest.TestCase):
     def test_environment_detection_x11(self, mock_environ_get, mock_which):
         """Test environment detection for X11."""
         # Import here to avoid loading all dependencies
-        from src.text_injection.text_injector import TextInjector, DesktopEnvironment
+        from src.text_injection.text_injector import DesktopEnvironment, TextInjector
 
         # Mock environment variables for X11
         mock_environ_get.return_value = "x11"
@@ -47,7 +47,7 @@ class TextInjectorTests(unittest.TestCase):
     def test_environment_detection_wayland(self, mock_environ_get, mock_which):
         """Test environment detection for Wayland."""
         # Import here to avoid loading all dependencies
-        from src.text_injection.text_injector import TextInjector, DesktopEnvironment
+        from src.text_injection.text_injector import DesktopEnvironment, TextInjector
 
         # Mock environment variables for Wayland
         mock_environ_get.return_value = "wayland"
@@ -120,7 +120,7 @@ class ConfigManagerTests(unittest.TestCase):
     def test_config_defaults(self):
         """Test that default configuration values are set correctly."""
         # Import config manager
-        from src.ui.config_manager import ConfigManager, DEFAULT_CONFIG
+        from src.ui.config_manager import DEFAULT_CONFIG, ConfigManager
 
         # Create config manager
         config = ConfigManager()

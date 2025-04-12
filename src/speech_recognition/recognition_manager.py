@@ -20,9 +20,9 @@ from .command_processor import CommandProcessor
 try:
     # Try absolute import first (when installed as a package)
     from src.ui.audio_feedback import (
+        play_error_sound,
         play_start_sound,
         play_stop_sound,
-        play_error_sound,
     )
 except ImportError:
     try:
@@ -33,9 +33,9 @@ except ImportError:
             0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
         )
         from src.ui.audio_feedback import (
+            play_error_sound,
             play_start_sound,
             play_stop_sound,
-            play_error_sound,
         )
     except ImportError:
         # Last resort fallback - define stub functions
@@ -117,7 +117,7 @@ class SpeechRecognitionManager:
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
         try:
-            from vosk import Model, KaldiRecognizer
+            from vosk import KaldiRecognizer, Model
 
             self.vosk_model_path = self._get_vosk_model_path()
 
@@ -166,9 +166,10 @@ class SpeechRecognitionManager:
 
     def _download_vosk_model(self):
         """Download the VOSK model if it doesn't exist."""
+        import zipfile
+
         import requests
         import tqdm
-        import zipfile
 
         model_urls = {
             "small": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
@@ -295,9 +296,10 @@ class SpeechRecognitionManager:
     def _record_audio(self):
         """Record audio from the microphone."""
         try:
-            import pyaudio
             import wave
+
             import numpy as np
+            import pyaudio
 
             # PyAudio configuration
             CHUNK = 1024

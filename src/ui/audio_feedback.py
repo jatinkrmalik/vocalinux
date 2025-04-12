@@ -6,8 +6,8 @@ This module provides audio feedback for various recognition states.
 
 import logging
 import os
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
