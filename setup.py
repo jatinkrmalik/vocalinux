@@ -15,6 +15,9 @@ setup(
         "python-xlib",  # For keyboard shortcut handling in X11
         "pynput",  # For keyboard/mouse events
         "PyGObject",  # For GTK UI
+        "requests",  # For downloading models
+        "tqdm",  # For progress bars during downloads
+        "numpy" # For numerical operations
     ],
     extras_require={
         "whisper": ["whisper", "torch"],  # Optional Whisper AI support
