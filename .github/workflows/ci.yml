@@ -21,8 +21,19 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+        # Removed cache: 'pip' which was causing the issue
         
+    - name: Generate requirements.txt for caching
+      run: |
+        # Create a simple requirements.txt from setup.py for the action to find
+        echo "# Generated requirements from setup.py" > requirements.txt
+        echo "vosk" >> requirements.txt
+        echo "pydub" >> requirements.txt
+        echo "pytest" >> requirements.txt
+        echo "black" >> requirements.txt
+        echo "isort" >> requirements.txt
+        echo "flake8" >> requirements.txt
+    
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -32,10 +43,8 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         # Install the package in development mode
-        python -m pip install -e ".[dev]"
-        # Create a requirements.txt file for dependency caching
-        python -c "from setuptools import setup; setup()" egg_info
-        if [ -f setup.py ]; then pip install -e .; fi
+        python -m pip install -e .
+        python -m pip install pytest pytest-cov black isort flake8
         
     - name: Lint with flake8
       run: |
