@@ -62,11 +62,13 @@ jobs:
         
     - name: Run basic tests
       run: |
-        python tests/run_basic_tests.py
+        # Make sure Python can find the 'src' module
+        PYTHONPATH=$PWD python tests/run_basic_tests.py
         
     - name: Run pytest suite with coverage
       run: |
-        pytest --cov=src tests/
+        # Make sure Python can find the 'src' module
+        PYTHONPATH=$PWD pytest --cov=src tests/
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
