@@ -1,5 +1,5 @@
 """
-Audio feedback module for Ubuntu Voice Typing.
+Audio feedback module for Vocalinux.
 
 This module provides audio feedback for various recognition states.
 """

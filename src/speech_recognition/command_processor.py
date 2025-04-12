@@ -1,5 +1,5 @@
 """
-Command processor for Ubuntu Voice Typing.
+Command processor for Vocalinux.
 
 This module processes text commands from speech recognition, such as
 "new line", "period", etc.

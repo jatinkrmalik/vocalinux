@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide provides instructions for installing and setting up Ubuntu Voice Typing.
+This guide provides instructions for installing and setting up Vocalinux.
 
 ## Requirements
 
@@ -25,8 +25,8 @@ sudo apt install ydotool python3-pip python3-gi gir1.2-appindicator3-0.1
 ### 2. Clone the Repository
 
 ```bash
-git clone https://github.com/ubuntu-voice-typing/ubuntu-voice-typing.git
-cd ubuntu-voice-typing
+git clone https://github.com/jatinkrmalik/vocalinux.git
+cd vocalinux
 ```
 
 ### 3. Install Python Dependencies
@@ -46,16 +46,16 @@ pip3 install --user ".[dev]"
 
 ```bash
 # Basic usage
-ubuntu-voice-typing
+vocalinux
 
 # With debug logging
-ubuntu-voice-typing --debug
+vocalinux --debug
 
 # With Whisper instead of VOSK
-ubuntu-voice-typing --engine whisper
+vocalinux --engine whisper
 
 # Force Wayland mode
-ubuntu-voice-typing --wayland
+vocalinux --wayland
 ```
 
 ## Advanced Installation
@@ -65,9 +65,9 @@ ubuntu-voice-typing --wayland
 By default, a small model will be downloaded and used. You can use larger models for improved accuracy:
 
 ```bash
-ubuntu-voice-typing --model medium
+vocalinux --model medium
 # or
-ubuntu-voice-typing --model large
+vocalinux --model large
 ```
 
 Note that larger models require more RAM and may have longer initialization times, but provide better recognition accuracy.

@@ -2,10 +2,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="ubuntu-voice-typing",
+    name="vocalinux",
     version="0.1.0",
-    description="A seamless voice dictation system for Ubuntu",
-    author="Ubuntu Voice Typing Team",
+    description="A seamless voice dictation system for Linux",
+    author="Vocalinux Team",
     author_email="project@example.com",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
@@ -15,6 +15,9 @@ setup(
         "python-xlib",  # For keyboard shortcut handling in X11
         "pynput",  # For keyboard/mouse events
         "PyGObject",  # For GTK UI
+        "requests",  # For downloading models
+        "tqdm",  # For progress bars during downloads
+        "numpy" # For numerical operations
     ],
     extras_require={
         "whisper": ["whisper", "torch"],  # Optional Whisper AI support
@@ -27,7 +30,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "ubuntu-voice-typing=main:main",
+            "vocalinux=main:main",
         ],
     },
     classifiers=[
