@@ -21,28 +21,27 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        # Removed cache: 'pip' which was causing the issue
         
-    - name: Generate requirements.txt for caching
-      run: |
-        # Create a simple requirements.txt from setup.py for the action to find
-        echo "# Generated requirements from setup.py" > requirements.txt
-        echo "vosk" >> requirements.txt
-        echo "pydub" >> requirements.txt
-        echo "pytest" >> requirements.txt
-        echo "black" >> requirements.txt
-        echo "isort" >> requirements.txt
-        echo "flake8" >> requirements.txt
-    
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y xdotool python3-gi gir1.2-appindicator3-0.1
+        sudo apt-get install -y \
+          xdotool \
+          python3-gi \
+          gir1.2-appindicator3-0.1 \
+          libcairo2-dev \
+          pkg-config \
+          python3-dev \
+          libgirepository1.0-dev \
+          libcairo-gobject2 \
+          gir1.2-gtk-3.0
         
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install the package in development mode
+        # Create a workaround to install PyGObject and dependencies first
+        python -m pip install pycairo PyGObject
+        # Now install the package in development mode
         python -m pip install -e .
         python -m pip install pytest pytest-cov black isort flake8
         
