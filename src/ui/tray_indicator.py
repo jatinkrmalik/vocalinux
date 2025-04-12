@@ -1,5 +1,5 @@
 """
-System tray indicator module for Ubuntu Voice Typing.
+System tray indicator module for Vocalinux.
 
 This module provides a system tray indicator for controlling the speech
 recognition process and displaying its status.
@@ -26,8 +26,8 @@ from ui.keyboard_shortcuts import KeyboardShortcutManager
 logger = logging.getLogger(__name__)
 
 # Define constants
-APP_ID = "ubuntu-voice-typing"
-ICON_DIR = os.path.expanduser("~/.local/share/ubuntu-voice-typing/icons")
+APP_ID = "vocalinux"
+ICON_DIR = os.path.expanduser("~/.local/share/vocalinux/icons")
 DEFAULT_ICON = "microphone-off"
 ACTIVE_ICON = "microphone"
 PROCESSING_ICON = "microphone-process"
@@ -35,7 +35,7 @@ PROCESSING_ICON = "microphone-process"
 
 class TrayIndicator:
     """
-    System tray indicator for Ubuntu Voice Typing.
+    System tray indicator for Vocalinux.
     
     This class provides a system tray icon with a menu for controlling
     the speech recognition process.
@@ -210,11 +210,11 @@ class TrayIndicator:
         logger.debug("About clicked")
         
         about_dialog = Gtk.AboutDialog()
-        about_dialog.set_program_name("Ubuntu Voice Typing")
+        about_dialog.set_program_name("Vocalinux")
         about_dialog.set_version("0.1.0")
-        about_dialog.set_copyright("© 2025 Ubuntu Voice Typing Team")
+        about_dialog.set_copyright("© 2025 Vocalinux Team")
         about_dialog.set_comments("A seamless voice dictation system for Ubuntu")
-        about_dialog.set_website("https://github.com/ubuntu-voice-typing")
+        about_dialog.set_website("https://github.com/vocalinux")
         about_dialog.set_website_label("GitHub Repository")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
         

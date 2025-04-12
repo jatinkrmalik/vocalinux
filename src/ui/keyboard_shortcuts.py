@@ -1,5 +1,5 @@
 """
-Keyboard shortcut manager for Ubuntu Voice Typing.
+Keyboard shortcut manager for Vocalinux.
 
 This module provides global keyboard shortcut functionality to
 start/stop speech recognition with a keystroke.

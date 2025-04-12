@@ -2,10 +2,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="ubuntu-voice-typing",
+    name="vocalinux",
     version="0.1.0",
-    description="A seamless voice dictation system for Ubuntu",
-    author="Ubuntu Voice Typing Team",
+    description="A seamless voice dictation system for Linux",
+    author="Vocalinux Team",
     author_email="project@example.com",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
@@ -27,7 +27,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "ubuntu-voice-typing=main:main",
+            "vocalinux=main:main",
         ],
     },
     classifiers=[

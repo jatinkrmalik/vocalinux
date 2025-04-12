@@ -1,11 +1,11 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Ubuntu Voice Typing
-Comment=Voice dictation system for Ubuntu
+Name=Vocalinux
+Comment=Voice dictation system for Linux
 GenericName=Voice Typing
-Exec=ubuntu-voice-typing
-Icon=/usr/share/icons/hicolor/scalable/apps/ubuntu-voice-typing.svg
+Exec=vocalinux
+Icon=/usr/share/icons/hicolor/scalable/apps/vocalinux.svg
 Terminal=false
 Categories=Utility;Accessibility;
 Keywords=voice;typing;dictation;speech;recognition;

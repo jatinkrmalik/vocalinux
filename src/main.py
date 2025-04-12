@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Main entry point for Ubuntu Voice Typing application.
+Main entry point for Vocalinux application.
 """
 
 import argparse
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Ubuntu Voice Typing")
+    parser = argparse.ArgumentParser(description="Vocalinux")
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug logging"
     )
@@ -54,7 +54,7 @@ def main():
         logger.debug("Debug logging enabled")
     
     # Initialize main components
-    logger.info("Initializing Ubuntu Voice Typing...")
+    logger.info("Initializing Vocalinux...")
     
     # Initialize speech recognition engine
     speech_engine = recognition_manager.SpeechRecognitionManager(

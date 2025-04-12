@@ -1,5 +1,5 @@
 """
-Basic tests for the Ubuntu Voice Typing application.
+Basic tests for the Vocalinux application.
 """
 
 import unittest
