@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-Speech recognition manager module for Ubuntu Voice Typing.
+Speech recognition manager module for Vocalinux.
 
 This module provides a unified interface to different speech recognition engines,
 currently supporting VOSK and Whisper.
@@ -40,7 +41,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Define constants
-MODELS_DIR = os.path.expanduser("~/.local/share/ubuntu-voice-typing/models")
+MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
 
 
 class RecognitionState(Enum):

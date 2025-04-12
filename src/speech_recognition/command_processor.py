@@ -1,173 +1,181 @@
+#!/usr/bin/env python3
 """
-Command processor for Ubuntu Voice Typing.
-
-This module processes text commands from speech recognition, such as
-"new line", "period", etc.
+Command processor for Vocalinux.
 """
 
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
+# Configure logging
 logger = logging.getLogger(__name__)
+
+# Define command patterns
+COMMAND_PATTERNS = {
+    # Navigation commands
+    r"new line|newline|line break": "ACTION:NEW_LINE",
+    r"tab|indent": "ACTION:TAB",
+    r"(go to|goto) line (\d+)": "ACTION:GOTO_LINE:\\2",
+    r"(go|move) (up|down|left|right)( (\d+))?": "ACTION:MOVE_CURSOR:\\2:\\4",
+    
+    # Editing commands
+    r"delete( that)?|remove( that)?": "ACTION:DELETE",
+    r"delete (word|line|sentence|paragraph)": "ACTION:DELETE_UNIT:\\1",
+    r"delete last (word|line|sentence|paragraph)": "ACTION:DELETE_LAST_UNIT:\\1",
+    r"select (word|line|sentence|paragraph)": "ACTION:SELECT_UNIT:\\1",
+    r"select all": "ACTION:SELECT_ALL",
+    r"copy( that)?": "ACTION:COPY",
+    r"cut( that)?": "ACTION:CUT",
+    r"paste": "ACTION:PASTE",
+    r"undo": "ACTION:UNDO",
+    r"redo": "ACTION:REDO",
+    
+    # Formatting commands
+    r"capitalize( that)?": "ACTION:CAPITALIZE",
+    r"uppercase|upper case( that)?": "ACTION:UPPERCASE",
+    r"lowercase|lower case( that)?": "ACTION:LOWERCASE",
+    r"bold( that)?": "ACTION:BOLD",
+    r"italic|italics|italicize( that)?": "ACTION:ITALIC",
+    r"underline( that)?": "ACTION:UNDERLINE",
+    
+    # Punctuation commands (these will be directly inserted into text)
+    r"^period$|^full stop$": ".",
+    r"^comma$": ",",
+    r"^question mark$": "?",
+    r"^exclamation point$|^exclamation mark$": "!",
+    r"^colon$": ":",
+    r"^semicolon$": ";",
+    r"^quote$|^quotation mark$": "\"",
+    r"^single quote$": "'",
+    r"^open parenthesis$": "(",
+    r"^close parenthesis$": ")",
+    r"^open bracket$": "[",
+    r"^close bracket$": "]",
+    
+    # Application control commands
+    r"save( file)?|save document": "ACTION:SAVE",
+    r"(quit|exit) application": "ACTION:QUIT",
+    
+    # Vocalinux-specific commands
+    r"stop (listening|dictation|recording)": "ACTION:STOP_RECOGNITION",
+}
 
 
 class CommandProcessor:
     """
-    Processes text commands in speech recognition results.
+    Processes speech recognition results for commands.
     
-    This class handles special commands like "new line", "period",
-    "delete that", etc.
+    Detects and processes commands from speech recognition results,
+    separating them from regular text input.
     """
-    
+
     def __init__(self):
         """Initialize the command processor."""
-        # Map of command phrases to their actions
-        self.text_commands = {
-            # Line commands
-            "new line": "\n",
-            "new paragraph": "\n\n",
-            
-            # Punctuation
-            "period": ".",
-            "full stop": ".",
-            "comma": ",",
-            "question mark": "?",
-            "exclamation mark": "!",
-            "exclamation point": "!",
-            "semicolon": ";",
-            "colon": ":",
-            "dash": "-",
-            "hyphen": "-",
-            "underscore": "_",
-            "quote": "\"",
-            "single quote": "'",
-            "open parenthesis": "(",
-            "close parenthesis": ")",
-            "open bracket": "[",
-            "close bracket": "]",
-            "open brace": "{",
-            "close brace": "}",
-        }
+        # Compile all command patterns for efficiency
+        self.command_patterns = []
+        for pattern, action in COMMAND_PATTERNS.items():
+            self.command_patterns.append((re.compile(pattern, re.IGNORECASE), action))
         
-        # Special action commands that don't directly map to text
-        self.action_commands = {
-            "delete that": "delete_last",
-            "scratch that": "delete_last",
-            "undo": "undo",
-            "redo": "redo",
-            "select all": "select_all",
-            "select line": "select_line",
-            "select word": "select_word",
-            "select paragraph": "select_paragraph",
-            "cut": "cut",
-            "copy": "copy",
-            "paste": "paste",
-        }
-        
-        # Formatting commands that modify the next word
-        self.format_commands = {
-            "capitalize": "capitalize_next",
-            "uppercase": "capitalize_next",
-            "all caps": "uppercase_next",
-            "lowercase": "lowercase_next",
-            "no spaces": "no_spaces_next",
-        }
-        
-        # Active format modifiers
-        self.active_formats = set()
-        
-        # Compile regex patterns for faster matching
-        self._compile_patterns()
-    
-    def _compile_patterns(self):
-        """Compile regex patterns for command matching."""
-        # Create regex pattern for text commands
-        text_cmd_pattern = r'\b(' + '|'.join(re.escape(cmd) for cmd in self.text_commands.keys()) + r')\b'
-        self.text_cmd_regex = re.compile(text_cmd_pattern, re.IGNORECASE)
-        
-        # Create regex pattern for action commands
-        action_cmd_pattern = r'\b(' + '|'.join(re.escape(cmd) for cmd in self.action_commands.keys()) + r')\b'
-        self.action_cmd_regex = re.compile(action_cmd_pattern, re.IGNORECASE)
-        
-        # Create regex pattern for format commands
-        format_cmd_pattern = r'\b(' + '|'.join(re.escape(cmd) for cmd in self.format_commands.keys()) + r')\b'
-        self.format_cmd_regex = re.compile(format_cmd_pattern, re.IGNORECASE)
-    
     def process_text(self, text: str) -> Tuple[str, List[str]]:
         """
-        Process text commands in the recognized text.
+        Process text for commands and regular input.
         
         Args:
-            text: The recognized text to process
+            text: The text to process
             
         Returns:
-            Tuple of (processed_text, actions)
-            - processed_text: The text with commands replaced
-            - actions: List of special actions to perform
+            A tuple of (processed_text, actions)
+            - processed_text: Text with commands removed
+            - actions: List of action strings to perform
         """
         if not text:
-            return "", []
-        
-        logger.debug(f"Processing commands in text: {text}")
-        
-        # Convert to lowercase for easier matching
-        lower_text = text.lower()
-        processed_text = text
-        actions = []
-        
-        # Process action commands first (delete that, undo, etc.)
-        action_matches = self.action_cmd_regex.findall(lower_text)
-        for match in action_matches:
-            action = self.action_commands[match]
-            actions.append(action)
-            # Remove the command from the text
-            processed_text = re.sub(r'\b' + re.escape(match) + r'\b', '', processed_text, flags=re.IGNORECASE)
-        
-        # Process format commands
-        format_matches = self.format_cmd_regex.findall(lower_text)
-        for match in format_matches:
-            action = self.format_commands[match]
-            self.active_formats.add(action)
-            # Remove the command from the text
-            processed_text = re.sub(r'\b' + re.escape(match) + r'\b', '', processed_text, flags=re.IGNORECASE)
-        
-        # Apply active format modifiers to the next word
-        if self.active_formats:
-            # Find the next word
-            word_match = re.search(r'\b(\w+)\b', processed_text)
-            if word_match:
-                word = word_match.group(1)
-                start, end = word_match.span(1)
-                
-                # Apply formatting
-                formatted_word = word
-                for format_type in self.active_formats:
-                    if format_type == "capitalize_next":
-                        formatted_word = formatted_word.capitalize()
-                    elif format_type == "uppercase_next":
-                        formatted_word = formatted_word.upper()
-                    elif format_type == "lowercase_next":
-                        formatted_word = formatted_word.lower()
-                    elif format_type == "no_spaces_next":
-                        # This will be applied when combining with the next word
-                        pass
-                
-                # Replace the word in the text
-                processed_text = processed_text[:start] + formatted_word + processed_text[end:]
+            return ("", [])
             
-            # Clear active formats
-            self.active_formats.clear()
+        # Clean up the text
+        text = text.strip()
         
-        # Finally, process text commands (period, comma, etc.)
-        def replace_command(match):
-            cmd = match.group(0).lower()
-            replacement = self.text_commands.get(cmd, "")
-            return replacement
+        # Check if the text is entirely a command
+        for pattern, action in self.command_patterns:
+            match = pattern.match(text)
+            if match and match.group(0) == text:
+                # The entire text is a command
+                if action.startswith("ACTION:"):
+                    # This is a special action, not text
+                    # Extract any parameters from the match
+                    action_parts = action.split(":")
+                    action_type = action_parts[1]
+                    
+                    # Handle parametrized actions
+                    if len(action_parts) > 2:
+                        # Replace captured groups in the action
+                        for i, group in enumerate(match.groups(), 1):
+                            if group:
+                                action_parts = [
+                                    p.replace(f"\\{i}", group) for p in action_parts
+                                ]
+                        
+                        action = ":".join(action_parts)
+                    
+                    logger.debug(f"Command: {text} -> Action: {action}")
+                    return ("", [action])
+                else:
+                    # This is a replacement text (e.g., punctuation)
+                    logger.debug(f"Command: {text} -> Text: {action}")
+                    return (action, [])
         
-        processed_text = self.text_cmd_regex.sub(replace_command, processed_text)
+        # Process word by word to find partial commands
+        # This is a simpler approach; more sophisticated parsing could be applied
+        # for now, just return the full text
+        return (text, [])
         
-        # Clean up multiple spaces
-        processed_text = re.sub(r'\s+', ' ', processed_text).strip()
+    def get_command_help(self) -> Dict[str, List[str]]:
+        """
+        Get help information for available commands.
         
-        return processed_text, actions
+        Returns:
+            A dictionary of command categories and their commands
+        """
+        return {
+            "Navigation": [
+                "new line - Insert a line break",
+                "tab - Insert a tab character",
+                "go to line [number] - Move cursor to specified line",
+                "move [up/down/left/right] [number] - Move cursor in specified direction",
+            ],
+            "Editing": [
+                "delete/remove - Delete selected text or last word/character",
+                "delete [word/line/sentence/paragraph] - Delete specified unit",
+                "select [word/line/sentence/paragraph] - Select specified unit",
+                "select all - Select all text",
+                "copy - Copy selected text",
+                "cut - Cut selected text",
+                "paste - Paste from clipboard",
+                "undo - Undo last action",
+                "redo - Redo last undone action",
+            ],
+            "Formatting": [
+                "capitalize - Capitalize selected text or next word",
+                "uppercase/upper case - Convert to UPPERCASE",
+                "lowercase/lower case - Convert to lowercase",
+                "bold - Apply bold formatting",
+                "italic - Apply italic formatting",
+                "underline - Apply underline formatting",
+            ],
+            "Punctuation": [
+                "period/full stop - Insert a period (.)",
+                "comma - Insert a comma (,)",
+                "question mark - Insert a question mark (?)",
+                "exclamation point/mark - Insert an exclamation mark (!)",
+                "colon - Insert a colon (:)",
+                "semicolon - Insert a semicolon (;)",
+                "quote/quotation mark - Insert quotation marks (\"\")",
+                "single quote - Insert single quotes ('')",
+                "open/close parenthesis - Insert parentheses ()",
+                "open/close bracket - Insert brackets []",
+            ],
+            "Application Control": [
+                "save/save file - Save the current file",
+                "quit application - Quit the application",
+                "stop listening/dictation/recording - Stop voice recognition",
+            ],
+        }

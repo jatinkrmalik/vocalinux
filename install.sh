@@ -1,6 +1,6 @@
 #!/bin/bash
-# Ubuntu Voice Typing Installer
-# This script installs the Ubuntu Voice Typing application and its dependencies
+# Vocalinux Installer
+# This script installs the Vocalinux application and its dependencies
 
 set -e  # Exit on error
 
@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help)
-            echo "Ubuntu Voice Typing Installer"
+            echo "Vocalinux Installer"
             echo "Usage: $0 [options]"
             echo "Options:"
             echo "  --dev      Install in development mode with all dev dependencies"
@@ -65,8 +65,8 @@ if [[ "$DEV_MODE" == "yes" ]]; then
     RUN_TESTS="yes"
 fi
 
-print_info "Ubuntu Voice Typing Installer"
-print_info "=============================="
+print_info "Vocalinux Installer"
+print_info "==================="
 echo ""
 [[ "$USE_VENV" == "yes" ]] && print_info "Using virtual environment mode"
 [[ "$DEV_MODE" == "yes" ]] && print_info "Installing in development mode"
@@ -118,9 +118,9 @@ fi
 
 # Create directories
 print_info "Creating application directories..."
-mkdir -p ~/.local/share/ubuntu-voice-typing/icons
-mkdir -p ~/.local/share/ubuntu-voice-typing/models
-mkdir -p ~/.config/ubuntu-voice-typing
+mkdir -p ~/.local/share/vocalinux/icons
+mkdir -p ~/.local/share/vocalinux/models
+mkdir -p ~/.config/vocalinux
 
 # Set up virtual environment if requested
 VENV_DIR="venv"
@@ -137,15 +137,15 @@ if [[ "$USE_VENV" == "yes" ]]; then
     print_info "Virtual environment activated."
     
     # Create activation script for users
-    cat > activate-ubuntu-voice-typing.sh << EOF
+    cat > activate-vocalinux.sh << EOF
 #!/bin/bash
-# This script activates the Ubuntu Voice Typing virtual environment
+# This script activates the Vocalinux virtual environment
 source "\$(dirname "\$(realpath "\$0")")/$VENV_DIR/bin/activate"
-echo "Ubuntu Voice Typing virtual environment activated."
-echo "To start the application, run: ubuntu-voice-typing"
+echo "Vocalinux virtual environment activated."
+echo "To start the application, run: vocalinux"
 EOF
-    chmod +x activate-ubuntu-voice-typing.sh
-    print_info "Created activation script: activate-ubuntu-voice-typing.sh"
+    chmod +x activate-vocalinux.sh
+    print_info "Created activation script: activate-vocalinux.sh"
 fi
 
 # Modify setup.py to exclude PyGObject when installing in a venv
@@ -160,7 +160,7 @@ fi
 
 # Install Python package
 if [[ "$DEV_MODE" == "yes" ]]; then
-    print_info "Installing Ubuntu Voice Typing in development mode..."
+    print_info "Installing Vocalinux in development mode..."
     if [[ "$USE_VENV" == "yes" ]]; then
         pip install -e .
         pip install pytest pytest-mock pytest-cov pynput
@@ -169,7 +169,7 @@ if [[ "$DEV_MODE" == "yes" ]]; then
         pip3 install --user pytest pytest-mock pytest-cov pynput
     fi
 else
-    print_info "Installing Ubuntu Voice Typing Python package..."
+    print_info "Installing Vocalinux Python package..."
     if [[ "$USE_VENV" == "yes" ]]; then
         pip install .
     else
@@ -207,12 +207,12 @@ fi
 # Install desktop entry
 print_info "Installing desktop entry..."
 mkdir -p ~/.local/share/applications
-cp ubuntu-voice-typing.desktop ~/.local/share/applications/
+cp vocalinux.desktop ~/.local/share/applications/
 
 # If using virtual environment, modify the desktop entry to use the venv
 if [[ "$USE_VENV" == "yes" ]]; then
-    VENV_SCRIPT_PATH="$(realpath $VENV_DIR/bin/ubuntu-voice-typing)"
-    sed -i "s|^Exec=ubuntu-voice-typing|Exec=$VENV_SCRIPT_PATH|" ~/.local/share/applications/ubuntu-voice-typing.desktop
+    VENV_SCRIPT_PATH="$(realpath $VENV_DIR/bin/vocalinux)"
+    sed -i "s|^Exec=vocalinux|Exec=$VENV_SCRIPT_PATH|" ~/.local/share/applications/vocalinux.desktop
     print_info "Updated desktop entry to use virtual environment"
 fi
 
@@ -235,11 +235,11 @@ print_success "Installation complete!"
 
 if [[ "$USE_VENV" == "yes" ]]; then
     print_info "To activate the virtual environment in the future, run:"
-    print_info "  source activate-ubuntu-voice-typing.sh"
-    print_info "You can then launch Ubuntu Voice Typing by running 'ubuntu-voice-typing'"
+    print_info "  source activate-vocalinux.sh"
+    print_info "You can then launch Vocalinux by running 'vocalinux'"
 else
-    print_info "You can now launch Ubuntu Voice Typing from your application menu"
-    print_info "or by running 'ubuntu-voice-typing' in a terminal."
+    print_info "You can now launch Vocalinux from your application menu"
+    print_info "or by running 'vocalinux' in a terminal."
 fi
 
 echo

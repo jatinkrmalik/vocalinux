@@ -1,207 +1,207 @@
+#!/usr/bin/env python3
 """
-Keyboard shortcut manager for Ubuntu Voice Typing.
-
-This module provides global keyboard shortcut functionality to
-start/stop speech recognition with a keystroke.
+Keyboard shortcut manager for Vocalinux.
 """
 
 import logging
 import threading
-import time
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict
 
-# Try to import X11 keyboard libraries first
+# Try to import keyboard library, which requires root on Linux
+# We'll try xlib/pynput as alternatives if not available
 try:
-    from pynput import keyboard
+    import keyboard
     KEYBOARD_AVAILABLE = True
 except ImportError:
     KEYBOARD_AVAILABLE = False
+    
+# Alternative keyboard libraries for different platforms
+if not KEYBOARD_AVAILABLE:
+    try:
+        from pynput import keyboard as pynput_keyboard
+        PYNPUT_AVAILABLE = True
+    except ImportError:
+        PYNPUT_AVAILABLE = False
 
+# Configure logging
 logger = logging.getLogger(__name__)
 
 
-class KeyboardShortcutManager:
+class KeyboardShortcuts:
     """
-    Manages global keyboard shortcuts for the application.
+    Keyboard shortcut manager for the application.
     
-    This class allows registering global keyboard shortcuts that work
-    across the desktop environment.
+    Handles registration and triggering of keyboard shortcuts.
     """
-    
+
     def __init__(self):
         """Initialize the keyboard shortcut manager."""
         self.shortcuts = {}
-        self.listener = None
-        self.active = False
-        self.last_trigger_time = 0  # Track last trigger time to prevent double triggers
+        self.pynput_listener = None
+        self.lock = threading.Lock()
         
-        if not KEYBOARD_AVAILABLE:
-            logger.error("Keyboard shortcut libraries not available. Shortcuts will not work.")
-            return
-        
-        # Default shortcut for toggling voice typing (Alt+Shift+V)
-        self.default_shortcut = (
-            {keyboard.Key.alt, keyboard.Key.shift},
-            keyboard.KeyCode.from_char('v')
-        )
-    
-    def start(self):
-        """Start listening for keyboard shortcuts."""
-        if not KEYBOARD_AVAILABLE:
-            return
-        
-        if self.active:
-            return
-        
-        logger.info("Starting keyboard shortcut listener")
-        self.active = True
-        
-        # Track currently pressed modifier keys
-        self.current_keys = set()
-        
-        try:
-            # Start keyboard listener in a separate thread
-            self.listener = keyboard.Listener(
-                on_press=self._on_press,
-                on_release=self._on_release
-            )
-            self.listener.daemon = True
-            self.listener.start()
+        # Check for available libraries
+        if not (KEYBOARD_AVAILABLE or PYNPUT_AVAILABLE):
+            logger.warning("No keyboard libraries available. Shortcuts will not work.")
             
-            # Verify the listener started successfully
-            if not self.listener.is_alive():
-                logger.error("Failed to start keyboard listener")
-                self.active = False
-            else:
-                logger.info("Keyboard shortcut listener started successfully")
-        except Exception as e:
-            logger.error(f"Error starting keyboard listener: {e}")
-            self.active = False
-    
-    def stop(self):
-        """Stop listening for keyboard shortcuts."""
-        if not self.active or not self.listener:
-            return
-        
-        logger.info("Stopping keyboard shortcut listener")
-        self.active = False
-        
-        if self.listener:
-            try:
-                self.listener.stop()
-                self.listener.join(timeout=1.0)
-            except Exception as e:
-                logger.error(f"Error stopping keyboard listener: {e}")
-            finally:
-                self.listener = None
-    
-    def register_shortcut(self, modifiers: set, key, callback: Callable):
+    def register_shortcut(self, key_combination, callback):
         """
         Register a keyboard shortcut.
         
         Args:
-            modifiers: Set of modifier keys (e.g., {keyboard.Key.alt, keyboard.Key.shift})
-            key: The main key (e.g., keyboard.KeyCode.from_char('v'))
-            callback: Function to call when the shortcut is pressed
+            key_combination: The key combination as a string (e.g., "ctrl+shift+a")
+            callback: The function to call when the shortcut is triggered
         """
-        shortcut_key = (frozenset(modifiers), key)
-        self.shortcuts[shortcut_key] = callback
-        
-        # Create readable description of the shortcut for logging
-        mod_names = [self._get_key_name(mod) for mod in modifiers]
-        key_name = self._get_key_name(key)
-        shortcut_desc = "+".join(mod_names + [key_name])
-        logger.info(f"Registered shortcut: {shortcut_desc}")
-    
-    def register_toggle_callback(self, callback: Callable):
-        """
-        Register a callback for the default toggle shortcut.
-        
-        Args:
-            callback: Function to call when the toggle shortcut is pressed
-        """
-        modifiers, key = self.default_shortcut
-        self.register_shortcut(modifiers, key, callback)
-    
-    def _get_key_name(self, key):
-        """Get a readable name for a key object."""
-        if hasattr(key, 'char') and key.char:
-            return key.char.upper()
-        elif hasattr(key, 'name'):
-            return key.name
-        else:
-            return str(key)
-    
-    def _on_press(self, key):
-        """
-        Handle key press events.
-        
-        Args:
-            key: The pressed key
-        """
-        try:
-            # Add to currently pressed keys (only for modifier keys)
-            if key in {
-                keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
-                keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r,
-                keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r,
-                keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r
-            }:
-                # Normalize left/right variants
-                normalized_key = self._normalize_modifier_key(key)
-                self.current_keys.add(normalized_key)
+        with self.lock:
+            if not key_combination:
+                logger.warning("Empty key combination provided")
+                return False
                 
-            # Check for shortcuts (only once per 500ms to prevent double triggers)
-            current_time = time.time()
-            if current_time - self.last_trigger_time > 0.5:  # 500ms debounce
-                for (modifiers, trigger_key), callback in self.shortcuts.items():
-                    # Normalize the trigger key for character keys
-                    if isinstance(trigger_key, keyboard.KeyCode) and hasattr(trigger_key, 'char'):
-                        if isinstance(key, keyboard.KeyCode) and hasattr(key, 'char'):
-                            key_matches = key.char.lower() == trigger_key.char.lower()
-                        else:
-                            key_matches = False
-                    else:
-                        key_matches = key == trigger_key
-                        
-                    # Check if modifiers match and key matches
-                    normalized_modifiers = {self._normalize_modifier_key(m) for m in modifiers}
-                    if self.current_keys == normalized_modifiers and key_matches:
-                        logger.debug(f"Shortcut triggered: {modifiers} + {trigger_key}")
-                        self.last_trigger_time = current_time
-                        
-                        # Run callback in a separate thread to avoid blocking
-                        threading.Thread(target=callback, daemon=True).start()
-        except Exception as e:
-            logger.error(f"Error in keyboard shortcut handling: {e}")
-    
-    def _on_release(self, key):
+            # Store the callback
+            self.shortcuts[self._normalize_key_combination(key_combination)] = callback
+            
+            # Register with the appropriate library
+            if KEYBOARD_AVAILABLE:
+                try:
+                    keyboard.add_hotkey(key_combination, callback, suppress=True)
+                    logger.info(f"Registered shortcut {key_combination}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Failed to register shortcut {key_combination}: {e}")
+                    return False
+            elif PYNPUT_AVAILABLE:
+                # For pynput, we need to set up a listener if not already done
+                if not self.pynput_listener:
+                    self._setup_pynput_listener()
+                logger.info(f"Registered shortcut {key_combination} with pynput")
+                return True
+            else:
+                logger.warning("Cannot register shortcuts without keyboard libraries")
+                return False
+                
+    def unregister_shortcut(self, key_combination):
         """
-        Handle key release events.
+        Unregister a keyboard shortcut.
         
         Args:
-            key: The released key
+            key_combination: The key combination to unregister
         """
-        try:
-            # Normalize the key for left/right variants
-            normalized_key = self._normalize_modifier_key(key)
-            # Remove from currently pressed keys
-            self.current_keys.discard(normalized_key)
-        except Exception as e:
-            logger.error(f"Error in keyboard release handling: {e}")
-    
-    def _normalize_modifier_key(self, key):
-        """Normalize left/right variants of modifier keys to their base form."""
-        # Map left/right variants to their base key
-        key_mapping = {
-            keyboard.Key.alt_l: keyboard.Key.alt,
-            keyboard.Key.alt_r: keyboard.Key.alt,
-            keyboard.Key.shift_l: keyboard.Key.shift,
-            keyboard.Key.shift_r: keyboard.Key.shift,
-            keyboard.Key.ctrl_l: keyboard.Key.ctrl,
-            keyboard.Key.ctrl_r: keyboard.Key.ctrl,
-            keyboard.Key.cmd_l: keyboard.Key.cmd,
-            keyboard.Key.cmd_r: keyboard.Key.cmd
-        }
+        with self.lock:
+            normalized = self._normalize_key_combination(key_combination)
+            if normalized in self.shortcuts:
+                del self.shortcuts[normalized]
+                
+                if KEYBOARD_AVAILABLE:
+                    try:
+                        keyboard.remove_hotkey(key_combination)
+                        logger.info(f"Unregistered shortcut {key_combination}")
+                    except Exception as e:
+                        logger.error(f"Failed to unregister shortcut {key_combination}: {e}")
+                        
+                # For pynput, we just remove from our dict; the listener will check it
+                
+    def unregister_all(self):
+        """Unregister all shortcuts."""
+        with self.lock:
+            self.shortcuts.clear()
+            
+            if KEYBOARD_AVAILABLE:
+                keyboard.unhook_all()
+                
+            if PYNPUT_AVAILABLE and self.pynput_listener:
+                self.pynput_listener.stop()
+                self.pynput_listener = None
+                
+    def _normalize_key_combination(self, combo):
+        """
+        Normalize a key combination string.
         
-        return key_mapping.get(key, key)
+        Handles different formats and ordering of modifier keys.
+        
+        Args:
+            combo: The key combination string
+            
+        Returns:
+            A normalized key combination string
+        """
+        if not combo:
+            return ""
+            
+        parts = combo.lower().split("+")
+        
+        # Sort modifiers for consistent ordering
+        modifiers = []
+        key = None
+        
+        for part in parts:
+            if part in ["ctrl", "control", "alt", "option", "shift", "super", "win", "meta", "command"]:
+                # Normalize modifier names
+                if part in ["control", "ctrl"]:
+                    modifiers.append("ctrl")
+                elif part in ["option", "alt"]:
+                    modifiers.append("alt")
+                elif part in ["super", "win", "meta", "command"]:
+                    modifiers.append("super")
+                else:
+                    modifiers.append(part)
+            else:
+                # The last non-modifier is the key
+                key = part
+                
+        modifiers.sort()
+        
+        if key:
+            return "+".join(modifiers + [key])
+        else:
+            # If no key was found, use the last part as the key
+            if parts:
+                return "+".join(modifiers + [parts[-1]])
+            return ""
+            
+    def _setup_pynput_listener(self):
+        """Set up a pynput keyboard listener for shortcuts."""
+        if not PYNPUT_AVAILABLE:
+            return
+            
+        # Track currently pressed keys
+        self.pressed_keys = set()
+        
+        def on_press(key):
+            try:
+                # Convert key to string
+                if hasattr(key, "char") and key.char:
+                    key_str = key.char.lower()
+                else:
+                    key_str = key.name.lower() if hasattr(key, "name") else str(key).lower()
+                    
+                # Add to pressed keys
+                self.pressed_keys.add(key_str)
+                
+                # Check if any registered combination is pressed
+                current_combo = "+".join(sorted(self.pressed_keys))
+                for combo, callback in self.shortcuts.items():
+                    if current_combo == combo:
+                        callback()
+                        
+            except Exception as e:
+                logger.error(f"Error in keyboard listener: {e}")
+                
+        def on_release(key):
+            try:
+                # Convert key to string
+                if hasattr(key, "char") and key.char:
+                    key_str = key.char.lower()
+                else:
+                    key_str = key.name.lower() if hasattr(key, "name") else str(key).lower()
+                    
+                # Remove from pressed keys
+                if key_str in self.pressed_keys:
+                    self.pressed_keys.remove(key_str)
+                    
+            except Exception as e:
+                logger.error(f"Error in keyboard listener: {e}")
+                
+        # Create and start the listener
+        self.pynput_listener = pynput_keyboard.Listener(on_press=on_press, on_release=on_release)
+        self.pynput_listener.start()
+        logger.info("Started pynput keyboard listener")

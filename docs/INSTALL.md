@@ -1,93 +1,213 @@
 # Installation Guide
 
-This guide provides instructions for installing and setting up Ubuntu Voice Typing.
+This guide provides instructions for installing and setting up Vocalinux.
 
-## Requirements
+## System Requirements
 
-- Ubuntu 22.04 or newer
-- Python 3.6 or newer
-- Dependencies for speech recognition and text injection
+- Operating System: Ubuntu 22.04 or newer (may work on other Linux distributions)
+- Python: 3.8 or newer
+- Desktop Environment: X11 or Wayland
+- Dependencies:
+  - For audio: PortAudio, PulseAudio
+  - For keyboard shortcuts: X11 libraries, libinput (optional)
+  - For text injection: xdotool (X11) or wtype/ydotool (Wayland)
 
-## Basic Installation
+## Installation Methods
 
-### 1. Install System Dependencies
+### Automated Installation (Recommended)
 
-```bash
-# For X11 environments
-sudo apt install xdotool python3-pip python3-gi gir1.2-appindicator3-0.1
+The easiest way to install Vocalinux is using the provided installation script:
 
-# For Wayland environments
-sudo apt install wtype python3-pip python3-gi gir1.2-appindicator3-0.1
-# OR alternatively for Wayland
-sudo apt install ydotool python3-pip python3-gi gir1.2-appindicator3-0.1
-```
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/vocalinux/vocalinux.git
+   cd vocalinux
+   ```
 
-### 2. Clone the Repository
+2. Run the installer script:
+   ```bash
+   ./install.sh
+   ```
 
-```bash
-git clone https://github.com/ubuntu-voice-typing/ubuntu-voice-typing.git
-cd ubuntu-voice-typing
-```
+3. Follow the on-screen instructions.
 
-### 3. Install Python Dependencies
+The installer will:
+- Install required system dependencies
+- Set up a Python virtual environment
+- Install Python package dependencies
+- Configure the application
+- Create desktop entry and icon
+- Download speech recognition models
 
-```bash
-# Basic installation
-pip3 install --user .
+### Manual Installation
 
-# With Whisper support (requires more resources)
-pip3 install --user ".[whisper]"
+If you prefer to install manually:
 
-# For development
-pip3 install --user ".[dev]"
-```
+1. Install system dependencies:
+   ```bash
+   sudo apt update
+   sudo apt install -y python3-pip python3-venv portaudio19-dev libinput-dev libxtst-dev libx11-dev xdotool python3-gi gir1.2-appindicator3-0.1
+   ```
 
-### 4. Run the Application
+2. For Wayland users, install a text injection tool:
+   ```bash
+   # Either wtype
+   sudo apt install -y wtype
+   # Or ydotool
+   sudo apt install -y ydotool
+   ```
 
-```bash
-# Basic usage
-ubuntu-voice-typing
+3. Clone the repository:
+   ```bash
+   git clone https://github.com/vocalinux/vocalinux.git
+   cd vocalinux
+   ```
 
-# With debug logging
-ubuntu-voice-typing --debug
+4. Create a virtual environment:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
 
-# With Whisper instead of VOSK
-ubuntu-voice-typing --engine whisper
+5. Install the package:
+   ```bash
+   pip install -e .
+   ```
 
-# Force Wayland mode
-ubuntu-voice-typing --wayland
-```
+6. Create necessary directories:
+   ```bash
+   mkdir -p ~/.local/share/vocalinux/icons
+   mkdir -p ~/.local/share/vocalinux/models
+   mkdir -p ~/.config/vocalinux
+   ```
 
-## Advanced Installation
+7. Install the desktop entry:
+   ```bash
+   cp vocalinux.desktop ~/.local/share/applications/
+   ```
 
-### Custom Model Sizes
+8. Install the icon:
+   ```bash
+   mkdir -p ~/.local/share/icons/hicolor/scalable/apps/
+   # Assuming there's an icon file
+   cp resources/icons/vocalinux.svg ~/.local/share/icons/hicolor/scalable/apps/
+   ```
 
-By default, a small model will be downloaded and used. You can use larger models for improved accuracy:
+## Post-Installation
 
-```bash
-ubuntu-voice-typing --model medium
-# or
-ubuntu-voice-typing --model large
-```
+After installation, you'll need to download the speech recognition model (if the installer didn't do this automatically):
 
-Note that larger models require more RAM and may have longer initialization times, but provide better recognition accuracy.
+1. For VOSK:
+   - Visit https://alphacephei.com/vosk/models
+   - Download a model (e.g., `vosk-model-small-en-us-0.15`)
+   - Extract the model to `~/.local/share/vocalinux/models/`
+
+2. For Whisper:
+   - The model will be downloaded automatically on first use
+
+## Starting the Application
+
+You can start Vocalinux in several ways:
+
+1. From the application menu:
+   - Look for "Vocalinux" in your applications
+
+2. From the command line:
+   ```bash
+   vocalinux
+   ```
+
+3. With specific options:
+   ```bash
+   # Debug mode
+   vocalinux --debug
+   
+   # Use a specific engine
+   vocalinux --engine whisper
+   
+   # Use a specific model size
+   vocalinux --model medium
+   ```
 
 ## Troubleshooting
 
-### No audio input detected
+### Application Doesn't Start
 
-- Check that your microphone is connected and working
-- Verify your system audio settings
-- Run with `--debug` flag to see detailed logs
+- Check if all dependencies are installed:
+  ```bash
+  cd vocalinux
+  pip install -e .
+  ```
 
-### Text injection not working
+### No Audio Input
 
-- For X11: Ensure xdotool is installed
-- For Wayland: Ensure wtype or ydotool is installed
-- Some applications may have security measures that prevent text injection
+- Check your microphone is connected and working:
+  ```bash
+  arecord -l  # List recording devices
+  ```
 
-### Recognition is inaccurate
+- Verify permissions:
+  ```bash
+  groups $USER  # Should include 'audio'
+  ```
 
-- Try a larger model size (`--model medium` or `--model large`)
-- Ensure your microphone is positioned correctly
-- Speak clearly and at a moderate pace
+### Text Not Injecting
+
+- For X11, ensure xdotool is installed:
+  ```bash
+  sudo apt install xdotool
+  ```
+
+- For Wayland, ensure wtype or ydotool is installed:
+  ```bash
+  sudo apt install wtype
+  # or
+  sudo apt install ydotool
+  ```
+
+- Try running with explicit Wayland mode:
+  ```bash
+  vocalinux --wayland
+  ```
+
+### Speech Recognition Not Working
+
+- Verify model installation:
+  ```bash
+  ls -la ~/.local/share/vocalinux/models/
+  ```
+
+- Try a different model size:
+  ```bash
+  vocalinux --model small
+  ```
+
+- Try a different engine:
+  ```bash
+  vocalinux --engine whisper
+  ```
+
+## Uninstallation
+
+To uninstall Vocalinux:
+
+1. Remove the desktop entry:
+   ```bash
+   rm ~/.local/share/applications/vocalinux.desktop
+   ```
+
+2. Remove the icon:
+   ```bash
+   rm ~/.local/share/icons/hicolor/scalable/apps/vocalinux.svg
+   ```
+
+3. Remove the data directories:
+   ```bash
+   rm -rf ~/.local/share/vocalinux
+   rm -rf ~/.config/vocalinux
+   ```
+
+4. If you installed in a virtual environment, delete it:
+   ```bash
+   rm -rf /path/to/vocalinux/venv
+   ```

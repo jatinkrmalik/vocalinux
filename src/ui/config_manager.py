@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-Configuration manager for Ubuntu Voice Typing.
+Configuration manager for Vocalinux.
 
 This module handles loading, saving, and accessing user preferences.
 """
@@ -13,7 +14,7 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 # Define constants
-CONFIG_DIR = os.path.expanduser("~/.config/ubuntu-voice-typing")
+CONFIG_DIR = os.path.expanduser("~/.config/vocalinux")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 # Default configuration

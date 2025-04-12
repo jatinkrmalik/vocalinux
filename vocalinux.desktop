@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Vocalinux
+Comment=Voice dictation for Linux
+Exec=vocalinux
+Icon=/usr/share/icons/hicolor/scalable/apps/vocalinux.svg
+Terminal=false
+Categories=Utility;Accessibility;
+StartupWMClass=vocalinux
+StartupNotify=true

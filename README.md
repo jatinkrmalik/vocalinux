@@ -1,10 +1,10 @@
-# Ubuntu Voice Typing
+# Vocalinux
 
 A seamless voice dictation system for Ubuntu, comparable to the built-in solutions on macOS and Windows.
 
 ## Overview
 
-Ubuntu Voice Typing provides a user-friendly speech-to-text solution for Linux users with:
+Vocalinux provides a user-friendly speech-to-text solution for Linux users with:
 
 - Activation via customizable keyboard shortcuts (default: Alt+Shift+V)
 - Real-time transcription with minimal latency
@@ -24,7 +24,7 @@ This project leverages existing open-source technologies:
 ## Project Structure
 
 ```
-ubuntu-voice-typing/
+vocalinux/
 ├── docs/                      # Documentation
 │   ├── INSTALL.md            # Installation guide
 │   └── USER_GUIDE.md         # User guide with command reference
@@ -55,7 +55,7 @@ ubuntu-voice-typing/
 ├── LICENSE                    # GPLv3 license
 ├── README.md                  # This file
 ├── setup.py                   # Python package configuration
-└── ubuntu-voice-typing.desktop  # Desktop entry file
+└── vocalinux.desktop  # Desktop entry file
 ```
 
 ## Installation
@@ -70,8 +70,8 @@ ubuntu-voice-typing/
 
 ```bash
 # Clone the repository
-git clone https://github.com/ubuntu-voice-typing/ubuntu-voice-typing.git
-cd ubuntu-voice-typing
+git clone https://github.com/vocalinux/vocalinux.git
+cd vocalinux
 
 # Run the installer script
 ./install.sh
@@ -89,20 +89,20 @@ For detailed installation instructions, see [docs/INSTALL.md](docs/INSTALL.md).
 
 ### Starting the Application
 
-After installation, you can start Ubuntu Voice Typing in several ways:
+After installation, you can start Vocalinux in several ways:
 
 ```bash
 # From the terminal
-ubuntu-voice-typing
+vocalinux
 
 # With debugging enabled
-ubuntu-voice-typing --debug
+vocalinux --debug
 
 # With a specific speech recognition engine
-ubuntu-voice-typing --engine whisper
+vocalinux --engine whisper
 
 # With a specific model size
-ubuntu-voice-typing --model medium
+vocalinux --model medium
 ```
 
 ### Using Voice Dictation
@@ -115,7 +115,7 @@ ubuntu-voice-typing --model medium
 
 ### Using Voice Commands
 
-Ubuntu Voice Typing supports various voice commands for text formatting:
+Vocalinux supports various voice commands for text formatting:
 
 | Command | Action |
 |---------|--------|
@@ -130,7 +130,7 @@ For a complete list of commands, see [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Configuration
 
-Configuration is stored in `~/.config/ubuntu-voice-typing/config.json` and includes:
+Configuration is stored in `~/.config/vocalinux/config.json` and includes:
 
 ```json
 {
@@ -172,8 +172,8 @@ Both MP3 and WAV formats are supported, with MP3 being the primary format.
 
 ```bash
 # Clone the repository
-git clone https://github.com/ubuntu-voice-typing/ubuntu-voice-typing.git
-cd ubuntu-voice-typing
+git clone https://github.com/vocalinux/vocalinux.git
+cd vocalinux
 
 # Install development dependencies
 pip install -e ".[dev]"

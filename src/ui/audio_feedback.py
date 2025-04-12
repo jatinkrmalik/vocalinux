@@ -1,110 +1,113 @@
+#!/usr/bin/env python3
 """
-Audio feedback module for Ubuntu Voice Typing.
-
-This module provides audio feedback for various recognition states.
+Audio feedback module for Vocalinux.
 """
 
 import logging
 import os
 import subprocess
-import shutil
+import sys
 from pathlib import Path
 
+# Configure logging
 logger = logging.getLogger(__name__)
 
-# Find the resources directory relative to this module
-MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-PACKAGE_DIR = os.path.dirname(MODULE_DIR)
-RESOURCES_DIR = os.path.join(os.path.dirname(PACKAGE_DIR), "resources")
-SOUNDS_DIR = os.path.join(RESOURCES_DIR, "sounds")
+# Determine the sounds directory
+PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DEFAULT_SOUNDS_DIR = os.path.join(PACKAGE_DIR, "resources", "sounds")
+USER_SOUNDS_DIR = os.path.expanduser("~/.local/share/vocalinux/sounds")
 
-# Sound file paths - prioritize WAV files
-START_SOUND = os.path.join(SOUNDS_DIR, "start_recording.wav")
-STOP_SOUND = os.path.join(SOUNDS_DIR, "stop_recording.wav")
-ERROR_SOUND = os.path.join(SOUNDS_DIR, "error.wav")
+# Sound file paths - first check user directory, then fall back to package directory
+def get_sound_path(filename):
+    """Get the path to a sound file, preferring user sounds if available."""
+    user_path = os.path.join(USER_SOUNDS_DIR, filename)
+    default_path = os.path.join(DEFAULT_SOUNDS_DIR, filename)
+    
+    if os.path.exists(user_path):
+        return user_path
+    elif os.path.exists(default_path):
+        return default_path
+    else:
+        logger.warning(f"Sound file not found: {filename}")
+        return None
 
+# Files for different notification sounds
+START_SOUND = "start_recording"
+STOP_SOUND = "stop_recording"
+ERROR_SOUND = "error"
 
-def _get_audio_player():
+class AudioFeedback:
     """
-    Determine the best available audio player on the system.
+    Audio feedback system for application events.
     
-    Returns:
-        tuple: (player_command, format_supported)
+    Plays sounds for different application events like
+    starting/stopping recording and errors.
     """
-    # Check for PulseAudio paplay (preferred)
-    if shutil.which("paplay"):
-        return "paplay", ["wav"]
-    
-    # Check for ALSA aplay
-    if shutil.which("aplay"):
-        return "aplay", ["wav"]
-    
-    # Check for play (from SoX)
-    if shutil.which("play"):
-        return "play", ["wav"]
+
+    def __init__(self):
+        """Initialize the audio feedback system."""
+        self.enabled = True
         
-    # Check for mplayer
-    if shutil.which("mplayer"):
-        return "mplayer", ["wav"]
-
-    # No suitable player found
-    logger.warning("No suitable audio player found for sound notifications")
-    return None, []
-
-
-def _play_sound_file(sound_path):
-    """
-    Play a sound file using the best available player.
-    
-    Args:
-        sound_path: Path to the sound file
-    """
-    if not os.path.exists(sound_path):
-        logger.warning(f"Sound file not found: {sound_path}")
-        return False
-    
-    player, formats = _get_audio_player()
-    if not player:
-        return False
-    
-    file_ext = os.path.splitext(sound_path)[1].lower().lstrip('.')
-    if file_ext not in formats:
-        logger.warning(f"Format {file_ext} not supported by {player}")
-        return False
-    
-    try:
-        if player == "paplay":
-            subprocess.Popen([player, sound_path], 
-                             stdout=subprocess.DEVNULL, 
-                             stderr=subprocess.DEVNULL)
-        elif player == "aplay":
-            subprocess.Popen([player, "-q", sound_path], 
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
-        elif player == "mplayer":
-            subprocess.Popen([player, "-really-quiet", sound_path],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
-        elif player == "play":
-            subprocess.Popen([player, "-q", sound_path],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
-        return True
-    except Exception as e:
-        logger.error(f"Failed to play sound {sound_path}: {e}")
-        return False
-
-
-def play_start_sound():
-    """Play the sound for starting voice recognition."""
-    _play_sound_file(START_SOUND)
-
-
-def play_stop_sound():
-    """Play the sound for stopping voice recognition."""
-    _play_sound_file(STOP_SOUND)
-
-
-def play_error_sound():
-    """Play the sound for error notifications."""
-    _play_sound_file(ERROR_SOUND)
+        # Create the user sounds directory if it doesn't exist
+        os.makedirs(USER_SOUNDS_DIR, exist_ok=True)
+        
+    def enable(self):
+        """Enable audio feedback."""
+        self.enabled = True
+        
+    def disable(self):
+        """Disable audio feedback."""
+        self.enabled = False
+        
+    def play_sound(self, sound_name):
+        """
+        Play a sound.
+        
+        Args:
+            sound_name: The name of the sound to play (without extension)
+        """
+        if not self.enabled:
+            return
+            
+        # Check for mp3 first, then fall back to wav
+        for ext in ["mp3", "wav"]:
+            sound_path = get_sound_path(f"{sound_name}.{ext}")
+            if sound_path:
+                break
+        
+        if not sound_path:
+            logger.error(f"No sound file found for {sound_name}")
+            return
+            
+        try:
+            # Use different players depending on platform
+            command = None
+            
+            if sys.platform == "linux":
+                # Try paplay (PulseAudio) first, then fall back to aplay (ALSA)
+                if os.path.exists("/usr/bin/paplay"):
+                    command = ["paplay", sound_path]
+                elif os.path.exists("/usr/bin/aplay"):
+                    command = ["aplay", "-q", sound_path]
+            
+            if command:
+                # Run the command in the background
+                subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logger.debug(f"Playing sound: {sound_path}")
+            else:
+                logger.warning("No suitable audio player found")
+                
+        except Exception as e:
+            logger.error(f"Failed to play sound {sound_name}: {str(e)}")
+            
+    def play_start(self):
+        """Play the recording start sound."""
+        self.play_sound(START_SOUND)
+        
+    def play_stop(self):
+        """Play the recording stop sound."""
+        self.play_sound(STOP_SOUND)
+        
+    def play_error(self):
+        """Play the error sound."""
+        self.play_sound(ERROR_SOUND)

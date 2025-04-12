@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-Text injection module for Ubuntu Voice Typing.
+Text injection module for Vocalinux.
 
 This module is responsible for injecting recognized text into the active
 application, supporting both X11 and Wayland environments.
@@ -7,6 +8,7 @@ application, supporting both X11 and Wayland environments.
 
 import logging
 import os
+import platform
 import shutil
 import subprocess
 import time
