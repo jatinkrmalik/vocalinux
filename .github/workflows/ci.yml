@@ -31,7 +31,11 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install .[dev]
+        # Install the package in development mode
+        python -m pip install -e ".[dev]"
+        # Create a requirements.txt file for dependency caching
+        python -c "from setuptools import setup; setup()" egg_info
+        if [ -f setup.py ]; then pip install -e .; fi
         
     - name: Lint with flake8
       run: |
