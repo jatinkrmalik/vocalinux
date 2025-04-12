@@ -19,7 +19,10 @@ gi.require_version("AppIndicator3", "0.1")
 from gi.repository import Gtk, AppIndicator3, GObject, GLib
 
 # Import local modules
-from speech_recognition.recognition_manager import SpeechRecognitionManager, RecognitionState
+from speech_recognition.recognition_manager import (
+    SpeechRecognitionManager,
+    RecognitionState,
+)
 from text_injection.text_injector import TextInjector
 from ui.keyboard_shortcuts import KeyboardShortcutManager
 
@@ -36,66 +39,66 @@ PROCESSING_ICON = "microphone-process"
 class TrayIndicator:
     """
     System tray indicator for Vocalinux.
-    
+
     This class provides a system tray icon with a menu for controlling
     the speech recognition process.
     """
-    
-    def __init__(self, speech_engine: SpeechRecognitionManager, text_injector: TextInjector):
+
+    def __init__(
+        self, speech_engine: SpeechRecognitionManager, text_injector: TextInjector
+    ):
         """
         Initialize the system tray indicator.
-        
+
         Args:
             speech_engine: The speech recognition manager instance
             text_injector: The text injector instance
         """
         self.speech_engine = speech_engine
         self.text_injector = text_injector
-        
+
         # Initialize keyboard shortcut manager
         self.shortcut_manager = KeyboardShortcutManager()
-        
+
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
-        
+
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
-        
+
         # Initialize the icon files
         self._init_icons()
-        
+
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
-        
+
         # Set up keyboard shortcuts
         self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
         self.shortcut_manager.start()
-    
+
     def _init_icons(self):
         """Initialize the icon files for the tray indicator."""
         # TODO: Copy default icons to the icon directory if they don't exist
         pass
-    
+
     def _init_indicator(self):
         """Initialize the system tray indicator."""
         logger.info("Initializing system tray indicator")
-        
+
         # Create the indicator
         self.indicator = AppIndicator3.Indicator.new(
-            APP_ID,
-            DEFAULT_ICON,
-            AppIndicator3.IndicatorCategory.APPLICATION_STATUS
+            APP_ID, DEFAULT_ICON, AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
-        
+
         # Set the icon path
         self.indicator.set_icon_theme_path(ICON_DIR)
-        
+
         # Set the indicator status
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-        
+
         # Create the menu
         self.menu = Gtk.Menu()
-        
+
         # Add menu items
         self._add_menu_item("Start Voice Typing", self._on_start_clicked)
         self._add_menu_item("Stop Voice Typing", self._on_stop_clicked)
@@ -104,29 +107,29 @@ class TrayIndicator:
         self._add_menu_separator()
         self._add_menu_item("About", self._on_about_clicked)
         self._add_menu_item("Quit", self._on_quit_clicked)
-        
+
         # Set the indicator menu
         self.indicator.set_menu(self.menu)
-        
+
         # Show the menu
         self.menu.show_all()
-        
+
         # Update the UI based on the initial state
         self._update_ui(RecognitionState.IDLE)
-        
+
         return False  # Remove idle callback
-    
+
     def _toggle_recognition(self):
         """Toggle the recognition state between IDLE and LISTENING."""
         if self.speech_engine.state == RecognitionState.IDLE:
             self.speech_engine.start_recognition()
         else:
             self.speech_engine.stop_recognition()
-    
+
     def _add_menu_item(self, label: str, callback: Callable):
         """
         Add a menu item to the indicator menu.
-        
+
         Args:
             label: The label for the menu item
             callback: The callback function to call when the item is clicked
@@ -135,26 +138,26 @@ class TrayIndicator:
         item.connect("activate", callback)
         self.menu.append(item)
         return item
-    
+
     def _add_menu_separator(self):
         """Add a separator to the indicator menu."""
         separator = Gtk.SeparatorMenuItem()
         self.menu.append(separator)
-    
+
     def _on_recognition_state_changed(self, state: RecognitionState):
         """
         Handle changes in the speech recognition state.
-        
+
         Args:
             state: The new recognition state
         """
         # Update the UI in the GTK main thread
         GLib.idle_add(self._update_ui, state)
-    
+
     def _update_ui(self, state: RecognitionState):
         """
         Update the UI based on the recognition state.
-        
+
         Args:
             state: The current recognition state
         """
@@ -174,13 +177,13 @@ class TrayIndicator:
             self.indicator.set_icon(DEFAULT_ICON)
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
-        
+
         return False  # Remove idle callback
-    
+
     def _set_menu_item_enabled(self, label: str, enabled: bool):
         """
         Set the enabled state of a menu item by its label.
-        
+
         Args:
             label: The label of the menu item
             enabled: Whether the item should be enabled
@@ -189,26 +192,26 @@ class TrayIndicator:
             if isinstance(item, Gtk.MenuItem) and item.get_label() == label:
                 item.set_sensitive(enabled)
                 break
-    
+
     def _on_start_clicked(self, widget):
         """Handle click on the Start Voice Typing menu item."""
         logger.debug("Start Voice Typing clicked")
         self.speech_engine.start_recognition()
-    
+
     def _on_stop_clicked(self, widget):
         """Handle click on the Stop Voice Typing menu item."""
         logger.debug("Stop Voice Typing clicked")
         self.speech_engine.stop_recognition()
-    
+
     def _on_settings_clicked(self, widget):
         """Handle click on the Settings menu item."""
         logger.debug("Settings clicked")
         # TODO: Implement settings dialog
-        
+
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
         logger.debug("About clicked")
-        
+
         about_dialog = Gtk.AboutDialog()
         about_dialog.set_program_name("Vocalinux")
         about_dialog.set_version("0.1.0")
@@ -217,43 +220,43 @@ class TrayIndicator:
         about_dialog.set_website("https://github.com/vocalinux")
         about_dialog.set_website_label("GitHub Repository")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
-        
+
         # Run the dialog
         about_dialog.run()
         about_dialog.destroy()
-    
+
     def _on_quit_clicked(self, widget):
         """Handle click on the Quit menu item."""
         logger.debug("Quit clicked")
         self._quit()
-    
+
     def _quit(self):
         """Quit the application."""
         logger.info("Quitting application")
-        
+
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
-        
+
         Gtk.main_quit()
-    
+
     def run(self):
         """Run the application main loop."""
         logger.info("Starting GTK main loop")
-        
+
         # Set up signal handlers for graceful termination
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
-        
+
         # Start the GTK main loop
         try:
             Gtk.main()
         except KeyboardInterrupt:
             self._quit()
-    
+
     def _signal_handler(self, sig, frame):
         """
         Handle signals (e.g., SIGINT, SIGTERM).
-        
+
         Args:
             sig: The signal number
             frame: The current stack frame
