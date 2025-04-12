@@ -6,10 +6,10 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.speech_recognition.recognition_manager import (
-    SpeechRecognitionManager,
     RecognitionState,
+    SpeechRecognitionManager,
 )
-from src.text_injection.text_injector import TextInjector, DesktopEnvironment
+from src.text_injection.text_injector import DesktopEnvironment, TextInjector
 
 
 class TestSpeechRecognition(unittest.TestCase):

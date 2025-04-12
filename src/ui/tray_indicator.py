@@ -5,7 +5,6 @@ This module provides a system tray indicator for controlling the speech
 recognition process and displaying its status.
 """
 
-import gi
 import logging
 import os
 import signal
@@ -13,15 +12,17 @@ import sys
 import threading
 from typing import Callable, Dict, Optional
 
+import gi
+
 # Import GTK
 gi.require_version("Gtk", "3.0")
 gi.require_version("AppIndicator3", "0.1")
-from gi.repository import Gtk, AppIndicator3, GObject, GLib
+from gi.repository import AppIndicator3, GLib, GObject, Gtk
 
 # Import local modules
 from speech_recognition.recognition_manager import (
-    SpeechRecognitionManager,
     RecognitionState,
+    SpeechRecognitionManager,
 )
 from text_injection.text_injector import TextInjector
 from ui.keyboard_shortcuts import KeyboardShortcutManager
