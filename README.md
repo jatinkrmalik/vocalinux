@@ -192,6 +192,30 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
+### Pre-commit Hooks
+
+This project uses pre-commit hooks to ensure code quality and consistency. The hooks will automatically check your code for linting errors before each commit, which helps prevent CI pipeline failures.
+
+To set up pre-commit hooks:
+
+1. Install pre-commit: `pip install pre-commit`
+2. Install the git hooks: `pre-commit install`
+
+Now, when you try to commit changes, the pre-commit hooks will automatically run and check your code. If any issues are found, the commit will be blocked until you fix them.
+
+To manually run all pre-commit hooks on all files:
+```
+pre-commit run --all-files
+```
+
+### Pre-commit Checks
+
+The following checks are performed by pre-commit:
+- **black**: Code formatting
+- **isort**: Import sorting
+- **flake8**: Code style and error detection
+- Various file checks (trailing whitespace, merge conflicts, etc.)
+
 ### Key Components
 
 1. **Speech Recognition Manager** (`src/speech_recognition/recognition_manager.py`)
