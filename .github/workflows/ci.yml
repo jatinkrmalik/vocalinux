@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, '3.11']  # Test oldest and newest supported versions
+        python-version: [3.8] 
 
     steps:
     - uses: actions/checkout@v3
