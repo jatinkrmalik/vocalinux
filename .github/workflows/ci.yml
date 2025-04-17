@@ -74,8 +74,10 @@ jobs:
     - name: Run pytest suite with coverage
       run: |
         source venv/bin/activate
+        # Ensure pytest-cov is installed
+        pip install pytest-cov
         # Make sure Python can find the 'src' module
-        PYTHONPATH=$PWD pytest --cov src tests/
+        PYTHONPATH=$PWD pytest --cov=src tests/
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
