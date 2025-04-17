@@ -6,18 +6,23 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.ui.audio_feedback import (ERROR_SOUND, RESOURCES_DIR, SOUNDS_DIR,
-                                  START_SOUND, STOP_SOUND)
+from src.ui.audio_feedback import (
+    ERROR_SOUND,
+    RESOURCES_DIR,
+    SOUNDS_DIR,
+    START_SOUND,
+    STOP_SOUND,
+)
 
 
 class TestAudioFeedback(unittest.TestCase):
     """Test cases for audio feedback functionality."""
-    
+
     def test_resource_paths(self):
         """Test that resource paths are correctly set up."""
         # Verify resource paths are correctly defined
-        self.assertTrue(os.path.dirname(RESOURCES_DIR).endswith('vocalinux'))
-        self.assertTrue(SOUNDS_DIR.endswith('sounds'))
+        self.assertTrue(os.path.dirname(RESOURCES_DIR).endswith("vocalinux"))
+        self.assertTrue(SOUNDS_DIR.endswith("sounds"))
         self.assertEqual(os.path.basename(START_SOUND), "start_recording.wav")
         self.assertEqual(os.path.basename(STOP_SOUND), "stop_recording.wav")
         self.assertEqual(os.path.basename(ERROR_SOUND), "error.wav")
