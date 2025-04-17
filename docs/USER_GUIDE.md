@@ -50,15 +50,12 @@ Vocalinux supports several commands that you can speak to control formatting:
 
 ## Customization
 
-### Keyboard Shortcuts
+### Keyboard Shortcut
 
-Vocalinux supports global keyboard shortcuts for starting and stopping voice typing:
+Vocalinux uses a double-tap Ctrl keyboard shortcut for starting and stopping voice typing:
 
-- **Double-tap Ctrl** (default): Quickly press the Ctrl key twice to toggle voice typing on or off
-- **Custom shortcuts**: You can configure additional keyboard shortcuts if needed:
-  1. Open the application settings from the tray icon menu
-  2. Go to the "Shortcuts" tab
-  3. Set your preferred keyboard shortcut
+- **Double-tap Ctrl**: Quickly press the Ctrl key twice to toggle voice typing on or off
+- The time between taps should be less than 0.3 seconds to be recognized as a double-tap
 
 ### Model Settings
 

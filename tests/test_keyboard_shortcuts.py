@@ -43,11 +43,6 @@ class TestKeyboardShortcuts(unittest.TestCase):
         self.mock_keyboard.Key.cmd_l = "Key.cmd_l"
         self.mock_keyboard.Key.cmd_r = "Key.cmd_r"
 
-        # Mock KeyCode.from_char
-        key_v = MagicMock()
-        key_v.char = "v"
-        self.mock_keyboard.KeyCode.from_char.return_value = key_v
-
         # Create mock Listener
         self.mock_listener = MagicMock()
         self.mock_listener.is_alive.return_value = True
@@ -63,10 +58,10 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
     def test_init(self):
         """Test initialization of the keyboard shortcut manager."""
-        # Verify default shortcut is set to double-tap Ctrl
-        self.assertEqual(self.ksm.default_shortcut, "double_tap_ctrl")
         # Verify double-tap threshold is set
         self.assertEqual(self.ksm.double_tap_threshold, 0.3)
+        # Verify double-tap callback is initially None
+        self.assertIsNone(self.ksm.double_tap_callback)
 
     def test_start_listener(self):
         """Test starting the keyboard listener."""
@@ -135,68 +130,16 @@ class TestKeyboardShortcuts(unittest.TestCase):
         if hasattr(self.ksm, "listener") and self.ksm.listener:
             self.mock_listener.stop.assert_not_called()
 
-    def test_register_shortcut(self):
-        """Test registering keyboard shortcuts."""
-        # Create mock callback and shortcut
-        callback = MagicMock()
-        modifiers = {self.mock_keyboard.Key.ctrl, self.mock_keyboard.Key.shift}
-        key = MagicMock()
-        key.char = "s"
-
-        # Mock _get_key_name to avoid errors
-        self.ksm._get_key_name = MagicMock(return_value="S")
-
-        # Register the shortcut
-        self.ksm.register_shortcut(modifiers, key, callback)
-
-        # Verify it was registered
-        shortcut_key = (frozenset(modifiers), key)
-        self.assertEqual(self.ksm.shortcuts[shortcut_key], callback)
-
-    def test_register_double_tap_ctrl(self):
-        """Test registering double-tap Ctrl callback."""
-        # Create mock callback
-        callback = MagicMock()
-
-        # Register as double-tap callback
-        self.ksm.register_double_tap_ctrl(callback)
-
-        # Verify it was set correctly
-        self.assertEqual(self.ksm.double_tap_callback, callback)
-
-    def test_register_toggle_callback_with_double_tap(self):
+    def test_register_toggle_callback(self):
         """Test registering toggle callback with double-tap shortcut."""
         # Create mock callback
         callback = MagicMock()
-
-        # Set default shortcut to double-tap Ctrl
-        self.ksm.default_shortcut = "double_tap_ctrl"
 
         # Register as toggle callback
         self.ksm.register_toggle_callback(callback)
 
         # Verify it was registered as double-tap callback
         self.assertEqual(self.ksm.double_tap_callback, callback)
-
-    def test_register_toggle_callback_with_normal_shortcut(self):
-        """Test registering toggle callback with normal shortcut."""
-        # Create mock callback
-        callback = MagicMock()
-
-        # Set default shortcut to a normal key combination
-        modifiers = {self.mock_keyboard.Key.alt, self.mock_keyboard.Key.shift}
-        key = self.mock_keyboard.KeyCode.from_char("v")
-        self.ksm.default_shortcut = (modifiers, key)
-
-        # Mock _get_key_name to avoid errors
-        self.ksm._get_key_name = MagicMock(return_value="V")
-
-        # Register as toggle callback
-        self.ksm.register_toggle_callback(callback)
-
-        # Verify it was registered with default shortcut
-        shortcut_key = (frozenset(modifiers), key)
-        self.assertEqual(self.ksm.shortcuts[shortcut_key], callback)
 
     def test_key_press_modifier(self):
         """Test handling a modifier key press."""
@@ -209,11 +152,11 @@ class TestKeyboardShortcuts(unittest.TestCase):
         # Make sure current_keys is set and initially empty
         self.ksm.current_keys = set()
 
-        # Simulate pressing Alt
-        on_press(self.mock_keyboard.Key.alt)
+        # Simulate pressing Ctrl
+        on_press(self.mock_keyboard.Key.ctrl)
 
-        # Verify Alt was added to current keys
-        self.assertIn(self.mock_keyboard.Key.alt, self.ksm.current_keys)
+        # Verify Ctrl was added to current keys
+        self.assertIn(self.mock_keyboard.Key.ctrl, self.ksm.current_keys)
 
     def test_double_tap_ctrl(self):
         """Test double-tap Ctrl detection."""
@@ -225,7 +168,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
         # Register mock callback for double-tap Ctrl
         callback = MagicMock()
-        self.ksm.register_double_tap_ctrl(callback)
+        self.ksm.register_toggle_callback(callback)
 
         # Set up initial state
         self.ksm.last_ctrl_press_time = (
@@ -267,107 +210,6 @@ class TestKeyboardShortcuts(unittest.TestCase):
             self.mock_keyboard.Key.alt,
         )
 
-    def test_get_key_name(self):
-        """Test getting readable name for a key."""
-        # Create a key with .char attribute
-        char_key = MagicMock()
-        char_key.char = "a"
-        self.assertEqual(self.ksm._get_key_name(char_key), "A")
-
-        # Create a key with .name attribute but no .char
-        name_key = MagicMock()
-        name_key.name = "shift"
-        name_key.char = None
-        self.assertEqual(self.ksm._get_key_name(name_key), "shift")
-
-        # Create a key with neither .char nor .name
-        other_key = "other_key"
-        self.assertEqual(self.ksm._get_key_name(other_key), "other_key")
-
-    def test_key_press_shortcut_trigger(self):
-        """Test triggering a shortcut."""
-        # Initialize and start to set up the listener
-        self.ksm.start()
-
-        # Create a simplified on_press function to avoid complex type checking
-        # This focuses on testing the shortcut logic, not the key detection
-        def simplified_on_press(key):
-            # Simply check for our specific key and trigger callback
-            shortcut_key = (frozenset({self.mock_keyboard.Key.ctrl}), key)
-            if shortcut_key in self.ksm.shortcuts:
-                callback = self.ksm.shortcuts[shortcut_key]
-                callback()
-
-        # Register a test shortcut (Ctrl+S)
-        callback = MagicMock()
-
-        # Create keys
-        ctrl_key = self.mock_keyboard.Key.ctrl
-        s_key = MagicMock()
-        s_key.char = "s"
-
-        # Set up the shortcut
-        modifiers = {ctrl_key}
-        self.ksm.register_shortcut(modifiers, s_key, callback)
-
-        # Simulate pressing 's'
-        simplified_on_press(s_key)
-
-        # Verify callback was triggered
-        callback.assert_called_once()
-
-    def test_key_release(self):
-        """Test handling a key release."""
-        # Initialize and start to set up the listener
-        self.ksm.start()
-
-        # Get the on_release handler
-        on_release = self.mock_keyboard.Listener.call_args[1]["on_release"]
-
-        # Add some keys
-        self.ksm.current_keys = {
-            self.mock_keyboard.Key.ctrl,
-            self.mock_keyboard.Key.alt,
-        }
-
-        # Simulate releasing Ctrl
-        on_release(self.mock_keyboard.Key.ctrl)
-
-        # Verify Ctrl was removed
-        self.assertNotIn(self.mock_keyboard.Key.ctrl, self.ksm.current_keys)
-
-    def test_shortcut_debounce(self):
-        """Test that shortcuts have debounce protection."""
-        # Initialize and start to set up the listener
-        self.ksm.start()
-
-        # Get the on_press handler
-        on_press = self.mock_keyboard.Listener.call_args[1]["on_press"]
-
-        # Register a test shortcut
-        callback = MagicMock()
-
-        # Create keys
-        ctrl_key = self.mock_keyboard.Key.ctrl
-        s_key = MagicMock()
-        s_key.char = "s"
-
-        # Set up the shortcut
-        modifiers = {ctrl_key}
-        self.ksm.register_shortcut(modifiers, s_key, callback)
-
-        # Set up the current keys
-        self.ksm.current_keys = {ctrl_key}
-
-        # Set last trigger time to now
-        self.ksm.last_trigger_time = time.time()
-
-        # Simulate pressing 's'
-        on_press(s_key)
-
-        # Callback should not be called due to debounce
-        callback.assert_not_called()
-
     def test_double_tap_ctrl_debounce(self):
         """Test that double-tap Ctrl has debounce protection."""
         # Initialize and start to set up the listener
@@ -378,7 +220,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
         # Register mock callback for double-tap Ctrl
         callback = MagicMock()
-        self.ksm.register_double_tap_ctrl(callback)
+        self.ksm.register_toggle_callback(callback)
 
         # Set up initial state (recent trigger)
         self.ksm.last_ctrl_press_time = (
@@ -393,6 +235,23 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
         # Verify callback was NOT triggered
         callback.assert_not_called()
+
+    def test_key_release(self):
+        """Test handling a key release."""
+        # Initialize and start to set up the listener
+        self.ksm.start()
+
+        # Get the on_release handler
+        on_release = self.mock_keyboard.Listener.call_args[1]["on_release"]
+
+        # Add some keys
+        self.ksm.current_keys = {self.mock_keyboard.Key.ctrl}
+
+        # Simulate releasing Ctrl
+        on_release(self.mock_keyboard.Key.ctrl)
+
+        # Verify Ctrl was removed
+        self.assertNotIn(self.mock_keyboard.Key.ctrl, self.ksm.current_keys)
 
     def test_error_handling(self):
         """Test error handling in key event handlers."""
@@ -428,17 +287,3 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
             # When keyboard is not available, active should remain False
             self.assertFalse(ksm.active)
-
-            # Should still be able to register shortcuts, but they won't do anything
-            callback = MagicMock()
-
-            # Create simulated keys
-            ctrl_key = "Key.ctrl"
-            s_key = MagicMock()
-            s_key.char = "s"
-
-            # Register
-            ksm.register_shortcut({ctrl_key}, s_key, callback)
-
-            # Verify it was added
-            self.assertEqual(len(ksm.shortcuts), 1)
