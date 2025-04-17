@@ -3,16 +3,54 @@ name: Vocalinux CI
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 jobs:
-  build:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        cache-dependency-path: 'setup.py'
+    
+    - name: Install development dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install flake8 black isort
+        
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
+        
+    - name: Check formatting with black
+      run: |
+        black --check src/ tests/
+        
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --profile black src/ tests/
+
+  test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9, '3.10', '3.11']
+        python-version: [3.8, '3.11']  # Test oldest and newest supported versions
 
     steps:
     - uses: actions/checkout@v3
@@ -21,6 +59,8 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+        cache-dependency-path: 'setup.py'
         
     - name: Install system dependencies
       run: |
@@ -37,6 +77,14 @@ jobs:
           libcairo-gobject2 \
           gir1.2-gtk-3.0
     
+    - name: Cache apt packages
+      uses: actions/cache@v3
+      with:
+        path: /var/cache/apt/archives
+        key: ${{ runner.os }}-apt-${{ hashFiles('**/apt-packages.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-apt-
+    
     - name: Set up virtual environment
       run: |
         python -m venv venv
@@ -44,32 +92,13 @@ jobs:
         python -m pip install --upgrade pip
         # Install the package in development mode with dev dependencies
         python -m pip install -e ".[dev]"
+        python -m pip install pytest pytest-cov
         echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
         echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
-        
-    - name: Lint with flake8
-      run: |
-        source venv/bin/activate
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings
-        flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
-        
-    - name: Check formatting with black
-      run: |
-        source venv/bin/activate
-        black --check src/ tests/
-        
-    - name: Check import sorting with isort
-      run: |
-        source venv/bin/activate
-        isort --check-only --profile black src/ tests/
         
     - name: Run pytest suite with coverage
       run: |
         source venv/bin/activate
-        # Ensure pytest-cov is installed
-        pip install pytest-cov
         # Make sure Python can find the 'src' module
         PYTHONPATH=$PWD pytest --cov=src tests/
         
