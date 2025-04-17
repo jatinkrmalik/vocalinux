@@ -26,13 +26,14 @@ mock_audio_feedback.play_stop_sound = MagicMock()
 mock_audio_feedback.play_error_sound = MagicMock()
 sys.modules["src.ui.audio_feedback"] = mock_audio_feedback
 
+from src.speech_recognition.command_processor import CommandProcessor
+
 # Now we can import our module
 from src.speech_recognition.recognition_manager import (
+    MODELS_DIR,
     RecognitionState,
     SpeechRecognitionManager,
-    MODELS_DIR,
 )
-from src.speech_recognition.command_processor import CommandProcessor
 
 
 class TestSpeechRecognition(unittest.TestCase):
