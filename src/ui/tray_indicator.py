@@ -218,7 +218,7 @@ class TrayIndicator:
         about_dialog.set_version("0.1.0")
         about_dialog.set_copyright("© 2025 Vocalinux Team")
         about_dialog.set_comments("A seamless voice dictation system for Ubuntu")
-        about_dialog.set_website("https://github.com/vocalinux")
+        about_dialog.set_website("https://github.com/jatinkrmalik/vocalinux")
         about_dialog.set_website_label("GitHub Repository")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
 

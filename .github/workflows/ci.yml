@@ -75,7 +75,7 @@ jobs:
       run: |
         source venv/bin/activate
         # Make sure Python can find the 'src' module
-        PYTHONPATH=$PWD pytest --cov=src tests/
+        PYTHONPATH=$PWD pytest --cov src tests/
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
