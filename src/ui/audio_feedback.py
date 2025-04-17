@@ -29,7 +29,7 @@ def _get_audio_player():
     Determine the best available audio player on the system.
 
     Returns:
-        tuple: (player_command, format_supported)
+        tuple: (player_command, supported_formats)
     """
     # Check for PulseAudio paplay (preferred)
     if shutil.which("paplay"):
@@ -58,6 +58,9 @@ def _play_sound_file(sound_path):
 
     Args:
         sound_path: Path to the sound file
+        
+    Returns:
+        bool: True if sound was played successfully, False otherwise
     """
     if not os.path.exists(sound_path):
         logger.warning(f"Sound file not found: {sound_path}")
@@ -104,15 +107,30 @@ def _play_sound_file(sound_path):
 
 
 def play_start_sound():
-    """Play the sound for starting voice recognition."""
-    _play_sound_file(START_SOUND)
+    """
+    Play the sound for starting voice recognition.
+    
+    Returns:
+        bool: True if sound was played successfully, False otherwise
+    """
+    return _play_sound_file(START_SOUND)
 
 
 def play_stop_sound():
-    """Play the sound for stopping voice recognition."""
-    _play_sound_file(STOP_SOUND)
+    """
+    Play the sound for stopping voice recognition.
+    
+    Returns:
+        bool: True if sound was played successfully, False otherwise
+    """
+    return _play_sound_file(STOP_SOUND)
 
 
 def play_error_sound():
-    """Play the sound for error notifications."""
-    _play_sound_file(ERROR_SOUND)
+    """
+    Play the sound for error notifications.
+    
+    Returns:
+        bool: True if sound was played successfully, False otherwise
+    """
+    return _play_sound_file(ERROR_SOUND)
