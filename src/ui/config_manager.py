@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         "timeout": 2.0,  # Seconds of silence before stopping recognition
     },
     "shortcuts": {
-        "toggle_recognition": "alt+shift+v",
+        "toggle_recognition": "ctrl+ctrl",  # Double-tap Ctrl
     },
     "ui": {
         "start_minimized": False,
