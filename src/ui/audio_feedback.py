@@ -58,7 +58,7 @@ def _play_sound_file(sound_path):
 
     Args:
         sound_path: Path to the sound file
-        
+
     Returns:
         bool: True if sound was played successfully, False otherwise
     """
@@ -109,7 +109,7 @@ def _play_sound_file(sound_path):
 def play_start_sound():
     """
     Play the sound for starting voice recognition.
-    
+
     Returns:
         bool: True if sound was played successfully, False otherwise
     """
@@ -119,7 +119,7 @@ def play_start_sound():
 def play_stop_sound():
     """
     Play the sound for stopping voice recognition.
-    
+
     Returns:
         bool: True if sound was played successfully, False otherwise
     """
@@ -129,7 +129,7 @@ def play_stop_sound():
 def play_error_sound():
     """
     Play the sound for error notifications.
-    
+
     Returns:
         bool: True if sound was played successfully, False otherwise
     """

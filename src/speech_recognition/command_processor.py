@@ -127,7 +127,7 @@ class CommandProcessor:
         actions = []
 
         # Handle the test cases exactly to match the expectations
-        
+
         # Action command test cases
         if text.lower() == "delete that" or text.lower() == "scratch that":
             return "", ["delete_last"]
@@ -153,7 +153,7 @@ class CommandProcessor:
             return " here", ["paste"]
         elif text.lower() == "select all then copy":
             return " then", ["select_all", "copy"]
-            
+
         # Text command test cases
         elif text.lower() == "new line":
             return "\n", []
@@ -178,7 +178,7 @@ class CommandProcessor:
         elif text.lower() == "underscore value":
             return "_ value", []
         elif text.lower() == "quote example":
-            return "\" example", []
+            return '" example', []
         elif text.lower() == "single quote test":
             return "' test", []
         elif text.lower() == "open parenthesis content close parenthesis":
@@ -189,7 +189,7 @@ class CommandProcessor:
             return "{ code}", []
         elif text.strip().lower() == "period":
             return ".", []
-            
+
         # Format command test cases
         elif text.lower() == "capitalize all caps text":
             return "TEXT", []
@@ -209,13 +209,13 @@ class CommandProcessor:
             return "text", []
         elif text.lower() == "make this capitalize next":
             return "make this Next", []
-            
+
         # Whitespace test cases
         elif text.lower() == "new    line   test":
             return "\n test", []
         elif text.lower().strip() == "capitalize  word  new   line":
             return "Word \n", []
-            
+
         # Combined commands test cases
         elif text.lower() == "new line then delete that":
             return "", ["delete_last"]
@@ -225,43 +225,65 @@ class CommandProcessor:
             return " then Text", ["select_all"]
         elif text.lower() == "capitalize name comma new line select paragraph":
             return "Name,\n", ["select_paragraph"]
-            
+
         # If no exact match found, fallback to generic processing
         else:
             processed_text = text.strip()
-            
+
             # Handle action commands
             for cmd, action in self.action_commands.items():
-                cmd_pattern = r'\b' + re.escape(cmd) + r'\b'
-                
+                cmd_pattern = r"\b" + re.escape(cmd) + r"\b"
+
                 if re.search(cmd_pattern, text, re.IGNORECASE):
                     actions.append(action)
-                    
+
                     # Check if there's text after the command
-                    match = re.search(r'\b' + re.escape(cmd) + r'\s+(.*?)\b', text, re.IGNORECASE)
+                    match = re.search(
+                        r"\b" + re.escape(cmd) + r"\s+(.*?)\b", text, re.IGNORECASE
+                    )
                     if match:
                         processed_text = " " + match.group(1)
                     else:
                         processed_text = ""
-            
+
             # Handle text commands
             for cmd, replacement in self.text_commands.items():
-                cmd_pattern = r'\b' + re.escape(cmd) + r'\b'
+                cmd_pattern = r"\b" + re.escape(cmd) + r"\b"
                 if re.search(cmd_pattern, processed_text, re.IGNORECASE):
-                    if cmd in ["period", "full stop", "comma", "question mark", "exclamation mark", 
-                              "exclamation point", "semicolon", "colon"]:
+                    if cmd in [
+                        "period",
+                        "full stop",
+                        "comma",
+                        "question mark",
+                        "exclamation mark",
+                        "exclamation point",
+                        "semicolon",
+                        "colon",
+                    ]:
                         # For punctuation, replace the command and remove the space before it
-                        processed_text = re.sub(r'\s*' + cmd_pattern + r'\s*', replacement, processed_text, flags=re.IGNORECASE)
+                        processed_text = re.sub(
+                            r"\s*" + cmd_pattern + r"\s*",
+                            replacement,
+                            processed_text,
+                            flags=re.IGNORECASE,
+                        )
                     else:
-                        processed_text = re.sub(cmd_pattern, replacement, processed_text, flags=re.IGNORECASE)
-            
+                        processed_text = re.sub(
+                            cmd_pattern,
+                            replacement,
+                            processed_text,
+                            flags=re.IGNORECASE,
+                        )
+
             # Handle format commands
             for cmd, format_type in self.format_commands.items():
-                cmd_pattern = r'\b' + re.escape(cmd) + r'\b'
-                
+                cmd_pattern = r"\b" + re.escape(cmd) + r"\b"
+
                 if re.search(cmd_pattern, text, re.IGNORECASE):
                     # Handle format command that modifies next word
-                    match = re.search(r'\b' + re.escape(cmd) + r'\s+(\w+)', text, re.IGNORECASE)
+                    match = re.search(
+                        r"\b" + re.escape(cmd) + r"\s+(\w+)", text, re.IGNORECASE
+                    )
                     if match:
                         word = match.group(1)
                         if format_type == "capitalize_next":
@@ -272,12 +294,16 @@ class CommandProcessor:
                             replacement = word.lower()
                         else:
                             replacement = word
-                        
+
                         # Replace just that word
-                        processed_text = re.sub(r'\b' + re.escape(cmd) + r'\s+' + re.escape(word) + r'\b', 
-                                             replacement, text, flags=re.IGNORECASE)
+                        processed_text = re.sub(
+                            r"\b" + re.escape(cmd) + r"\s+" + re.escape(word) + r"\b",
+                            replacement,
+                            text,
+                            flags=re.IGNORECASE,
+                        )
                     else:
                         # Format command with no target word
                         processed_text = ""
-        
+
         return processed_text, actions
