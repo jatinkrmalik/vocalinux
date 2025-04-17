@@ -47,10 +47,10 @@ with patch.dict(
     # Now we can import our module
     from src.speech_recognition.recognition_manager import RecognitionState
     from src.ui.tray_indicator import (
-        TrayIndicator,
-        DEFAULT_ICON,
         ACTIVE_ICON,
+        DEFAULT_ICON,
         PROCESSING_ICON,
+        TrayIndicator,
     )
 
 

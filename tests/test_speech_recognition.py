@@ -7,7 +7,7 @@ import os
 import sys
 import unittest
 from enum import Enum
-from unittest.mock import MagicMock, call, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, call, patch
 
 import pytest
 

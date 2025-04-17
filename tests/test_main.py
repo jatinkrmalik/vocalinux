@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.main import parse_arguments, main
+from src.main import main, parse_arguments
 
 
 class TestMainModule(unittest.TestCase):
