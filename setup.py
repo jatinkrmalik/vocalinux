@@ -6,7 +6,7 @@ setup(
     version="0.1.0",
     description="A seamless voice dictation system for Linux",
     author="Vocalinux Team",
-    author_email="project@example.com",
+    author_email="jatinkrmalik@gmail.com",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
@@ -23,6 +23,7 @@ setup(
         "whisper": ["whisper", "torch"],  # Optional Whisper AI support
         "dev": [
             "pytest",
+            "pytest-cov",  # Add this for coverage testing
             "black",
             "isort",
             "flake8",
@@ -42,5 +43,5 @@ setup(
         "Programming Language :: Python :: 3",
         "Topic :: Desktop Environment :: Gnome",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.8",  # Updated minimum Python version
 )
