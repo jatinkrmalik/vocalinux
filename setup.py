@@ -17,7 +17,8 @@ setup(
         "PyGObject",  # For GTK UI
         "requests",  # For downloading models
         "tqdm",  # For progress bars during downloads
-        "numpy" # For numerical operations
+        "numpy", # For numerical operations
+        "pyaudio",  # For audio input/output
     ],
     extras_require={
         "whisper": ["whisper", "torch"],  # Optional Whisper AI support
@@ -26,7 +27,8 @@ setup(
             "pytest-cov",  # Add this for coverage testing
             "black",
             "isort",
-            "flake8",
+            "flake8"
+            "precommit",  # For pre-commit hooks
         ],
     },
     entry_points={
