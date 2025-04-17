@@ -51,8 +51,14 @@ class TestKeyboardShortcuts(unittest.TestCase):
             "toggle_dictation", "alt+shift+v", test_callback
         )
         assert "toggle_dictation" in shortcut_manager.shortcuts
-        assert shortcut_manager.shortcuts["toggle_dictation"]["keys"] == ["alt", "shift", "v"]
-        assert shortcut_manager.shortcuts["toggle_dictation"]["callback"] == test_callback
+        assert shortcut_manager.shortcuts["toggle_dictation"]["keys"] == [
+            "alt",
+            "shift",
+            "v",
+        ]
+        assert (
+            shortcut_manager.shortcuts["toggle_dictation"]["callback"] == test_callback
+        )
 
     # Mock test for the detection algorithm - without the dependency
     def test_shortcut_detection_logic(self):

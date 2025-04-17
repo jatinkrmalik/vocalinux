@@ -40,12 +40,12 @@ class TestTextInjector(unittest.TestCase):
         assert mock_run.call_count == 2
         first_call_args = mock_run.call_args_list[0][0][0]
         second_call_args = mock_run.call_args_list[1][0][0]
-        
+
         # Verify first call types the text
         assert first_call_args[0] == "xdotool"
         assert first_call_args[2] == "--clearmodifiers"
         assert first_call_args[3] == "Hello, world!"
-        
+
         # Verify second call presses Escape
         assert second_call_args[0] == "xdotool"
         assert second_call_args[2] == "--clearmodifiers"
