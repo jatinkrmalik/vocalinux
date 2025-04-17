@@ -127,15 +127,15 @@ VENV_DIR="venv"
 if [[ "$USE_VENV" == "yes" ]]; then
     print_info "Setting up Python virtual environment..."
     python3 -m venv $VENV_DIR --system-site-packages
-    
+
     # Activate virtual environment
     source $VENV_DIR/bin/activate
-    
+
     # Update pip and setuptools
     pip install --upgrade pip setuptools wheel
-    
+
     print_info "Virtual environment activated."
-    
+
     # Create activation script for users
     cat > activate-vocalinux.sh << EOF
 #!/bin/bash
