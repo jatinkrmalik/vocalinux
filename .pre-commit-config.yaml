@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        args: [--check]
+        files: ^(src|tests)/
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--check-only", "--profile", "black"]
+        files: ^(src|tests)/
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        name: flake8 (critical)
+        args: ["--count", "--select=E9,F63,F7,F82", "--show-source", "--statistics"]
+        files: ^(src|tests)/
+      - id: flake8
+        name: flake8 (warnings)
+        args: ["--count", "--exit-zero", "--max-complexity=10", "--max-line-length=100", "--statistics"]
+        files: ^(src|tests)/

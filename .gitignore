@@ -42,3 +42,6 @@ Thumbs.db
 
 # Installed desktop entries
 *-installed.desktop
+
+# Pre-commit
+.pre-commit-cache/
