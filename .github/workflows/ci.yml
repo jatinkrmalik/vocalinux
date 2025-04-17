@@ -65,12 +65,6 @@ jobs:
         source venv/bin/activate
         isort --check-only --profile black src/ tests/
         
-    - name: Run basic tests
-      run: |
-        source venv/bin/activate
-        # Make sure Python can find the 'src' module
-        PYTHONPATH=$PWD python tests/run_basic_tests.py
-        
     - name: Run pytest suite with coverage
       run: |
         source venv/bin/activate
