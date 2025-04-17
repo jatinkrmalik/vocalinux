@@ -36,17 +36,19 @@ class KeyboardShortcutManager:
         self.active = False
         self.last_trigger_time = 0  # Track last trigger time to prevent double triggers
 
+        # Double-tap tracking variables
+        self.last_ctrl_press_time = 0
+        self.double_tap_callback = None
+        self.double_tap_threshold = 0.3  # seconds between taps to count as double-tap
+
         if not KEYBOARD_AVAILABLE:
             logger.error(
                 "Keyboard shortcut libraries not available. Shortcuts will not work."
             )
             return
 
-        # Default shortcut for toggling voice typing (Alt+Shift+V)
-        self.default_shortcut = (
-            {keyboard.Key.alt, keyboard.Key.shift},
-            keyboard.KeyCode.from_char("v"),
-        )
+        # Default shortcut for toggling voice typing (double-tap Ctrl)
+        self.default_shortcut = "double_tap_ctrl"
 
     def start(self):
         """Start listening for keyboard shortcuts."""
@@ -115,6 +117,16 @@ class KeyboardShortcutManager:
         shortcut_desc = "+".join(mod_names + [key_name])
         logger.info(f"Registered shortcut: {shortcut_desc}")
 
+    def register_double_tap_ctrl(self, callback: Callable):
+        """
+        Register a callback for the double-tap Ctrl shortcut.
+
+        Args:
+            callback: Function to call when double-tap Ctrl is detected
+        """
+        self.double_tap_callback = callback
+        logger.info("Registered shortcut: Double-tap Ctrl")
+
     def register_toggle_callback(self, callback: Callable):
         """
         Register a callback for the default toggle shortcut.
@@ -122,8 +134,11 @@ class KeyboardShortcutManager:
         Args:
             callback: Function to call when the toggle shortcut is pressed
         """
-        modifiers, key = self.default_shortcut
-        self.register_shortcut(modifiers, key, callback)
+        if self.default_shortcut == "double_tap_ctrl":
+            self.register_double_tap_ctrl(callback)
+        else:
+            modifiers, key = self.default_shortcut
+            self.register_shortcut(modifiers, key, callback)
 
     def _get_key_name(self, key):
         """Get a readable name for a key object."""
@@ -142,6 +157,24 @@ class KeyboardShortcutManager:
             key: The pressed key
         """
         try:
+            # Check for double-tap Ctrl
+            normalized_key = self._normalize_modifier_key(key)
+            if normalized_key == keyboard.Key.ctrl:
+                current_time = time.time()
+                if current_time - self.last_ctrl_press_time < self.double_tap_threshold:
+                    # This is a double-tap Ctrl
+                    if (
+                        self.double_tap_callback
+                        and current_time - self.last_trigger_time > 0.5
+                    ):
+                        logger.debug("Double-tap Ctrl detected")
+                        self.last_trigger_time = current_time
+                        # Run callback in a separate thread to avoid blocking
+                        threading.Thread(
+                            target=self.double_tap_callback, daemon=True
+                        ).start()
+                self.last_ctrl_press_time = current_time
+
             # Add to currently pressed keys (only for modifier keys)
             if key in {
                 keyboard.Key.alt,
@@ -161,7 +194,7 @@ class KeyboardShortcutManager:
                 normalized_key = self._normalize_modifier_key(key)
                 self.current_keys.add(normalized_key)
 
-            # Check for shortcuts (only once per 500ms to prevent double triggers)
+            # Check for regular shortcuts (only once per 500ms to prevent double triggers)
             current_time = time.time()
             if current_time - self.last_trigger_time > 0.5:  # 500ms debounce
                 for (modifiers, trigger_key), callback in self.shortcuts.items():
