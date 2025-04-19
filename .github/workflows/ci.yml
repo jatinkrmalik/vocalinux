@@ -75,7 +75,8 @@ jobs:
           libgirepository1.0-dev \
           gobject-introspection \
           libcairo-gobject2 \
-          gir1.2-gtk-3.0
+          gir1.2-gtk-3.0 \
+          portaudio19-dev
 
     - name: Cache apt packages
       uses: actions/cache@v3

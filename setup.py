@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from setuptools import setup, find_packages
 
+# This package requires several system dependencies that must be installed manually:
+# For PyAudio: portaudio19-dev (on Ubuntu/Debian)
+# For PyGObject: libgirepository1.0-dev, libcairo2-dev, pkg-config, python3-dev
+
 setup(
     name="vocalinux",
     version="0.1.0",
@@ -17,7 +21,8 @@ setup(
         "PyGObject",  # For GTK UI
         "requests",  # For downloading models
         "tqdm",  # For progress bars during downloads
-        "numpy" # For numerical operations
+        "numpy", # For numerical operations
+        "pyaudio",  # For audio input/output
     ],
     extras_require={
         "whisper": ["whisper", "torch"],  # Optional Whisper AI support
@@ -27,6 +32,7 @@ setup(
             "black",
             "isort",
             "flake8",
+            "pre-commit",  # For pre-commit hooks
         ],
     },
     entry_points={
