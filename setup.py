@@ -9,7 +9,7 @@ setup(
     name="vocalinux",
     version="0.1.0",
     description="A seamless voice dictation system for Linux",
-    author="Vocalinux Team",
+    author="@jatinkrmaik",
     author_email="jatinkrmalik@gmail.com",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
