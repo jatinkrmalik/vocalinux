@@ -18,7 +18,7 @@ PACKAGE_DIR = os.path.dirname(MODULE_DIR)
 RESOURCES_DIR = os.path.join(os.path.dirname(PACKAGE_DIR), "resources")
 SOUNDS_DIR = os.path.join(RESOURCES_DIR, "sounds")
 
-# Sound file paths - prioritize WAV files
+# Sound file paths
 START_SOUND = os.path.join(SOUNDS_DIR, "start_recording.wav")
 STOP_SOUND = os.path.join(SOUNDS_DIR, "stop_recording.wav")
 ERROR_SOUND = os.path.join(SOUNDS_DIR, "error.wav")
@@ -68,11 +68,6 @@ def _play_sound_file(sound_path):
 
     player, formats = _get_audio_player()
     if not player:
-        return False
-
-    file_ext = os.path.splitext(sound_path)[1].lower().lstrip(".")
-    if file_ext not in formats:
-        logger.warning(f"Format {file_ext} not supported by {player}")
         return False
 
     try:
