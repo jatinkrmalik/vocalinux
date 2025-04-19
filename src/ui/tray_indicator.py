@@ -68,6 +68,13 @@ class TrayIndicator:
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
+        
+        # Set up icon file paths
+        self.icon_paths = {
+            "default": os.path.join(ICON_DIR, f"{DEFAULT_ICON}.svg"),
+            "active": os.path.join(ICON_DIR, f"{ACTIVE_ICON}.svg"),
+            "processing": os.path.join(ICON_DIR, f"{PROCESSING_ICON}.svg"),
+        }
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -90,14 +97,27 @@ class TrayIndicator:
     def _init_indicator(self):
         """Initialize the system tray indicator."""
         logger.info("Initializing system tray indicator")
-
-        # Create the indicator
-        self.indicator = AppIndicator3.Indicator.new(
-            APP_ID, DEFAULT_ICON, AppIndicator3.IndicatorCategory.APPLICATION_STATUS
+        
+        # Log the icon directory path
+        logger.info(f"Using icon directory: {ICON_DIR}")
+        logger.info(f"Icon directory exists: {os.path.exists(ICON_DIR)}")
+        
+        # List available icon files and check if they exist
+        if os.path.exists(ICON_DIR):
+            icon_files = os.listdir(ICON_DIR)
+            logger.info(f"Available icon files: {icon_files}")
+            
+            for name, path in self.icon_paths.items():
+                exists = os.path.exists(path)
+                logger.info(f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}")
+        
+        # Create the indicator with absolute path to the default icon
+        self.indicator = AppIndicator3.Indicator.new_with_path(
+            APP_ID, 
+            DEFAULT_ICON,
+            AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
+            ICON_DIR
         )
-
-        # Set the icon path
-        self.indicator.set_icon_theme_path(ICON_DIR)
 
         # Set the indicator status
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
@@ -168,19 +188,19 @@ class TrayIndicator:
             state: The current recognition state
         """
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon(DEFAULT_ICON)
+            self.indicator.set_icon_full(self.icon_paths["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon(ACTIVE_ICON)
+            self.indicator.set_icon_full(self.icon_paths["active"], "Microphone on")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon(PROCESSING_ICON)
+            self.indicator.set_icon_full(self.icon_paths["processing"], "Processing speech")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon(DEFAULT_ICON)
+            self.indicator.set_icon_full(self.icon_paths["default"], "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
