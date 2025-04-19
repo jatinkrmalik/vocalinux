@@ -216,9 +216,24 @@ if [[ "$USE_VENV" == "yes" ]]; then
     print_info "Updated desktop entry to use virtual environment"
 fi
 
-# TODO: Install icons
+# Install icons
 print_info "Installing application icons..."
-# Future: Copy SVG icons to ~/.local/share/icons/hicolor/scalable/apps/
+# Create icon directories
+mkdir -p ~/.local/share/icons/hicolor/scalable/apps
+
+# Copy SVG icons to the hicolor icon theme directory
+if [ -d "resources/icons/scalable" ]; then
+    cp resources/icons/scalable/vocalinux.svg ~/.local/share/icons/hicolor/scalable/apps/
+    cp resources/icons/scalable/vocalinux-microphone.svg ~/.local/share/icons/hicolor/scalable/apps/
+    cp resources/icons/scalable/vocalinux-microphone-off.svg ~/.local/share/icons/hicolor/scalable/apps/
+    cp resources/icons/scalable/vocalinux-microphone-process.svg ~/.local/share/icons/hicolor/scalable/apps/
+    print_info "Installed custom Vocalinux icons"
+else
+    print_warning "Custom icons not found in resources/icons/scalable directory"
+fi
+
+# Update icon cache to make the icons available immediately
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
 
 # Run tests if requested
 if [[ "$RUN_TESTS" == "yes" ]]; then

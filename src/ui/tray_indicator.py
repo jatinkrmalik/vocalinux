@@ -17,7 +17,7 @@ import gi
 # Import GTK
 gi.require_version("Gtk", "3.0")
 gi.require_version("AppIndicator3", "0.1")
-from gi.repository import AppIndicator3, GLib, GObject, Gtk
+from gi.repository import AppIndicator3, GLib, GObject, Gtk, GdkPixbuf
 
 # Import local modules
 from speech_recognition.recognition_manager import (
@@ -31,10 +31,15 @@ logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
-ICON_DIR = os.path.expanduser("~/.local/share/vocalinux/icons")
-DEFAULT_ICON = "microphone-off"
-ACTIVE_ICON = "microphone"
-PROCESSING_ICON = "microphone-process"
+ICON_DIR = os.path.abspath(
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "resources/icons/scalable",
+    )
+)
+DEFAULT_ICON = "vocalinux-microphone-off"
+ACTIVE_ICON = "vocalinux-microphone"
+PROCESSING_ICON = "vocalinux-microphone-process"
 
 
 class TrayIndicator:
@@ -222,6 +227,15 @@ class TrayIndicator:
         about_dialog.set_website("https://github.com/jatinkrmalik/vocalinux")
         about_dialog.set_website_label("GitHub Repository")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
+
+        # Set the logo using our custom icon
+        logo_path = os.path.join(ICON_DIR, "vocalinux.svg")
+        if os.path.exists(logo_path):
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
+                about_dialog.set_logo(pixbuf)
+            except Exception as e:
+                logger.warning(f"Failed to load logo: {e}")
 
         # Run the dialog
         about_dialog.run()
