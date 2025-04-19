@@ -41,9 +41,9 @@ vocalinux/
 │   └── USER_GUIDE.md         # User guide with command reference
 ├── resources/                 # Resource files
 │   └── sounds/               # Audio notification sounds
-│       ├── start_recording.mp3  # Sound when recording starts
-│       ├── stop_recording.mp3   # Sound when recording stops
-│       └── error.mp3            # Sound when an error occurs
+│       ├── start_recording.wav  # Sound when recording starts
+│       ├── stop_recording.wav   # Sound when recording stops
+│       └── error.wav            # Sound when an error occurs
 ├── src/                       # Source code
 │   ├── __init__.py           # Package initialization
 │   ├── main.py               # Main entry point
@@ -61,7 +61,17 @@ vocalinux/
 │       ├── keyboard_shortcuts.py  # Keyboard shortcut handling
 │       └── tray_indicator.py  # System tray UI
 ├── tests/                     # Test suite
-│   └── test_basic.py         # Basic unit tests
+│   ├── conftest.py           # Pytest configuration
+│   ├── test_audio_feedback.py
+│   ├── test_command_processor.py
+│   ├── test_config_manager.py
+│   ├── test_keyboard_shortcuts.py
+│   ├── test_main.py
+│   ├── test_recognition_manager.py
+│   ├── test_speech_recognition.py
+│   ├── test_text_injector.py
+│   └── test_tray_indicator.py
+├── activate-vocalinux.sh     # Script to activate the environment
 ├── install.sh                 # Installation script
 ├── LICENSE                    # GPLv3 license
 ├── README.md                  # This file
@@ -74,7 +84,7 @@ vocalinux/
 ### Prerequisites
 
 - Ubuntu 22.04 or newer (may work on other Linux distributions)
-- Python 3.6 or newer
+- Python 3.8 or newer
 - X11 or Wayland desktop environment
 
 ### Quick Install
@@ -114,6 +124,9 @@ vocalinux --engine whisper
 
 # With a specific model size
 vocalinux --model medium
+
+# Force Wayland compatibility mode
+vocalinux --wayland
 ```
 
 ### Using Voice Dictation
@@ -171,11 +184,11 @@ Configuration is stored in `~/.config/vocalinux/config.json` and includes:
 
 You can customize the audio feedback by replacing the sound files in the `resources/sounds/` directory:
 
-- `start_recording.mp3` - Played when recording starts
-- `stop_recording.mp3` - Played when recording stops
-- `error.mp3` - Played when an error occurs
+- `start_recording.wav` - Played when recording starts
+- `stop_recording.wav` - Played when recording stops
+- `error.wav` - Played when an error occurs
 
-Both MP3 and WAV formats are supported, with MP3 being the primary format.
+WAV format is used for all audio notifications.
 
 ## Development
 
@@ -185,6 +198,10 @@ Both MP3 and WAV formats are supported, with MP3 being the primary format.
 # Clone the repository
 git clone https://github.com/jatinkrmalik/vocalinux.git
 cd vocalinux
+
+# Create a virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
 
 # Install development dependencies
 pip install -e ".[dev]"
@@ -235,7 +252,7 @@ The following checks are performed by pre-commit:
 
 4. **Audio Feedback** (`src/ui/audio_feedback.py`)
    - Provides audio cues for application states
-   - Supports both MP3 and WAV formats
+   - Uses WAV format for sound files
    - Uses system audio players (PulseAudio/ALSA)
 
 5. **Tray Indicator** (`src/ui/tray_indicator.py`)
@@ -274,6 +291,8 @@ Future development plans include:
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+For contribution guidelines, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
