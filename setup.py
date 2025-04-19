@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from setuptools import setup, find_packages
 
+# This package requires several system dependencies that must be installed manually:
+# For PyAudio: portaudio19-dev (on Ubuntu/Debian)
+# For PyGObject: libgirepository1.0-dev, libcairo2-dev, pkg-config, python3-dev
+
 setup(
     name="vocalinux",
     version="0.1.0",

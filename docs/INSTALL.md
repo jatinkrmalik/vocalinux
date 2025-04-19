@@ -13,6 +13,9 @@ This guide provides instructions for installing and setting up Vocalinux.
 ### 1. Install System Dependencies
 
 ```bash
+# Required system dependencies for PyAudio and PyGObject
+sudo apt install portaudio19-dev libgirepository1.0-dev libcairo2-dev pkg-config python3-dev
+
 # For X11 environments
 sudo apt install xdotool python3-pip python3-gi gir1.2-appindicator3-0.1
 
@@ -32,19 +35,27 @@ cd vocalinux
 ### 3. Install Python Dependencies
 
 ```bash
+# Create a virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+
 # Basic installation
-pip3 install --user .
+pip install --upgrade pip
+pip install .
 
 # With Whisper support (requires more resources)
-pip3 install --user ".[whisper]"
+pip install ".[whisper]"
 
 # For development
-pip3 install --user ".[dev]"
+pip install ".[dev]"
 ```
 
 ### 4. Run the Application
 
 ```bash
+# If using virtual environment, make sure it's activated
+source venv/bin/activate
+
 # Basic usage
 vocalinux
 
@@ -73,6 +84,14 @@ vocalinux --model large
 Note that larger models require more RAM and may have longer initialization times, but provide better recognition accuracy.
 
 ## Troubleshooting
+
+### Build errors related to PyAudio or PyGObject
+
+If you encounter errors like `portaudio.h: No such file or directory` or issues with GTK/GObject, make sure you've installed all the required system dependencies:
+
+```bash
+sudo apt install portaudio19-dev libgirepository1.0-dev libcairo2-dev pkg-config python3-dev
+```
 
 ### No audio input detected
 
