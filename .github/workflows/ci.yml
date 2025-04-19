@@ -101,7 +101,13 @@ jobs:
       run: |
         source venv/bin/activate
         # Make sure Python can find the 'src' module
-        PYTHONPATH=$PWD pytest --cov=src tests/
+        PYTHONPATH=$PWD pytest --junitxml=junit.xml --cov=src tests/ 
+
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/test-results-action@v1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
