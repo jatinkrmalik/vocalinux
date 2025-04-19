@@ -27,8 +27,8 @@ setup(
             "pytest-cov",  # Add this for coverage testing
             "black",
             "isort",
-            "flake8"
-            "precommit",  # For pre-commit hooks
+            "flake8",
+            "pre-commit",  # For pre-commit hooks
         ],
     },
     entry_points={
