@@ -40,6 +40,12 @@ vocalinux/
 │   ├── INSTALL.md            # Installation guide
 │   └── USER_GUIDE.md         # User guide with command reference
 ├── resources/                 # Resource files
+│   ├── icons/                # Application icons
+│   │   └── scalable/         # SVG icon files
+│   │       ├── vocalinux.svg              # Main application icon
+│   │       ├── vocalinux-microphone.svg   # Active microphone icon 
+│   │       ├── vocalinux-microphone-off.svg  # Inactive microphone icon
+│   │       └── vocalinux-microphone-process.svg  # Processing state icon
 │   └── sounds/               # Audio notification sounds
 │       ├── start_recording.wav  # Sound when recording starts
 │       ├── stop_recording.wav   # Sound when recording stops
@@ -190,6 +196,20 @@ You can customize the audio feedback by replacing the sound files in the `resour
 
 WAV format is used for all audio notifications.
 
+### Custom Icons
+
+Vocalinux features a set of custom icons for visual recognition in system trays and application launchers:
+
+- **Application Icon**: The main Vocalinux brand icon used in application launchers and menus
+- **Microphone States**:
+  - **Microphone Off**: Icon shown when voice recognition is inactive
+  - **Microphone On**: Icon shown when actively listening
+  - **Microphone Processing**: Icon shown when processing speech
+
+These icons are automatically installed when you run the installation script.
+
+Developers can find the icon source files in the `resources/icons/scalable/` directory. These are placeholder SVG files that can be replaced with custom designs.
+
 ## Development
 
 ### Setting Up Development Environment
@@ -279,7 +299,7 @@ pytest --cov=src
 
 Future development plans include:
 
-1. Custom icon design
+1. ~~Custom icon design~~ ✅ (Implemented in v0.1.0)
 2. Graphical settings dialog
 3. Advanced voice commands for specific applications
 4. Multi-language support
