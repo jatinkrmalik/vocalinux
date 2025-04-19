@@ -12,9 +12,9 @@ After installing Vocalinux (see the [Installation Guide](INSTALL.md)), you can s
 
 1. **Launch the application**: Run `vocalinux` in a terminal or launch it from your application menu
 2. **Find the tray icon**: Look for the microphone icon in your system tray
-3. **Start voice typing**: Click the tray icon and select "Start Voice Typing" from the menu
+3. **Start voice typing**: Click the tray icon and select "Start Voice Typing" from the menu, or use the double-tap Ctrl keyboard shortcut
 4. **Speak clearly**: As you speak, your words will be transcribed into the currently focused application
-5. **Stop voice typing**: Click the tray icon and select "Stop Voice Typing" when you're done
+5. **Stop voice typing**: Click the tray icon and select "Stop Voice Typing" when you're done, or use the double-tap Ctrl keyboard shortcut again
 
 ### Understanding the Status Icons
 
@@ -50,13 +50,12 @@ Vocalinux supports several commands that you can speak to control formatting:
 
 ## Customization
 
-### Keyboard Shortcuts
+### Keyboard Shortcut
 
-Vocalinux supports global keyboard shortcuts for starting and stopping voice typing:
+Vocalinux uses a double-tap Ctrl keyboard shortcut for starting and stopping voice typing:
 
-1. Open the application settings from the tray icon menu
-2. Go to the "Shortcuts" tab
-3. Set your preferred keyboard shortcut (default is Alt+Shift+V)
+- **Double-tap Ctrl**: Quickly press the Ctrl key twice to toggle voice typing on or off
+- The time between taps should be less than 0.3 seconds to be recognized as a double-tap
 
 ### Model Settings
 

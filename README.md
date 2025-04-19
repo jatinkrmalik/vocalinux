@@ -17,7 +17,7 @@ A seamless voice dictation system for Linux, comparable to the built-in solution
 
 Vocalinux provides a user-friendly speech-to-text solution for Linux users with:
 
-- Activation via customizable keyboard shortcuts (default: Alt+Shift+V)
+- Activation via double-tap Ctrl keyboard shortcut
 - Real-time transcription with minimal latency
 - Universal compatibility across applications
 - Offline operation for privacy and reliability
@@ -118,10 +118,10 @@ vocalinux --model medium
 
 ### Using Voice Dictation
 
-1. Press the keyboard shortcut (default: Alt+Shift+V) to start recording
+1. Double-tap the Ctrl key to start recording
 2. You'll hear a start sound when recording begins
 3. Speak clearly into your microphone
-4. Press the same shortcut again or pause speaking to stop recording
+4. Double-tap Ctrl again or pause speaking to stop recording
 5. You'll hear a stop sound when recording ends
 
 ### Using Voice Commands
@@ -153,7 +153,7 @@ Configuration is stored in `~/.config/vocalinux/config.json` and includes:
         "timeout": 2.0
     },
     "shortcuts": {
-        "toggle_recognition": "alt+shift+v"
+        "toggle_recognition": "ctrl+ctrl"
     },
     "ui": {
         "start_minimized": false,
