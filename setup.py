@@ -38,7 +38,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "vocalinux=main:main",
+            "vocalinux=vocalinux.main:main",
         ],
     },
     # Include custom application icons in the package
