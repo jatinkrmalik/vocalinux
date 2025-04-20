@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from vocalinux.utils.environment import FEATURE_AUDIO, environment
+
 logger = logging.getLogger(__name__)
 
 
@@ -71,6 +73,11 @@ def _get_audio_player():
     Returns:
         tuple: (player_command, supported_formats)
     """
+    # Check if audio playback is available in this environment
+    if not environment.is_feature_available(FEATURE_AUDIO):
+        logger.info("Audio features are disabled in this environment")
+        return None, []
+
     # Check for PulseAudio paplay (preferred)
     if shutil.which("paplay"):
         return "paplay", ["wav"]
@@ -102,6 +109,11 @@ def _play_sound_file(sound_path):
     Returns:
         bool: True if sound was played successfully, False otherwise
     """
+    # Check if audio playback is available
+    if not environment.is_feature_available(FEATURE_AUDIO):
+        logger.debug(f"Audio disabled: Simulating playback of {sound_path}")
+        return True
+
     if not os.path.exists(sound_path):
         logger.warning(f"Sound file not found: {sound_path}")
         return False
