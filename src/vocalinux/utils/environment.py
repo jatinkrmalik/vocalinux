@@ -27,6 +27,44 @@ FEATURE_KEYBOARD = "keyboard"
 FEATURE_GUI = "gui"
 
 
+def is_true_value(value):
+    """
+    Check if a value represents a boolean true.
+
+    Args:
+        value: The value to check (can be string, bool, or None)
+
+    Returns:
+        bool: True if the value represents a boolean true
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ("true", "t", "yes", "y", "1")
+    return bool(value)
+
+
+def is_false_value(value):
+    """
+    Check if a value represents a boolean false.
+
+    Args:
+        value: The value to check (can be string, bool, or None)
+
+    Returns:
+        bool: True if the value represents a boolean false
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, str):
+        return value.lower() in ("false", "f", "no", "n", "0")
+    return not bool(value)
+
+
 class EnvironmentManager:
     """
     Manages environment detection and feature availability.
@@ -55,7 +93,9 @@ class EnvironmentManager:
             return os.environ.get("VOCALINUX_ENV")
 
         # Check for CI environment
-        if os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true":
+        if is_true_value(os.environ.get("CI")) or is_true_value(
+            os.environ.get("GITHUB_ACTIONS")
+        ):
             return ENV_CI
 
         # Check for test environment
@@ -169,28 +209,35 @@ class EnvironmentManager:
         # In CI or testing, hardware features must be explicitly enabled
         if self._environment in (ENV_CI, ENV_TESTING):
             # Features can be explicitly enabled even in CI/testing
-            if os.environ.get("VOCALINUX_ENABLE_AUDIO") == "true":
+            # Check for both "true" and absence of "false" for better compatibility
+            if is_true_value(
+                os.environ.get("VOCALINUX_ENABLE_AUDIO")
+            ) and not is_false_value(os.environ.get("VOCALINUX_ENABLE_AUDIO")):
                 available.add(FEATURE_AUDIO)
-            if os.environ.get("VOCALINUX_ENABLE_KEYBOARD") == "true":
+            if is_true_value(
+                os.environ.get("VOCALINUX_ENABLE_KEYBOARD")
+            ) and not is_false_value(os.environ.get("VOCALINUX_ENABLE_KEYBOARD")):
                 available.add(FEATURE_KEYBOARD)
-            if os.environ.get("VOCALINUX_ENABLE_GUI") == "true":
+            if is_true_value(
+                os.environ.get("VOCALINUX_ENABLE_GUI")
+            ) and not is_false_value(os.environ.get("VOCALINUX_ENABLE_GUI")):
                 available.add(FEATURE_GUI)
         else:
             # In development/production, detect hardware features by default
             # unless explicitly disabled
 
             # Check audio feature
-            if os.environ.get("VOCALINUX_DISABLE_AUDIO") != "true":
+            if not is_false_value(os.environ.get("VOCALINUX_DISABLE_AUDIO")):
                 if self._can_access_audio_hardware():
                     available.add(FEATURE_AUDIO)
 
             # Check keyboard feature
-            if os.environ.get("VOCALINUX_DISABLE_KEYBOARD") != "true":
+            if not is_false_value(os.environ.get("VOCALINUX_DISABLE_KEYBOARD")):
                 if self._can_access_keyboard():
                     available.add(FEATURE_KEYBOARD)
 
             # Check GUI feature
-            if os.environ.get("VOCALINUX_DISABLE_GUI") != "true":
+            if not is_false_value(os.environ.get("VOCALINUX_DISABLE_GUI")):
                 if self._can_access_gui():
                     available.add(FEATURE_GUI)
 
