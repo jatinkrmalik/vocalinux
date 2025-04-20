@@ -12,12 +12,34 @@ import sys
 import threading
 from typing import Callable, Dict, Optional
 
-import gi
+from vocalinux.utils.environment import FEATURE_GUI, environment
 
-# Import GTK
-gi.require_version("Gtk", "3.0")
-gi.require_version("AppIndicator3", "0.1")
-from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
+# Only import GUI components if the GUI feature is available
+if environment.is_feature_available(FEATURE_GUI):
+    import gi
+
+    # Import GTK
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("AppIndicator3", "0.1")
+    from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
+else:
+    # Define placeholders for GUI-related imports when running in a non-GUI environment
+    class PlaceholderGLib:
+        @staticmethod
+        def idle_add(func, *args):
+            # Simply execute the function directly without scheduling
+            if args:
+                func(*args)
+            else:
+                func()
+            return False
+
+    # Create dummy placeholder for GUI libraries
+    GLib = PlaceholderGLib()
+    AppIndicator3 = None
+    GdkPixbuf = None
+    GObject = None
+    Gtk = None
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import (
@@ -105,6 +127,20 @@ class TrayIndicator:
         """
         self.speech_engine = speech_engine
         self.text_injector = text_injector
+        self.indicator = None
+        self.menu = None
+
+        # Check if GUI is available before initializing GUI components
+        self.gui_available = environment.is_feature_available(FEATURE_GUI)
+        if not self.gui_available:
+            logger.info(
+                "GUI features are disabled, tray indicator will operate in headless mode"
+            )
+            # Register for state changes even in headless mode to maintain state
+            self.speech_engine.register_state_callback(
+                self._on_recognition_state_changed
+            )
+            return
 
         # Initialize keyboard shortcut manager
         self.shortcut_manager = KeyboardShortcutManager()
@@ -134,11 +170,19 @@ class TrayIndicator:
 
     def _init_icons(self):
         """Initialize the icon files for the tray indicator."""
+        # Skip if GUI is not available
+        if not self.gui_available:
+            return
+
         # TODO: Copy default icons to the icon directory if they don't exist
         pass
 
     def _init_indicator(self):
         """Initialize the system tray indicator."""
+        # Skip if GUI is not available
+        if not self.gui_available:
+            return False
+
         logger.info("Initializing system tray indicator")
 
         # Log the icon directory path
@@ -205,6 +249,10 @@ class TrayIndicator:
             label: The label for the menu item
             callback: The callback function to call when the item is clicked
         """
+        # Skip if GUI is not available or menu is not initialized
+        if not self.gui_available or self.menu is None:
+            return None
+
         item = Gtk.MenuItem.new_with_label(label)
         item.connect("activate", callback)
         self.menu.append(item)
@@ -212,6 +260,10 @@ class TrayIndicator:
 
     def _add_menu_separator(self):
         """Add a separator to the indicator menu."""
+        # Skip if GUI is not available or menu is not initialized
+        if not self.gui_available or self.menu is None:
+            return
+
         separator = Gtk.SeparatorMenuItem()
         self.menu.append(separator)
 
@@ -232,6 +284,11 @@ class TrayIndicator:
         Args:
             state: The current recognition state
         """
+        # Skip UI updates if GUI is not available
+        if not self.gui_available:
+            logger.debug(f"Recognition state changed to {state} (headless mode)")
+            return False
+
         if state == RecognitionState.IDLE:
             self.indicator.set_icon_full(self.icon_paths["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
@@ -261,6 +318,10 @@ class TrayIndicator:
             label: The label of the menu item
             enabled: Whether the item should be enabled
         """
+        # Skip if GUI is not available or menu is not initialized
+        if not self.gui_available or self.menu is None:
+            return
+
         for item in self.menu.get_children():
             if isinstance(item, Gtk.MenuItem) and item.get_label() == label:
                 item.set_sensitive(enabled)
@@ -283,6 +344,10 @@ class TrayIndicator:
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
+        # Skip if GUI is not available
+        if not self.gui_available:
+            return
+
         logger.debug("About clicked")
 
         about_dialog = Gtk.AboutDialog()
@@ -320,13 +385,21 @@ class TrayIndicator:
         """Quit the application."""
         logger.info("Quitting application")
 
-        # Stop the keyboard shortcut manager
-        self.shortcut_manager.stop()
+        # Stop the keyboard shortcut manager if it was initialized
+        if self.gui_available and hasattr(self, "shortcut_manager"):
+            self.shortcut_manager.stop()
 
-        Gtk.main_quit()
+        # Only quit the GTK main loop if GUI is available
+        if self.gui_available and Gtk is not None:
+            Gtk.main_quit()
 
     def run(self):
         """Run the application main loop."""
+        # Skip if GUI is not available
+        if not self.gui_available:
+            logger.info("GUI features are disabled, not starting GTK main loop")
+            return
+
         logger.info("Starting GTK main loop")
 
         # Set up signal handlers for graceful termination
