@@ -62,8 +62,7 @@ sys.modules["wave"] = mock_wave
 
 # Update import paths to use the new package structure
 from vocalinux.common_types import RecognitionState
-from vocalinux.speech_recognition.recognition_manager import \
-    SpeechRecognitionManager
+from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
 
 class TestSpeechRecognition(unittest.TestCase):

@@ -8,8 +8,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Update import path to use the new package structure
-from vocalinux.text_injection.text_injector import (DesktopEnvironment,
-                                                    TextInjector)
+from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
 
 # Create a mock for audio feedback module
 mock_audio_feedback = MagicMock()

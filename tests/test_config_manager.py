@@ -9,8 +9,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Update import path to use the new package structure
-from vocalinux.ui.config_manager import (CONFIG_DIR, CONFIG_FILE,
-                                         DEFAULT_CONFIG, ConfigManager)
+from vocalinux.ui.config_manager import (
+    CONFIG_DIR,
+    CONFIG_FILE,
+    DEFAULT_CONFIG,
+    ConfigManager,
+)
 
 
 class TestConfigManager(unittest.TestCase):
