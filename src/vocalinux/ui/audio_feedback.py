@@ -8,16 +8,54 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Update paths to find resources directory at the project root
-MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-PACKAGE_DIR = os.path.dirname(MODULE_DIR)
-SRC_DIR = os.path.dirname(PACKAGE_DIR)
-PROJECT_ROOT = os.path.dirname(SRC_DIR)
-RESOURCES_DIR = os.path.join(PROJECT_ROOT, "resources")
+
+# Define a more robust way to find the resources directory
+def find_resources_dir():
+    """Find the resources directory regardless of how the application is executed."""
+    # First, check if we're running from the repository
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Try several methods to find the resources directory
+    candidates = [
+        # For direct repository execution
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(module_dir))), "resources"
+        ),
+        # For installed package or virtual environment
+        os.path.join(sys.prefix, "share", "vocalinux", "resources"),
+        # For development in virtual environment
+        os.path.join(os.path.dirname(sys.prefix), "resources"),
+        # Additional fallback
+        "/usr/local/share/vocalinux/resources",
+        "/usr/share/vocalinux/resources",
+    ]
+
+    # Log all candidates for debugging
+    for candidate in candidates:
+        logger.debug(
+            f"Checking resources candidate: {candidate} (exists: {os.path.exists(candidate)})"
+        )
+
+    # Return the first candidate that exists
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            logger.info(f"Found resources directory: {candidate}")
+            return candidate
+
+    # If no candidate exists, default to the first one (with warning)
+    logger.warning(
+        f"Could not find resources directory, defaulting to: {candidates[0]}"
+    )
+    return candidates[0]
+
+
+# Update paths to find resources directory
+RESOURCES_DIR = find_resources_dir()
 SOUNDS_DIR = os.path.join(RESOURCES_DIR, "sounds")
 
 # Sound file paths
