@@ -1,19 +1,13 @@
 """
-Tests for the keyboard shortcuts module.
+Tests for keyboard shortcut functionality.
 """
 
-import sys
-import threading
 import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-# We need to mock the keyboard module before importing the class under test
-sys.modules["pynput"] = MagicMock()
-sys.modules["pynput.keyboard"] = MagicMock()
-
-# Import after mocking
-from src.ui.keyboard_shortcuts import KeyboardShortcutManager
+# Update import to use the new package structure
+from vocalinux.ui.keyboard_shortcuts import KeyboardShortcutManager
 
 
 class TestKeyboardShortcuts(unittest.TestCase):
@@ -22,11 +16,13 @@ class TestKeyboardShortcuts(unittest.TestCase):
     def setUp(self):
         """Set up for tests."""
         # Set up more complete mocks for the keyboard library
-        self.kb_patch = patch("src.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", True)
+        self.kb_patch = patch(
+            "vocalinux.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", True
+        )
         self.kb_patch.start()
 
         # Create proper Key enum and KeyCode class
-        self.keyboard_patch = patch("src.ui.keyboard_shortcuts.keyboard")
+        self.keyboard_patch = patch("vocalinux.ui.keyboard_shortcuts.keyboard")
         self.mock_keyboard = self.keyboard_patch.start()
 
         # Set up Key attributes as simple strings for easier testing
@@ -278,7 +274,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
     def test_no_keyboard_library(self):
         """Test behavior when keyboard library is not available."""
         # Create a new mock to replace the keyboard system
-        with patch("src.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", False):
+        with patch("vocalinux.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", False):
             # Create a new KSM with no keyboard library
             ksm = KeyboardShortcutManager()
 

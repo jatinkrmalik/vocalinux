@@ -17,24 +17,70 @@ import gi
 # Import GTK
 gi.require_version("Gtk", "3.0")
 gi.require_version("AppIndicator3", "0.1")
-from gi.repository import AppIndicator3, GLib, GObject, Gtk
+from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
 
-# Import local modules
-from speech_recognition.recognition_manager import (
+# Import local modules - Use protocols to avoid circular imports
+from ..common_types import (
     RecognitionState,
-    SpeechRecognitionManager,
+    SpeechRecognitionManagerProtocol,
+    TextInjectorProtocol,
 )
-from text_injection.text_injector import TextInjector
-from ui.keyboard_shortcuts import KeyboardShortcutManager
+from .keyboard_shortcuts import KeyboardShortcutManager
 
 logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
-ICON_DIR = os.path.expanduser("~/.local/share/vocalinux/icons")
-DEFAULT_ICON = "microphone-off"
-ACTIVE_ICON = "microphone"
-PROCESSING_ICON = "microphone-process"
+
+
+# Define a robust way to find the resources directory
+def find_resources_dir():
+    """Find the resources directory regardless of how the application is executed."""
+    # First, check if we're running from the repository
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Try several methods to find the resources directory
+    candidates = [
+        # For direct repository execution
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(module_dir))), "resources"
+        ),
+        # For installed package or virtual environment
+        os.path.join(sys.prefix, "share", "vocalinux", "resources"),
+        # For development in virtual environment
+        os.path.join(os.path.dirname(sys.prefix), "resources"),
+        # Additional fallback
+        "/usr/local/share/vocalinux/resources",
+        "/usr/share/vocalinux/resources",
+    ]
+
+    # Log all candidates for debugging
+    for candidate in candidates:
+        logger.debug(
+            f"Checking resources candidate: {candidate} (exists: {os.path.exists(candidate)})"
+        )
+
+    # Return the first candidate that exists
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            logger.info(f"Found resources directory: {candidate}")
+            return candidate
+
+    # If no candidate exists, default to the first one (with warning)
+    logger.warning(
+        f"Could not find resources directory, defaulting to: {candidates[0]}"
+    )
+    return candidates[0]
+
+
+# Find resources directory and icon directory
+RESOURCES_DIR = find_resources_dir()
+ICON_DIR = os.path.join(RESOURCES_DIR, "icons/scalable")
+
+# Icon file names
+DEFAULT_ICON = "vocalinux-microphone-off"
+ACTIVE_ICON = "vocalinux-microphone"
+PROCESSING_ICON = "vocalinux-microphone-process"
 
 
 class TrayIndicator:
@@ -46,7 +92,9 @@ class TrayIndicator:
     """
 
     def __init__(
-        self, speech_engine: SpeechRecognitionManager, text_injector: TextInjector
+        self,
+        speech_engine: SpeechRecognitionManagerProtocol,
+        text_injector: TextInjectorProtocol,
     ):
         """
         Initialize the system tray indicator.
@@ -63,6 +111,13 @@ class TrayIndicator:
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
+
+        # Set up icon file paths
+        self.icon_paths = {
+            "default": os.path.join(ICON_DIR, f"{DEFAULT_ICON}.svg"),
+            "active": os.path.join(ICON_DIR, f"{ACTIVE_ICON}.svg"),
+            "processing": os.path.join(ICON_DIR, f"{PROCESSING_ICON}.svg"),
+        }
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -86,13 +141,28 @@ class TrayIndicator:
         """Initialize the system tray indicator."""
         logger.info("Initializing system tray indicator")
 
-        # Create the indicator
-        self.indicator = AppIndicator3.Indicator.new(
-            APP_ID, DEFAULT_ICON, AppIndicator3.IndicatorCategory.APPLICATION_STATUS
-        )
+        # Log the icon directory path
+        logger.info(f"Using icon directory: {ICON_DIR}")
+        logger.info(f"Icon directory exists: {os.path.exists(ICON_DIR)}")
 
-        # Set the icon path
-        self.indicator.set_icon_theme_path(ICON_DIR)
+        # List available icon files and check if they exist
+        if os.path.exists(ICON_DIR):
+            icon_files = os.listdir(ICON_DIR)
+            logger.info(f"Available icon files: {icon_files}")
+
+            for name, path in self.icon_paths.items():
+                exists = os.path.exists(path)
+                logger.info(
+                    f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}"
+                )
+
+        # Create the indicator with absolute path to the default icon
+        self.indicator = AppIndicator3.Indicator.new_with_path(
+            APP_ID,
+            DEFAULT_ICON,
+            AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
+            ICON_DIR,
+        )
 
         # Set the indicator status
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
@@ -163,19 +233,21 @@ class TrayIndicator:
             state: The current recognition state
         """
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon(DEFAULT_ICON)
+            self.indicator.set_icon_full(self.icon_paths["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon(ACTIVE_ICON)
+            self.indicator.set_icon_full(self.icon_paths["active"], "Microphone on")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon(PROCESSING_ICON)
+            self.indicator.set_icon_full(
+                self.icon_paths["processing"], "Processing speech"
+            )
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon(DEFAULT_ICON)
+            self.indicator.set_icon_full(self.icon_paths["default"], "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
@@ -222,6 +294,18 @@ class TrayIndicator:
         about_dialog.set_website("https://github.com/jatinkrmalik/vocalinux")
         about_dialog.set_website_label("GitHub Repository")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
+
+        # Set the logo using our custom icon
+        logo_path = os.path.join(ICON_DIR, "vocalinux.svg")
+        if os.path.exists(logo_path):
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
+                scaled_pixbuf = pixbuf.scale_simple(
+                    150, 150, GdkPixbuf.InterpType.BILINEAR
+                )
+                about_dialog.set_logo(scaled_pixbuf)
+            except Exception as e:
+                logger.warning(f"Failed to load or scale logo: {e}")
 
         # Run the dialog
         about_dialog.run()
