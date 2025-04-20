@@ -17,23 +17,21 @@ import gi
 # Import GTK
 gi.require_version("Gtk", "3.0")
 gi.require_version("AppIndicator3", "0.1")
-from gi.repository import AppIndicator3, GLib, GObject, Gtk, GdkPixbuf
+from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
 
-# Import local modules
-from speech_recognition.recognition_manager import (
-    RecognitionState,
-    SpeechRecognitionManager,
-)
-from text_injection.text_injector import TextInjector
-from ui.keyboard_shortcuts import KeyboardShortcutManager
+# Import local modules - Use protocols to avoid circular imports
+from ..common_types import (RecognitionState, SpeechRecognitionManagerProtocol,
+                            TextInjectorProtocol)
+from .keyboard_shortcuts import KeyboardShortcutManager
 
 logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
+# Update the icon directory path to use the top-level resources directory
 ICON_DIR = os.path.abspath(
     os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
         "resources/icons/scalable",
     )
 )
@@ -51,7 +49,9 @@ class TrayIndicator:
     """
 
     def __init__(
-        self, speech_engine: SpeechRecognitionManager, text_injector: TextInjector
+        self,
+        speech_engine: SpeechRecognitionManagerProtocol,
+        text_injector: TextInjectorProtocol,
     ):
         """
         Initialize the system tray indicator.
@@ -68,7 +68,7 @@ class TrayIndicator:
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
-        
+
         # Set up icon file paths
         self.icon_paths = {
             "default": os.path.join(ICON_DIR, f"{DEFAULT_ICON}.svg"),
@@ -97,26 +97,28 @@ class TrayIndicator:
     def _init_indicator(self):
         """Initialize the system tray indicator."""
         logger.info("Initializing system tray indicator")
-        
+
         # Log the icon directory path
         logger.info(f"Using icon directory: {ICON_DIR}")
         logger.info(f"Icon directory exists: {os.path.exists(ICON_DIR)}")
-        
+
         # List available icon files and check if they exist
         if os.path.exists(ICON_DIR):
             icon_files = os.listdir(ICON_DIR)
             logger.info(f"Available icon files: {icon_files}")
-            
+
             for name, path in self.icon_paths.items():
                 exists = os.path.exists(path)
-                logger.info(f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}")
-        
+                logger.info(
+                    f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}"
+                )
+
         # Create the indicator with absolute path to the default icon
         self.indicator = AppIndicator3.Indicator.new_with_path(
-            APP_ID, 
+            APP_ID,
             DEFAULT_ICON,
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
-            ICON_DIR
+            ICON_DIR,
         )
 
         # Set the indicator status
@@ -196,7 +198,9 @@ class TrayIndicator:
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon_full(self.icon_paths["processing"], "Processing speech")
+            self.indicator.set_icon_full(
+                self.icon_paths["processing"], "Processing speech"
+            )
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
