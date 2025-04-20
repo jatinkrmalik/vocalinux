@@ -42,6 +42,13 @@ fi
 # Remove virtual environment (if exists)
 if [ -d "venv" ]; then
     print_info "Removing virtual environment..."
+    # Deactivate the virtual environment if it's active
+    if [[ "$VIRTUAL_ENV" == *"venv"* ]]; then
+        print_warning "Virtual environment is active. Deactivating..."
+        deactivate
+    fi
+    # Remove the virtual environment directory
+    print_info "Deleting virtual environment directory..."
     rm -rf venv
 fi
 
