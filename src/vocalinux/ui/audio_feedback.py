@@ -12,10 +12,12 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Find the resources directory relative to this module
+# Update paths to find resources directory at the project root
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_DIR = os.path.dirname(MODULE_DIR)
-RESOURCES_DIR = os.path.join(os.path.dirname(PACKAGE_DIR), "resources")
+SRC_DIR = os.path.dirname(PACKAGE_DIR)
+PROJECT_ROOT = os.path.dirname(SRC_DIR)
+RESOURCES_DIR = os.path.join(PROJECT_ROOT, "resources")
 SOUNDS_DIR = os.path.join(RESOURCES_DIR, "sounds")
 
 # Sound file paths

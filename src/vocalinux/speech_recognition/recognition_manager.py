@@ -10,58 +10,18 @@ import logging
 import os
 import threading
 import time
-from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from ..common_types import RecognitionState
+from ..ui.audio_feedback import (play_error_sound, play_start_sound,
+                                 play_stop_sound)
 from .command_processor import CommandProcessor
-
-# Fix imports to use absolute imports instead of relative imports
-try:
-    # Try absolute import first (when installed as a package)
-    from src.ui.audio_feedback import (
-        play_error_sound,
-        play_start_sound,
-        play_stop_sound,
-    )
-except ImportError:
-    try:
-        # Fallback for development environment
-        import sys
-
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-        )
-        from src.ui.audio_feedback import (
-            play_error_sound,
-            play_start_sound,
-            play_stop_sound,
-        )
-    except ImportError:
-        # Last resort fallback - define stub functions
-        def play_start_sound():
-            logging.warning("Audio feedback not available")
-
-        def play_stop_sound():
-            logging.warning("Audio feedback not available")
-
-        def play_error_sound():
-            logging.warning("Audio feedback not available")
-
 
 logger = logging.getLogger(__name__)
 
 # Define constants
 MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
-
-
-class RecognitionState(Enum):
-    """Enum representing the state of the speech recognition system."""
-
-    IDLE = auto()
-    LISTENING = auto()
-    PROCESSING = auto()
-    ERROR = auto()
 
 
 class SpeechRecognitionManager:

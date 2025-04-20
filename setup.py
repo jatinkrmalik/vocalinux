@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-from setuptools import setup, find_packages
 import os
+
+from setuptools import find_packages, setup
 
 # This package requires several system dependencies that must be installed manually:
 # For PyAudio: portaudio19-dev (on Ubuntu/Debian)
@@ -22,7 +23,7 @@ setup(
         "PyGObject",  # For GTK UI
         "requests",  # For downloading models
         "tqdm",  # For progress bars during downloads
-        "numpy", # For numerical operations
+        "numpy",  # For numerical operations
         "pyaudio",  # For audio input/output
     ],
     extras_require={
@@ -43,13 +44,16 @@ setup(
     },
     # Include custom application icons in the package
     data_files=[
-        ('share/icons/hicolor/scalable/apps', [
-            'resources/icons/scalable/vocalinux.svg',
-            'resources/icons/scalable/vocalinux-microphone.svg',
-            'resources/icons/scalable/vocalinux-microphone-off.svg',
-            'resources/icons/scalable/vocalinux-microphone-process.svg',
-        ]),
-        ('share/applications', ['vocalinux.desktop']),
+        (
+            "share/icons/hicolor/scalable/apps",
+            [
+                "resources/icons/scalable/vocalinux.svg",
+                "resources/icons/scalable/vocalinux-microphone.svg",
+                "resources/icons/scalable/vocalinux-microphone-off.svg",
+                "resources/icons/scalable/vocalinux-microphone-process.svg",
+            ],
+        ),
+        ("share/applications", ["vocalinux.desktop"]),
     ],
     include_package_data=True,
     classifiers=[

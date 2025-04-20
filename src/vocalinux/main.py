@@ -8,19 +8,17 @@ import logging
 import os
 import sys
 
-# Add package to path for development mode
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from speech_recognition import recognition_manager
-from text_injection import text_injector
-from ui import tray_indicator
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Import from the vocalinux package
+from .speech_recognition import recognition_manager
+from .text_injection import text_injector
+from .ui import tray_indicator
 
 
 def parse_arguments():
