@@ -1,14 +1,13 @@
 """
-Tests for the main module.
+Tests for the main module functionality.
 """
 
-import logging
+import argparse
 import unittest
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from src.main import main, parse_arguments
+# Update import to use the new package structure
+from vocalinux.main import main, parse_arguments
 
 
 class TestMainModule(unittest.TestCase):
@@ -45,10 +44,10 @@ class TestMainModule(unittest.TestCase):
             self.assertEqual(args.engine, "whisper")
             self.assertTrue(args.wayland)
 
-    @patch("src.main.recognition_manager.SpeechRecognitionManager")
-    @patch("src.main.text_injector.TextInjector")
-    @patch("src.main.tray_indicator.TrayIndicator")
-    @patch("src.main.logging")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.main.logging")
     def test_main_initializes_components(
         self, mock_logging, mock_tray, mock_text, mock_speech
     ):
@@ -64,7 +63,7 @@ class TestMainModule(unittest.TestCase):
         mock_tray.return_value = mock_tray_instance
 
         # Mock the arguments
-        with patch("src.main.parse_arguments") as mock_parse:
+        with patch("vocalinux.main.parse_arguments") as mock_parse:
             mock_args = MagicMock()
             mock_args.debug = False
             mock_args.model = "medium"
@@ -92,9 +91,20 @@ class TestMainModule(unittest.TestCase):
 
     def test_main_with_debug_enabled(self):
         """Test that debug mode enables debug logging."""
-        # Test a simpler approach - just check that when args.debug is True,
-        # we call setLevel with DEBUG
-        with patch("src.main.parse_arguments") as mock_parse:
+        import logging  # Import for DEBUG constant
+
+        # Test with args.debug = True
+        with patch("vocalinux.main.parse_arguments") as mock_parse, patch(
+            "vocalinux.main.logging"
+        ) as mock_logging, patch("vocalinux.main.logging.DEBUG", logging.DEBUG), patch(
+            "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager"
+        ), patch(
+            "vocalinux.text_injection.text_injector.TextInjector"
+        ), patch(
+            "vocalinux.ui.tray_indicator.TrayIndicator"
+        ):
+
+            # Create mock args
             mock_args = MagicMock()
             mock_args.debug = True
             mock_args.model = "small"
@@ -102,26 +112,13 @@ class TestMainModule(unittest.TestCase):
             mock_args.wayland = False
             mock_parse.return_value = mock_args
 
-            # Skip actually running main to avoid complex mocking
-            # Just verify that the debug flag works correctly
-            with patch("src.main.logging.getLogger") as mock_get_logger:
-                with patch("src.main.logging.DEBUG", logging.DEBUG):
-                    # Need to mock the rest of the components to avoid actual execution
-                    with patch("src.main.recognition_manager.SpeechRecognitionManager"):
-                        with patch("src.main.text_injector.TextInjector"):
-                            with patch("src.main.tray_indicator.TrayIndicator"):
-                                # These mock loggers will be returned by successive calls to getLogger()
-                                root_logger = MagicMock()
-                                named_logger = MagicMock()
-                                mock_get_logger.side_effect = [
-                                    root_logger,
-                                    named_logger,
-                                ]
+            # Create mock loggers
+            root_logger = MagicMock()
+            named_logger = MagicMock()
+            mock_logging.getLogger.side_effect = [root_logger, named_logger]
 
-                                # Call main
-                                main()
+            # Call main
+            main()
 
-                                # Verify root logger had setLevel called with DEBUG
-                                root_logger.setLevel.assert_called_once_with(
-                                    logging.DEBUG
-                                )
+            # Verify root logger had setLevel called with DEBUG
+            root_logger.setLevel.assert_called_once_with(logging.DEBUG)

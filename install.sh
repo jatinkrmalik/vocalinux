@@ -23,9 +23,9 @@ print_warning() {
 
 # Parse command line arguments
 INSTALL_MODE="user"
-USE_VENV="no"
 RUN_TESTS="no"
 DEV_MODE="no"
+VENV_DIR="venv"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -33,22 +33,22 @@ while [[ $# -gt 0 ]]; do
             DEV_MODE="yes"
             shift
             ;;
-        --venv)
-            USE_VENV="yes"
-            shift
-            ;;
         --test)
             RUN_TESTS="yes"
+            shift
+            ;;
+        --venv-dir=*)
+            VENV_DIR="${1#*=}"
             shift
             ;;
         --help)
             echo "Vocalinux Installer"
             echo "Usage: $0 [options]"
             echo "Options:"
-            echo "  --dev      Install in development mode with all dev dependencies"
-            echo "  --venv     Use virtual environment instead of system-wide installation"
-            echo "  --test     Run tests after installation"
-            echo "  --help     Show this help message"
+            echo "  --dev            Install in development mode with all dev dependencies"
+            echo "  --test           Run tests after installation"
+            echo "  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)"
+            echo "  --help           Show this help message"
             exit 0
             ;;
         *)
@@ -59,16 +59,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# If dev mode is enabled, automatically use venv and run tests
+# If dev mode is enabled, automatically run tests
 if [[ "$DEV_MODE" == "yes" ]]; then
-    USE_VENV="yes"
     RUN_TESTS="yes"
 fi
 
 print_info "Vocalinux Installer"
 print_info "=============================="
 echo ""
-[[ "$USE_VENV" == "yes" ]] && print_info "Using virtual environment mode"
+print_info "Using virtual environment: $VENV_DIR"
 [[ "$DEV_MODE" == "yes" ]] && print_info "Installing in development mode"
 [[ "$RUN_TESTS" == "yes" ]] && print_info "Tests will be run after installation"
 echo ""
@@ -99,15 +98,15 @@ fi
 print_info "Installing system dependencies..."
 sudo apt update
 sudo apt install -y python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
-    gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev
+    gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv
 
-# Install venv if needed
-if [[ "$USE_VENV" == "yes" ]]; then
-    print_info "Installing Python virtual environment..."
-    sudo apt install -y python3-venv
-fi
+# Define XDG directories
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vocalinux"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux"
+DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 
-# Detect desktop environment
+# Detect desktop environment for text input tools
 if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
     print_info "Detected Wayland session, installing wtype..."
     sudo apt install -y wtype
@@ -116,114 +115,89 @@ else
     sudo apt install -y xdotool
 fi
 
-# Create directories
+# Create necessary directories
 print_info "Creating application directories..."
-mkdir -p ~/.local/share/vocalinux/icons
-mkdir -p ~/.local/share/vocalinux/models
-mkdir -p ~/.config/vocalinux
+mkdir -p "$CONFIG_DIR"
+mkdir -p "$DATA_DIR/models"
+mkdir -p "$DESKTOP_DIR"
+mkdir -p "$ICON_DIR"
 
-# Set up virtual environment if requested
-VENV_DIR="venv"
-if [[ "$USE_VENV" == "yes" ]]; then
-    print_info "Setting up Python virtual environment..."
-    python3 -m venv $VENV_DIR --system-site-packages
+# Set up virtual environment 
+print_info "Setting up Python virtual environment..."
+python3 -m venv "$VENV_DIR" --system-site-packages
 
-    # Activate virtual environment
-    source $VENV_DIR/bin/activate
+# Activate virtual environment
+source "$VENV_DIR/bin/activate"
 
-    # Update pip and setuptools
-    pip install --upgrade pip setuptools wheel
+# Update pip and setuptools
+pip install --upgrade pip setuptools wheel
 
-    print_info "Virtual environment activated."
+print_info "Virtual environment activated."
 
-    # Create activation script for users
-    cat > activate-vocalinux.sh << EOF
+# Create activation script for users
+cat > activate-vocalinux.sh << EOF
 #!/bin/bash
 # This script activates the Vocalinux virtual environment
 source "\$(dirname "\$(realpath "\$0")")/$VENV_DIR/bin/activate"
 echo "Vocalinux virtual environment activated."
 echo "To start the application, run: vocalinux"
 EOF
-    chmod +x activate-vocalinux.sh
-    print_info "Created activation script: activate-vocalinux.sh"
-fi
-
-# Modify setup.py to exclude PyGObject when installing in a venv
-if [[ "$USE_VENV" == "yes" ]]; then
-    print_info "Using system PyGObject for virtual environment..."
-    # Create a temporary modified setup.py file that excludes PyGObject
-    SETUP_BACKUP="setup.py.bak"
-    cp setup.py $SETUP_BACKUP
-    # Remove PyGObject from install_requires
-    sed -i 's/"PyGObject",  # For GTK UI/"# PyGObject is provided by system packages",/g' setup.py
-fi
+chmod +x activate-vocalinux.sh
+print_info "Created activation script: activate-vocalinux.sh"
 
 # Install Python package
 if [[ "$DEV_MODE" == "yes" ]]; then
     print_info "Installing Vocalinux in development mode..."
-    if [[ "$USE_VENV" == "yes" ]]; then
-        pip install -e .
-        pip install pytest pytest-mock pytest-cov pynput
-    else
-        pip3 install --user -e .
-        pip3 install --user pytest pytest-mock pytest-cov pynput
-    fi
+    pip install -e .
+    pip install pytest pytest-mock pytest-cov
+    # Install all optional dependencies for development
+    print_info "Installing all optional dependencies for development..."
+    pip install ".[whisper,dev]"
 else
-    print_info "Installing Vocalinux Python package..."
-    if [[ "$USE_VENV" == "yes" ]]; then
-        pip install .
-    else
-        pip3 install --user .
-    fi
-fi
-
-# Restore original setup.py if it was modified
-if [[ "$USE_VENV" == "yes" && -f "$SETUP_BACKUP" ]]; then
-    mv $SETUP_BACKUP setup.py
-fi
-
-# Install optional Whisper support
-if [[ "$DEV_MODE" != "yes" ]]; then
+    print_info "Installing Vocalinux..."
+    pip install .
+    
+    # Prompt for Whisper installation
     read -p "Do you want to install Whisper AI support? This requires additional disk space. (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_info "Installing Whisper support (this might take a while)..."
-        if [[ "$USE_VENV" == "yes" ]]; then
-            pip install ".[whisper]"
-        else
-            pip3 install --user ".[whisper]"
-        fi
-    fi
-else
-    # In dev mode, install all optional dependencies
-    print_info "Installing all optional dependencies for development..."
-    if [[ "$USE_VENV" == "yes" ]]; then
-        pip install ".[whisper,dev]"
-    else
-        pip3 install --user ".[whisper,dev]"
+        pip install ".[whisper]"
     fi
 fi
 
 # Install desktop entry
 print_info "Installing desktop entry..."
-mkdir -p ~/.local/share/applications
-cp vocalinux.desktop ~/.local/share/applications/
+cp vocalinux.desktop "$DESKTOP_DIR/"
 
-# If using virtual environment, modify the desktop entry to use the venv
-if [[ "$USE_VENV" == "yes" ]]; then
-    VENV_SCRIPT_PATH="$(realpath $VENV_DIR/bin/vocalinux)"
-    sed -i "s|^Exec=vocalinux|Exec=$VENV_SCRIPT_PATH|" ~/.local/share/applications/vocalinux.desktop
-    print_info "Updated desktop entry to use virtual environment"
+# Update the desktop entry to use the venv
+VENV_SCRIPT_PATH="$(realpath $VENV_DIR/bin/vocalinux)"
+sed -i "s|^Exec=vocalinux|Exec=$VENV_SCRIPT_PATH|" "$DESKTOP_DIR/vocalinux.desktop"
+print_info "Updated desktop entry to use virtual environment"
+
+# Install icons
+print_info "Installing application icons..."
+if [ -d "resources/icons/scalable" ]; then
+    cp resources/icons/scalable/vocalinux.svg "$ICON_DIR/"
+    cp resources/icons/scalable/vocalinux-microphone.svg "$ICON_DIR/"
+    cp resources/icons/scalable/vocalinux-microphone-off.svg "$ICON_DIR/"
+    cp resources/icons/scalable/vocalinux-microphone-process.svg "$ICON_DIR/"
+    print_info "Installed custom Vocalinux icons"
+else
+    print_warning "Custom icons not found in resources/icons/scalable directory"
 fi
 
-# TODO: Install icons
-print_info "Installing application icons..."
-# Future: Copy SVG icons to ~/.local/share/icons/hicolor/scalable/apps/
+# Update icon cache to make the icons available immediately
+gtk-update-icon-cache -f -t "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || true
 
 # Run tests if requested
 if [[ "$RUN_TESTS" == "yes" ]]; then
     print_info "Running tests..."
-    python3 tests/run_basic_tests.py
+    # Install pytest if not already installed
+    pip install pytest pytest-mock pytest-cov
+    
+    # Run the tests with pytest
+    pytest
     if [ $? -eq 0 ]; then
         print_success "All tests passed!"
     else
@@ -232,15 +206,9 @@ if [[ "$RUN_TESTS" == "yes" ]]; then
 fi
 
 print_success "Installation complete!"
-
-if [[ "$USE_VENV" == "yes" ]]; then
-    print_info "To activate the virtual environment in the future, run:"
-    print_info "  source activate-vocalinux.sh"
-    print_info "You can then launch Vocalinux by running 'vocalinux'"
-else
-    print_info "You can now launch Vocalinux from your application menu"
-    print_info "or by running 'vocalinux' in a terminal."
-fi
+print_info "To activate the virtual environment in the future, run:"
+print_info "  source activate-vocalinux.sh"
+print_info "You can then launch Vocalinux by running 'vocalinux'"
 
 echo
 print_info "For more information, see the documentation in the docs/ directory."

@@ -1,165 +1,119 @@
 """
-Tests for the tray indicator module.
+Tests for system tray indicator functionality.
 """
 
 import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-# Create mock modules before importing our code
-mock_gi = MagicMock()
-mock_gtk = MagicMock()
-mock_glib = MagicMock()
-mock_app_indicator = MagicMock()
-mock_gobject = MagicMock()
-
-# Configure GLib.idle_add to execute function directly
-mock_glib.idle_add = lambda func, *args: func(*args) or False
-
-# Set up necessary mocks for AppIndicator
-mock_app_indicator.IndicatorCategory = MagicMock()
-mock_app_indicator.IndicatorCategory.APPLICATION_STATUS = "APPLICATION_STATUS"
-mock_app_indicator.IndicatorStatus = MagicMock()
-mock_app_indicator.IndicatorStatus.ACTIVE = "ACTIVE"
-
-# Set up repository structure
-mock_gi.repository = MagicMock()
-mock_gi.repository.Gtk = mock_gtk
-mock_gi.repository.GLib = mock_glib
-mock_gi.repository.AppIndicator3 = mock_app_indicator
-mock_gi.repository.GObject = mock_gobject
-mock_gi.require_version = MagicMock()
-
-# Apply patches before importing the module under test
-with patch.dict(
-    "sys.modules",
-    {
-        "gi": mock_gi,
-        "gi.repository": mock_gi.repository,
-        "gi.repository.Gtk": mock_gtk,
-        "gi.repository.GLib": mock_glib,
-        "gi.repository.AppIndicator3": mock_app_indicator,
-        "gi.repository.GObject": mock_gobject,
-    },
-):
-    # Now we can import our module
-    from src.speech_recognition.recognition_manager import RecognitionState
-    from src.ui.tray_indicator import (
-        ACTIVE_ICON,
-        DEFAULT_ICON,
-        PROCESSING_ICON,
-        TrayIndicator,
-    )
-
-
-# Define a simplified version of TrayIndicator for testing
-class TestableIndicator(TrayIndicator):
-    """A testable version of TrayIndicator that avoids GTK dependencies."""
-
-    def __init__(self, speech_engine, text_injector, mock_ksm):
-        """
-        Initialize the testable indicator with mocked dependencies.
-
-        Args:
-            speech_engine: The mock speech engine
-            text_injector: The mock text injector
-            mock_ksm: The mock keyboard shortcut manager
-        """
-        # Skip calling the parent __init__ to avoid GTK setup
-        # but initialize important attributes
-        self.speech_engine = speech_engine
-        self.text_injector = text_injector
-
-        # Set up the shortcut manager directly
-        self.shortcut_manager = mock_ksm
-
-        # Set up mocked UI components
-        self.indicator = MagicMock()
-        self.menu = MagicMock()
-
-        # Register callbacks
-        self.speech_engine.register_state_callback(self._on_recognition_state_changed)
-        self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
-        self.shortcut_manager.start()
-
-
-# Define a complete test class for TrayIndicator
+# We need to patch modules BEFORE they are imported
+# Use patch context manager approach instead
+@patch("gi.repository.AppIndicator3", MagicMock())
+@patch("gi.repository.Gtk", MagicMock())
+@patch("gi.repository.GLib", MagicMock())
+@patch("gi.repository.GObject", MagicMock())
+@patch("gi.repository.GdkPixbuf", MagicMock())
+@patch("gi.require_version", MagicMock())
+@patch("vocalinux.ui.keyboard_shortcuts.KeyboardShortcutManager", MagicMock())
 class TestTrayIndicator(unittest.TestCase):
     """Test cases for the tray indicator."""
 
     def setUp(self):
         """Set up test environment before each test."""
+        # Import here after patching for proper mocking
+        from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        self.RecognitionState = RecognitionState
+
         # Create mocks for dependencies
         self.mock_speech_engine = MagicMock()
+        self.mock_speech_engine.state = RecognitionState.IDLE
         self.mock_text_injector = MagicMock()
-        self.mock_ksm = MagicMock()
 
-        # Create a list of patches we'll need to stop later
-        self.patches = []
+        # Patch specific methods we need to control
+        self.patcher_glib_idle = patch("gi.repository.GLib.idle_add")
+        self.mock_glib_idle = self.patcher_glib_idle.start()
+        # Make idle_add execute the function directly
+        self.mock_glib_idle.side_effect = lambda func, *args: func(*args) or False
 
-        # Patch os.makedirs to avoid filesystem operations
-        self.patcher_makedirs = patch("os.makedirs")
-        self.mock_makedirs = self.patcher_makedirs.start()
-        self.patches.append(self.patcher_makedirs)
+        # Patch os path exists to return True for icon files
+        self.patcher_path_exists = patch("os.path.exists", return_value=True)
+        self.mock_path_exists = self.patcher_path_exists.start()
 
-        # Patch Gtk.main_quit to avoid actually quitting during tests
-        self.patcher_main_quit = patch.object(mock_gtk, "main_quit")
-        self.mock_main_quit = self.patcher_main_quit.start()
-        self.patches.append(self.patcher_main_quit)
-
-        # Create the testable indicator with our mocked dependencies
-        self.indicator = TestableIndicator(
-            speech_engine=self.mock_speech_engine,
-            text_injector=self.mock_text_injector,
-            mock_ksm=self.mock_ksm,
+        # Patch os.listdir to return mock icon files
+        self.patcher_listdir = patch(
+            "os.listdir",
+            return_value=[
+                "vocalinux.svg",
+                "vocalinux-microphone-off.svg",
+                "vocalinux-microphone.svg",
+                "vocalinux-microphone-process.svg",
+            ],
         )
+        self.mock_listdir = self.patcher_listdir.start()
+
+        # Create the indicator with our mocked dependencies
+        with patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager", autospec=True
+        ) as mock_ksm_class:
+            self.mock_ksm = mock_ksm_class.return_value
+            self.tray_indicator = TrayIndicator(
+                speech_engine=self.mock_speech_engine,
+                text_injector=self.mock_text_injector,
+            )
 
     def tearDown(self):
-        """Clean up after each test."""
-        for patcher in self.patches:
-            patcher.stop()
+        """Clean up test environment after each test."""
+        self.patcher_glib_idle.stop()
+        self.patcher_path_exists.stop()
+        self.patcher_listdir.stop()
 
     def test_initialization(self):
         """Test initialization of the tray indicator."""
-        # Verify speech_engine and text_injector were set correctly
-        self.assertEqual(self.indicator.speech_engine, self.mock_speech_engine)
-        self.assertEqual(self.indicator.text_injector, self.mock_text_injector)
+        # Verify initialization
+        self.assertEqual(self.tray_indicator.speech_engine, self.mock_speech_engine)
+        self.assertEqual(self.tray_indicator.text_injector, self.mock_text_injector)
 
         # Verify callback was registered
-        self.mock_speech_engine.register_state_callback.assert_called_once_with(
-            self.indicator._on_recognition_state_changed
-        )
+        self.mock_speech_engine.register_state_callback.assert_called_once()
 
-        # Verify shortcut manager was configured properly
-        self.mock_ksm.register_toggle_callback.assert_called_once_with(
-            self.indicator._toggle_recognition
-        )
+        # Verify shortcut manager was configured
+        self.mock_ksm.register_toggle_callback.assert_called_once()
         self.mock_ksm.start.assert_called_once()
 
-    def test_toggle_recognition(self):
-        """Test toggling recognition state."""
+    def test_toggle_recognition_from_idle(self):
+        """Test toggling recognition state from IDLE."""
+        # Set state to IDLE
+        self.mock_speech_engine.state = self.RecognitionState.IDLE
 
-        # Define a real implementation of _toggle_recognition that we can test
-        def simple_toggle(state):
-            if state == RecognitionState.IDLE:
-                self.mock_speech_engine.start_recognition()
-            else:
-                self.mock_speech_engine.stop_recognition()
-
-        # Test with IDLE state
-        simple_toggle(RecognitionState.IDLE)
+        # Call toggle method
+        self.tray_indicator._toggle_recognition()
 
         # Verify start_recognition was called
         self.mock_speech_engine.start_recognition.assert_called_once()
         self.mock_speech_engine.stop_recognition.assert_not_called()
 
-        # Reset mocks
-        self.mock_speech_engine.reset_mock()
+    def test_toggle_recognition_from_listening(self):
+        """Test toggling recognition state from LISTENING."""
+        # Set state to LISTENING
+        self.mock_speech_engine.state = self.RecognitionState.LISTENING
 
-        # Test with LISTENING state
-        simple_toggle(RecognitionState.LISTENING)
+        # Call toggle method
+        self.tray_indicator._toggle_recognition()
+
+        # Verify stop_recognition was called
+        self.mock_speech_engine.stop_recognition.assert_called_once()
+        self.mock_speech_engine.start_recognition.assert_not_called()
+
+    def test_toggle_recognition_from_processing(self):
+        """Test toggling recognition state from PROCESSING."""
+        # Set state to PROCESSING
+        self.mock_speech_engine.state = self.RecognitionState.PROCESSING
+
+        # Call toggle method
+        self.tray_indicator._toggle_recognition()
 
         # Verify stop_recognition was called
         self.mock_speech_engine.stop_recognition.assert_called_once()
@@ -167,37 +121,102 @@ class TestTrayIndicator(unittest.TestCase):
 
     def test_on_start_clicked(self):
         """Test start button click handler."""
+        # Reset mock
+        self.mock_speech_engine.start_recognition.reset_mock()
+
         # Call the start handler
-        self.indicator._on_start_clicked(None)
+        self.tray_indicator._on_start_clicked(None)
 
         # Verify start_recognition was called
         self.mock_speech_engine.start_recognition.assert_called_once()
 
     def test_on_stop_clicked(self):
         """Test stop button click handler."""
+        # Reset mock
+        self.mock_speech_engine.stop_recognition.reset_mock()
+
         # Call the stop handler
-        self.indicator._on_stop_clicked(None)
+        self.tray_indicator._on_stop_clicked(None)
 
         # Verify stop_recognition was called
         self.mock_speech_engine.stop_recognition.assert_called_once()
 
-    def test_on_quit_clicked(self):
-        """Test quit button click handler."""
-        # Patch the _quit method to avoid actually quitting
-        with patch.object(self.indicator, "_quit") as mock_quit:
-            # Call the handler
-            self.indicator._on_quit_clicked(None)
+    def test_on_recognition_state_changed(self):
+        """Test state change callback."""
+        # Create patch for _update_ui
+        with patch.object(self.tray_indicator, "_update_ui") as mock_update_ui:
+            # Call state change callback with each state
+            for state in self.RecognitionState:
+                # Reset mock
+                mock_update_ui.reset_mock()
 
-            # Verify _quit was called
-            mock_quit.assert_called_once()
+                # Call callback
+                self.tray_indicator._on_recognition_state_changed(state)
+
+                # Verify update_ui was called with correct state
+                mock_update_ui.assert_called_once_with(state)
 
     def test_quit(self):
-        """Test quit method."""
-        # Call the quit method
-        self.indicator._quit()
+        """Test quit functionality."""
+        # Patch Gtk.main_quit
+        with patch("gi.repository.Gtk.main_quit") as mock_main_quit:
+            # Reset mocks
+            self.mock_ksm.stop.reset_mock()
 
-        # Verify shortcut manager was stopped
-        self.mock_ksm.stop.assert_called_once()
+            # Call quit method
+            self.tray_indicator._quit()
 
-        # Verify Gtk.main_quit was called
-        self.mock_main_quit.assert_called_once()
+            # Verify shortcuts manager stopped and GTK main loop exited
+            self.mock_ksm.stop.assert_called_once()
+            mock_main_quit.assert_called_once()
+
+    def test_signal_handler(self):
+        """Test signal handler."""
+        # Create a patch for _quit
+        with patch.object(self.tray_indicator, "_quit") as mock_quit:
+            # Reset mock for idle_add to clear previous calls
+            self.mock_glib_idle.reset_mock()
+
+            # Call signal handler
+            self.tray_indicator._signal_handler(15, None)  # 15 is SIGTERM
+
+            # Verify idle_add was called with _quit
+            self.mock_glib_idle.assert_called_once_with(mock_quit)
+
+    def test_run(self):
+        """Test run method."""
+        # Patch signal.signal and Gtk.main
+        with patch("signal.signal") as mock_signal, patch(
+            "gi.repository.Gtk.main"
+        ) as mock_main:
+
+            # Call run method
+            self.tray_indicator.run()
+
+            # Verify signal handlers were set and main loop started
+            self.assertEqual(mock_signal.call_count, 2)  # SIGINT and SIGTERM
+            mock_main.assert_called_once()
+
+    def test_settings_callback(self):
+        """Test settings callback (placeholder for future implementation)."""
+        # Simply verify that the method doesn't raise any exceptions
+        self.tray_indicator._on_settings_clicked(None)
+
+    def test_about_dialog(self):
+        """Test about dialog creation."""
+        # Patch AboutDialog class and pixbuf
+        with patch("gi.repository.Gtk.AboutDialog") as mock_about_dialog_class, patch(
+            "gi.repository.GdkPixbuf.Pixbuf.new_from_file"
+        ):
+
+            # Create mock for dialog instance
+            mock_about_dialog = MagicMock()
+            mock_about_dialog_class.return_value = mock_about_dialog
+
+            # Call about handler
+            self.tray_indicator._on_about_clicked(None)
+
+            # Verify dialog was configured and shown
+            mock_about_dialog.set_program_name.assert_called_with("Vocalinux")
+            mock_about_dialog.run.assert_called_once()
+            mock_about_dialog.destroy.assert_called_once()

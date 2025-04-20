@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-from setuptools import setup, find_packages
+import os
+
+from setuptools import find_packages, setup
 
 # This package requires several system dependencies that must be installed manually:
 # For PyAudio: portaudio19-dev (on Ubuntu/Debian)
@@ -21,7 +23,7 @@ setup(
         "PyGObject",  # For GTK UI
         "requests",  # For downloading models
         "tqdm",  # For progress bars during downloads
-        "numpy", # For numerical operations
+        "numpy",  # For numerical operations
         "pyaudio",  # For audio input/output
     ],
     extras_require={
@@ -37,9 +39,43 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "vocalinux=main:main",
+            "vocalinux=vocalinux.main:main",
         ],
     },
+    # Include custom application icons and sounds in the package
+    data_files=[
+        # System-wide icons for desktop integration
+        (
+            "share/icons/hicolor/scalable/apps",
+            [
+                "resources/icons/scalable/vocalinux.svg",
+                "resources/icons/scalable/vocalinux-microphone.svg",
+                "resources/icons/scalable/vocalinux-microphone-off.svg",
+                "resources/icons/scalable/vocalinux-microphone-process.svg",
+            ],
+        ),
+        # Desktop file for application launcher
+        ("share/applications", ["vocalinux.desktop"]),
+        # Install resources inside the package share directory for runtime discovery
+        (
+            "share/vocalinux/resources/icons/scalable",
+            [
+                "resources/icons/scalable/vocalinux.svg",
+                "resources/icons/scalable/vocalinux-microphone.svg",
+                "resources/icons/scalable/vocalinux-microphone-off.svg",
+                "resources/icons/scalable/vocalinux-microphone-process.svg",
+            ],
+        ),
+        (
+            "share/vocalinux/resources/sounds",
+            [
+                "resources/sounds/start_recording.wav",
+                "resources/sounds/stop_recording.wav",
+                "resources/sounds/error.wav",
+            ],
+        ),
+    ],
+    include_package_data=True,
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Environment :: X11 Applications :: GTK",
