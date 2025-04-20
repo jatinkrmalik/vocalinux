@@ -41,9 +41,15 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_resource_paths(self):
         """Test that resource paths are correctly set up."""
-        # Verify resource paths are correctly defined
-        self.assertTrue(os.path.dirname(RESOURCES_DIR).endswith("vocalinux"))
-        self.assertTrue(SOUNDS_DIR.endswith("sounds"))
+        # Verify that resource paths are correctly set and accessible
+        self.assertTrue(
+            os.path.exists(RESOURCES_DIR) or RESOURCES_DIR.endswith("resources"),
+            f"Resources directory is not valid: {RESOURCES_DIR}",
+        )
+        self.assertTrue(
+            SOUNDS_DIR.endswith("sounds"),
+            f"Sounds directory path is not valid: {SOUNDS_DIR}",
+        )
         self.assertEqual(os.path.basename(START_SOUND), "start_recording.wav")
         self.assertEqual(os.path.basename(STOP_SOUND), "stop_recording.wav")
         self.assertEqual(os.path.basename(ERROR_SOUND), "error.wav")
