@@ -1,5 +1,5 @@
 """
-Tests for the config manager module.
+Tests for the config manager functionality.
 """
 
 import json
@@ -8,7 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.ui.config_manager import CONFIG_DIR, CONFIG_FILE, DEFAULT_CONFIG, ConfigManager
+# Update import path to use the new package structure
+from vocalinux.ui.config_manager import (CONFIG_DIR, CONFIG_FILE,
+                                         DEFAULT_CONFIG, ConfigManager)
 
 
 class TestConfigManager(unittest.TestCase):
@@ -24,17 +26,17 @@ class TestConfigManager(unittest.TestCase):
 
         # Patch the config paths to use our temporary directory
         self.config_dir_patcher = patch(
-            "src.ui.config_manager.CONFIG_DIR", self.temp_config_dir
+            "vocalinux.ui.config_manager.CONFIG_DIR", self.temp_config_dir
         )
         self.config_file_patcher = patch(
-            "src.ui.config_manager.CONFIG_FILE", self.temp_config_file
+            "vocalinux.ui.config_manager.CONFIG_FILE", self.temp_config_file
         )
 
         self.config_dir_patcher.start()
         self.config_file_patcher.start()
 
         # Patch logging to avoid actual logging
-        self.logger_patcher = patch("src.ui.config_manager.logger")
+        self.logger_patcher = patch("vocalinux.ui.config_manager.logger")
         self.mock_logger = self.logger_patcher.start()
 
     def tearDown(self):
