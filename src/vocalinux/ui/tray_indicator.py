@@ -28,13 +28,53 @@ logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
-# Update the icon directory path to use the top-level resources directory
-ICON_DIR = os.path.abspath(
-    os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-        "resources/icons/scalable",
+
+
+# Define a robust way to find the resources directory
+def find_resources_dir():
+    """Find the resources directory regardless of how the application is executed."""
+    # First, check if we're running from the repository
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Try several methods to find the resources directory
+    candidates = [
+        # For direct repository execution
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(module_dir))), "resources"
+        ),
+        # For installed package or virtual environment
+        os.path.join(sys.prefix, "share", "vocalinux", "resources"),
+        # For development in virtual environment
+        os.path.join(os.path.dirname(sys.prefix), "resources"),
+        # Additional fallback
+        "/usr/local/share/vocalinux/resources",
+        "/usr/share/vocalinux/resources",
+    ]
+
+    # Log all candidates for debugging
+    for candidate in candidates:
+        logger.debug(
+            f"Checking resources candidate: {candidate} (exists: {os.path.exists(candidate)})"
+        )
+
+    # Return the first candidate that exists
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            logger.info(f"Found resources directory: {candidate}")
+            return candidate
+
+    # If no candidate exists, default to the first one (with warning)
+    logger.warning(
+        f"Could not find resources directory, defaulting to: {candidates[0]}"
     )
-)
+    return candidates[0]
+
+
+# Find resources directory and icon directory
+RESOURCES_DIR = find_resources_dir()
+ICON_DIR = os.path.join(RESOURCES_DIR, "icons/scalable")
+
+# Icon file names
 DEFAULT_ICON = "vocalinux-microphone-off"
 ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
@@ -257,9 +297,12 @@ class TrayIndicator:
         if os.path.exists(logo_path):
             try:
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
-                about_dialog.set_logo(pixbuf)
+                scaled_pixbuf = pixbuf.scale_simple(
+                    150, 150, GdkPixbuf.InterpType.BILINEAR
+                )
+                about_dialog.set_logo(scaled_pixbuf)
             except Exception as e:
-                logger.warning(f"Failed to load logo: {e}")
+                logger.warning(f"Failed to load or scale logo: {e}")
 
         # Run the dialog
         about_dialog.run()

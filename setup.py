@@ -42,8 +42,9 @@ setup(
             "vocalinux=vocalinux.main:main",
         ],
     },
-    # Include custom application icons in the package
+    # Include custom application icons and sounds in the package
     data_files=[
+        # System-wide icons for desktop integration
         (
             "share/icons/hicolor/scalable/apps",
             [
@@ -53,7 +54,26 @@ setup(
                 "resources/icons/scalable/vocalinux-microphone-process.svg",
             ],
         ),
+        # Desktop file for application launcher
         ("share/applications", ["vocalinux.desktop"]),
+        # Install resources inside the package share directory for runtime discovery
+        (
+            "share/vocalinux/resources/icons/scalable",
+            [
+                "resources/icons/scalable/vocalinux.svg",
+                "resources/icons/scalable/vocalinux-microphone.svg",
+                "resources/icons/scalable/vocalinux-microphone-off.svg",
+                "resources/icons/scalable/vocalinux-microphone-process.svg",
+            ],
+        ),
+        (
+            "share/vocalinux/resources/sounds",
+            [
+                "resources/sounds/start_recording.wav",
+                "resources/sounds/stop_recording.wav",
+                "resources/sounds/error.wav",
+            ],
+        ),
     ],
     include_package_data=True,
     classifiers=[
