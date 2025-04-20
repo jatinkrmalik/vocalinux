@@ -10,13 +10,55 @@ import threading
 import time
 from typing import Callable
 
-# Try to import X11 keyboard libraries first
-try:
-    from pynput import keyboard
+from vocalinux.utils.environment import FEATURE_KEYBOARD, environment
 
-    KEYBOARD_AVAILABLE = True
-except ImportError:
+# Only import keyboard libraries if keyboard features are available
+if environment.is_feature_available(FEATURE_KEYBOARD):
+    try:
+        from pynput import keyboard
+
+        KEYBOARD_AVAILABLE = True
+    except ImportError:
+        KEYBOARD_AVAILABLE = False
+        keyboard = None
+else:
     KEYBOARD_AVAILABLE = False
+
+    # Create a dummy keyboard module for testing
+    class DummyKeyboard:
+        class Key:
+            alt = "Key.alt"
+            alt_l = "Key.alt_l"
+            alt_r = "Key.alt_r"
+            shift = "Key.shift"
+            shift_l = "Key.shift_l"
+            shift_r = "Key.shift_r"
+            ctrl = "Key.ctrl"
+            ctrl_l = "Key.ctrl_l"
+            ctrl_r = "Key.ctrl_r"
+            cmd = "Key.cmd"
+            cmd_l = "Key.cmd_l"
+            cmd_r = "Key.cmd_r"
+
+        class Listener:
+            def __init__(self, on_press=None, on_release=None):
+                self.on_press = on_press
+                self.on_release = on_release
+                self.daemon = False
+
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+            def join(self, timeout=None):
+                pass
+
+            def is_alive(self):
+                return True
+
+    keyboard = DummyKeyboard()
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +81,11 @@ class KeyboardShortcutManager:
         self.last_ctrl_press_time = 0
         self.double_tap_callback = None
         self.double_tap_threshold = 0.3  # seconds between taps to count as double-tap
+        self.current_keys = set()
 
         if not KEYBOARD_AVAILABLE:
-            logger.error(
-                "Keyboard shortcut libraries not available. Shortcuts will not work."
+            logger.warning(
+                "Keyboard shortcut features not available. Shortcuts will not work."
             )
             return
 
@@ -162,6 +205,9 @@ class KeyboardShortcutManager:
     def _normalize_modifier_key(self, key):
         """Normalize left/right variants of modifier keys to their base form."""
         # Map left/right variants to their base key
+        if not keyboard or not hasattr(keyboard, "Key"):
+            return key
+
         key_mapping = {
             keyboard.Key.alt_l: keyboard.Key.alt,
             keyboard.Key.alt_r: keyboard.Key.alt,
