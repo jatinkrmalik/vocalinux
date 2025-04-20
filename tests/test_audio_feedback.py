@@ -14,8 +14,13 @@ import pytest
 AUDIO_FEEDBACK_MODULE = "vocalinux.ui.audio_feedback"
 
 # Import the module under test
-from vocalinux.ui.audio_feedback import (ERROR_SOUND, RESOURCES_DIR,
-                                         SOUNDS_DIR, START_SOUND, STOP_SOUND)
+from vocalinux.ui.audio_feedback import (
+    ERROR_SOUND,
+    RESOURCES_DIR,
+    SOUNDS_DIR,
+    START_SOUND,
+    STOP_SOUND,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -293,8 +298,7 @@ class TestAudioFeedback(unittest.TestCase):
         """Test playing start sound."""
         with patch(f"{AUDIO_FEEDBACK_MODULE}._play_sound_file") as mock_play:
             # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import (START_SOUND,
-                                                     play_start_sound)
+            from vocalinux.ui.audio_feedback import START_SOUND, play_start_sound
 
             # Call the function
             play_start_sound()
@@ -318,8 +322,7 @@ class TestAudioFeedback(unittest.TestCase):
         """Test playing error sound."""
         with patch(f"{AUDIO_FEEDBACK_MODULE}._play_sound_file") as mock_play:
             # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import (ERROR_SOUND,
-                                                     play_error_sound)
+            from vocalinux.ui.audio_feedback import ERROR_SOUND, play_error_sound
 
             # Call the function
             play_error_sound()

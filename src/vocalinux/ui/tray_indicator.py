@@ -20,8 +20,11 @@ gi.require_version("AppIndicator3", "0.1")
 from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
-from ..common_types import (RecognitionState, SpeechRecognitionManagerProtocol,
-                            TextInjectorProtocol)
+from ..common_types import (
+    RecognitionState,
+    SpeechRecognitionManagerProtocol,
+    TextInjectorProtocol,
+)
 from .keyboard_shortcuts import KeyboardShortcutManager
 
 logger = logging.getLogger(__name__)

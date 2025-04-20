@@ -24,7 +24,9 @@ sys.modules["zipfile"] = MagicMock()
 from vocalinux.common_types import RecognitionState
 from vocalinux.speech_recognition.command_processor import CommandProcessor
 from vocalinux.speech_recognition.recognition_manager import (
-    MODELS_DIR, SpeechRecognitionManager)
+    MODELS_DIR,
+    SpeechRecognitionManager,
+)
 
 # Need to create a mock for audio_feedback module before importing the recognition_manager
 mock_audio_feedback = MagicMock()

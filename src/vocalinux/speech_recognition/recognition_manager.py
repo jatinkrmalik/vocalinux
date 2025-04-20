@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from ..common_types import RecognitionState
-from ..ui.audio_feedback import (play_error_sound, play_start_sound,
-                                 play_stop_sound)
+from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from .command_processor import CommandProcessor
 
 logger = logging.getLogger(__name__)
