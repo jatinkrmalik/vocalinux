@@ -14,10 +14,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Set a flag for CI/test environments
-# This will be used to make sound functions work in testing environments
-TEST_MODE = (
-    os.environ.get("CI") == "true" or os.environ.get("VOCALINUX_TEST_MODE") == "true"
-)
+# This will be used to make sound functions work in CI testing environments
+# Note: We don't activate this during unit tests as they use mocking
+CI_MODE = os.environ.get("CI") == "true" and "PYTEST_CURRENT_TEST" not in os.environ
 
 
 # Define a more robust way to find the resources directory
@@ -77,8 +76,10 @@ def _get_audio_player():
     Returns:
         tuple: (player_command, supported_formats)
     """
-    # In test mode, return a mock player to make tests pass
-    if TEST_MODE:
+    # In CI mode, return a mock player to make tests pass,
+    # but only when not running pytest (to avoid interfering with unit tests)
+    if CI_MODE:
+        logger.info("CI mode: Using mock audio player")
         return "mock_player", ["wav"]
 
     # Check for PulseAudio paplay (preferred)
@@ -120,9 +121,10 @@ def _play_sound_file(sound_path):
     if not player:
         return False
 
-    # In test mode, just pretend we played the sound and return success
-    if TEST_MODE and player == "mock_player":
-        logger.info(f"Test mode: Simulating playing sound {sound_path}")
+    # In CI mode, just pretend we played the sound and return success
+    # but only when not running pytest (to avoid interfering with unit tests)
+    if CI_MODE and player == "mock_player":
+        logger.info(f"CI mode: Simulating playing sound {sound_path}")
         return True
 
     try:
