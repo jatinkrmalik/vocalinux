@@ -23,6 +23,16 @@ class TestTrayIndicator(unittest.TestCase):
         """Set up test environment before each test."""
         # Import here after patching for proper mocking
         from vocalinux.common_types import RecognitionState
+
+        # Patch the settings dialog BEFORE importing TrayIndicator
+        self.patcher_settings_dialog = patch(
+            "vocalinux.ui.tray_indicator.SettingsDialog"
+        )
+        self.mock_settings_dialog_class = self.patcher_settings_dialog.start()
+        self.mock_settings_dialog = MagicMock()
+        self.mock_settings_dialog_class.return_value = self.mock_settings_dialog
+
+        # Now import TrayIndicator after all patches are applied
         from vocalinux.ui.tray_indicator import TrayIndicator
 
         self.RecognitionState = RecognitionState
@@ -31,6 +41,7 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_speech_engine = MagicMock()
         self.mock_speech_engine.state = RecognitionState.IDLE
         self.mock_text_injector = MagicMock()
+        self.mock_config_manager = MagicMock()  # Mock the ConfigManager
 
         # Patch specific methods we need to control
         self.patcher_glib_idle = patch("gi.repository.GLib.idle_add")
@@ -54,6 +65,11 @@ class TestTrayIndicator(unittest.TestCase):
         )
         self.mock_listdir = self.patcher_listdir.start()
 
+        # Patch ConfigManager constructor
+        self.patcher_config_manager = patch("vocalinux.ui.tray_indicator.ConfigManager")
+        self.mock_config_manager_class = self.patcher_config_manager.start()
+        self.mock_config_manager_class.return_value = self.mock_config_manager
+
         # Create the indicator with our mocked dependencies
         with patch(
             "vocalinux.ui.tray_indicator.KeyboardShortcutManager", autospec=True
@@ -69,6 +85,8 @@ class TestTrayIndicator(unittest.TestCase):
         self.patcher_glib_idle.stop()
         self.patcher_path_exists.stop()
         self.patcher_listdir.stop()
+        self.patcher_config_manager.stop()
+        self.patcher_settings_dialog.stop()
 
     def test_initialization(self):
         """Test initialization of the tray indicator."""
@@ -189,6 +207,8 @@ class TestTrayIndicator(unittest.TestCase):
         with patch("signal.signal") as mock_signal, patch(
             "gi.repository.Gtk.main"
         ) as mock_main:
+            # Configure mock_main to return immediately instead of blocking
+            mock_main.side_effect = lambda: None
 
             # Call run method
             self.tray_indicator.run()
@@ -198,9 +218,18 @@ class TestTrayIndicator(unittest.TestCase):
             mock_main.assert_called_once()
 
     def test_settings_callback(self):
-        """Test settings callback (placeholder for future implementation)."""
-        # Simply verify that the method doesn't raise any exceptions
+        """Test settings callback."""
+        # Reset mocks
+        self.mock_settings_dialog_class.reset_mock()
+        self.mock_settings_dialog.reset_mock()
+
+        # Call the settings handler
         self.tray_indicator._on_settings_clicked(None)
+
+        # Verify SettingsDialog was created with correct parameters
+        self.mock_settings_dialog_class.assert_called_once()
+        # Verify dialog was shown
+        self.mock_settings_dialog.show.assert_called_once()
 
     def test_about_dialog(self):
         """Test about dialog creation."""
