@@ -117,7 +117,8 @@ class SpeechRecognitionManager:
         model_map = {
             "small": "vosk-model-small-en-us-0.15",
             "medium": "vosk-model-en-us-0.22",
-            "large": "vosk-model-en-us-0.42",
+            # Use the standard large model URL, as 0.42 seems unavailable
+            "large": "vosk-model-en-us-0.22",
         }
 
         model_name = model_map.get(self.model_size, model_map["small"])
@@ -146,25 +147,50 @@ class SpeechRecognitionManager:
 
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
-        response = requests.get(url, stream=True)
-        total_size = int(response.headers.get("content-length", 0))
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
-        with open(zip_path, "wb") as f:
-            for data in tqdm.tqdm(
-                response.iter_content(chunk_size=1024),
-                total=total_size // 1024,
-                unit="KB",
-            ):
-                f.write(data)
+            total_size = int(response.headers.get("content-length", 0))
 
-        # Extract the model
-        logger.info(f"Extracting VOSK model to {model_path}")
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(MODELS_DIR)
+            with open(zip_path, "wb") as f:
+                for data in tqdm.tqdm(
+                    response.iter_content(chunk_size=1024),
+                    total=total_size // 1024,
+                    unit="KB",
+                    desc=f"Downloading {model_name}" # Add description to progress bar
+                ):
+                    f.write(data)
 
-        # Remove the zip file
-        os.remove(zip_path)
-        logger.info("VOSK model downloaded and extracted successfully")
+            # Extract the model
+            logger.info(f"Extracting VOSK model to {model_path}")
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(MODELS_DIR)
+
+            # Remove the zip file
+            os.remove(zip_path)
+            logger.info("VOSK model downloaded and extracted successfully")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download VOSK model from {url}: {e}")
+            # Clean up potentially incomplete download
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            raise RuntimeError(f"Failed to download VOSK model: {e}") from e
+        except zipfile.BadZipFile:
+            logger.error(f"Downloaded file from {url} is not a valid zip file.")
+            # Clean up corrupted download
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            raise RuntimeError("Downloaded VOSK model file is corrupted.")
+        except Exception as e:
+            logger.error(f"An error occurred during VOSK model download/extraction: {e}")
+            # Clean up potentially corrupted extraction
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            # Consider removing partially extracted model dir if needed
+            # if os.path.exists(model_path): shutil.rmtree(model_path)
+            raise
 
     def register_text_callback(self, callback: Callable[[str], None]):
         """
