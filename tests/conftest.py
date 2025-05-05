@@ -15,13 +15,18 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 pytest_plugins = []
 
 
-# Skip problematic tests that cause hanging
-def pytest_collection_modifyitems(items):
-    """Skip tests that are causing hanging issues."""
+def pytest_collection_modifyitems(config, items):
+    """Modify collected test items to skip tray_indicator tests when running the full suite."""
+    # Get the list of file names being tested
+    test_files = set()
     for item in items:
-        if "test_tray_indicator.py" in item.nodeid:
-            item.add_marker(
-                pytest.mark.skip(
-                    reason="Temporarily skipping tray_indicator tests that cause hanging"
-                )
-            )
+        test_files.add(item.fspath.basename)
+
+    # If we're running more than just the tray_indicator tests, skip them to prevent hangs
+    if len(test_files) > 1 and "test_tray_indicator.py" in test_files:
+        skip_tray = pytest.mark.skip(
+            reason="Skipping tray_indicator tests in full suite to prevent hanging"
+        )
+        for item in items:
+            if item.fspath.basename == "test_tray_indicator.py":
+                item.add_marker(skip_tray)
