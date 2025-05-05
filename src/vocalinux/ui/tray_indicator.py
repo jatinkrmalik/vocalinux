@@ -25,7 +25,11 @@ from ..common_types import (
     SpeechRecognitionManagerProtocol,
     TextInjectorProtocol,
 )
+
+# Import necessary components
+from .config_manager import ConfigManager  # Added
 from .keyboard_shortcuts import KeyboardShortcutManager
+from .settings_dialog import SettingsDialog  # Added
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +109,12 @@ class TrayIndicator:
         """
         self.speech_engine = speech_engine
         self.text_injector = text_injector
+        self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
 
         # Initialize keyboard shortcut manager
-        self.shortcut_manager = KeyboardShortcutManager()
+        self.shortcut_manager = (
+            KeyboardShortcutManager()
+        )  # Pass config_manager - Removed config_manager argument
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
@@ -279,7 +286,24 @@ class TrayIndicator:
     def _on_settings_clicked(self, widget):
         """Handle click on the Settings menu item."""
         logger.debug("Settings clicked")
-        # TODO: Implement settings dialog
+        # Create and run the settings dialog
+        dialog = SettingsDialog(
+            parent=None,  # Or get the main window if available
+            config_manager=self.config_manager,
+            speech_engine=self.speech_engine,
+        )
+        response = dialog.run()
+
+        if response == Gtk.ResponseType.APPLY:
+            logger.info("Applying settings from dialog.")
+            if dialog.apply_settings():
+                logger.info("Settings applied successfully.")
+            else:
+                logger.error("Failed to apply settings.")
+        elif response == Gtk.ResponseType.CANCEL:
+            logger.info("Settings dialog cancelled.")
+
+        dialog.destroy()
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
