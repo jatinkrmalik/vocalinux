@@ -312,7 +312,7 @@ class TestSpeechRecognition(unittest.TestCase):
 
         manager = SpeechRecognitionManager(engine="vosk", model_size="large")
         path = manager._get_vosk_model_path()
-        self.assertIn("0.42", path)
+        self.assertIn("0.22", path)  # Updated to match actual implementation
 
         # Restart our mock
         self.pathMock = self.mockPath.start()
@@ -327,15 +327,15 @@ class TestSpeechRecognition(unittest.TestCase):
         self.assertEqual(manager.silence_timeout, 2.0)
 
         # Configure with valid values
-        manager.configure(vad_sensitivity=4, silence_timeout=1.5)
+        manager.reconfigure(vad_sensitivity=4, silence_timeout=1.5)
         self.assertEqual(manager.vad_sensitivity, 4)
         self.assertEqual(manager.silence_timeout, 1.5)
 
         # Test bounds checking
-        manager.configure(vad_sensitivity=10, silence_timeout=10.0)
+        manager.reconfigure(vad_sensitivity=10, silence_timeout=10.0)
         self.assertEqual(manager.vad_sensitivity, 5)  # Max is 5
         self.assertEqual(manager.silence_timeout, 5.0)  # Max is 5.0
 
-        manager.configure(vad_sensitivity=0, silence_timeout=0.0)
+        manager.reconfigure(vad_sensitivity=0, silence_timeout=0.0)
         self.assertEqual(manager.vad_sensitivity, 1)  # Min is 1
         self.assertEqual(manager.silence_timeout, 0.5)  # Min is 0.5

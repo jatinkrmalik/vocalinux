@@ -73,7 +73,7 @@ class TestConfigManager(unittest.TestCase):
         """Test loading configuration from file."""
         # Create a test config file
         test_config = {
-            "recognition": {
+            "speech_recognition": {
                 "engine": "whisper",
                 "model_size": "large",
             },
@@ -89,10 +89,14 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
 
         # Verify it merged with defaults correctly
-        self.assertEqual(config_manager.config["recognition"]["engine"], "whisper")
-        self.assertEqual(config_manager.config["recognition"]["model_size"], "large")
         self.assertEqual(
-            config_manager.config["recognition"]["auto_punctuate"], True
+            config_manager.config["speech_recognition"]["engine"], "whisper"
+        )
+        self.assertEqual(
+            config_manager.config["speech_recognition"]["model_size"], "large"
+        )
+        self.assertEqual(
+            config_manager.config["speech_recognition"]["vad_sensitivity"], 3
         )  # From defaults
         self.assertEqual(config_manager.config["ui"]["start_minimized"], True)
         self.assertEqual(
@@ -115,7 +119,7 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
 
         # Modify config
-        config_manager.config["recognition"]["engine"] = "whisper"
+        config_manager.config["speech_recognition"]["engine"] = "whisper"
         config_manager.config["ui"]["start_minimized"] = True
 
         # Save config
@@ -127,7 +131,7 @@ class TestConfigManager(unittest.TestCase):
         with open(self.temp_config_file, "r") as f:
             saved_config = json.load(f)
 
-        self.assertEqual(saved_config["recognition"]["engine"], "whisper")
+        self.assertEqual(saved_config["speech_recognition"]["engine"], "whisper")
         self.assertEqual(saved_config["ui"]["start_minimized"], True)
 
     def test_save_config_error(self):
@@ -143,7 +147,7 @@ class TestConfigManager(unittest.TestCase):
     def test_get_existing_value(self):
         """Test getting an existing configuration value."""
         config_manager = ConfigManager()
-        value = config_manager.get("recognition", "engine")
+        value = config_manager.get("speech_recognition", "engine")
         self.assertEqual(value, "vosk")
 
     def test_get_nonexistent_value(self):
@@ -155,9 +159,11 @@ class TestConfigManager(unittest.TestCase):
     def test_set_existing_section(self):
         """Test setting a value in an existing section."""
         config_manager = ConfigManager()
-        result = config_manager.set("recognition", "engine", "whisper")
+        result = config_manager.set("speech_recognition", "engine", "whisper")
         self.assertTrue(result)
-        self.assertEqual(config_manager.config["recognition"]["engine"], "whisper")
+        self.assertEqual(
+            config_manager.config["speech_recognition"]["engine"], "whisper"
+        )
 
     def test_set_new_section(self):
         """Test setting a value in a new section."""
