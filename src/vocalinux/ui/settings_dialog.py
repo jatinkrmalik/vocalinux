@@ -46,10 +46,7 @@ class SettingsDialog(Gtk.Dialog):
         self.speech_engine = speech_engine
         self._test_active = False
         self._test_result = ""
-        # Temporary storage for initial values
-        self._initial_engine = None
-        self._initial_model_size = None
-
+        
         self.add_buttons(
             Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_APPLY, Gtk.ResponseType.APPLY
         )
@@ -63,13 +60,7 @@ class SettingsDialog(Gtk.Dialog):
         # Engine Selection
         self.grid.attach(Gtk.Label(label="Speech Engine:", halign=Gtk.Align.START), 0, 0, 1, 1)
         self.engine_combo = Gtk.ComboBoxText()
-        # Populate engine combo FIRST, using ID and Text
-        for engine in ENGINE_MODELS.keys():
-            capitalized_engine = engine.capitalize()
-            self.engine_combo.append(capitalized_engine, capitalized_engine)  # Use ID and Text
-        self.engine_combo.connect("changed", self._on_engine_changed)
-        self.grid.attach(self.engine_combo, 1, 0, 1, 1)
-
+        
         # Model Size Selection
         self.grid.attach(Gtk.Label(label="Model Size:", halign=Gtk.Align.START), 0, 1, 1, 1)
         self.model_combo = Gtk.ComboBoxText()
@@ -110,105 +101,122 @@ class SettingsDialog(Gtk.Dialog):
         self.test_button.connect("clicked", self._on_test_clicked)
         self.grid.attach(self.test_button, 0, 6, 2, 1)
 
-        # --- Load Initial Settings ---
-        # Load settings *after* creating widgets but *before* setting active/populating dependent ones
-        self._load_settings()
-
-        # Set active engine *after* populating and loading
-        if self._initial_engine:
-            capitalized_engine = self._initial_engine.capitalize()
-            self.engine_combo.set_active_id(capitalized_engine)
-            # Fallback check if ID didn't work (shouldn't be needed with append(id, text))
-            if self.engine_combo.get_active_id() != capitalized_engine:
-                logger.warning(f"Failed to set active engine by ID '{capitalized_engine}', trying by text.")
-                # Find index by text as fallback
-                model = self.engine_combo.get_model()
-                for i, row in enumerate(model):
-                    if row[0] == capitalized_engine:  # Assuming text is in the first column
-                        self.engine_combo.set_active(i)
-                        break
-
-        # Populate model options based on the now-set engine
-        # This will use _initial_model_size internally
-        self._update_model_options()
-
-        # Show/hide VOSK settings based on the now-set engine
+        # ---- CRITICAL CHANGE ----
+        # Load settings FIRST before creating UI connections
+        settings = self._get_current_settings()
+        self.current_engine = settings["engine"]
+        self.current_model_size = settings["model_size"]
+        self.current_vad = settings.get("vad_sensitivity", 3)
+        self.current_silence = settings.get("silence_timeout", 2.0)
+        
+        logger.info(f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}")
+        
+        # Populate engine combo
+        for engine in ENGINE_MODELS.keys():
+            capitalized_engine = engine.capitalize()
+            self.engine_combo.append(capitalized_engine, capitalized_engine)
+        
+        # Add engine change handler AFTER populating, but before setting active
+        self.engine_combo.connect("changed", self._on_engine_changed)
+        self.grid.attach(self.engine_combo, 1, 0, 1, 1)
+        
+        # Set engine active
+        engine_text = self.current_engine.capitalize()
+        logger.info(f"Setting active engine to: {engine_text}")
+        if not self.engine_combo.set_active_id(engine_text):
+            logger.warning(f"Could not set engine by ID, trying by index")
+            # Fallback to setting by index
+            if self.current_engine == "vosk":
+                self.engine_combo.set_active(0)
+            elif self.current_engine == "whisper":
+                self.engine_combo.set_active(1)
+        
+        # Populate model options for the selected engine 
+        self._populate_model_options()
+        
+        # Set non-dependent widgets directly
+        self.vad_spin.set_value(self.current_vad)
+        self.silence_spin.set_value(self.current_silence)
+        
+        # Show/hide VOSK settings based on the engine
         self._update_engine_specific_ui()
 
-        # Show everything at the end
+        # Show everything
         self.show_all()
-        # Ensure VOSK box visibility is correct after show_all, sometimes needed
-        self._update_engine_specific_ui()
-
-    def _load_settings(self):
-        """Load current settings from the config manager and store them."""
+        
+    def _get_current_settings(self):
+        """Get current settings from config manager."""
+        # Always reload config from disk to reflect latest saved settings
+        self.config_manager.load_config()
         settings = self.config_manager.get_settings()
+        
         # Use .get with defaults for robustness
         sr_settings = settings.get("speech_recognition", {})
         engine = sr_settings.get("engine", "vosk")
         model_size = sr_settings.get("model_size", "small")
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
-
-        # Store initial values to be set *after* widgets are populated/available
-        self._initial_engine = engine
-        self._initial_model_size = model_size
-
-        # Set non-dependent widgets directly
-        self.vad_spin.set_value(vad_sensitivity)
-        self.silence_spin.set_value(silence_timeout)
-
+        
+        logger.info(f"Loaded current settings: engine={engine}, model_size={model_size}, " 
+                   f"vad={vad_sensitivity}, silence={silence_timeout}")
+                   
+        return {
+            "engine": engine,
+            "model_size": model_size,
+            "vad_sensitivity": vad_sensitivity,
+            "silence_timeout": silence_timeout
+        }
+        
+    def _populate_model_options(self):
+        """Populate model options based on the current engine selection."""
+        # Clear existing items
+        self.model_combo.remove_all()
+        
+        # Get the current engine text and convert to lowercase for lookup
+        engine_text = self.engine_combo.get_active_text()
+        if not engine_text:
+            logger.warning("No engine selected during model options population")
+            return
+            
+        engine = engine_text.lower()
+        logger.info(f"Populating model options for engine: {engine}")
+        
+        # Add model sizes for this engine
+        if engine in ENGINE_MODELS:
+            # Add all options for this engine
+            for size in ENGINE_MODELS[engine]:
+                capitalized_size = size.capitalize()
+                self.model_combo.append(capitalized_size, capitalized_size)
+                
+            # Set the active model from settings
+            model_to_set = self.current_model_size.capitalize()
+            logger.info(f"Setting active model to: {model_to_set}")
+            
+            # Try to set by ID
+            if not self.model_combo.set_active_id(model_to_set):
+                logger.warning(f"Could not set model by ID '{model_to_set}', trying by text")
+                # Find by text as fallback
+                model = self.model_combo.get_model()
+                model_found = False
+                for i, row in enumerate(model):
+                    if row[0].lower() == self.current_model_size.lower():
+                        self.model_combo.set_active(i)
+                        model_found = True
+                        logger.info(f"Set model by index {i}")
+                        break
+                        
+                # If still not found, default to first
+                if not model_found and len(ENGINE_MODELS[engine]) > 0:
+                    logger.warning(f"Model '{model_to_set}' not found in options, defaulting to first")
+                    self.model_combo.set_active(0)
+            
+            # Log final selection
+            logger.info(f"Final selected model: {self.model_combo.get_active_text()}")
+            
     def _on_engine_changed(self, widget):
         """Handle changes in the selected engine."""
-        # Clear the temporary initial model size if the user changes the engine
-        # Otherwise, switching back and forth might try to set an invalid model
-        if hasattr(self, '_initial_model_size'):
-            del self._initial_model_size
-        self._update_model_options()
+        self._populate_model_options()
         self._update_engine_specific_ui()
-
-    def _update_model_options(self):
-        """Update the available model sizes based on the selected engine."""
-        selected_engine_text = self.engine_combo.get_active_text()
-        if not selected_engine_text:
-            logger.warning("No engine selected in combo during _update_model_options.")
-            # For safety, let's just return if no text is active
-            return
-
-        selected_engine = selected_engine_text.lower()
-
-        self.model_combo.remove_all()
-        active_model_set = False
-        # Get the potentially stored initial model size for this run
-        current_initial_model = getattr(self, '_initial_model_size', None)
-
-        if selected_engine in ENGINE_MODELS:
-            for size in ENGINE_MODELS[selected_engine]:
-                capitalized_size = size.capitalize()
-                # Use ID and Text for model combo as well
-                self.model_combo.append(capitalized_size, capitalized_size)  # Use ID and Text
-
-                # Try to set the initial model size if it exists and matches
-                if current_initial_model and size == current_initial_model:
-                    self.model_combo.set_active_id(capitalized_size)
-                    active_model_set = True
-                    # Fallback check
-                    if self.model_combo.get_active_id() != capitalized_size:
-                        logger.warning(f"Failed to set active model by ID '{capitalized_size}', trying by text.")
-                        model = self.model_combo.get_model()
-                        for i, row in enumerate(model):
-                            if row[0] == capitalized_size:  # Assuming text is in first column
-                                self.model_combo.set_active(i)
-                                break
-
-            # Default to the first model if the initial one wasn't found or set
-            if not active_model_set and len(ENGINE_MODELS[selected_engine]) > 0:
-                self.model_combo.set_active(0)  # Set first item active by index
-
-        # Clean up the temporary initial model size after first use during init
-        # Check existence before deleting
-        if hasattr(self, '_initial_model_size'):
-            del self._initial_model_size
 
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
