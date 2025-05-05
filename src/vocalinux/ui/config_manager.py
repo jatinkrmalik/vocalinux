@@ -92,6 +92,10 @@ class ConfigManager:
             logger.error(f"Failed to save config: {e}")
             return False
 
+    def save_settings(self):
+        """Save the current configuration to the config file."""
+        return self.save_config()
+
     def get(self, section: str, key: str, default: Any = None) -> Any:
         """
         Get a configuration value.

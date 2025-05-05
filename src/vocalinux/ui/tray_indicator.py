@@ -286,24 +286,36 @@ class TrayIndicator:
     def _on_settings_clicked(self, widget):
         """Handle click on the Settings menu item."""
         logger.debug("Settings clicked")
-        # Create and run the settings dialog
+        
+        # Create the settings dialog
         dialog = SettingsDialog(
             parent=None,  # Or get the main window if available
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
         )
-        response = dialog.run()
-
+        
+        # Connect to the response signal
+        dialog.connect("response", self._on_settings_dialog_response)
+        
+        # Show the dialog (non-modal)
+        dialog.show()
+        
+    def _on_settings_dialog_response(self, dialog, response):
+        """Handle responses from the settings dialog."""
         if response == Gtk.ResponseType.APPLY:
             logger.info("Applying settings from dialog.")
             if dialog.apply_settings():
                 logger.info("Settings applied successfully.")
             else:
                 logger.error("Failed to apply settings.")
-        elif response == Gtk.ResponseType.CANCEL:
-            logger.info("Settings dialog cancelled.")
-
-        dialog.destroy()
+                
+            # Don't destroy the dialog - keep it open for further changes
+            return
+            
+        elif response == Gtk.ResponseType.CANCEL or response == Gtk.ResponseType.DELETE_EVENT:
+            logger.info("Settings dialog cancelled or closed.")
+            # Only destroy the dialog when Cancel is clicked or the window is closed
+            dialog.destroy()
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
