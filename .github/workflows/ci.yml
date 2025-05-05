@@ -51,6 +51,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [3.8]
+    
+    # Set environment variables for the entire job
+    env:
+      VOCALINUX_ENV: ci
+      # Explicitly disable hardware features in CI
+      VOCALINUX_ENABLE_AUDIO: "false"
+      VOCALINUX_ENABLE_KEYBOARD: "false"
+      VOCALINUX_ENABLE_GUI: "false"
 
     steps:
     - uses: actions/checkout@v3
