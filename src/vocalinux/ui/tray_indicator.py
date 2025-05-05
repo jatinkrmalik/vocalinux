@@ -15,31 +15,34 @@ from typing import Callable, Dict, Optional
 from vocalinux.utils.environment import FEATURE_GUI, environment
 
 # Only import GUI components if the GUI feature is available
-if environment.is_feature_available(FEATURE_GUI):
+# The conditional import is now moved inside try-except to handle test mocking
+try:
     import gi
 
     # Import GTK
     gi.require_version("Gtk", "3.0")
     gi.require_version("AppIndicator3", "0.1")
     from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
-else:
-    # Define placeholders for GUI-related imports when running in a non-GUI environment
-    class PlaceholderGLib:
-        @staticmethod
-        def idle_add(func, *args):
-            # Simply execute the function directly without scheduling
-            if args:
-                func(*args)
-            else:
-                func()
-            return False
+except (ImportError, ValueError):
+    # For testing, these might already be mocked
+    if "gi.repository.Gtk" not in sys.modules:
+        # Define placeholders for GUI-related imports when running in a non-GUI environment or for tests
+        class PlaceholderGLib:
+            @staticmethod
+            def idle_add(func, *args):
+                # Simply execute the function directly without scheduling
+                if args:
+                    func(*args)
+                else:
+                    func()
+                return False
 
-    # Create dummy placeholder for GUI libraries
-    GLib = PlaceholderGLib()
-    AppIndicator3 = None
-    GdkPixbuf = None
-    GObject = None
-    Gtk = None
+        # Create dummy placeholder for GUI libraries
+        GLib = PlaceholderGLib()
+        AppIndicator3 = None
+        GdkPixbuf = None
+        GObject = None
+        Gtk = None
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import (
@@ -47,7 +50,9 @@ from ..common_types import (
     SpeechRecognitionManagerProtocol,
     TextInjectorProtocol,
 )
-from .keyboard_shortcuts import KeyboardShortcutManager
+
+# Import KeyboardShortcutManager lazily to avoid circular imports
+# from .keyboard_shortcuts import KeyboardShortcutManager
 
 logger = logging.getLogger(__name__)
 
@@ -129,21 +134,29 @@ class TrayIndicator:
         self.text_injector = text_injector
         self.indicator = None
         self.menu = None
+        self.shortcut_manager = None
 
         # Check if GUI is available before initializing GUI components
         self.gui_available = environment.is_feature_available(FEATURE_GUI)
+
+        # Initialize keyboard shortcut manager
+        from .keyboard_shortcuts import KeyboardShortcutManager
+
+        self.shortcut_manager = KeyboardShortcutManager()
+
+        # Set up keyboard shortcuts if available
+        if self.shortcut_manager and self.shortcut_manager.keyboard_available:
+            self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
+            self.shortcut_manager.start()
+
+        # Register for speech recognition state changes
+        self.speech_engine.register_state_callback(self._on_recognition_state_changed)
+
         if not self.gui_available:
             logger.info(
                 "GUI features are disabled, tray indicator will operate in headless mode"
             )
-            # Register for state changes even in headless mode to maintain state
-            self.speech_engine.register_state_callback(
-                self._on_recognition_state_changed
-            )
             return
-
-        # Initialize keyboard shortcut manager
-        self.shortcut_manager = KeyboardShortcutManager()
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
@@ -155,18 +168,11 @@ class TrayIndicator:
             "processing": os.path.join(ICON_DIR, f"{PROCESSING_ICON}.svg"),
         }
 
-        # Register for speech recognition state changes
-        self.speech_engine.register_state_callback(self._on_recognition_state_changed)
-
         # Initialize the icon files
         self._init_icons()
 
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
-
-        # Set up keyboard shortcuts
-        self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
-        self.shortcut_manager.start()
 
     def _init_icons(self):
         """Initialize the icon files for the tray indicator."""
@@ -184,21 +190,6 @@ class TrayIndicator:
             return False
 
         logger.info("Initializing system tray indicator")
-
-        # Log the icon directory path
-        logger.info(f"Using icon directory: {ICON_DIR}")
-        logger.info(f"Icon directory exists: {os.path.exists(ICON_DIR)}")
-
-        # List available icon files and check if they exist
-        if os.path.exists(ICON_DIR):
-            icon_files = os.listdir(ICON_DIR)
-            logger.info(f"Available icon files: {icon_files}")
-
-            for name, path in self.icon_paths.items():
-                exists = os.path.exists(path)
-                logger.info(
-                    f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}"
-                )
 
         # Create the indicator with absolute path to the default icon
         self.indicator = AppIndicator3.Indicator.new_with_path(
@@ -231,7 +222,6 @@ class TrayIndicator:
 
         # Update the UI based on the initial state
         self._update_ui(RecognitionState.IDLE)
-
         return False  # Remove idle callback
 
     def _toggle_recognition(self):
@@ -275,7 +265,10 @@ class TrayIndicator:
             state: The new recognition state
         """
         # Update the UI in the GTK main thread
-        GLib.idle_add(self._update_ui, state)
+        if self.gui_available:
+            self._update_ui(state)
+        else:
+            logger.debug(f"Recognition state changed to {state} (headless mode)")
 
     def _update_ui(self, state: RecognitionState):
         """
@@ -350,7 +343,10 @@ class TrayIndicator:
 
         logger.debug("About clicked")
 
-        about_dialog = Gtk.AboutDialog()
+        # Create an AboutDialog instance
+        about_dialog = Gtk.AboutDialog.new()
+
+        # Set dialog properties
         about_dialog.set_program_name("Vocalinux")
         about_dialog.set_version("0.1.0")
         about_dialog.set_copyright("© 2025 | @jatinkrmalik")
@@ -362,19 +358,21 @@ class TrayIndicator:
 
         # Set the logo using our custom icon
         logo_path = os.path.join(ICON_DIR, "vocalinux.svg")
-        if os.path.exists(logo_path):
-            try:
+        try:
+            if os.path.exists(logo_path) and GdkPixbuf is not None:
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
                 scaled_pixbuf = pixbuf.scale_simple(
                     150, 150, GdkPixbuf.InterpType.BILINEAR
                 )
                 about_dialog.set_logo(scaled_pixbuf)
-            except Exception as e:
-                logger.warning(f"Failed to load or scale logo: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to load or scale logo: {e}")
 
-        # Run the dialog
-        about_dialog.run()
-        about_dialog.destroy()
+        # Run the dialog and wait for response
+        try:
+            response = about_dialog.run()
+        finally:
+            about_dialog.destroy()
 
     def _on_quit_clicked(self, widget):
         """Handle click on the Quit menu item."""
@@ -385,13 +383,33 @@ class TrayIndicator:
         """Quit the application."""
         logger.info("Quitting application")
 
-        # Stop the keyboard shortcut manager if it was initialized
-        if self.gui_available and hasattr(self, "shortcut_manager"):
-            self.shortcut_manager.stop()
+        # Stop the keyboard shortcut manager if it exists and is available
+        try:
+            if (
+                hasattr(self, "shortcut_manager")
+                and self.shortcut_manager is not None
+                and self.shortcut_manager.keyboard_available
+            ):
+                self.shortcut_manager.stop()
+        except Exception as e:
+            logger.error(f"Error stopping keyboard shortcut manager: {e}")
 
         # Only quit the GTK main loop if GUI is available
         if self.gui_available and Gtk is not None:
             Gtk.main_quit()
+
+    def _signal_handler(self, sig, frame):
+        """
+        Handle signals (e.g., SIGINT, SIGTERM).
+
+        Args:
+            sig: The signal number
+            frame: The current stack frame
+        """
+        logger.info(f"Received signal {sig}, shutting down...")
+        # Directly call _quit instead of using GLib.idle_add
+        # since we want to shut down immediately
+        self._quit()
 
     def run(self):
         """Run the application main loop."""
@@ -406,19 +424,9 @@ class TrayIndicator:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-        # Start the GTK main loop
-        try:
-            Gtk.main()
-        except KeyboardInterrupt:
-            self._quit()
-
-    def _signal_handler(self, sig, frame):
-        """
-        Handle signals (e.g., SIGINT, SIGTERM).
-
-        Args:
-            sig: The signal number
-            frame: The current stack frame
-        """
-        logger.info(f"Received signal {sig}, shutting down...")
-        GLib.idle_add(self._quit)
+        # Start the GTK main loop (skip in testing environment)
+        if os.environ.get("VOCALINUX_ENV") != "testing":
+            try:
+                Gtk.main()
+            except KeyboardInterrupt:
+                self._quit()

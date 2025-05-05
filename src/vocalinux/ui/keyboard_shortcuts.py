@@ -23,8 +23,11 @@ if environment.is_feature_available(FEATURE_KEYBOARD):
         keyboard = None
 else:
     KEYBOARD_AVAILABLE = False
+    keyboard = None
 
-    # Create a dummy keyboard module for testing
+# Create a dummy keyboard module for testing
+if not KEYBOARD_AVAILABLE:
+
     class DummyKeyboard:
         class Key:
             alt = "Key.alt"
@@ -83,28 +86,44 @@ class KeyboardShortcutManager:
         self.double_tap_threshold = 0.3  # seconds between taps to count as double-tap
         self.current_keys = set()
 
-        if not KEYBOARD_AVAILABLE:
+        # Initialize keyboard availability - this can be overridden via setter
+        self._keyboard_available = True
+
+        if not self.keyboard_available:
             logger.warning(
                 "Keyboard shortcut features not available. Shortcuts will not work."
             )
-            return
+
+    @property
+    def keyboard_available(self):
+        """Check if keyboard shortcuts are available."""
+        return (
+            self._keyboard_available
+            and KEYBOARD_AVAILABLE
+            and environment.is_feature_available(FEATURE_KEYBOARD)
+        )
+
+    @keyboard_available.setter
+    def keyboard_available(self, value):
+        """Set keyboard availability (mainly for testing)."""
+        self._keyboard_available = value
 
     def start(self):
         """Start listening for keyboard shortcuts."""
-        if not KEYBOARD_AVAILABLE:
+        # Use the property to check availability
+        if not self.keyboard_available:
+            logger.warning(
+                "Cannot start keyboard listener: keyboard features not available"
+            )
             return
 
         if self.active:
             return
 
         logger.info("Starting keyboard shortcut listener")
-        self.active = True
-
-        # Track currently pressed modifier keys
-        self.current_keys = set()
 
         try:
-            # Start keyboard listener in a separate thread
+            # Create and start keyboard listener
             self.listener = keyboard.Listener(
                 on_press=self._on_press, on_release=self._on_release
             )
@@ -112,18 +131,21 @@ class KeyboardShortcutManager:
             self.listener.start()
 
             # Verify the listener started successfully
-            if not self.listener.is_alive():
+            if self.listener.is_alive():
+                logger.info("Keyboard shortcut listener started successfully")
+                self.active = True
+            else:
                 logger.error("Failed to start keyboard listener")
                 self.active = False
-            else:
-                logger.info("Keyboard shortcut listener started successfully")
+                self.listener = None
         except Exception as e:
             logger.error(f"Error starting keyboard listener: {e}")
             self.active = False
+            self.listener = None
 
     def stop(self):
         """Stop listening for keyboard shortcuts."""
-        if not self.active or not self.listener:
+        if not self.active:
             return
 
         logger.info("Stopping keyboard shortcut listener")

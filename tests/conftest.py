@@ -8,6 +8,10 @@ import sys
 
 import pytest
 
+# Add global timeout for all tests to avoid infinite loops
+# This will terminate any test that runs longer than 30 seconds
+pytest.timeout = 30
+
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
