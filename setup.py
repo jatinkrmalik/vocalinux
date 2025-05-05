@@ -31,6 +31,7 @@ setup(
         "dev": [
             "pytest",
             "pytest-cov",  # Add this for coverage testing
+            "pytest-timeout",  # Add explicit timeout support for tests
             "black",
             "isort",
             "flake8",

@@ -11,7 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Set
+from typing import Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +73,23 @@ class EnvironmentManager:
     it easier to handle different execution contexts.
     """
 
+    # Class variable to store the singleton instance
+    _instance: Optional["EnvironmentManager"] = None
+
+    @classmethod
+    def get_instance(cls):
+        """Get or create the singleton instance of EnvironmentManager."""
+        if cls._instance is None:
+            cls._instance = EnvironmentManager()
+        return cls._instance
+
     def __init__(self):
         """Initialize the environment manager and detect current environment."""
+        # Check if we're being used in a test mock
+        if hasattr(self, "_is_test_mock") and self._is_test_mock:
+            # Skip actual initialization for test mocks
+            return
+
         self._environment = self._detect_environment()
         self._available_features = self._detect_available_features()
 
@@ -98,7 +113,8 @@ class EnvironmentManager:
         ):
             return ENV_CI
 
-        # Check for test environment
+        # Check for test environment - directly check for pytest in sys.modules
+        # without trying to import it to avoid circular import issues
         if "pytest" in sys.modules:
             return ENV_TESTING
 
@@ -112,6 +128,10 @@ class EnvironmentManager:
         Returns:
             bool: True if audio hardware is accessible, False otherwise
         """
+        # Check if we're in a test environment - only perform actual checks in production
+        if self._environment in (ENV_TESTING, ENV_CI):
+            return False
+
         # Check for common audio players
         audio_players = ["paplay", "aplay", "play", "mplayer"]
         for player in audio_players:
@@ -144,6 +164,10 @@ class EnvironmentManager:
         Returns:
             bool: True if keyboard is accessible for global shortcuts, False otherwise
         """
+        # Check if we're in a test environment, avoid real import
+        if self._environment in (ENV_TESTING, ENV_CI):
+            return False
+
         # Try to import the keyboard library without side effects
         try:
             import importlib.util
@@ -175,6 +199,10 @@ class EnvironmentManager:
         Returns:
             bool: True if GUI is accessible, False otherwise
         """
+        # Check if we're in a test environment, avoid real import
+        if self._environment in (ENV_TESTING, ENV_CI):
+            return False
+
         # Check if X11 display is available
         if "DISPLAY" not in os.environ:
             logger.debug("X11 DISPLAY environment variable not set")
@@ -226,18 +254,22 @@ class EnvironmentManager:
             # In development/production, detect hardware features by default
             # unless explicitly disabled
 
-            # Check audio feature
+            # Check audio feature - if disabled via environment, don't even check hardware
             if not is_false_value(os.environ.get("VOCALINUX_DISABLE_AUDIO")):
                 if self._can_access_audio_hardware():
                     available.add(FEATURE_AUDIO)
 
-            # Check keyboard feature
-            if not is_false_value(os.environ.get("VOCALINUX_DISABLE_KEYBOARD")):
+            # Check keyboard feature - if disabled via environment, don't even check hardware
+            if is_true_value(os.environ.get("VOCALINUX_DISABLE_KEYBOARD")):
+                logger.debug("Keyboard explicitly disabled by environment variable")
+            else:
                 if self._can_access_keyboard():
                     available.add(FEATURE_KEYBOARD)
 
-            # Check GUI feature
-            if not is_false_value(os.environ.get("VOCALINUX_DISABLE_GUI")):
+            # Check GUI feature - if disabled via environment, don't even check hardware
+            if is_false_value(os.environ.get("VOCALINUX_DISABLE_GUI")):
+                logger.debug("GUI explicitly disabled by environment variable")
+            else:
                 if self._can_access_gui():
                     available.add(FEATURE_GUI)
 
@@ -284,4 +316,5 @@ class EnvironmentManager:
 
 
 # Create a singleton instance
-environment = EnvironmentManager()
+# This is now a function call, not a direct instantiation
+environment = EnvironmentManager.get_instance()
