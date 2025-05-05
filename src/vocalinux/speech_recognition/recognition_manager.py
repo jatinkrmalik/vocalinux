@@ -31,7 +31,7 @@ class SpeechRecognitionManager:
     speech recognition engines (VOSK and Whisper).
     """
 
-    def __init__(self, engine: str = "vosk", model_size: str = "small"):
+    def __init__(self, engine: str = "vosk", model_size: str = "small", **kwargs):
         """
         Initialize the speech recognition manager.
 
@@ -45,14 +45,15 @@ class SpeechRecognitionManager:
         self.audio_thread = None
         self.recognition_thread = None
         self.model = None
+        self.recognizer = None  # Added for VOSK
         self.command_processor = CommandProcessor()
         self.text_callbacks: List[Callable[[str], None]] = []
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
         self.action_callbacks: List[Callable[[str], None]] = []
 
-        # Speech detection parameters
-        self.vad_sensitivity = 3  # Voice Activity Detection sensitivity (1-5)
-        self.silence_timeout = 2.0  # Seconds of silence before stopping recognition
+        # Speech detection parameters (load defaults, will be overridden by configure)
+        self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
+        self.silence_timeout = kwargs.get("silence_timeout", 2.0)
 
         # Recording control flags
         self.should_record = False
@@ -87,8 +88,12 @@ class SpeechRecognitionManager:
                 self._download_vosk_model()
 
             logger.info(f"Loading VOSK model from {self.vosk_model_path}")
+            # Ensure previous model/recognizer are released if re-initializing
+            self.model = None
+            self.recognizer = None
             self.model = Model(self.vosk_model_path)
             self.recognizer = KaldiRecognizer(self.model, 16000)
+            logger.info("VOSK engine initialized successfully.")
 
         except ImportError:
             logger.error(
@@ -103,8 +108,10 @@ class SpeechRecognitionManager:
             import whisper
 
             logger.info(f"Loading Whisper {self.model_size} model")
+            # Ensure previous model is released if re-initializing
+            self.model = None
             self.model = whisper.load_model(self.model_size)
-
+            logger.info("Whisper engine initialized successfully.")
         except ImportError:
             logger.error(
                 "Failed to import Whisper. Please install it with 'pip install whisper torch'"
@@ -117,7 +124,8 @@ class SpeechRecognitionManager:
         model_map = {
             "small": "vosk-model-small-en-us-0.15",
             "medium": "vosk-model-en-us-0.22",
-            "large": "vosk-model-en-us-0.42",
+            # Use the standard large model URL, as 0.42 seems unavailable
+            "large": "vosk-model-en-us-0.22",
         }
 
         model_name = model_map.get(self.model_size, model_map["small"])
@@ -146,25 +154,52 @@ class SpeechRecognitionManager:
 
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
-        response = requests.get(url, stream=True)
-        total_size = int(response.headers.get("content-length", 0))
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
-        with open(zip_path, "wb") as f:
-            for data in tqdm.tqdm(
-                response.iter_content(chunk_size=1024),
-                total=total_size // 1024,
-                unit="KB",
-            ):
-                f.write(data)
+            total_size = int(response.headers.get("content-length", 0))
 
-        # Extract the model
-        logger.info(f"Extracting VOSK model to {model_path}")
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(MODELS_DIR)
+            with open(zip_path, "wb") as f:
+                for data in tqdm.tqdm(
+                    response.iter_content(chunk_size=1024),
+                    total=total_size // 1024,
+                    unit="KB",
+                    desc=f"Downloading {model_name}",  # Add description to progress bar
+                ):
+                    f.write(data)
 
-        # Remove the zip file
-        os.remove(zip_path)
-        logger.info("VOSK model downloaded and extracted successfully")
+            # Extract the model
+            logger.info(f"Extracting VOSK model to {model_path}")
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(MODELS_DIR)
+
+            # Remove the zip file
+            os.remove(zip_path)
+            logger.info("VOSK model downloaded and extracted successfully")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download VOSK model from {url}: {e}")
+            # Clean up potentially incomplete download
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            raise RuntimeError(f"Failed to download VOSK model: {e}") from e
+        except zipfile.BadZipFile:
+            logger.error(f"Downloaded file from {url} is not a valid zip file.")
+            # Clean up corrupted download
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            raise RuntimeError("Downloaded VOSK model file is corrupted.")
+        except Exception as e:
+            logger.error(
+                f"An error occurred during VOSK model download/extraction: {e}"
+            )
+            # Clean up potentially corrupted extraction
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            # Consider removing partially extracted model dir if needed
+            # if os.path.exists(model_path): shutil.rmtree(model_path)
+            raise
 
     def register_text_callback(self, callback: Callable[[str], None]):
         """
@@ -174,6 +209,19 @@ class SpeechRecognitionManager:
             callback: A function that takes a string argument (the recognized text)
         """
         self.text_callbacks.append(callback)
+
+    def unregister_text_callback(self, callback: Callable[[str], None]):
+        """
+        Unregister a text callback function.
+
+        Args:
+            callback: The callback function to remove.
+        """
+        try:
+            self.text_callbacks.remove(callback)
+            logger.debug(f"Unregistered text callback: {callback}")
+        except ValueError:
+            logger.warning(f"Callback {callback} not found in text_callbacks.")
 
     def register_state_callback(self, callback: Callable[[RecognitionState], None]):
         """
@@ -293,12 +341,24 @@ class SpeechRecognitionManager:
                     volume = np.abs(audio_data).mean()
 
                     # Threshold based on sensitivity (1-5)
-                    threshold = 500 / self.vad_sensitivity
+                    # Ensure vad_sensitivity is treated as integer for calculation
+                    try:
+                        vad_sens = int(self.vad_sensitivity)
+                        threshold = 500 / max(
+                            1, min(5, vad_sens)
+                        )  # Use self.vad_sensitivity
+                    except ValueError:
+                        logger.warning(
+                            f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
+                        )
+                        threshold = 500 / 3
 
                     if volume < threshold:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if silence_counter > self.silence_timeout:
-                            logger.debug("Silence detected, stopping recognition")
+                        if (
+                            silence_counter > self.silence_timeout
+                        ):  # Use self.silence_timeout
+                            logger.debug("Silence detected, processing buffer")
                             self._update_state(RecognitionState.PROCESSING)
                             # Process final buffer
                             self._process_final_buffer()
@@ -380,16 +440,64 @@ class SpeechRecognitionManager:
             # The real work is done in _record_audio and _process_final_buffer
             time.sleep(0.1)
 
-    def configure(self, vad_sensitivity: int = None, silence_timeout: float = None):
+    def reconfigure(
+        self,
+        engine: Optional[str] = None,
+        model_size: Optional[str] = None,
+        vad_sensitivity: Optional[int] = None,
+        silence_timeout: Optional[float] = None,
+        **kwargs,  # Allow for future expansion
+    ):
         """
-        Configure recognition parameters.
+        Reconfigure the speech recognition engine on the fly.
 
         Args:
-            vad_sensitivity: Voice Activity Detection sensitivity (1-5)
-            silence_timeout: Seconds of silence before stopping recognition
+            engine: The new speech recognition engine ("vosk" or "whisper").
+            model_size: The new model size.
+            vad_sensitivity: New VAD sensitivity (for VOSK).
+            silence_timeout: New silence timeout (for VOSK).
         """
-        if vad_sensitivity is not None:
-            self.vad_sensitivity = max(1, min(5, vad_sensitivity))
+        logger.info(
+            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, vad={vad_sensitivity}, silence={silence_timeout}"
+        )
 
+        restart_needed = False
+        if engine is not None and engine != self.engine:
+            self.engine = engine
+            restart_needed = True
+
+        if model_size is not None and model_size != self.model_size:
+            self.model_size = model_size
+            restart_needed = True
+
+        # Update VOSK specific params if provided
+        if vad_sensitivity is not None:
+            self.vad_sensitivity = max(1, min(5, int(vad_sensitivity)))
         if silence_timeout is not None:
-            self.silence_timeout = max(0.5, min(5.0, silence_timeout))
+            self.silence_timeout = max(0.5, min(5.0, float(silence_timeout)))
+
+        if restart_needed:
+            logger.info("Engine or model changed, re-initializing...")
+            # Release old resources explicitly if necessary (Python's GC might handle it)
+            self.model = None
+            self.recognizer = None
+            try:
+                if self.engine == "vosk":
+                    self._init_vosk()
+                elif self.engine == "whisper":
+                    self._init_whisper()
+                else:
+                    raise ValueError(
+                        f"Unsupported engine during reconfigure: {self.engine}"
+                    )
+                logger.info("Speech engine re-initialized successfully.")
+            except Exception as e:
+                logger.error(
+                    f"Failed to re-initialize speech engine: {e}", exc_info=True
+                )
+                self._update_state(RecognitionState.ERROR)
+                # Re-raise or handle appropriately
+                raise
+        else:
+            # If only VOSK params changed, just log it
+            logger.info("Applied VAD/silence timeout changes.")

@@ -18,12 +18,11 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 # Default configuration
 DEFAULT_CONFIG = {
-    "recognition": {
+    "speech_recognition": {  # Changed section name
         "engine": "vosk",  # "vosk" or "whisper"
         "model_size": "small",  # "small", "medium", or "large"
-        "auto_punctuate": True,
-        "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
-        "timeout": 2.0,  # Seconds of silence before stopping recognition
+        "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5) - Moved here
+        "silence_timeout": 2.0,  # Seconds of silence before stopping recognition - Moved here
     },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap Ctrl
@@ -81,6 +80,8 @@ class ConfigManager:
     def save_config(self):
         """Save the current configuration to the config file."""
         try:
+            # Ensure directory exists before writing
+            self._ensure_config_dir()
             with open(CONFIG_FILE, "w") as f:
                 json.dump(self.config, f, indent=4)
 
@@ -91,12 +92,16 @@ class ConfigManager:
             logger.error(f"Failed to save config: {e}")
             return False
 
+    def save_settings(self):
+        """Save the current configuration to the config file."""
+        return self.save_config()
+
     def get(self, section: str, key: str, default: Any = None) -> Any:
         """
         Get a configuration value.
 
         Args:
-            section: The configuration section (e.g., "recognition", "shortcuts")
+            section: The configuration section (e.g., "speech_recognition", "shortcuts")
             key: The configuration key within the section
             default: The default value to return if the key doesn't exist
 
@@ -113,7 +118,7 @@ class ConfigManager:
         Set a configuration value.
 
         Args:
-            section: The configuration section (e.g., "recognition", "shortcuts")
+            section: The configuration section (e.g., "speech_recognition", "shortcuts")
             key: The configuration key within the section
             value: The value to set
 
@@ -130,6 +135,20 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to set config value: {e}")
             return False
+
+    def get_settings(self) -> Dict[str, Any]:
+        """Get the entire configuration dictionary."""
+        return self.config
+
+    def update_speech_recognition_settings(self, settings: Dict[str, Any]):
+        """Update multiple speech recognition settings at once."""
+        if "speech_recognition" not in self.config:
+            self.config["speech_recognition"] = {}
+
+        # Only update keys present in the provided settings dict
+        for key, value in settings.items():
+            self.config["speech_recognition"][key] = value
+        logger.info(f"Updated speech recognition settings: {settings}")
 
     def _update_dict_recursive(self, target: Dict, source: Dict):
         """

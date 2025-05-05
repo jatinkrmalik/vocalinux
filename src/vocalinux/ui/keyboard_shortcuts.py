@@ -10,13 +10,19 @@ import threading
 import time
 from typing import Callable
 
-# Try to import X11 keyboard libraries first
+# Make keyboard a module-level attribute first, even if it's None
+# This will ensure the attribute exists for patching in tests
+keyboard = None
+KEYBOARD_AVAILABLE = False
+
+# Try to import X11 keyboard libraries
 try:
     from pynput import keyboard
 
     KEYBOARD_AVAILABLE = True
 except ImportError:
-    KEYBOARD_AVAILABLE = False
+    # Keep keyboard as None, which we set above
+    pass
 
 logger = logging.getLogger(__name__)
 

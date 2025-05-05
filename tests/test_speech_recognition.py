@@ -413,15 +413,15 @@ class TestSpeechRecognition(unittest.TestCase):
         self.assertEqual(manager.silence_timeout, 2.0)
 
         # Configure with valid values
-        manager.configure(vad_sensitivity=4, silence_timeout=1.5)
+        manager.reconfigure(vad_sensitivity=4, silence_timeout=1.5)
         self.assertEqual(manager.vad_sensitivity, 4)
         self.assertEqual(manager.silence_timeout, 1.5)
 
         # Configure with out-of-range values
-        manager.configure(vad_sensitivity=10, silence_timeout=10.0)
+        manager.reconfigure(vad_sensitivity=10, silence_timeout=10.0)
         self.assertEqual(manager.vad_sensitivity, 5)  # Clamped to max
         self.assertEqual(manager.silence_timeout, 5.0)  # Clamped to max
 
-        manager.configure(vad_sensitivity=0, silence_timeout=0.2)
+        manager.reconfigure(vad_sensitivity=0, silence_timeout=0.2)
         self.assertEqual(manager.vad_sensitivity, 1)  # Clamped to min
         self.assertEqual(manager.silence_timeout, 0.5)  # Clamped to min
