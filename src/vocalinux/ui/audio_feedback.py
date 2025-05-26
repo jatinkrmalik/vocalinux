@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Set a flag for CI/test environments
 # This will be used to make sound functions work in CI testing environments
 # Only use mock player in CI when not explicitly testing the player detection
-CI_MODE = os.environ.get("CI") == "true" and "PYTEST_CURRENT_TEST" not in os.environ
+CI_MODE = os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 # Define a more robust way to find the resources directory
@@ -122,11 +122,7 @@ def _play_sound_file(sound_path):
     # Special handling for CI environment during tests
     # If we're in CI (no audio players available) but running tests,
     # continue with the execution to allow proper mocking
-    if (
-        not player
-        and os.environ.get("CI") == "true"
-        and "PYTEST_CURRENT_TEST" in os.environ
-    ):
+    if not player and os.environ.get("GITHUB_ACTIONS") == "true":
         # In CI tests with no audio player, use a placeholder to allow mocking to work
         player = "ci_test_player"
 
