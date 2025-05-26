@@ -202,24 +202,38 @@ Update documentation for any new features or changes:
 
 ## Development Workflow Tips
 
-1. **Virtual Environment**: Always activate the virtual environment before working on the project:
-   ```bash
-   source activate-vocalinux.sh
-   ```
+1.  **Virtual Environment**: Always activate the virtual environment before working on the project:
+    ```bash
+    # Activate the environment (assuming it's named venv)
+    source venv/bin/activate
+    # Or use the helper script
+    # source activate-vocalinux.sh 
+    ```
 
-2. **Debugging**: Use the `--debug` flag when running Vocalinux during development:
-   ```bash
-   vocalinux --debug
-   ```
+2.  **Running from Source**: To ensure you are running the latest code from your `src` directory during development (instead of the potentially installed version), use:
+    ```bash
+    # Make sure venv is active
+    python -m vocalinux.main
+    ```
+    This command executes the main module directly from your source files.
 
-3. **Branching Strategy**:
-   - Create feature branches from `main`
-   - Name branches descriptively (e.g., `feature/voice-commands`, `fix/tray-icon-bug`)
-   - Keep pull requests focused on a single issue/feature
+3.  **Debugging**: Use the `--debug` flag when running Vocalinux during development:
+    ```bash
+    # When running from source
+    python -m vocalinux.main --debug
+    
+    # If running the installed command (less common during active dev)
+    # vocalinux --debug 
+    ```
 
-4. **Common Development Tasks**:
-   - Adding a new voice command? Modify `command_processor.py`
-   - UI changes? Look at files in the `ui/` directory
-   - Speech recognition tweaks? Check `speech_recognition/recognition_manager.py`
+4.  **Branching Strategy**:
+    - Create feature branches from `main`
+    - Name branches descriptively (e.g., `feature/voice-commands`, `fix/tray-icon-bug`)
+    - Keep pull requests focused on a single issue/feature
+
+5.  **Common Development Tasks**:
+    - Adding a new voice command? Modify `command_processor.py`
+    - UI changes? Look at files in the `ui/` directory
+    - Speech recognition tweaks? Check `speech_recognition/recognition_manager.py`
 
 Thank you for contributing to Vocalinux!
