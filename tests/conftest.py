@@ -23,14 +23,25 @@ def pytest_addoption(parser):
         default=False,
         help="Run tray indicator tests (may hang in headless environments)",
     )
+    parser.addoption(
+        "--run-audio-tests",
+        action="store_true",
+        default=False,
+        help="Run audio feedback tests (may fail in CI environments without audio)",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
-    """Modify collected test items to skip tray_indicator tests when running the full suite."""
+    """Modify collected test items to skip tray_indicator and audio_feedback tests when running the full suite."""
     # Check if we should run tray tests (environment variable or command line option)
     run_tray_tests = os.getenv(
         "RUN_TRAY_TESTS", "false"
     ).lower() == "true" or config.getoption("--run-tray-tests", default=False)
+
+    # Check if we should run audio tests (environment variable or command line option)
+    run_audio_tests = os.getenv(
+        "RUN_AUDIO_TESTS", "false"
+    ).lower() == "true" or config.getoption("--run-audio-tests", default=False)
 
     # Get the list of file names being tested
     test_files = set()
@@ -49,3 +60,16 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if item.fspath.basename == "test_tray_indicator.py":
                 item.add_marker(skip_tray)
+
+    # If we're running more than just the audio_feedback tests and not explicitly enabling them, skip them
+    if (
+        len(test_files) > 1
+        and "test_audio_feedback.py" in test_files
+        and not run_audio_tests
+    ):
+        skip_audio = pytest.mark.skip(
+            reason="Skipping audio_feedback tests in full suite to prevent CI failures (use --run-audio-tests or RUN_AUDIO_TESTS=true to enable)"
+        )
+        for item in items:
+            if item.fspath.basename == "test_audio_feedback.py":
+                item.add_marker(skip_audio)
