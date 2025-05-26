@@ -69,9 +69,11 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Package manager lock files (keep bun.lock but ignore others if mixed)
-package-lock.json
+# Allow package-lock.json in web directory for GitHub Actions caching
 yarn.lock
 pnpm-lock.yaml
+package-lock.json
+!web/package-lock.json
 
 # Build outputs
 out/
