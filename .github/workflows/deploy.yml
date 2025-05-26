@@ -49,3 +49,4 @@ jobs:
           publish_dir: ./web/out
           publish_branch: gh-pages
           cname: vocalinux.com
+          force_orphan: true
