@@ -8,7 +8,7 @@
     "build:static": "next build",
     "check": "next lint && tsc --noEmit",
     "dev": "next dev",
-    "lint": "eslint",
+    "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "preview": "next build && next start",
     "start": "next start",
