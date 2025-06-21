@@ -35,14 +35,14 @@ const FeatureCard = ({
     y: 20
   }} transition={{
     duration: 0.5
-  }} className="bg-white dark:bg-zinc-800 p-4 sm:p-6 rounded-xl shadow-md hover:shadow-lg transition-all h-full" data-unique-id="c64e6a42-0751-4c11-914c-d62aad06bcf3" data-file-name="app/page.tsx">
-      <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4" data-unique-id="83e556d0-f24d-4ac5-a872-0dcd55927c1d" data-file-name="app/page.tsx">
-        <div className="bg-primary/10 p-2 sm:p-3 rounded-lg" data-unique-id="e1f57c92-0a53-4624-bfb7-4a52b5bef55c" data-file-name="app/page.tsx" data-dynamic-text="true">
+  }} className="bg-white dark:bg-zinc-800 p-4 sm:p-6 rounded-xl shadow-md hover:shadow-lg transition-all h-full">
+      <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+        <div className="bg-primary/10 p-2 sm:p-3 rounded-lg">
           {icon}
         </div>
-        <h3 className="text-lg sm:text-xl font-semibold" data-unique-id="5a59c192-6cc6-440b-80f1-34a0f891052f" data-file-name="app/page.tsx" data-dynamic-text="true">{title}</h3>
+        <h3 className="text-lg sm:text-xl font-semibold">{title}</h3>
       </div>
-      <p className="text-sm sm:text-base text-muted-foreground" data-unique-id="d9af1a1e-e097-4b28-a9ee-fdb37f0904dc" data-file-name="app/page.tsx" data-dynamic-text="true">{description}</p>
+      <p className="text-sm sm:text-base text-muted-foreground">{description}</p>
     </motion.div>;
 };
 const CopyToClipboard = ({
@@ -54,7 +54,7 @@ const CopyToClipboard = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-  return <button onClick={handleCopy} className="absolute top-2 sm:top-4 right-2 sm:right-4 bg-zinc-700 hover:bg-zinc-600 text-white px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs sm:text-sm transition-colors" aria-label={copied ? "Copied to clipboard" : "Copy to clipboard"} data-unique-id="5687d7b3-6bfe-40cf-9aa6-9748479c06c7" data-file-name="app/page.tsx" data-dynamic-text="true">
+  return <button onClick={handleCopy} className="absolute top-2 sm:top-4 right-2 sm:right-4 bg-zinc-700 hover:bg-zinc-600 text-white px-2 sm:px-3 py-0.5 sm:py-1 rounded text-xs sm:text-sm transition-colors" aria-label={copied ? "Copied to clipboard" : "Copy to clipboard"}>
       {copied ? "Copied!" : "Copy"}
     </button>;
 };
@@ -79,7 +79,7 @@ const FadeInSection = ({
   }} transition={{
     duration: 0.5,
     delay
-  }} className="w-full" data-unique-id="6a15a208-65fb-428b-ab2f-1923135ded2d" data-file-name="app/page.tsx" data-dynamic-text="true">
+  }} className="w-full">
       {children}
     </motion.div>;
 };

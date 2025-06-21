@@ -77,10 +77,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <html lang="en" className={`${GeistSans.variable} scroll-smooth`} suppressHydrationWarning data-unique-id="e40c53aa-a38b-4d6a-8168-f4c83a429623" data-file-name="app/layout.tsx">
-      <body data-unique-id="ae9bfce5-4f02-4d18-943e-7fdb835c2363" data-file-name="app/layout.tsx">
+  return <html lang="en" className={`${GeistSans.variable} scroll-smooth`} suppressHydrationWarning>
+      <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <DevtoolsProvider>{children}</DevtoolsProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>;
