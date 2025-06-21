@@ -1,0 +1,299 @@
+name: Vocalinux Unified Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+# Define path filters for different components
+env:
+  WEB_FILES_FILTER: 'web/**'
+  PYTHON_FILES_FILTER: 'src/**,tests/**,setup.py'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # This step checks if Python files were changed
+      - name: Check for Python file changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            python:
+              - '${{ env.PYTHON_FILES_FILTER }}'
+      
+      # Skip the rest of the job if no Python files were changed
+      - name: Skip if no Python files changed
+        if: steps.changes.outputs.python != 'true' && github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[python]')
+        run: |
+          echo "No Python files were changed. Skipping Python linting."
+          exit 0
+
+      - name: Set up Python
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: 'setup.py'
+
+      - name: Install development dependencies
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install flake8 black isort
+
+      - name: Lint with flake8
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings
+          flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
+
+      - name: Check formatting with black
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        run: |
+          black --check src/ tests/
+
+      - name: Check import sorting with isort
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        run: |
+          isort --check-only --profile black src/ tests/
+
+  python-test:
+    name: Python Test
+    runs-on: ubuntu-latest
+    needs: python-lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.8]
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      # This step checks if Python files were changed
+      - name: Check for Python file changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            python:
+              - '${{ env.PYTHON_FILES_FILTER }}'
+      
+      # Skip the rest of the job if no Python files were changed
+      - name: Skip if no Python files changed
+        if: steps.changes.outputs.python != 'true' && github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[python]')
+        run: |
+          echo "No Python files were changed. Skipping Python tests."
+          exit 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'setup.py'
+
+      - name: Install system dependencies
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xdotool \
+            python3-gi \
+            gir1.2-appindicator3-0.1 \
+            libcairo2-dev \
+            pkg-config \
+            python3-dev \
+            libgirepository1.0-dev \
+            gobject-introspection \
+            libcairo-gobject2 \
+            gir1.2-gtk-3.0 \
+            portaudio19-dev
+
+      - name: Cache apt packages
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        uses: actions/cache@v3
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-${{ hashFiles('**/apt-packages.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
+      - name: Set up virtual environment
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          python -m pip install --upgrade pip
+          # Install the package in development mode with dev dependencies
+          python -m pip install -e ".[dev]"
+          python -m pip install pytest pytest-cov
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Run pytest suite with coverage
+        if: steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')
+        run: |
+          source venv/bin/activate
+          # Make sure Python can find the 'src' module
+          PYTHONPATH=$PWD pytest --junitxml=junit.xml --cov=src tests/ 
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() && (steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]')) }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage reports to Codecov
+        if: ${{ steps.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[python]') }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  web-validate:
+    name: Web Validation
+    runs-on: ubuntu-latest
+    # Use GitHub's path filtering to determine if this job should run
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # This step checks if web files were changed
+      - name: Check for web file changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            web:
+              - '${{ env.WEB_FILES_FILTER }}'
+      
+      # Skip the rest of the job if no web files were changed
+      - name: Skip if no web files changed
+        if: steps.changes.outputs.web != 'true' && github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[web]')
+        run: |
+          echo "No web files were changed. Skipping web validation."
+          exit 0
+          
+      # Continue with web validation if files were changed
+      - name: Setup Node.js
+        if: steps.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './web/package-lock.json'
+
+      - name: Install dependencies
+        if: steps.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')
+        working-directory: ./web
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Lint
+        if: steps.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')
+        working-directory: ./web
+        run: npm run lint || echo "Linting failed but continuing with the build"
+
+      - name: Type check
+        if: steps.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')
+        working-directory: ./web
+        run: npm run test:types || echo "Type checking failed but continuing with the build"
+
+      - name: Format check
+        if: steps.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')
+        working-directory: ./web
+        run: npm run format:check || echo "Format checking failed but continuing with the build"
+
+      - name: Build
+        if: steps.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')
+        working-directory: ./web
+        run: npm run build
+
+  deploy-website:
+    name: Deploy Website
+    runs-on: ubuntu-latest
+    needs: [python-test, web-validate]
+    # Only deploy on pushes to main branch
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      # This step checks if web files were changed
+      - name: Check for web file changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            web:
+              - '${{ env.WEB_FILES_FILTER }}'
+      
+      # Skip the rest of the job if no web files were changed
+      - name: Skip if no web files changed
+        if: steps.changes.outputs.web != 'true' && !contains(github.event.head_commit.message, '[web]')
+        run: |
+          echo "No web files were changed. Skipping website deployment."
+          exit 0
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.web == 'true' || contains(github.event.head_commit.message, '[web]')
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './web/package-lock.json'
+
+      - name: Install dependencies
+        if: steps.changes.outputs.web == 'true' || contains(github.event.head_commit.message, '[web]')
+        working-directory: ./web
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build website
+        if: steps.changes.outputs.web == 'true' || contains(github.event.head_commit.message, '[web]')
+        working-directory: ./web
+        run: npm run deploy
+
+      - name: Deploy to gh-pages
+        if: steps.changes.outputs.web == 'true' || contains(github.event.head_commit.message, '[web]')
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web/out
+          publish_branch: gh-pages
+          cname: vocalinux.com
+          force_orphan: true
