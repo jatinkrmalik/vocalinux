@@ -19,54 +19,16 @@ logger = logging.getLogger(__name__)
 CI_MODE = os.environ.get("GITHUB_ACTIONS") == "true"
 
 
-# Define a more robust way to find the resources directory
-def find_resources_dir():
-    """Find the resources directory regardless of how the application is executed."""
-    # First, check if we're running from the repository
-    module_dir = os.path.dirname(os.path.abspath(__file__))
+# Import the centralized resource manager
+from ..utils.resource_manager import ResourceManager
 
-    # Try several methods to find the resources directory
-    candidates = [
-        # For direct repository execution
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(module_dir))), "resources"
-        ),
-        # For installed package or virtual environment
-        os.path.join(sys.prefix, "share", "vocalinux", "resources"),
-        # For development in virtual environment
-        os.path.join(os.path.dirname(sys.prefix), "resources"),
-        # Additional fallback
-        "/usr/local/share/vocalinux/resources",
-        "/usr/share/vocalinux/resources",
-    ]
-
-    # Log all candidates for debugging
-    for candidate in candidates:
-        logger.debug(
-            f"Checking resources candidate: {candidate} (exists: {os.path.exists(candidate)})"
-        )
-
-    # Return the first candidate that exists
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            logger.info(f"Found resources directory: {candidate}")
-            return candidate
-
-    # If no candidate exists, default to the first one (with warning)
-    logger.warning(
-        f"Could not find resources directory, defaulting to: {candidates[0]}"
-    )
-    return candidates[0]
-
-
-# Update paths to find resources directory
-RESOURCES_DIR = find_resources_dir()
-SOUNDS_DIR = os.path.join(RESOURCES_DIR, "sounds")
+# Initialize resource manager
+_resource_manager = ResourceManager()
 
 # Sound file paths
-START_SOUND = os.path.join(SOUNDS_DIR, "start_recording.wav")
-STOP_SOUND = os.path.join(SOUNDS_DIR, "stop_recording.wav")
-ERROR_SOUND = os.path.join(SOUNDS_DIR, "error.wav")
+START_SOUND = _resource_manager.get_sound_path("start_recording")
+STOP_SOUND = _resource_manager.get_sound_path("stop_recording")
+ERROR_SOUND = _resource_manager.get_sound_path("error")
 
 
 def _get_audio_player():
