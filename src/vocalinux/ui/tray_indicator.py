@@ -37,49 +37,12 @@ logger = logging.getLogger(__name__)
 APP_ID = "vocalinux"
 
 
-# Define a robust way to find the resources directory
-def find_resources_dir():
-    """Find the resources directory regardless of how the application is executed."""
-    # First, check if we're running from the repository
-    module_dir = os.path.dirname(os.path.abspath(__file__))
+# Import the centralized resource manager
+from ..utils.resource_manager import ResourceManager
 
-    # Try several methods to find the resources directory
-    candidates = [
-        # For direct repository execution
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(module_dir))), "resources"
-        ),
-        # For installed package or virtual environment
-        os.path.join(sys.prefix, "share", "vocalinux", "resources"),
-        # For development in virtual environment
-        os.path.join(os.path.dirname(sys.prefix), "resources"),
-        # Additional fallback
-        "/usr/local/share/vocalinux/resources",
-        "/usr/share/vocalinux/resources",
-    ]
-
-    # Log all candidates for debugging
-    for candidate in candidates:
-        logger.debug(
-            f"Checking resources candidate: {candidate} (exists: {os.path.exists(candidate)})"
-        )
-
-    # Return the first candidate that exists
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            logger.info(f"Found resources directory: {candidate}")
-            return candidate
-
-    # If no candidate exists, default to the first one (with warning)
-    logger.warning(
-        f"Could not find resources directory, defaulting to: {candidates[0]}"
-    )
-    return candidates[0]
-
-
-# Find resources directory and icon directory
-RESOURCES_DIR = find_resources_dir()
-ICON_DIR = os.path.join(RESOURCES_DIR, "icons/scalable")
+# Initialize resource manager
+_resource_manager = ResourceManager()
+ICON_DIR = _resource_manager.icons_dir
 
 # Icon file names
 DEFAULT_ICON = "vocalinux-microphone-off"
@@ -119,18 +82,19 @@ class TrayIndicator:
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
 
-        # Set up icon file paths
+        # Set up icon file paths using resource manager
         self.icon_paths = {
-            "default": os.path.join(ICON_DIR, f"{DEFAULT_ICON}.svg"),
-            "active": os.path.join(ICON_DIR, f"{ACTIVE_ICON}.svg"),
-            "processing": os.path.join(ICON_DIR, f"{PROCESSING_ICON}.svg"),
+            "default": _resource_manager.get_icon_path(DEFAULT_ICON),
+            "active": _resource_manager.get_icon_path(ACTIVE_ICON),
+            "processing": _resource_manager.get_icon_path(PROCESSING_ICON),
         }
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
 
-        # Initialize the icon files
+        # Initialize the icon files and validate resources
         self._init_icons()
+        self._validate_resources()
 
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
@@ -141,8 +105,27 @@ class TrayIndicator:
 
     def _init_icons(self):
         """Initialize the icon files for the tray indicator."""
-        # TODO: Copy default icons to the icon directory if they don't exist
-        pass
+        # Ensure icon directory exists
+        _resource_manager.ensure_directories_exist()
+
+    def _validate_resources(self):
+        """Validate that required resources are available."""
+        validation_results = _resource_manager.validate_resources()
+        
+        if not validation_results["resources_dir_exists"]:
+            logger.warning("Resources directory not found")
+        
+        if validation_results["missing_icons"]:
+            logger.warning(f"Missing icon files: {validation_results['missing_icons']}")
+        
+        if validation_results["missing_sounds"]:
+            logger.warning(f"Missing sound files: {validation_results['missing_sounds']}")
+        
+        # Log successful validation
+        if (validation_results["resources_dir_exists"] and 
+            not validation_results["missing_icons"] and 
+            not validation_results["missing_sounds"]):
+            logger.info("All required resources validated successfully")
 
     def _init_indicator(self):
         """Initialize the system tray indicator."""
@@ -335,7 +318,7 @@ class TrayIndicator:
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
 
         # Set the logo using our custom icon
-        logo_path = os.path.join(ICON_DIR, "vocalinux.svg")
+        logo_path = _resource_manager.get_icon_path("vocalinux")
         if os.path.exists(logo_path):
             try:
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
