@@ -8,6 +8,7 @@ currently supporting VOSK and Whisper.
 import json
 import logging
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -21,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 # Define constants
 MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
+# Alternative locations for pre-installed models
+SYSTEM_MODELS_DIRS = [
+    "/usr/local/share/vocalinux/models",
+    "/usr/share/vocalinux/models",
+]
 
 
 class SpeechRecognitionManager:
@@ -86,6 +92,16 @@ class SpeechRecognitionManager:
                     f"VOSK model not found at {self.vosk_model_path}. Downloading..."
                 )
                 self._download_vosk_model()
+                # Update path after download
+                self.vosk_model_path = self._get_vosk_model_path()
+            else:
+                # Check if this is a pre-installed model
+                if any(self.vosk_model_path.startswith(sys_dir) for sys_dir in SYSTEM_MODELS_DIRS):
+                    logger.info(f"Using pre-installed VOSK model from {self.vosk_model_path}")
+                elif os.path.exists(os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")):
+                    logger.info(f"Using installer-provided VOSK model from {self.vosk_model_path}")
+                else:
+                    logger.info(f"Using existing VOSK model from {self.vosk_model_path}")
 
             logger.info(f"Loading VOSK model from {self.vosk_model_path}")
             # Ensure previous model/recognizer are released if re-initializing
@@ -129,7 +145,23 @@ class SpeechRecognitionManager:
         }
 
         model_name = model_map.get(self.model_size, model_map["small"])
-        return os.path.join(MODELS_DIR, model_name)
+        
+        # First, check user's local models directory
+        user_model_path = os.path.join(MODELS_DIR, model_name)
+        if os.path.exists(user_model_path):
+            logger.debug(f"Found user model at: {user_model_path}")
+            return user_model_path
+        
+        # Then check system-wide installation directories
+        for system_dir in SYSTEM_MODELS_DIRS:
+            system_model_path = os.path.join(system_dir, model_name)
+            if os.path.exists(system_model_path):
+                logger.info(f"Found pre-installed model at: {system_model_path}")
+                return system_model_path
+        
+        # If not found anywhere, return the user path (will be created if needed)
+        logger.debug(f"No existing model found, will use: {user_model_path}")
+        return user_model_path
 
     def _download_vosk_model(self):
         """Download the VOSK model if it doesn't exist."""
@@ -149,8 +181,15 @@ class SpeechRecognitionManager:
             raise ValueError(f"Unknown model size: {self.model_size}")
 
         model_name = os.path.basename(url).replace(".zip", "")
+        
+        # Always download to user's local directory
         model_path = os.path.join(MODELS_DIR, model_name)
         zip_path = os.path.join(MODELS_DIR, os.path.basename(url))
+        
+        # Create models directory if it doesn't exist
+        os.makedirs(MODELS_DIR, exist_ok=True)
+        
+        logger.info(f"Downloading VOSK {self.model_size} model to user directory: {model_path}")
 
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
