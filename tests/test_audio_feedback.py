@@ -16,8 +16,6 @@ AUDIO_FEEDBACK_MODULE = "vocalinux.ui.audio_feedback"
 # Import the module under test
 from vocalinux.ui.audio_feedback import (
     ERROR_SOUND,
-    RESOURCES_DIR,
-    SOUNDS_DIR,
     START_SOUND,
     STOP_SOUND,
 )
@@ -46,14 +44,19 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_resource_paths(self):
         """Test that resource paths are correctly set up."""
+        # Import the resource manager to test paths
+        from vocalinux.utils.resource_manager import ResourceManager
+        
+        resource_manager = ResourceManager()
+        
         # Verify that resource paths are correctly set and accessible
         self.assertTrue(
-            os.path.exists(RESOURCES_DIR) or RESOURCES_DIR.endswith("resources"),
-            f"Resources directory is not valid: {RESOURCES_DIR}",
+            resource_manager.resources_dir.endswith("resources"),
+            f"Resources directory is not valid: {resource_manager.resources_dir}",
         )
         self.assertTrue(
-            SOUNDS_DIR.endswith("sounds"),
-            f"Sounds directory path is not valid: {SOUNDS_DIR}",
+            resource_manager.sounds_dir.endswith("sounds"),
+            f"Sounds directory path is not valid: {resource_manager.sounds_dir}",
         )
         self.assertEqual(os.path.basename(START_SOUND), "start_recording.wav")
         self.assertEqual(os.path.basename(STOP_SOUND), "stop_recording.wav")
