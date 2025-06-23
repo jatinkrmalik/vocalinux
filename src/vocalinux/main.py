@@ -86,6 +86,11 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug logging enabled")
 
+    # Initialize logging manager early
+    from .ui.logging_manager import initialize_logging
+    initialize_logging()
+    logger.info("Logging system initialized")
+
     # Check dependencies first
     if not check_dependencies():
         logger.error("Cannot start Vocalinux due to missing dependencies")

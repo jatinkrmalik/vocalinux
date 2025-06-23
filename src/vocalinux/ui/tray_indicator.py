@@ -165,6 +165,7 @@ class TrayIndicator:
         self._add_menu_item("Stop Voice Typing", self._on_stop_clicked)
         self._add_menu_separator()
         self._add_menu_item("Settings", self._on_settings_clicked)
+        self._add_menu_item("View Logs", self._on_logs_clicked)
         self._add_menu_separator()
         self._add_menu_item("About", self._on_about_clicked)
         self._add_menu_item("Quit", self._on_quit_clicked)
@@ -281,6 +282,17 @@ class TrayIndicator:
         dialog.connect("response", self._on_settings_dialog_response)
 
         # Show the dialog (non-modal)
+        dialog.show()
+
+    def _on_logs_clicked(self, widget):
+        """Handle click on the View Logs menu item."""
+        logger.debug("View Logs clicked")
+
+        # Import here to avoid circular imports
+        from .logging_dialog import LoggingDialog
+
+        # Create and show the logging dialog
+        dialog = LoggingDialog(parent=None)
         dialog.show()
 
     def _on_settings_dialog_response(self, dialog, response):

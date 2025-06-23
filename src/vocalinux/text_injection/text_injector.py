@@ -196,10 +196,15 @@ class TextInjector:
             logger.debug("Empty text provided, skipping injection")
             return True
 
-        logger.debug(f"Injecting text: {text}")
+        logger.info(f"Starting text injection: '{text}' (length: {len(text)})")
+        logger.debug(f"Environment: {self.environment}")
+
+        # Get information about the current window/application
+        self._log_current_window_info()
 
         # Escape special characters for shell
         escaped_text = self._escape_text(text)
+        logger.debug(f"Escaped text: '{escaped_text}'")
 
         try:
             if (
@@ -222,9 +227,10 @@ class TextInjector:
                         self._inject_with_xdotool(escaped_text)
                     else:
                         raise
+            logger.info(f"Text injection completed successfully")
             return True
         except Exception as e:
-            logger.error(f"Failed to inject text: {e}")
+            logger.error(f"Failed to inject text: {e}", exc_info=True)
             try:
                 from ..ui.audio_feedback import play_error_sound
                 play_error_sound()  # Play error sound when text injection fails
@@ -310,17 +316,25 @@ class TextInjector:
         # Inject text using xdotool
         try:
             max_retries = 2
+            logger.debug(f"Starting xdotool injection with {max_retries} max retries")
+            
             for retry in range(max_retries + 1):
                 try:
                     # Inject in smaller chunks to avoid issues with very long text
                     chunk_size = 20  # Reduced chunk size for better reliability
+                    total_chunks = (len(text) + chunk_size - 1) // chunk_size
+                    logger.debug(f"Splitting text into {total_chunks} chunks of max {chunk_size} chars")
+                    
                     for i in range(0, len(text), chunk_size):
                         chunk = text[i : i + chunk_size]
+                        chunk_num = (i // chunk_size) + 1
 
                         # First try with clearmodifiers
                         cmd = ["xdotool", "type", "--clearmodifiers", chunk]
+                        logger.debug(f"Injecting chunk {chunk_num}/{total_chunks}: '{chunk}'")
+                        
                         result = subprocess.run(
-                            cmd, env=env, check=True, stderr=subprocess.PIPE, text=True
+                            cmd, env=env, check=True, stderr=subprocess.PIPE, text=True, timeout=5
                         )
 
                         # Add a larger delay between chunks
@@ -338,7 +352,15 @@ class TextInjector:
                         )
                         time.sleep(0.5)  # Wait before retry
                     else:
+                        logger.error(f"Final attempt failed: {chunk_error.stderr}")
                         raise  # Re-raise on final attempt
+                except subprocess.TimeoutExpired:
+                    if retry < max_retries:
+                        logger.warning(f"Text injection timeout, retrying (attempt {retry+1}/{max_retries})")
+                        time.sleep(0.5)
+                    else:
+                        logger.error("Text injection timed out on final attempt")
+                        raise
 
             # Try to reset any stuck modifiers
             try:
@@ -450,3 +472,94 @@ class TextInjector:
         else:
             logger.warning(f"Keyboard shortcuts not supported with {self.wayland_tool}")
             return False
+
+    def _log_current_window_info(self):
+        """Log information about the current window/application for debugging."""
+        try:
+            if (
+                self.environment == DesktopEnvironment.X11
+                or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
+            ):
+                self._log_x11_window_info()
+            else:
+                logger.debug("Window info logging not available for pure Wayland")
+        except Exception as e:
+            logger.debug(f"Could not get window info: {e}")
+
+    def _log_x11_window_info(self):
+        """Log X11 window information."""
+        env = os.environ.copy()
+        
+        if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+            env["GDK_BACKEND"] = "x11"
+            env["QT_QPA_PLATFORM"] = "xcb"
+            if "DISPLAY" not in env or not env["DISPLAY"]:
+                env["DISPLAY"] = ":0"
+
+        try:
+            # Get active window ID
+            result = subprocess.run(
+                ["xdotool", "getactivewindow"],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=2
+            )
+            window_id = result.stdout.strip()
+            logger.debug(f"Active window ID: {window_id}")
+
+            # Get window name
+            result = subprocess.run(
+                ["xdotool", "getwindowname", window_id],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=2
+            )
+            window_name = result.stdout.strip()
+            logger.info(f"Target window: '{window_name}' (ID: {window_id})")
+
+            # Get window class
+            result = subprocess.run(
+                ["xdotool", "getwindowclassname", window_id],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=2
+            )
+            window_class = result.stdout.strip()
+            logger.debug(f"Window class: {window_class}")
+
+            # Get window PID
+            result = subprocess.run(
+                ["xdotool", "getwindowpid", window_id],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=2
+            )
+            window_pid = result.stdout.strip()
+            logger.debug(f"Window PID: {window_pid}")
+
+            # Try to get process name
+            try:
+                with open(f"/proc/{window_pid}/comm", "r") as f:
+                    process_name = f.read().strip()
+                logger.info(f"Target process: {process_name} (PID: {window_pid})")
+            except:
+                pass
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout getting window information")
+        except subprocess.CalledProcessError as e:
+            logger.debug(f"xdotool command failed: {e.stderr}")
+        except Exception as e:
+            logger.debug(f"Error getting window info: {e}")
