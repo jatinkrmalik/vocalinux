@@ -584,6 +584,101 @@ if ! install_python_package; then
     exit 1
 fi
 
+# Function to download and install VOSK models
+install_vosk_models() {
+    print_info "Installing VOSK speech recognition models..."
+    
+    # Create models directory
+    local MODELS_DIR="$DATA_DIR/models"
+    mkdir -p "$MODELS_DIR"
+    
+    # Define model information
+    local SMALL_MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+    local SMALL_MODEL_NAME="vosk-model-small-en-us-0.15"
+    local SMALL_MODEL_PATH="$MODELS_DIR/$SMALL_MODEL_NAME"
+    
+    # Check if small model already exists
+    if [ -d "$SMALL_MODEL_PATH" ]; then
+        print_info "Small VOSK model already exists at $SMALL_MODEL_PATH"
+        return 0
+    fi
+    
+    # Check internet connectivity
+    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
+        print_warning "Neither wget nor curl found. Cannot download VOSK models."
+        print_warning "Models will be downloaded on first application run."
+        return 1
+    fi
+    
+    # Test internet connectivity
+    if ! ping -c 1 google.com >/dev/null 2>&1; then
+        print_warning "No internet connection detected."
+        print_warning "VOSK models will be downloaded on first application run."
+        return 1
+    fi
+    
+    print_info "Downloading small VOSK model (approximately 40MB)..."
+    print_info "This may take a few minutes depending on your internet connection."
+    
+    local TEMP_ZIP="$MODELS_DIR/$(basename $SMALL_MODEL_URL)"
+    
+    # Download the model
+    if command -v wget >/dev/null 2>&1; then
+        if ! wget --progress=bar:force:noscroll -O "$TEMP_ZIP" "$SMALL_MODEL_URL" 2>&1; then
+            print_error "Failed to download VOSK model with wget"
+            rm -f "$TEMP_ZIP"
+            return 1
+        fi
+    elif command -v curl >/dev/null 2>&1; then
+        if ! curl -L --progress-bar -o "$TEMP_ZIP" "$SMALL_MODEL_URL"; then
+            print_error "Failed to download VOSK model with curl"
+            rm -f "$TEMP_ZIP"
+            return 1
+        fi
+    fi
+    
+    # Verify download
+    if [ ! -f "$TEMP_ZIP" ] || [ ! -s "$TEMP_ZIP" ]; then
+        print_error "Downloaded model file is empty or missing"
+        rm -f "$TEMP_ZIP"
+        return 1
+    fi
+    
+    print_info "Extracting VOSK model..."
+    
+    # Extract the model
+    if command -v unzip >/dev/null 2>&1; then
+        if ! unzip -q "$TEMP_ZIP" -d "$MODELS_DIR"; then
+            print_error "Failed to extract VOSK model"
+            rm -f "$TEMP_ZIP"
+            return 1
+        fi
+    else
+        print_error "unzip command not found. Cannot extract VOSK model."
+        rm -f "$TEMP_ZIP"
+        return 1
+    fi
+    
+    # Clean up zip file
+    rm -f "$TEMP_ZIP"
+    
+    # Verify extraction
+    if [ -d "$SMALL_MODEL_PATH" ]; then
+        print_success "VOSK small model installed successfully at $SMALL_MODEL_PATH"
+        
+        # Set proper permissions
+        chmod -R 755 "$SMALL_MODEL_PATH"
+        
+        # Create a marker file to indicate this model was pre-installed
+        echo "$(date)" > "$SMALL_MODEL_PATH/.vocalinux_preinstalled"
+        
+        return 0
+    else
+        print_error "VOSK model extraction failed - directory not found"
+        return 1
+    fi
+}
+
 # Function to install desktop entry with error handling
 install_desktop_entry() {
     print_info "Installing desktop entry..."
@@ -799,101 +894,6 @@ verify_installation() {
     
     # Return the number of issues found
     return $ISSUES
-}
-
-# Function to download and install VOSK models
-install_vosk_models() {
-    print_info "Installing VOSK speech recognition models..."
-    
-    # Create models directory
-    local MODELS_DIR="$DATA_DIR/models"
-    mkdir -p "$MODELS_DIR"
-    
-    # Define model information
-    local SMALL_MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-    local SMALL_MODEL_NAME="vosk-model-small-en-us-0.15"
-    local SMALL_MODEL_PATH="$MODELS_DIR/$SMALL_MODEL_NAME"
-    
-    # Check if small model already exists
-    if [ -d "$SMALL_MODEL_PATH" ]; then
-        print_info "Small VOSK model already exists at $SMALL_MODEL_PATH"
-        return 0
-    fi
-    
-    # Check internet connectivity
-    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
-        print_warning "Neither wget nor curl found. Cannot download VOSK models."
-        print_warning "Models will be downloaded on first application run."
-        return 1
-    fi
-    
-    # Test internet connectivity
-    if ! ping -c 1 google.com >/dev/null 2>&1; then
-        print_warning "No internet connection detected."
-        print_warning "VOSK models will be downloaded on first application run."
-        return 1
-    fi
-    
-    print_info "Downloading small VOSK model (approximately 40MB)..."
-    print_info "This may take a few minutes depending on your internet connection."
-    
-    local TEMP_ZIP="$MODELS_DIR/$(basename $SMALL_MODEL_URL)"
-    
-    # Download the model
-    if command -v wget >/dev/null 2>&1; then
-        if ! wget --progress=bar:force:noscroll -O "$TEMP_ZIP" "$SMALL_MODEL_URL" 2>&1; then
-            print_error "Failed to download VOSK model with wget"
-            rm -f "$TEMP_ZIP"
-            return 1
-        fi
-    elif command -v curl >/dev/null 2>&1; then
-        if ! curl -L --progress-bar -o "$TEMP_ZIP" "$SMALL_MODEL_URL"; then
-            print_error "Failed to download VOSK model with curl"
-            rm -f "$TEMP_ZIP"
-            return 1
-        fi
-    fi
-    
-    # Verify download
-    if [ ! -f "$TEMP_ZIP" ] || [ ! -s "$TEMP_ZIP" ]; then
-        print_error "Downloaded model file is empty or missing"
-        rm -f "$TEMP_ZIP"
-        return 1
-    fi
-    
-    print_info "Extracting VOSK model..."
-    
-    # Extract the model
-    if command -v unzip >/dev/null 2>&1; then
-        if ! unzip -q "$TEMP_ZIP" -d "$MODELS_DIR"; then
-            print_error "Failed to extract VOSK model"
-            rm -f "$TEMP_ZIP"
-            return 1
-        fi
-    else
-        print_error "unzip command not found. Cannot extract VOSK model."
-        rm -f "$TEMP_ZIP"
-        return 1
-    fi
-    
-    # Clean up zip file
-    rm -f "$TEMP_ZIP"
-    
-    # Verify extraction
-    if [ -d "$SMALL_MODEL_PATH" ]; then
-        print_success "VOSK small model installed successfully at $SMALL_MODEL_PATH"
-        
-        # Set proper permissions
-        chmod -R 755 "$SMALL_MODEL_PATH"
-        
-        # Create a marker file to indicate this model was pre-installed
-        echo "$(date)" > "$SMALL_MODEL_PATH/.vocalinux_preinstalled"
-        
-        return 0
-    else
-        print_error "VOSK model extraction failed - directory not found"
-        return 1
-    fi
 }
 
 # Function to print installation summary
