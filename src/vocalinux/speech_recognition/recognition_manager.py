@@ -141,7 +141,7 @@ class SpeechRecognitionManager:
         model_urls = {
             "small": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
             "medium": "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip",
-            "large": "https://alphacephei.com/vosk/models/vosk-model-en-us-0.42.zip",
+            "large": "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip",  # Use 0.22 as 0.42 is not available
         }
 
         url = model_urls.get(self.model_size)
@@ -307,6 +307,14 @@ class SpeechRecognitionManager:
 
             import numpy as np
             import pyaudio
+        except ImportError as e:
+            logger.error(f"Failed to import required audio libraries: {e}")
+            logger.error("Please install required dependencies: pip install pyaudio numpy")
+            play_error_sound()
+            self._update_state(RecognitionState.ERROR)
+            return
+
+        try:
 
             # PyAudio configuration
             CHUNK = 1024

@@ -182,15 +182,19 @@ class TextInjector:
         except Exception as e:
             logger.error(f"Failed to test XWayland fallback: {e}")
 
-    def inject_text(self, text: str):
+    def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently focused application.
 
         Args:
             text: The text to inject
+            
+        Returns:
+            True if injection was successful, False otherwise
         """
         if not text or not text.strip():
-            return
+            logger.debug("Empty text provided, skipping injection")
+            return True
 
         logger.debug(f"Injecting text: {text}")
 
@@ -218,11 +222,15 @@ class TextInjector:
                         self._inject_with_xdotool(escaped_text)
                     else:
                         raise
+            return True
         except Exception as e:
             logger.error(f"Failed to inject text: {e}")
-            from ..ui.audio_feedback import play_error_sound
-
-            play_error_sound()  # Play error sound when text injection fails
+            try:
+                from ..ui.audio_feedback import play_error_sound
+                play_error_sound()  # Play error sound when text injection fails
+            except ImportError:
+                logger.warning("Could not import audio feedback module")
+            return False
 
     def _escape_text(self, text: str) -> str:
         """
@@ -363,3 +371,82 @@ class TextInjector:
         logger.info(
             f"Text injected using {self.wayland_tool}: '{text[:20]}...' ({len(text)} chars)"
         )
+
+    def _inject_keyboard_shortcut(self, shortcut: str) -> bool:
+        """
+        Inject a keyboard shortcut.
+        
+        Args:
+            shortcut: The keyboard shortcut to inject (e.g., "ctrl+z", "ctrl+a")
+            
+        Returns:
+            True if injection was successful, False otherwise
+        """
+        logger.debug(f"Injecting keyboard shortcut: {shortcut}")
+        
+        try:
+            if (
+                self.environment == DesktopEnvironment.X11
+                or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
+            ):
+                return self._inject_shortcut_with_xdotool(shortcut)
+            else:
+                return self._inject_shortcut_with_wayland_tool(shortcut)
+        except Exception as e:
+            logger.error(f"Failed to inject keyboard shortcut '{shortcut}': {e}")
+            return False
+
+    def _inject_shortcut_with_xdotool(self, shortcut: str) -> bool:
+        """
+        Inject a keyboard shortcut using xdotool.
+        
+        Args:
+            shortcut: The keyboard shortcut to inject
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        # Create environment with explicit X11 settings for Wayland compatibility
+        env = os.environ.copy()
+        
+        if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+            env["GDK_BACKEND"] = "x11"
+            env["QT_QPA_PLATFORM"] = "xcb"
+            if "DISPLAY" not in env or not env["DISPLAY"]:
+                env["DISPLAY"] = ":0"
+        
+        try:
+            cmd = ["xdotool", "key", "--clearmodifiers", shortcut]
+            subprocess.run(cmd, env=env, check=True, stderr=subprocess.PIPE, text=True)
+            logger.debug(f"Keyboard shortcut '{shortcut}' injected successfully")
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.error(f"xdotool shortcut error: {e.stderr}")
+            return False
+
+    def _inject_shortcut_with_wayland_tool(self, shortcut: str) -> bool:
+        """
+        Inject a keyboard shortcut using a Wayland-compatible tool.
+        
+        Args:
+            shortcut: The keyboard shortcut to inject
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if self.wayland_tool == "wtype":
+            # wtype doesn't support key combinations directly, so we can't implement this easily
+            logger.warning("Keyboard shortcuts not supported with wtype")
+            return False
+        elif self.wayland_tool == "ydotool":
+            try:
+                cmd = ["ydotool", "key", shortcut]
+                subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+                logger.debug(f"Keyboard shortcut '{shortcut}' injected successfully")
+                return True
+            except subprocess.CalledProcessError as e:
+                logger.error(f"ydotool shortcut error: {e.stderr}")
+                return False
+        else:
+            logger.warning(f"Keyboard shortcuts not supported with {self.wayland_tool}")
+            return False
