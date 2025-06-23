@@ -38,11 +38,12 @@ class LoggingDialog(Gtk.Dialog):
         self.filter_module = None
         
         # Set dialog properties
-        self.set_default_size(900, 600)
+        self.set_default_size(900, 700)
         self.set_border_width(10)
         
         # Add buttons
         self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.add_button("Copy All", Gtk.ResponseType.HELP)
         self.add_button("Export", Gtk.ResponseType.APPLY)
         self.add_button("Clear", Gtk.ResponseType.REJECT)
         
@@ -71,7 +72,7 @@ class LoggingDialog(Gtk.Dialog):
         toolbar_box = self._create_toolbar()
         main_box.pack_start(toolbar_box, False, False, 0)
         
-        # Create log view
+        # Create log view (give it most of the space)
         log_view_box = self._create_log_view()
         main_box.pack_start(log_view_box, True, True, 0)
         
@@ -129,12 +130,19 @@ class LoggingDialog(Gtk.Dialog):
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scrolled.set_shadow_type(Gtk.ShadowType.IN)
+        # Set minimum height to ensure the text view takes up most of the dialog space
+        scrolled.set_min_content_height(400)
+        scrolled.set_vexpand(True)
+        scrolled.set_hexpand(True)
         
         # Create text view
         self.text_view = Gtk.TextView()
         self.text_view.set_editable(False)
         self.text_view.set_cursor_visible(False)
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD)
+        # Ensure the text view expands to fill available space
+        self.text_view.set_vexpand(True)
+        self.text_view.set_hexpand(True)
         
         # Set monospace font
         font_desc = self.text_view.get_pango_context().get_font_description()
@@ -324,6 +332,8 @@ class LoggingDialog(Gtk.Dialog):
             self._export_logs()
         elif response_id == Gtk.ResponseType.REJECT:
             self._clear_logs()
+        elif response_id == Gtk.ResponseType.HELP:
+            self._copy_logs_to_clipboard()
         elif response_id == Gtk.ResponseType.CLOSE:
             self.destroy()
     
@@ -368,6 +378,50 @@ class LoggingDialog(Gtk.Dialog):
                 self._show_message("Export failed", "Failed to export logs. Check the logs for details.", Gtk.MessageType.ERROR)
         
         file_dialog.destroy()
+    
+    def _copy_logs_to_clipboard(self):
+        """Copy all visible logs to clipboard."""
+        try:
+            # Get all text from the text buffer
+            start_iter = self.text_buffer.get_start_iter()
+            end_iter = self.text_buffer.get_end_iter()
+            text_content = self.text_buffer.get_text(start_iter, end_iter, False)
+            
+            if not text_content.strip():
+                self._show_message("No logs to copy", "There are no logs to copy to clipboard.")
+                return
+            
+            # Get the clipboard
+            from gi.repository import Gdk
+            clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+            
+            # Create header for clipboard content
+            from datetime import datetime
+            header = f"VocaLinux Logs - Copied at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            header += "=" * 80 + "\n\n"
+            
+            # Combine header and content
+            clipboard_content = header + text_content
+            
+            # Set clipboard content
+            clipboard.set_text(clipboard_content, -1)
+            clipboard.store()
+            
+            # Count lines for user feedback
+            line_count = len(text_content.strip().split('\n'))
+            self._show_message(
+                "Logs copied to clipboard", 
+                f"Successfully copied {line_count} log lines to clipboard.\n\n"
+                "You can now paste them into any text editor or document."
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to copy logs to clipboard: {e}")
+            self._show_message(
+                "Copy failed", 
+                f"Failed to copy logs to clipboard: {e}", 
+                Gtk.MessageType.ERROR
+            )
     
     def _clear_logs(self):
         """Clear all logs after confirmation."""
