@@ -65,8 +65,9 @@ setup(
     ] + platform_dependencies,
     extras_require={
         "whisper": [
-            "whisper>=1.1.10", 
+            "openai-whisper>=20231117", 
             "torch>=2.0.0",
+            "torchaudio>=2.0.0",
         ],  # Optional Whisper AI support
         "dev": [
             "pytest>=7.0.0",

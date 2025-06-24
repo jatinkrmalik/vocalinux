@@ -43,6 +43,8 @@ sys.modules["pyaudio"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
 sys.modules["whisper"] = MagicMock()
 sys.modules["whisper"].load_model = MagicMock(return_value=MagicMock())
+sys.modules["torch"] = MagicMock()
+sys.modules["torch"].cuda.is_available = MagicMock(return_value=False)
 
 # Mock tempfile and wave modules to avoid file system issues
 mock_tempfile = MagicMock()
@@ -343,7 +345,7 @@ class TestSpeechRecognition(unittest.TestCase):
         with patch.object(
             SpeechRecognitionManager, "_process_final_buffer"
         ) as mock_process:
-            # Setup manager with whisper engine
+            # Setup manager with whisper engine (this should work now with mocked torch)
             manager = SpeechRecognitionManager(engine="whisper")
 
             # Setup side effect function that will be called when _process_final_buffer is called
