@@ -392,6 +392,43 @@ class SettingsDialog(Gtk.Dialog):
 
         return False  # Remove idle callback
 
+    def _show_whisper_install_dialog(self):
+        """Show a dialog with instructions for installing Whisper."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK,
+            text="Whisper Not Installed",
+        )
+        
+        install_text = """Whisper AI is not installed. To use Whisper for speech recognition, you need to install it first.
+
+Installation Options:
+
+1. Using the installation script:
+   ./install.sh --with-whisper
+
+2. Manual installation in virtual environment:
+   source venv/bin/activate
+   pip install openai-whisper torch torchaudio
+
+3. If you have SSL issues, try:
+   pip install openai-whisper torch torchaudio --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org
+
+Note: Whisper requires significant disk space (~1-3GB) and may take time to download.
+
+For now, the engine has been reverted to VOSK."""
+        
+        dialog.format_secondary_text(install_text)
+        dialog.run()
+        dialog.destroy()
+        
+        # Revert the engine selection back to VOSK
+        self.engine_combo.set_active_id("Vosk")
+        self._populate_model_options()
+        self._update_engine_specific_ui()
+
     def apply_settings(self):
         """Apply the selected settings."""
         settings = self.get_selected_settings()
@@ -420,15 +457,20 @@ class SettingsDialog(Gtk.Dialog):
             return True
         except Exception as e:
             logger.error(f"Failed to apply settings: {e}", exc_info=True)
-            # Show error dialog to the user
-            error_dialog = Gtk.MessageDialog(
-                transient_for=self,
-                flags=0,
-                message_type=Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Error Applying Settings",
-            )
-            error_dialog.format_secondary_text(f"Could not apply settings: {e}")
-            error_dialog.run()
-            error_dialog.destroy()
+            
+            # Check if this is a Whisper import error
+            if "whisper" in str(e).lower() and "no module named" in str(e).lower():
+                self._show_whisper_install_dialog()
+            else:
+                # Show generic error dialog
+                error_dialog = Gtk.MessageDialog(
+                    transient_for=self,
+                    flags=0,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Error Applying Settings",
+                )
+                error_dialog.format_secondary_text(f"Could not apply settings: {e}")
+                error_dialog.run()
+                error_dialog.destroy()
             return False
