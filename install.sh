@@ -27,6 +27,7 @@ RUN_TESTS="no"
 DEV_MODE="no"
 VENV_DIR="venv"
 SKIP_MODELS="no"
+WITH_WHISPER="no"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -46,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_MODELS="yes"
             shift
             ;;
+        --with-whisper)
+            WITH_WHISPER="yes"
+            shift
+            ;;
         --help)
             echo "Vocalinux Installer"
             echo "Usage: $0 [options]"
@@ -54,6 +59,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)"
             echo "  --skip-models    Skip downloading VOSK models during installation"
+            echo "  --with-whisper   Install Whisper AI support (requires more disk space and time)"
             echo "  --help           Show this help message"
             exit 0
             ;;
@@ -553,15 +559,24 @@ install_python_package() {
             return 1
         }
         
-        # Prompt for Whisper installation
-        read -p "Do you want to install Whisper AI support? This requires additional disk space. (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        # Install Whisper if requested
+        if [ "$WITH_WHISPER" = "yes" ]; then
             print_info "Installing Whisper support (this might take a while)..."
             pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                 print_warning "Failed to install Whisper support."
                 print_warning "Voice recognition will fall back to VOSK."
             }
+        else
+            # Prompt for Whisper installation
+            read -p "Do you want to install Whisper AI support? This requires additional disk space. (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                print_info "Installing Whisper support (this might take a while)..."
+                pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
+                    print_warning "Failed to install Whisper support."
+                    print_warning "Voice recognition will fall back to VOSK."
+                }
+            fi
         fi
     fi
     

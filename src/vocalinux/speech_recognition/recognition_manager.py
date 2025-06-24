@@ -122,18 +122,135 @@ class SpeechRecognitionManager:
         """Initialize the Whisper speech recognition engine."""
         try:
             import whisper
+            import torch
+            
+            # Validate model size for Whisper
+            valid_whisper_models = ["tiny", "base", "small", "medium", "large"]
+            if self.model_size not in valid_whisper_models:
+                # Map common size names to Whisper model names
+                size_mapping = {
+                    "tiny": "tiny",
+                    "small": "base",  # Map small to base for better quality
+                    "medium": "small", # Map medium to small for balance
+                    "large": "medium"  # Map large to medium (large is very slow)
+                }
+                mapped_size = size_mapping.get(self.model_size, "base")
+                logger.warning(f"Model size '{self.model_size}' not valid for Whisper. Using '{mapped_size}' instead.")
+                self.whisper_model_size = mapped_size
+            else:
+                self.whisper_model_size = self.model_size
 
-            logger.info(f"Loading Whisper {self.model_size} model")
+            # Check for GPU availability
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Using device: {self.device}")
+            
+            # Download directory for Whisper models
+            self.whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
+            os.makedirs(self.whisper_cache_dir, exist_ok=True)
+            
+            logger.info(f"Loading Whisper '{self.whisper_model_size}' model...")
             # Ensure previous model is released if re-initializing
             self.model = None
-            self.model = whisper.load_model(self.model_size)
+            
+            # Load model with custom cache directory
+            self.model = whisper.load_model(
+                self.whisper_model_size, 
+                download_root=self.whisper_cache_dir
+            )
+            
+            # Move model to appropriate device
+            if self.device == "cuda":
+                self.model = self.model.cuda()
+                logger.info("Whisper model loaded on GPU")
+            else:
+                logger.info("Whisper model loaded on CPU")
+                
+            # Initialize audio preprocessing parameters
+            self.whisper_sample_rate = 16000
+            self.whisper_chunk_length = 30  # seconds
+            
             logger.info("Whisper engine initialized successfully.")
-        except ImportError:
+            
+        except ImportError as e:
             logger.error(
-                "Failed to import Whisper. Please install it with 'pip install whisper torch'"
+                f"Failed to import required libraries for Whisper: {e}"
+            )
+            logger.error(
+                "Please install with: pip install openai-whisper torch"
             )
             self.state = RecognitionState.ERROR
             raise
+        except Exception as e:
+            logger.error(f"Failed to initialize Whisper engine: {e}")
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _transcribe_with_whisper(self, audio_buffer: List[bytes]) -> str:
+        """
+        Transcribe audio buffer using Whisper.
+        
+        Args:
+            audio_buffer: List of audio data chunks
+            
+        Returns:
+            Transcribed text
+        """
+        try:
+            import numpy as np
+            import torch
+            
+            if not audio_buffer:
+                return ""
+            
+            # Convert audio buffer to numpy array
+            audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+            
+            # Convert to float32 and normalize to [-1, 1]
+            audio_float = audio_data.astype(np.float32) / 32768.0
+            
+            # Ensure audio is the right length (pad or trim)
+            target_length = self.whisper_sample_rate * self.whisper_chunk_length
+            if len(audio_float) > target_length:
+                # Trim to target length
+                audio_float = audio_float[:target_length]
+            elif len(audio_float) < target_length:
+                # Pad with zeros
+                audio_float = np.pad(audio_float, (0, target_length - len(audio_float)))
+            
+            # Convert to torch tensor
+            audio_tensor = torch.from_numpy(audio_float)
+            
+            # Move to appropriate device
+            if self.device == "cuda":
+                audio_tensor = audio_tensor.cuda()
+            
+            logger.debug(f"Transcribing audio: {len(audio_float)/self.whisper_sample_rate:.2f} seconds")
+            
+            # Transcribe with Whisper
+            with torch.no_grad():  # Disable gradient computation for inference
+                result = self.model.transcribe(
+                    audio_tensor,
+                    language="en",  # Force English for better performance
+                    task="transcribe",
+                    verbose=False,  # Reduce logging
+                    temperature=0.0,  # Use greedy decoding for consistency
+                    compression_ratio_threshold=2.4,
+                    logprob_threshold=-1.0,
+                    no_speech_threshold=0.6,
+                )
+            
+            text = result.get("text", "").strip()
+            
+            if text:
+                logger.info(f"Whisper transcribed: '{text}'")
+            else:
+                logger.debug("Whisper returned empty transcription")
+            
+            return text
+            
+        except Exception as e:
+            logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
+            return ""
 
     def _get_vosk_model_path(self) -> str:
         """Get the path to the VOSK model based on the selected size."""
@@ -443,25 +560,7 @@ class SpeechRecognitionManager:
             text = result.get("text", "")
 
         elif self.engine == "whisper":
-            # Save buffer to a temporary file
-            import tempfile
-            import wave
-
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                temp_path = temp_file.name
-
-            with wave.open(temp_path, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)  # 16-bit
-                wf.setframerate(16000)
-                wf.writeframes(b"".join(self.audio_buffer))
-
-            # Process with Whisper
-            result = self.model.transcribe(temp_path)
-            text = result.get("text", "")
-
-            # Remove temporary file
-            os.unlink(temp_path)
+            text = self._transcribe_with_whisper(self.audio_buffer)
 
         else:
             logger.error(f"Unknown engine: {self.engine}")
