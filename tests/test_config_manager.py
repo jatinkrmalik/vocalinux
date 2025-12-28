@@ -89,19 +89,13 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
 
         # Verify it merged with defaults correctly
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["engine"], "whisper"
-        )
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["model_size"], "large"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["engine"], "whisper")
+        self.assertEqual(config_manager.config["speech_recognition"]["model_size"], "large")
         self.assertEqual(
             config_manager.config["speech_recognition"]["vad_sensitivity"], 3
         )  # From defaults
         self.assertEqual(config_manager.config["ui"]["start_minimized"], True)
-        self.assertEqual(
-            config_manager.config["ui"]["show_notifications"], True
-        )  # From defaults
+        self.assertEqual(config_manager.config["ui"]["show_notifications"], True)  # From defaults
 
     def test_load_config_file_error(self):
         """Test handling of errors when loading config file."""
@@ -161,9 +155,7 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
         result = config_manager.set("speech_recognition", "engine", "whisper")
         self.assertTrue(result)
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["engine"], "whisper"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["engine"], "whisper")
 
     def test_set_new_section(self):
         """Test setting a value in a new section."""

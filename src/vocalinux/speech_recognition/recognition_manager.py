@@ -101,9 +101,7 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(
-            f"Initializing speech recognition with {engine} engine and {model_size} model"
-        )
+        logger.info(f"Initializing speech recognition with {engine} engine and {model_size} model")
 
         # Initialize the selected speech recognition engine
         if engine == "vosk":
@@ -121,31 +119,18 @@ class SpeechRecognitionManager:
             self.vosk_model_path = self._get_vosk_model_path()
 
             if not os.path.exists(self.vosk_model_path):
-                logger.info(
-                    f"VOSK model not found at {self.vosk_model_path}. Downloading..."
-                )
+                logger.info(f"VOSK model not found at {self.vosk_model_path}. Downloading...")
                 self._download_vosk_model()
                 # Update path after download
                 self.vosk_model_path = self._get_vosk_model_path()
             else:
                 # Check if this is a pre-installed model
-                if any(
-                    self.vosk_model_path.startswith(sys_dir)
-                    for sys_dir in SYSTEM_MODELS_DIRS
-                ):
-                    logger.info(
-                        f"Using pre-installed VOSK model from {self.vosk_model_path}"
-                    )
-                elif os.path.exists(
-                    os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")
-                ):
-                    logger.info(
-                        f"Using installer-provided VOSK model from {self.vosk_model_path}"
-                    )
+                if any(self.vosk_model_path.startswith(sys_dir) for sys_dir in SYSTEM_MODELS_DIRS):
+                    logger.info(f"Using pre-installed VOSK model from {self.vosk_model_path}")
+                elif os.path.exists(os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")):
+                    logger.info(f"Using installer-provided VOSK model from {self.vosk_model_path}")
                 else:
-                    logger.info(
-                        f"Using existing VOSK model from {self.vosk_model_path}"
-                    )
+                    logger.info(f"Using existing VOSK model from {self.vosk_model_path}")
 
             logger.info(f"Loading VOSK model from {self.vosk_model_path}")
             # Ensure previous model/recognizer are released if re-initializing
@@ -156,9 +141,7 @@ class SpeechRecognitionManager:
             logger.info("VOSK engine initialized successfully.")
 
         except ImportError:
-            logger.error(
-                "Failed to import VOSK. Please install it with 'pip install vosk'"
-            )
+            logger.error("Failed to import VOSK. Please install it with 'pip install vosk'")
             self.state = RecognitionState.ERROR
             raise
 
@@ -324,9 +307,7 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(
-            f"Downloading VOSK {self.model_size} model to user directory: {model_path}"
-        )
+        logger.info(f"Downloading VOSK {self.model_size} model to user directory: {model_path}")
 
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
@@ -367,9 +348,7 @@ class SpeechRecognitionManager:
                 os.remove(zip_path)
             raise RuntimeError("Downloaded VOSK model file is corrupted.")
         except Exception as e:
-            logger.error(
-                f"An error occurred during VOSK model download/extraction: {e}"
-            )
+            logger.error(f"An error occurred during VOSK model download/extraction: {e}")
             # Clean up potentially corrupted extraction
             if os.path.exists(zip_path):
                 os.remove(zip_path)
@@ -500,9 +479,7 @@ class SpeechRecognitionManager:
             import pyaudio
         except ImportError as e:
             logger.error(f"Failed to import required audio libraries: {e}")
-            logger.error(
-                "Please install required dependencies: pip install pyaudio numpy"
-            )
+            logger.error("Please install required dependencies: pip install pyaudio numpy")
             play_error_sound()
             self._update_state(RecognitionState.ERROR)
             return
@@ -545,9 +522,7 @@ class SpeechRecognitionManager:
                     # Ensure vad_sensitivity is treated as integer for calculation
                     try:
                         vad_sens = int(self.vad_sensitivity)
-                        threshold = 500 / max(
-                            1, min(5, vad_sens)
-                        )  # Use self.vad_sensitivity
+                        threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
                     except ValueError:
                         logger.warning(
                             f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
@@ -556,9 +531,7 @@ class SpeechRecognitionManager:
 
                     if volume < threshold:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if (
-                            silence_counter > self.silence_timeout
-                        ):  # Use self.silence_timeout
+                        if silence_counter > self.silence_timeout:  # Use self.silence_timeout
                             logger.debug("Silence detected, processing buffer")
                             self._update_state(RecognitionState.PROCESSING)
                             # Process final buffer
@@ -670,14 +643,10 @@ class SpeechRecognitionManager:
                 elif self.engine == "whisper":
                     self._init_whisper()
                 else:
-                    raise ValueError(
-                        f"Unsupported engine during reconfigure: {self.engine}"
-                    )
+                    raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                 logger.info("Speech engine re-initialized successfully.")
             except Exception as e:
-                logger.error(
-                    f"Failed to re-initialize speech engine: {e}", exc_info=True
-                )
+                logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
                 self._update_state(RecognitionState.ERROR)
                 # Re-raise or handle appropriately
                 raise

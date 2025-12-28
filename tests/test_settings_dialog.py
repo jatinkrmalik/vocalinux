@@ -81,9 +81,7 @@ class TestSettingsDialog(unittest.TestCase):
         self.test_textview.get_buffer.return_value = buffer_mock
 
         # Mock SettingsDialog to avoid actually creating GTK objects
-        with patch(
-            "vocalinux.ui.settings_dialog.SettingsDialog.__init__", return_value=None
-        ):
+        with patch("vocalinux.ui.settings_dialog.SettingsDialog.__init__", return_value=None):
             self.dialog = SettingsDialog(
                 parent=None,
                 config_manager=mock_config_manager,
@@ -134,9 +132,7 @@ class TestSettingsDialog(unittest.TestCase):
         # Mock the Gtk module for this test
         with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch(
-            "vocalinux.ui.settings_dialog.threading"
-        ) as mock_threading, patch(
+        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
@@ -164,9 +160,7 @@ class TestSettingsDialog(unittest.TestCase):
         # Mock the Gtk module for this test
         with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch(
-            "vocalinux.ui.settings_dialog.threading"
-        ) as mock_threading, patch(
+        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
@@ -190,9 +184,7 @@ class TestSettingsDialog(unittest.TestCase):
         # Mock the Gtk module for this test
         with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch(
-            "vocalinux.ui.settings_dialog.threading"
-        ) as mock_threading, patch(
+        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
