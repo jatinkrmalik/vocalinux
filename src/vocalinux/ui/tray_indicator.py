@@ -311,16 +311,18 @@ class TrayIndicator:
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
+        from ..version import __version__, __url__, __description__, __copyright__
+
         logger.debug("About clicked")
 
         about_dialog = Gtk.AboutDialog()
         about_dialog.set_program_name("Vocalinux")
-        about_dialog.set_version("0.1.0")
-        about_dialog.set_copyright("© 2025 | @jatinkrmalik")
-        about_dialog.set_authors(["Jatin K Malik"])
-        about_dialog.set_comments("A seamless voice dictation system for Ubuntu")
-        about_dialog.set_website("https://github.com/jatinkrmalik/vocalinux")
-        about_dialog.set_website_label("GitHub Repository")
+        about_dialog.set_version(__version__)
+        about_dialog.set_copyright(__copyright__)
+        about_dialog.set_authors(["Jatin K Malik (@jatinkrmalik)"])
+        about_dialog.set_comments(f"{__description__}\n\n🌟 Open Source - Contributions Welcome!")
+        about_dialog.set_website(__url__)
+        about_dialog.set_website_label("⭐ Star on GitHub")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
 
         # Set the logo using our custom icon
