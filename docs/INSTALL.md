@@ -2,50 +2,84 @@
 
 This guide provides detailed instructions for installing Vocalinux on Linux systems.
 
+## Quick Start
+
+### One-liner Installation
+
+```bash
+git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
+```
+
+That's it! The installer handles everything automatically.
+
 ## System Requirements
 
-- **Operating System**: Ubuntu 22.04 or newer (may work on other Linux distributions)
-- **Python**: Version 3.8 or newer
-- **Display Server**: X11 or Wayland desktop environment
-- **Hardware**: Microphone for speech input
+| Requirement | Details |
+|-------------|---------|
+| **Operating System** | Ubuntu 22.04+ (recommended), Debian 11+, Fedora 38+, Arch Linux |
+| **Python** | 3.8 or newer |
+| **Display Server** | X11 or Wayland |
+| **Hardware** | Microphone for speech input |
+| **Disk Space** | ~500MB (including speech models) |
+| **RAM** | 4GB minimum, 8GB recommended for Whisper |
 
-## Standard Installation
+## Installation Options
 
-The recommended way to install Vocalinux is using the provided installation script:
+### Standard Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/jatinkrmalik/vocalinux.git
 cd vocalinux
 
-# Run the installer script
+# Run the installer
 ./install.sh
 ```
 
-### What the Installer Does
+### Installation with Whisper Support
 
-The installation script:
-1. Installs required system dependencies
-2. Creates a Python virtual environment
-3. Configures application directories
-4. Installs custom icons and desktop entries
-5. Sets up everything you need to run Vocalinux
-
-### Installation Options
-
-The installer script supports several options:
+Whisper provides better accuracy but requires more resources:
 
 ```bash
-# See all available options
+./install.sh --with-whisper
+```
+
+### Development Installation
+
+For contributing or development work:
+
+```bash
+./install.sh --dev
+```
+
+This installs additional tools: pytest, black, isort, flake8, pre-commit.
+
+### All Installer Options
+
+```bash
 ./install.sh --help
 
-# Specify a custom virtual environment directory
-./install.sh --venv-dir=custom_venv_name
+Options:
+  --dev            Install in development mode with all dev dependencies
+  --test           Run tests after installation
+  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)
+  --skip-models    Skip downloading VOSK models during installation
+  --with-whisper   Install Whisper AI support (requires more disk space)
+  --help           Show this help message
 ```
+
+## What the Installer Does
+
+1. **Detects your Linux distribution** and installs appropriate system packages
+2. **Creates a Python virtual environment** with system site-packages access
+3. **Installs the Vocalinux package** and all dependencies
+4. **Downloads speech recognition models** (VOSK small model by default)
+5. **Installs desktop integration** (icons, .desktop file)
+6. **Creates activation script** for easy environment activation
 
 ## Running Vocalinux
 
-After installation, you need to activate the virtual environment before using Vocalinux:
+After installation:
 
 ```bash
 # Activate the virtual environment
@@ -55,151 +89,230 @@ source activate-vocalinux.sh
 vocalinux
 ```
 
-You can also launch Vocalinux from your application menu.
-
-## Command Line Options
-
-Vocalinux supports several command-line options:
+### Command Line Options
 
 ```bash
-# With debugging enabled
-vocalinux --debug
-
-# With a specific speech recognition engine
-vocalinux --engine whisper
-
-# With a specific model size
-vocalinux --model medium
-
-# Force Wayland compatibility mode
-vocalinux --wayland
+vocalinux --help              # Show all options
+vocalinux --debug             # Enable debug logging
+vocalinux --engine whisper    # Use Whisper AI engine
+vocalinux --engine vosk       # Use VOSK engine (default)
+vocalinux --model small       # Use small model
+vocalinux --model medium      # Use medium model
+vocalinux --model large       # Use large model
+vocalinux --wayland           # Force Wayland compatibility mode
 ```
 
 ## Directory Structure
 
-Vocalinux follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) and stores files in these locations:
+Vocalinux follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html):
 
-- `~/.config/vocalinux/` - Configuration files
-- `~/.local/share/vocalinux/` - Application data (models, etc.)
-- `~/.local/share/applications/` - Desktop entry
-- `~/.local/share/icons/hicolor/scalable/apps/` - System-wide icons
+| Directory | Purpose |
+|-----------|---------|
+| `~/.config/vocalinux/` | Configuration files |
+| `~/.local/share/vocalinux/` | Application data, speech models |
+| `~/.local/share/applications/` | Desktop entry |
+| `~/.local/share/icons/hicolor/scalable/apps/` | Application icons |
 
 ## Manual Installation
 
-If you prefer to install manually:
+If you prefer manual installation or the automatic installer doesn't work:
 
 ### 1. Install System Dependencies
 
+**Ubuntu/Debian:**
 ```bash
-# Required system dependencies
 sudo apt update
-sudo apt install -y python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
-    gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv
+sudo apt install -y \
+    python3-pip python3-venv python3-dev \
+    python3-gi python3-gi-cairo \
+    gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 \
+    libgirepository1.0-dev portaudio19-dev \
+    wget curl unzip
 
-# For X11 environments
+# For X11
 sudo apt install -y xdotool
 
-# For Wayland environments
+# For Wayland
 sudo apt install -y wtype
 ```
 
-### 2. Set Up Python Environment
+**Fedora:**
+```bash
+sudo dnf install -y \
+    python3-pip python3-devel python3-virtualenv \
+    python3-gobject gtk3 libappindicator-gtk3 \
+    gobject-introspection-devel portaudio-devel \
+    wget curl unzip xdotool
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S --noconfirm \
+    python-pip python-gobject gtk3 \
+    libappindicator-gtk3 gobject-introspection \
+    python-cairo portaudio python-virtualenv \
+    wget curl unzip xdotool
+```
+
+### 2. Create Virtual Environment
 
 ```bash
-# Create a virtual environment
+cd vocalinux
 python3 -m venv venv --system-site-packages
 source venv/bin/activate
-
-# Update pip and setuptools
 pip install --upgrade pip setuptools wheel
 ```
 
-### 3. Install Python Package
+### 3. Install Package
 
 ```bash
-# Basic installation
+# Standard installation
 pip install .
 
-# With Whisper support (requires more resources)
+# With Whisper support
 pip install ".[whisper]"
+
+# Development mode
+pip install -e ".[dev]"
 ```
 
-### 4. Install Icons and Desktop Entry
+### 4. Set Up Desktop Integration
 
 ```bash
-# Define XDG directories
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vocalinux"
-DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux"
-DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+# Create directories
+mkdir -p ~/.config/vocalinux
+mkdir -p ~/.local/share/vocalinux/models
+mkdir -p ~/.local/share/applications
+mkdir -p ~/.local/share/icons/hicolor/scalable/apps
 
-# Create necessary directories
-mkdir -p "$CONFIG_DIR"
-mkdir -p "$DATA_DIR/models"
-mkdir -p "$DESKTOP_DIR"
-mkdir -p "$ICON_DIR"
+# Install desktop entry
+cp vocalinux.desktop ~/.local/share/applications/
+VENV_PATH=$(realpath venv/bin/vocalinux)
+sed -i "s|^Exec=vocalinux|Exec=$VENV_PATH|" ~/.local/share/applications/vocalinux.desktop
 
-# Copy desktop entry and update to use the venv
-cp vocalinux.desktop "$DESKTOP_DIR/"
-VENV_SCRIPT_PATH="$(realpath venv/bin/vocalinux)"
-sed -i "s|^Exec=vocalinux|Exec=$VENV_SCRIPT_PATH|" "$DESKTOP_DIR/vocalinux.desktop"
-
-# Copy icons
-cp resources/icons/scalable/vocalinux.svg "$ICON_DIR/"
-cp resources/icons/scalable/vocalinux-microphone.svg "$ICON_DIR/"
-cp resources/icons/scalable/vocalinux-microphone-off.svg "$ICON_DIR/"
-cp resources/icons/scalable/vocalinux-microphone-process.svg "$ICON_DIR/"
+# Install icons
+cp resources/icons/scalable/*.svg ~/.local/share/icons/hicolor/scalable/apps/
 
 # Update icon cache
-gtk-update-icon-cache -f -t "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || true
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 ```
 
 ## Troubleshooting
 
 ### Virtual Environment Issues
 
-If you encounter problems with the virtual environment:
-- Ensure you've activated it with `source activate-vocalinux.sh`
-- If you get "command not found" errors, verify the virtual environment has been properly created
+**Symptom:** "command not found: vocalinux"
+
+**Solution:**
+```bash
+# Make sure you've activated the environment
+source activate-vocalinux.sh
+
+# Or activate directly
+source venv/bin/activate
+```
 
 ### Audio Input Problems
 
-- Check that your microphone is connected and working
-- Verify your system audio settings
-- Run with `--debug` flag to see detailed logs
+**Symptom:** "No audio detected" or microphone not working
 
-### Text Injection Issues
+**Solutions:**
+1. Check system audio settings
+2. Run `arecord -l` to list audio devices
+3. Try with debug mode: `vocalinux --debug`
+4. Check microphone permissions
 
-- For X11: Ensure xdotool is installed
-- For Wayland: Ensure wtype is installed
-- Some applications may have security measures that prevent text injection
+### GTK/AppIndicator Errors
+
+**Symptom:** "No module named gi" or AppIndicator errors
+
+**Solution:**
+```bash
+# Reinstall GTK dependencies
+sudo apt install python3-gi python3-gi-cairo gir1.2-appindicator3-0.1
+
+# Recreate venv with system packages
+rm -rf venv
+python3 -m venv venv --system-site-packages
+source venv/bin/activate
+pip install -e .
+```
+
+### Text Injection Not Working
+
+**Symptom:** Recognized text doesn't appear in applications
+
+**Solutions:**
+
+For X11:
+```bash
+sudo apt install xdotool
+# Test: xdotool type "hello"
+```
+
+For Wayland:
+```bash
+sudo apt install wtype
+# Test: wtype "hello"
+```
+
+### Model Download Fails
+
+**Symptom:** Can't download speech models
+
+**Solution:**
+```bash
+# Models will auto-download on first run
+# Or manually download:
+mkdir -p ~/.local/share/vocalinux/models
+cd ~/.local/share/vocalinux/models
+wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+unzip vosk-model-small-en-us-0.15.zip
+```
 
 ### Icons Not Displaying
 
-- Run `gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor` to refresh the icon cache
-- Ensure the SVG icons are properly installed in the correct directory
+**Symptom:** Tray icon missing or generic
 
-### Recognition Accuracy
+**Solution:**
+```bash
+# Refresh icon cache
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 
-- Try a larger model size (`--model medium` or `--model large`)
-- Ensure your microphone is positioned correctly
-- Speak clearly and at a moderate pace
+# Restart the application
+```
 
 ## Uninstallation
 
-To uninstall Vocalinux:
+### Using the Uninstaller
 
-1. Remove the application directories:
-   ```bash
-   rm -rf ~/.config/vocalinux
-   rm -rf ~/.local/share/vocalinux
-   rm ~/.local/share/applications/vocalinux.desktop
-   rm ~/.local/share/icons/hicolor/scalable/apps/vocalinux*.svg
-   ```
+```bash
+./uninstall.sh
+```
 
-2. Update the icon cache:
-   ```bash
-   gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
-   ```
+Options:
+- `--keep-config` - Keep configuration files
+- `--keep-data` - Keep application data (models, etc.)
 
-3. Remove the cloned repository and virtual environment (if you wish).
+### Manual Uninstallation
+
+```bash
+# Remove application files
+rm -rf venv
+rm -f activate-vocalinux.sh
+
+# Remove user data
+rm -rf ~/.config/vocalinux
+rm -rf ~/.local/share/vocalinux
+rm -f ~/.local/share/applications/vocalinux.desktop
+rm -f ~/.local/share/icons/hicolor/scalable/apps/vocalinux*.svg
+
+# Update icon cache
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
+```
+
+## Getting Help
+
+- 📖 [User Guide](USER_GUIDE.md)
+- 🐛 [Report Issues](https://github.com/jatinkrmalik/vocalinux/issues)
+- 💬 [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)

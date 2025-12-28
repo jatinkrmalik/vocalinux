@@ -1,0 +1,153 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vocalinux"
+dynamic = ["version"]
+description = "A seamless voice dictation system for Linux"
+readme = "README.md"
+license = {text = "GPL-3.0"}
+authors = [
+    {name = "Jatin K Malik", email = "jatinkrmalik@gmail.com"}
+]
+maintainers = [
+    {name = "Jatin K Malik", email = "jatinkrmalik@gmail.com"}
+]
+requires-python = ">=3.8"
+keywords = [
+    "voice", "dictation", "speech", "recognition", 
+    "linux", "accessibility", "voice-typing", "speech-to-text"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: GTK",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Desktop Environment :: Gnome",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Text Processing",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "vosk>=0.3.45",
+    "pydub>=0.25.1",
+    "pynput>=1.7.6",
+    "requests>=2.28.0",
+    "tqdm>=4.64.0",
+    "numpy>=1.22.0",
+    "pyaudio>=0.2.13",
+    "python-xlib; sys_platform == 'linux'",
+    "PyGObject; sys_platform == 'linux'",
+]
+
+[project.optional-dependencies]
+whisper = [
+    "openai-whisper>=20231117",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "pre-commit>=3.0.0",
+    "mypy>=1.0.0",
+]
+docs = [
+    "sphinx>=6.0.0",
+    "sphinx-rtd-theme>=1.2.0",
+]
+
+[project.scripts]
+vocalinux = "vocalinux.main:main"
+
+[project.gui-scripts]
+vocalinux-gui = "vocalinux.main:main"
+
+[project.urls]
+Homepage = "https://github.com/jatinkrmalik/vocalinux"
+Documentation = "https://github.com/jatinkrmalik/vocalinux/tree/main/docs"
+Repository = "https://github.com/jatinkrmalik/vocalinux"
+Issues = "https://github.com/jatinkrmalik/vocalinux/issues"
+Changelog = "https://github.com/jatinkrmalik/vocalinux/releases"
+
+[tool.setuptools]
+packages = ["vocalinux", "vocalinux.speech_recognition", "vocalinux.text_injection", "vocalinux.ui", "vocalinux.utils"]
+package-dir = {"" = "src"}
+
+[tool.setuptools.dynamic]
+version = {attr = "vocalinux.version.__version__"}
+
+[tool.setuptools.package-data]
+"*" = ["*.svg", "*.wav"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | node_modules
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_gitignore = true
+skip = [".git", "venv", "node_modules", "build", "dist"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "audio: marks tests that require audio hardware",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["venv", "build", "dist", "node_modules"]
