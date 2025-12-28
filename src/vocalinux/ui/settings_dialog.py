@@ -673,9 +673,8 @@ class SettingsDialog(Gtk.Dialog):
 
             def download_and_apply():
                 try:
-                    # Set up progress callback for VOSK downloads
-                    if engine == "vosk":
-                        self.speech_engine.set_download_progress_callback(progress_callback)
+                    # Set up progress callback for downloads (both VOSK and Whisper)
+                    self.speech_engine.set_download_progress_callback(progress_callback)
 
                     # Check for cancellation periodically
                     def check_cancelled():
@@ -693,8 +692,7 @@ class SettingsDialog(Gtk.Dialog):
                         GLib.idle_add(self._populate_model_options)
                     finally:
                         GLib.source_remove(cancel_check_id)
-                        if engine == "vosk":
-                            self.speech_engine.set_download_progress_callback(None)
+                        self.speech_engine.set_download_progress_callback(None)
 
                 except Exception as e:
                     error_msg = str(e)
@@ -1033,9 +1031,8 @@ For now, the engine has been reverted to VOSK."""
 
             def download_and_apply():
                 try:
-                    # Set up progress callback for VOSK downloads
-                    if engine == "vosk":
-                        self.speech_engine.set_download_progress_callback(progress_callback)
+                    # Set up progress callback for downloads (both VOSK and Whisper)
+                    self.speech_engine.set_download_progress_callback(progress_callback)
 
                     # Check for cancellation periodically
                     def check_cancelled():
@@ -1050,8 +1047,7 @@ For now, the engine has been reverted to VOSK."""
                         GLib.idle_add(download_dialog.set_complete, True, "")
                     finally:
                         GLib.source_remove(cancel_check_id)
-                        if engine == "vosk":
-                            self.speech_engine.set_download_progress_callback(None)
+                        self.speech_engine.set_download_progress_callback(None)
 
                 except Exception as e:
                     error_msg = str(e)
