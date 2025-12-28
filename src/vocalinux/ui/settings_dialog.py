@@ -176,7 +176,7 @@ def _get_recommended_vosk_model() -> tuple:
 
 
 class ModelDownloadDialog(Gtk.Dialog):
-    """Dialog showing model download progress."""
+    """Dialog showing model download progress with cancel support."""
 
     def __init__(self, parent, model_name: str, model_size_mb: int, engine: str = "whisper"):
         super().__init__(
@@ -184,22 +184,25 @@ class ModelDownloadDialog(Gtk.Dialog):
             transient_for=parent,
             flags=Gtk.DialogFlags.MODAL,
         )
-        self.set_default_size(400, 150)
+        self.set_default_size(450, 180)
         self.set_deletable(False)  # Prevent closing during download
+
+        self.cancelled = False
+        self.engine = engine
+        self.model_name = model_name
 
         engine_display = engine.upper() if engine == "vosk" else engine.capitalize()
 
         box = self.get_content_area()
-        box.set_spacing(15)
+        box.set_spacing(12)
         box.set_margin_start(20)
         box.set_margin_end(20)
         box.set_margin_top(20)
-        box.set_margin_bottom(20)
+        box.set_margin_bottom(15)
 
         # Info label
         self.info_label = Gtk.Label(
-            label=f"Downloading {engine_display} {model_name} model (~{_format_size(model_size_mb)})...\n"
-            f"This may take a few minutes depending on your connection.",
+            label=f"Downloading {engine_display} {model_name} model (~{_format_size(model_size_mb)})...",
             wrap=True,
             justify=Gtk.Justification.CENTER,
         )
@@ -208,35 +211,77 @@ class ModelDownloadDialog(Gtk.Dialog):
         # Progress bar
         self.progress_bar = Gtk.ProgressBar()
         self.progress_bar.set_show_text(True)
-        self.progress_bar.set_text("Preparing download...")
-        box.pack_start(self.progress_bar, False, False, 0)
+        self.progress_bar.set_text("Connecting...")
+        box.pack_start(self.progress_bar, False, False, 5)
 
-        # Status label
+        # Status label (shows speed and ETA)
         self.status_label = Gtk.Label(label="")
         self.status_label.set_markup("<i>Please wait...</i>")
         box.pack_start(self.status_label, False, False, 0)
 
+        # Cancel button
+        self.cancel_button = Gtk.Button(label="Cancel")
+        self.cancel_button.connect("clicked", self._on_cancel_clicked)
+        self.cancel_button.set_halign(Gtk.Align.CENTER)
+        self.cancel_button.set_margin_top(10)
+        box.pack_start(self.cancel_button, False, False, 0)
+
         self.show_all()
-        self._pulse_timeout = GLib.timeout_add(100, self._pulse_progress)
+
+        # For Whisper, we can't track progress, so pulse
+        if engine == "whisper":
+            self._pulse_timeout = GLib.timeout_add(100, self._pulse_progress)
+        else:
+            self._pulse_timeout = None
 
     def _pulse_progress(self):
-        """Pulse the progress bar while downloading."""
+        """Pulse the progress bar while downloading (for Whisper)."""
+        if self.cancelled:
+            return False
         self.progress_bar.pulse()
         return True  # Continue pulsing
 
+    def _on_cancel_clicked(self, widget):
+        """Handle cancel button click."""
+        self.cancelled = True
+        self.cancel_button.set_sensitive(False)
+        self.cancel_button.set_label("Cancelling...")
+        self.status_label.set_markup("<i>Cancelling download...</i>")
+
+    def update_progress(self, fraction: float, speed_mbps: float, status_text: str):
+        """Update the progress bar with actual download progress."""
+        if self.cancelled:
+            return
+
+        # Stop pulsing if we were pulsing
+        if self._pulse_timeout:
+            GLib.source_remove(self._pulse_timeout)
+            self._pulse_timeout = None
+
+        self.progress_bar.set_fraction(fraction)
+        self.progress_bar.set_text(f"{fraction * 100:.0f}%")
+        self.status_label.set_markup(f"<i>{status_text}</i>")
+
     def set_complete(self, success: bool, message: str = ""):
         """Mark download as complete."""
-        if hasattr(self, "_pulse_timeout"):
+        if self._pulse_timeout:
             GLib.source_remove(self._pulse_timeout)
+            self._pulse_timeout = None
+
+        # Hide cancel button
+        self.cancel_button.hide()
 
         if success:
             self.progress_bar.set_fraction(1.0)
             self.progress_bar.set_text("Complete!")
-            self.status_label.set_markup(f"<b>✓ Model ready to use</b>")
+            self.status_label.set_markup("<b>✓ Model ready to use</b>")
         else:
             self.progress_bar.set_fraction(0)
             self.progress_bar.set_text("Failed")
-            self.status_label.set_markup(f"<span color='red'>✗ {message}</span>")
+            if "cancelled" in message.lower():
+                self.status_label.set_markup("<span color='orange'>✗ Download cancelled</span>")
+            else:
+                self.status_label.set_markup(f"<span color='red'>✗ {message}</span>")
 
         # Allow closing now
         self.set_deletable(True)
@@ -598,15 +643,40 @@ class SettingsDialog(Gtk.Dialog):
                 self, model_name, model_info["size_mb"], engine=engine
             )
 
+            def progress_callback(fraction, speed, status):
+                """Update UI with download progress."""
+                GLib.idle_add(download_dialog.update_progress, fraction, speed, status)
+
             def download_and_apply():
                 try:
-                    self._apply_settings_internal(settings)
-                    GLib.idle_add(download_dialog.set_complete, True, "")
-                    # Refresh model list after download to update icons
-                    GLib.idle_add(self._populate_model_options)
+                    # Set up progress callback for VOSK downloads
+                    if engine == "vosk":
+                        self.speech_engine.set_download_progress_callback(progress_callback)
+
+                    # Check for cancellation periodically
+                    def check_cancelled():
+                        if download_dialog.cancelled:
+                            self.speech_engine.cancel_download()
+                        return not download_dialog.cancelled
+
+                    # Start cancellation checker
+                    cancel_check_id = GLib.timeout_add(100, check_cancelled)
+
+                    try:
+                        self._apply_settings_internal(settings)
+                        GLib.idle_add(download_dialog.set_complete, True, "")
+                        # Refresh model list after download to update icons
+                        GLib.idle_add(self._populate_model_options)
+                    finally:
+                        GLib.source_remove(cancel_check_id)
+                        if engine == "vosk":
+                            self.speech_engine.set_download_progress_callback(None)
+
                 except Exception as e:
                     error_msg = str(e)
-                    if engine == "whisper" and "no module named" in error_msg.lower():
+                    if "cancelled" in error_msg.lower():
+                        GLib.idle_add(download_dialog.set_complete, False, "Download cancelled")
+                    elif engine == "whisper" and "no module named" in error_msg.lower():
                         GLib.idle_add(download_dialog.set_complete, False, "Whisper not installed")
                         GLib.idle_add(self._show_whisper_install_dialog)
                     else:
@@ -915,72 +985,67 @@ For now, the engine has been reverted to VOSK."""
         settings = self.get_selected_settings()
         logger.info(f"Applying settings: {settings}")
 
-        # Check if we need to download a Whisper model
-        if settings.get("engine") == "whisper":
-            model_name = settings.get("model_size", "base")
-            if not _is_whisper_model_downloaded(model_name):
-                # Show download dialog
-                model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
-                download_dialog = ModelDownloadDialog(
-                    self, model_name, model_info["size_mb"], engine="whisper"
-                )
+        engine = settings.get("engine", "vosk")
+        model_name = settings.get("model_size", "small")
 
-                # Run the download in a background thread
-                def download_and_apply():
+        # Check if we need to download a model
+        needs_download = False
+        if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
+            needs_download = True
+            model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
+        elif engine == "vosk" and not _is_vosk_model_downloaded(model_name):
+            needs_download = True
+            model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
+
+        if needs_download:
+            # Show download dialog
+            download_dialog = ModelDownloadDialog(
+                self, model_name, model_info["size_mb"], engine=engine
+            )
+
+            def progress_callback(fraction, speed, status):
+                """Update UI with download progress."""
+                GLib.idle_add(download_dialog.update_progress, fraction, speed, status)
+
+            def download_and_apply():
+                try:
+                    # Set up progress callback for VOSK downloads
+                    if engine == "vosk":
+                        self.speech_engine.set_download_progress_callback(progress_callback)
+
+                    # Check for cancellation periodically
+                    def check_cancelled():
+                        if download_dialog.cancelled:
+                            self.speech_engine.cancel_download()
+                        return not download_dialog.cancelled
+
+                    cancel_check_id = GLib.timeout_add(100, check_cancelled)
+
                     try:
-                        # The actual download happens when we reconfigure the engine
                         self._apply_settings_internal(settings)
                         GLib.idle_add(download_dialog.set_complete, True, "")
-                    except Exception as e:
-                        error_msg = str(e)
-                        if (
-                            "whisper" in error_msg.lower()
-                            and "no module named" in error_msg.lower()
-                        ):
-                            GLib.idle_add(
-                                download_dialog.set_complete,
-                                False,
-                                "Whisper not installed",
-                            )
-                            GLib.idle_add(self._show_whisper_install_dialog)
-                        else:
-                            GLib.idle_add(download_dialog.set_complete, False, error_msg[:100])
+                    finally:
+                        GLib.source_remove(cancel_check_id)
+                        if engine == "vosk":
+                            self.speech_engine.set_download_progress_callback(None)
 
-                threading.Thread(target=download_and_apply, daemon=True).start()
-                download_dialog.run()
-                download_dialog.destroy()
-
-                # Refresh the model list to show updated download status
-                self._populate_model_options()
-                return True
-
-        # Check if we need to download a VOSK model
-        elif settings.get("engine") == "vosk":
-            model_name = settings.get("model_size", "small")
-            if not _is_vosk_model_downloaded(model_name):
-                # Show download dialog
-                model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
-                download_dialog = ModelDownloadDialog(
-                    self, model_name, model_info["size_mb"], engine="vosk"
-                )
-
-                # Run the download in a background thread
-                def download_and_apply():
-                    try:
-                        # The actual download happens when we reconfigure the engine
-                        self._apply_settings_internal(settings)
-                        GLib.idle_add(download_dialog.set_complete, True, "")
-                    except Exception as e:
-                        error_msg = str(e)
+                except Exception as e:
+                    error_msg = str(e)
+                    if "cancelled" in error_msg.lower():
+                        GLib.idle_add(download_dialog.set_complete, False, "Download cancelled")
+                    elif engine == "whisper" and "no module named" in error_msg.lower():
+                        GLib.idle_add(download_dialog.set_complete, False, "Whisper not installed")
+                        GLib.idle_add(self._show_whisper_install_dialog)
+                    else:
                         GLib.idle_add(download_dialog.set_complete, False, error_msg[:100])
 
-                threading.Thread(target=download_and_apply, daemon=True).start()
-                download_dialog.run()
-                download_dialog.destroy()
+            threading.Thread(target=download_and_apply, daemon=True).start()
+            download_dialog.run()
+            download_dialog.destroy()
 
-                # Refresh the model list to show updated download status
-                self._populate_model_options()
-                return True
+            # Refresh the model list to show updated download status
+            self._populate_model_options()
+            return True
 
         return self._apply_settings_internal(settings)
 
