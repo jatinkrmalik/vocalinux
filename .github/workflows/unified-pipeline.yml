@@ -69,8 +69,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             xdotool \
-            python3-gi \
-            python3-gi-cairo \
             gir1.2-appindicator3-0.1 \
             libcairo2-dev \
             pkg-config \
@@ -83,13 +81,12 @@ jobs:
 
       - name: Set up virtual environment
         run: |
-          python -m venv venv --system-site-packages
+          python -m venv venv
           source venv/bin/activate
           python -m pip install --upgrade pip setuptools wheel
-          # Skip PyGObject in pip install - we use system python3-gi package
-          pip install -e ".[dev]" --no-deps
-          # Install other dependencies without PyGObject
-          pip install vosk pydub pynput requests tqdm numpy pyaudio python-xlib pytest pytest-cov
+          # Install PyGObject from pip (with build deps installed above)
+          pip install PyGObject
+          pip install -e ".[dev]"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
 
