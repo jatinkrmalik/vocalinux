@@ -55,6 +55,12 @@ echo ""
 KEEP_CONFIG="no"
 KEEP_DATA="no"
 VENV_DIR="venv"
+NON_INTERACTIVE="no"
+
+# Detect if running non-interactively
+if [ ! -t 0 ]; then
+    NON_INTERACTIVE="yes"
+fi
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -70,6 +76,10 @@ while [[ $# -gt 0 ]]; do
             VENV_DIR="${1#*=}"
             shift
             ;;
+        -y|--yes)
+            NON_INTERACTIVE="yes"
+            shift
+            ;;
         --help)
             echo "Vocalinux Uninstaller"
             echo "Usage: $0 [options]"
@@ -77,6 +87,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --keep-config     Keep configuration files"
             echo "  --keep-data       Keep application data (models, etc.)"
             echo "  --venv-dir=PATH   Specify custom virtual environment directory (default: venv)"
+            echo "  -y, --yes         Non-interactive mode (no confirmation prompts)"
             echo "  --help            Show this help message"
             exit 0
             ;;
@@ -94,45 +105,83 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux"
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 
+# Directories created by curl-based installation
+CURL_INSTALL_DIR="$HOME/.local/share/vocalinux-install"
+CURL_VENV_DIR="$HOME/.local/share/vocalinux/venv"
+CURL_BIN_DIR="$HOME/.local/bin"
+
 # Print uninstallation options
 echo "Uninstallation options:"
-echo "- Virtual environment directory: $VENV_DIR"
+echo "- Local virtual environment: $VENV_DIR"
+echo "- Curl-installed venv: $CURL_VENV_DIR"
+echo "- Curl-installed repo: $CURL_INSTALL_DIR"
 [[ "$KEEP_CONFIG" == "yes" ]] && echo "- Keeping configuration files"
 [[ "$KEEP_DATA" == "yes" ]] && echo "- Keeping application data"
 echo
 
 # Ask for confirmation
-read -p "This will remove Vocalinux from your system. Continue? (y/n) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_info "Uninstallation cancelled."
-    exit 0
+if [[ "$NON_INTERACTIVE" == "yes" ]]; then
+    print_info "Non-interactive mode: proceeding with uninstallation..."
+else
+    read -p "This will remove Vocalinux from your system. Continue? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Uninstallation cancelled."
+        exit 0
+    fi
 fi
 
 # Function to handle virtual environment removal
 remove_virtual_environment() {
-    if [ -d "$VENV_DIR" ]; then
-        print_info "Removing virtual environment..."
-        
-        # Deactivate the virtual environment if it's active
-        if [[ -n "$VIRTUAL_ENV" && "$VIRTUAL_ENV" == *"$VENV_DIR"* ]]; then
-            print_warning "Virtual environment is active. Deactivating..."
-            deactivate 2>/dev/null || {
-                print_warning "Failed to deactivate virtual environment. This is not critical."
-            }
-        fi
-        
-        # Remove the virtual environment directory
-        safe_remove "$VENV_DIR" "virtual environment directory"
-    else
-        print_info "Virtual environment not found: $VENV_DIR"
+    # Deactivate the virtual environment if it's active
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        print_warning "Virtual environment is active. Deactivating..."
+        deactivate 2>/dev/null || {
+            print_warning "Failed to deactivate virtual environment. This is not critical."
+        }
     fi
+    
+    # Remove local venv (if running from repo)
+    if [ -d "$VENV_DIR" ]; then
+        print_info "Removing local virtual environment..."
+        safe_remove "$VENV_DIR" "local virtual environment directory"
+    else
+        print_info "Local virtual environment not found: $VENV_DIR"
+    fi
+    
+    # Remove curl-installed venv
+    if [ -d "$CURL_VENV_DIR" ]; then
+        print_info "Removing curl-installed virtual environment..."
+        safe_remove "$CURL_VENV_DIR" "curl-installed virtual environment"
+    fi
+    
+    # Remove the vocalinux data directory if empty (contains venv)
+    local VOCALINUX_DATA_DIR="$HOME/.local/share/vocalinux"
+    if [ -d "$VOCALINUX_DATA_DIR" ] && [ -z "$(ls -A "$VOCALINUX_DATA_DIR" 2>/dev/null)" ]; then
+        safe_remove "$VOCALINUX_DATA_DIR" "empty vocalinux data directory"
+    fi
+}
+
+# Function to remove curl-installed files
+remove_curl_install_files() {
+    print_info "Removing curl-installation files..."
+    
+    # Remove cloned repository
+    safe_remove "$CURL_INSTALL_DIR" "cloned repository"
+    
+    # Remove symlink in ~/.local/bin
+    if [ -L "$CURL_BIN_DIR/vocalinux" ]; then
+        safe_remove "$CURL_BIN_DIR/vocalinux" "vocalinux symlink"
+    fi
+    
+    # Remove activation script in ~/.local/bin
+    safe_remove "$CURL_BIN_DIR/activate-vocalinux.sh" "activation script in ~/.local/bin"
 }
 
 # Function to remove application files
 remove_application_files() {
-    # Remove activation script
-    safe_remove "activate-vocalinux.sh" "activation script"
+    # Remove local activation script (if running from repo)
+    safe_remove "activate-vocalinux.sh" "local activation script"
     
     # Remove desktop entry
     safe_remove "$DESKTOP_DIR/vocalinux.desktop" "desktop entry"
@@ -211,9 +260,27 @@ verify_uninstallation() {
     print_info "Verifying uninstallation..."
     local ISSUES=0
     
-    # Check if virtual environment still exists
+    # Check if local virtual environment still exists
     if [ -d "$VENV_DIR" ]; then
-        print_warning "Virtual environment still exists: $VENV_DIR"
+        print_warning "Local virtual environment still exists: $VENV_DIR"
+        ((ISSUES++))
+    fi
+    
+    # Check if curl-installed virtual environment still exists
+    if [ -d "$CURL_VENV_DIR" ]; then
+        print_warning "Curl-installed venv still exists: $CURL_VENV_DIR"
+        ((ISSUES++))
+    fi
+    
+    # Check if cloned repository still exists
+    if [ -d "$CURL_INSTALL_DIR" ]; then
+        print_warning "Cloned repository still exists: $CURL_INSTALL_DIR"
+        ((ISSUES++))
+    fi
+    
+    # Check if symlink still exists
+    if [ -L "$CURL_BIN_DIR/vocalinux" ]; then
+        print_warning "Vocalinux symlink still exists: $CURL_BIN_DIR/vocalinux"
         ((ISSUES++))
     fi
     
@@ -290,6 +357,7 @@ print_uninstallation_summary() {
 
 # Perform uninstallation steps
 remove_virtual_environment
+remove_curl_install_files
 remove_application_files
 remove_config_and_data
 cleanup_build_artifacts

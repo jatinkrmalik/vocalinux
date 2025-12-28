@@ -37,10 +37,16 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install
 ```
 
 This will:
-- Clone the repository
-- Install all dependencies
+- Clone the repository to `~/.local/share/vocalinux-install`
+- Install all system dependencies
 - Set up a virtual environment in `~/.local/share/vocalinux/venv`
 - Create a symlink at `~/.local/bin/vocalinux`
+- Download the default VOSK speech model
+
+**With Whisper AI support:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --with-whisper
+```
 
 ### Alternative: Install from Source
 
@@ -51,6 +57,9 @@ cd vocalinux
 
 # Run the installer
 ./install.sh
+
+# Or with Whisper support
+./install.sh --with-whisper
 ```
 
 The installer handles everything: system dependencies, Python environment, speech models, and desktop integration.
@@ -70,6 +79,16 @@ vocalinux
 ```
 
 Or launch it from your application menu!
+
+### Uninstall
+
+```bash
+# If installed via curl:
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash
+
+# If installed from source:
+./uninstall.sh
+```
 
 ## 📋 Requirements
 
