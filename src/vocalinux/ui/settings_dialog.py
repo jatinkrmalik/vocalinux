@@ -725,11 +725,9 @@ class SettingsDialog(Gtk.Dialog):
         settings = {
             "engine": engine,
             "model_size": model_size,
+            "vad_sensitivity": vad,
+            "silence_timeout": silence,
         }
-        # Only include VOSK settings if VOSK is selected
-        if engine == "vosk":
-            settings["vad_sensitivity"] = vad
-            settings["silence_timeout"] = silence
 
         return settings
 
