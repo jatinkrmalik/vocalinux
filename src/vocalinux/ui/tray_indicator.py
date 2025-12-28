@@ -319,8 +319,28 @@ class TrayIndicator:
         about_dialog.set_program_name("Vocalinux")
         about_dialog.set_version(__version__)
         about_dialog.set_copyright(__copyright__)
-        about_dialog.set_authors(["Jatin K Malik (@jatinkrmalik)"])
-        about_dialog.set_comments(f"{__description__}\n\n🌟 Open Source - Contributions Welcome!")
+        
+        # Authors and credits
+        about_dialog.set_authors(["Jatin K Malik"])
+        about_dialog.set_documenters(["Jatin K Malik"])
+        about_dialog.set_artists(["Jatin K Malik"])
+        
+        # Add credits section with social links
+        about_dialog.add_credit_section(
+            "Connect",
+            [
+                "GitHub: github.com/jatinkrmalik",
+                "Twitter/X: @jatinkrmalik",
+            ]
+        )
+        
+        # Comments with better formatting
+        about_dialog.set_comments(
+            f"{__description__}\n\n"
+            "🌟 Open Source Project\n"
+            "Contributions Welcome!"
+        )
+        
         about_dialog.set_website(__url__)
         about_dialog.set_website_label("⭐ Star on GitHub")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
@@ -331,7 +351,7 @@ class TrayIndicator:
             try:
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
                 scaled_pixbuf = pixbuf.scale_simple(
-                    150, 150, GdkPixbuf.InterpType.BILINEAR
+                    128, 128, GdkPixbuf.InterpType.BILINEAR
                 )
                 about_dialog.set_logo(scaled_pixbuf)
             except Exception as e:
