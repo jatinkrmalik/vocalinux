@@ -5,6 +5,8 @@ This module provides a unified interface to different speech recognition engines
 currently supporting VOSK and Whisper.
 """
 
+import contextlib
+import ctypes
 import json
 import logging
 import os
@@ -15,6 +17,37 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from ..common_types import RecognitionState
+
+
+# ALSA error handler to suppress warnings during PyAudio initialization
+def _setup_alsa_error_handler():
+    """Set up an error handler to suppress ALSA warnings."""
+    try:
+        asound = ctypes.CDLL("libasound.so.2")
+        # Define error handler type
+        ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
+            None,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+        )
+
+        # Create a no-op error handler
+        def _error_handler(filename, line, function, err, fmt):
+            pass
+
+        _alsa_error_handler = ERROR_HANDLER_FUNC(_error_handler)
+        asound.snd_lib_error_set_handler(_alsa_error_handler)
+        return _alsa_error_handler  # Keep reference to prevent GC
+    except (OSError, AttributeError):
+        # ALSA not available or different platform
+        return None
+
+
+# Set up ALSA error handler at module load time
+_alsa_handler = _setup_alsa_error_handler()
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from .command_processor import CommandProcessor
 
@@ -96,12 +129,23 @@ class SpeechRecognitionManager:
                 self.vosk_model_path = self._get_vosk_model_path()
             else:
                 # Check if this is a pre-installed model
-                if any(self.vosk_model_path.startswith(sys_dir) for sys_dir in SYSTEM_MODELS_DIRS):
-                    logger.info(f"Using pre-installed VOSK model from {self.vosk_model_path}")
-                elif os.path.exists(os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")):
-                    logger.info(f"Using installer-provided VOSK model from {self.vosk_model_path}")
+                if any(
+                    self.vosk_model_path.startswith(sys_dir)
+                    for sys_dir in SYSTEM_MODELS_DIRS
+                ):
+                    logger.info(
+                        f"Using pre-installed VOSK model from {self.vosk_model_path}"
+                    )
+                elif os.path.exists(
+                    os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")
+                ):
+                    logger.info(
+                        f"Using installer-provided VOSK model from {self.vosk_model_path}"
+                    )
                 else:
-                    logger.info(f"Using existing VOSK model from {self.vosk_model_path}")
+                    logger.info(
+                        f"Using existing VOSK model from {self.vosk_model_path}"
+                    )
 
             logger.info(f"Loading VOSK model from {self.vosk_model_path}")
             # Ensure previous model/recognizer are released if re-initializing
@@ -120,20 +164,111 @@ class SpeechRecognitionManager:
 
     def _init_whisper(self):
         """Initialize the Whisper speech recognition engine."""
+        import warnings
+
         try:
             import whisper
 
-            logger.info(f"Loading Whisper {self.model_size} model")
+            # Suppress CUDA warnings during import
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                import torch
+
+            # Validate model size for Whisper
+            valid_whisper_models = ["tiny", "base", "small", "medium", "large"]
+            if self.model_size not in valid_whisper_models:
+                logger.warning(
+                    f"Model size '{self.model_size}' not valid for Whisper. "
+                    f"Valid options: {valid_whisper_models}. Using 'base' instead."
+                )
+                self.model_size = "base"
+
+            # Determine device (GPU if available, otherwise CPU)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Using device: {device}")
+
+            # Download directory for Whisper models
+            whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
+            os.makedirs(whisper_cache_dir, exist_ok=True)
+
+            logger.info(f"Loading Whisper '{self.model_size}' model...")
             # Ensure previous model is released if re-initializing
             self.model = None
-            self.model = whisper.load_model(self.model_size)
-            logger.info("Whisper engine initialized successfully.")
-        except ImportError:
-            logger.error(
-                "Failed to import Whisper. Please install it with 'pip install whisper torch'"
+
+            # Load model with device and custom cache directory
+            self.model = whisper.load_model(
+                self.model_size, device=device, download_root=whisper_cache_dir
             )
+
+            logger.info(f"Whisper model loaded on {device.upper()}")
+            logger.info("Whisper engine initialized successfully.")
+
+        except ImportError as e:
+            logger.error(f"Failed to import required libraries for Whisper: {e}")
+            logger.error("Please install with: pip install openai-whisper torch")
             self.state = RecognitionState.ERROR
             raise
+        except Exception as e:
+            logger.error(f"Failed to initialize Whisper engine: {e}")
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _transcribe_with_whisper(self, audio_buffer: List[bytes]) -> str:
+        """
+        Transcribe audio buffer using Whisper.
+
+        Args:
+            audio_buffer: List of audio data chunks (16-bit PCM at 16kHz)
+
+        Returns:
+            Transcribed text
+        """
+        import warnings
+
+        try:
+            import numpy as np
+
+            if not audio_buffer:
+                return ""
+
+            # Convert audio buffer to numpy array
+            audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+
+            # Convert to float32 and normalize to [-1, 1] (Whisper expects this format)
+            audio_float = audio_data.astype(np.float32) / 32768.0
+
+            duration = len(audio_float) / 16000.0  # 16kHz sample rate
+            logger.debug(f"Transcribing audio: {duration:.2f} seconds")
+
+            # Determine if we should use fp16 (only on CUDA)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                import torch
+            use_fp16 = self.model.device != torch.device("cpu")
+
+            # Transcribe with Whisper (handles variable length audio automatically)
+            result = self.model.transcribe(
+                audio_float,
+                language="en",
+                task="transcribe",
+                verbose=False,
+                temperature=0.0,  # Greedy decoding for consistency
+                no_speech_threshold=0.6,
+                fp16=use_fp16,  # Explicitly set to avoid warning on CPU
+            )
+
+            text = result.get("text", "").strip()
+
+            if text:
+                logger.info(f"Whisper transcribed: '{text}'")
+            else:
+                logger.debug("Whisper returned empty transcription")
+
+            return text
+
+        except Exception as e:
+            logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
+            return ""
 
     def _get_vosk_model_path(self) -> str:
         """Get the path to the VOSK model based on the selected size."""
@@ -145,20 +280,20 @@ class SpeechRecognitionManager:
         }
 
         model_name = model_map.get(self.model_size, model_map["small"])
-        
+
         # First, check user's local models directory
         user_model_path = os.path.join(MODELS_DIR, model_name)
         if os.path.exists(user_model_path):
             logger.debug(f"Found user model at: {user_model_path}")
             return user_model_path
-        
+
         # Then check system-wide installation directories
         for system_dir in SYSTEM_MODELS_DIRS:
             system_model_path = os.path.join(system_dir, model_name)
             if os.path.exists(system_model_path):
                 logger.info(f"Found pre-installed model at: {system_model_path}")
                 return system_model_path
-        
+
         # If not found anywhere, return the user path (will be created if needed)
         logger.debug(f"No existing model found, will use: {user_model_path}")
         return user_model_path
@@ -181,15 +316,17 @@ class SpeechRecognitionManager:
             raise ValueError(f"Unknown model size: {self.model_size}")
 
         model_name = os.path.basename(url).replace(".zip", "")
-        
+
         # Always download to user's local directory
         model_path = os.path.join(MODELS_DIR, model_name)
         zip_path = os.path.join(MODELS_DIR, os.path.basename(url))
-        
+
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
-        
-        logger.info(f"Downloading VOSK {self.model_size} model to user directory: {model_path}")
+
+        logger.info(
+            f"Downloading VOSK {self.model_size} model to user directory: {model_path}"
+        )
 
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
@@ -261,6 +398,14 @@ class SpeechRecognitionManager:
             logger.debug(f"Unregistered text callback: {callback}")
         except ValueError:
             logger.warning(f"Callback {callback} not found in text_callbacks.")
+
+    def get_text_callbacks(self) -> List[Callable[[str], None]]:
+        """Get a copy of the current text callbacks list."""
+        return list(self.text_callbacks)
+
+    def set_text_callbacks(self, callbacks: List[Callable[[str], None]]):
+        """Set the text callbacks list (used for temporarily replacing callbacks)."""
+        self.text_callbacks = list(callbacks)
 
     def register_state_callback(self, callback: Callable[[RecognitionState], None]):
         """
@@ -337,6 +482,13 @@ class SpeechRecognitionManager:
         if self.recognition_thread and self.recognition_thread.is_alive():
             self.recognition_thread.join(timeout=1.0)
 
+        # Process any remaining audio in the buffer before going idle
+        if self.audio_buffer:
+            logger.debug("Processing remaining audio buffer before stopping")
+            self._update_state(RecognitionState.PROCESSING)
+            self._process_final_buffer()
+            self.audio_buffer = []
+
         self._update_state(RecognitionState.IDLE)
 
     def _record_audio(self):
@@ -348,7 +500,9 @@ class SpeechRecognitionManager:
             import pyaudio
         except ImportError as e:
             logger.error(f"Failed to import required audio libraries: {e}")
-            logger.error("Please install required dependencies: pip install pyaudio numpy")
+            logger.error(
+                "Please install required dependencies: pip install pyaudio numpy"
+            )
             play_error_sound()
             self._update_state(RecognitionState.ERROR)
             return
@@ -443,25 +597,7 @@ class SpeechRecognitionManager:
             text = result.get("text", "")
 
         elif self.engine == "whisper":
-            # Save buffer to a temporary file
-            import tempfile
-            import wave
-
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                temp_path = temp_file.name
-
-            with wave.open(temp_path, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)  # 16-bit
-                wf.setframerate(16000)
-                wf.writeframes(b"".join(self.audio_buffer))
-
-            # Process with Whisper
-            result = self.model.transcribe(temp_path)
-            text = result.get("text", "")
-
-            # Remove temporary file
-            os.unlink(temp_path)
+            text = self._transcribe_with_whisper(self.audio_buffer)
 
         else:
             logger.error(f"Unknown engine: {self.engine}")
