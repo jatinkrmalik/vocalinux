@@ -101,6 +101,8 @@ jobs:
       - name: Run tests with coverage
         run: |
           source venv/bin/activate
+          # Set GI_TYPELIB_PATH so pip-installed PyGObject can find system typelibs (AppIndicator3, etc.)
+          export GI_TYPELIB_PATH=/usr/lib/x86_64-linux-gnu/girepository-1.0:/usr/lib/girepository-1.0
           PYTHONPATH=$PWD pytest --junitxml=junit-${{ matrix.python-version }}.xml --cov=src --cov-report=xml tests/
 
       - name: Upload test results
