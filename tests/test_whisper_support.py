@@ -93,14 +93,18 @@ class TestWhisperSupport:
         model_mock = MagicMock()
         whisper_mock.load_model.return_value = model_mock
 
-        # Patch modules
-        with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}):
+        # Patch modules and mock the download method to avoid network/file operations
+        with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}), patch(
+            "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._download_whisper_model"
+        ) as mock_download, patch("os.path.exists", return_value=True):
             from vocalinux.speech_recognition.recognition_manager import (
                 SpeechRecognitionManager,
             )
 
-            # Create manager with Whisper engine
-            manager = SpeechRecognitionManager(engine="whisper", model_size="base")
+            # Create manager with Whisper engine and defer_download=False to trigger model loading
+            manager = SpeechRecognitionManager(
+                engine="whisper", model_size="base", defer_download=False
+            )
 
             # Verify Whisper was initialized correctly
             assert manager.engine == "whisper"

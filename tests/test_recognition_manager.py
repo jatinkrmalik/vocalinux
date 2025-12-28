@@ -59,9 +59,7 @@ class TestSpeechRecognition(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(
-            SpeechRecognitionManager, "_download_vosk_model"
-        )
+        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
         self.mockCmdProcessor = patch.object(CommandProcessor, "process_text")
 
         # Start all patches

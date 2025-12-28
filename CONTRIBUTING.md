@@ -1,239 +1,282 @@
 # Contributing to Vocalinux
 
-Thank you for your interest in contributing to Vocalinux! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to Vocalinux! 🎉
 
-## Development Environment Setup
+This document provides guidelines and instructions for contributing to the project.
+
+## 📋 Table of Contents
+
+- [Code of Conduct](#code-of-conduct)
+- [Getting Started](#getting-started)
+- [Development Setup](#development-setup)
+- [Making Changes](#making-changes)
+- [Testing](#testing)
+- [Pull Request Process](#pull-request-process)
+- [Release Process](#release-process)
+- [Community](#community)
+
+## Code of Conduct
+
+We are committed to providing a welcoming and inclusive environment. Please be respectful and constructive in your interactions.
+
+## Getting Started
+
+### Ways to Contribute
+
+- 🐛 **Report bugs** - Found a bug? [Open an issue](https://github.com/jatinkrmalik/vocalinux/issues/new)
+- 💡 **Suggest features** - Have an idea? [Start a discussion](https://github.com/jatinkrmalik/vocalinux/discussions)
+- 📖 **Improve documentation** - Docs can always be better!
+- 🔧 **Fix bugs** - Check the [issues](https://github.com/jatinkrmalik/vocalinux/issues) for things to work on
+- ✨ **Add features** - Pick up a feature from the roadmap
+
+### Good First Issues
+
+New to the project? Look for issues labeled [`good first issue`](https://github.com/jatinkrmalik/vocalinux/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+
+## Development Setup
 
 ### Option 1: Automated Setup (Recommended)
 
-The easiest way to set up a development environment is using the installer script with the `--dev` flag:
-
 ```bash
-# Clone the repository
+# Fork and clone the repository
 git clone https://github.com/YOUR-USERNAME/vocalinux.git
 cd vocalinux
 
-# Install in development mode
+# Install in development mode (includes all dev dependencies)
 ./install.sh --dev
 ```
 
 This will:
 1. Install all system dependencies
 2. Create a Python virtual environment
-3. Install the package in development mode with the `-e` flag
-4. Install all development dependencies including testing tools
-5. Run the tests automatically
+3. Install the package in editable mode (`-e`)
+4. Install all dev dependencies (pytest, black, isort, flake8)
+5. Run the test suite automatically
 
 ### Option 2: Manual Setup
 
-If you prefer to set up your development environment manually:
-
-1. Fork the repository on GitHub
-2. Clone your fork locally:
+1. **Fork and clone:**
    ```bash
    git clone https://github.com/YOUR-USERNAME/vocalinux.git
    cd vocalinux
    ```
 
-3. Install system dependencies:
+2. **Install system dependencies:**
    ```bash
-   # For Ubuntu/Debian
+   # Ubuntu/Debian
    sudo apt update
-   sudo apt install -y python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
-       gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv
-   
-   # For X11 environments
-   sudo apt install -y xdotool
-   
-   # For Wayland environments
-   sudo apt install -y wtype
+   sudo apt install -y python3-pip python3-gi python3-gi-cairo \
+       gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev \
+       python3-dev portaudio19-dev python3-venv xdotool
    ```
 
-4. Create and activate a virtual environment:
+3. **Set up Python environment:**
    ```bash
    python3 -m venv venv --system-site-packages
    source venv/bin/activate
-   ```
-
-5. Install the package in development mode:
-   ```bash
-   # Update pip and setuptools
    pip install --upgrade pip setuptools wheel
-   
-   # Install in development mode with all dev dependencies
    pip install -e ".[dev]"
    ```
 
-6. Install pre-commit hooks:
+4. **(Optional) Install pre-commit hooks:**
    ```bash
    pre-commit install
    ```
+   > **Note:** Pre-commit hooks are optional. The CI pipeline runs the same checks, so you can skip this if you prefer faster local commits.
 
-## Directory Structure
+## Making Changes
 
-The project follows this directory structure:
+### Branching Strategy
+
+```bash
+# Create a feature branch from main
+git checkout main
+git pull origin main
+git checkout -b feature/your-feature-name
+
+# Or for bug fixes
+git checkout -b fix/issue-description
+```
+
+**Branch naming conventions:**
+- `feature/` - New features
+- `fix/` - Bug fixes
+- `docs/` - Documentation updates
+- `refactor/` - Code refactoring
+- `test/` - Test additions/updates
+
+### Code Style
+
+We use automated tools to ensure consistent code style:
+
+- **Black** - Code formatting (line length: 100)
+- **isort** - Import sorting (black-compatible profile)
+- **flake8** - Linting
+
+```bash
+# Format your code
+black src/ tests/
+isort src/ tests/
+
+# Check for issues
+flake8 src/ tests/
+```
+
+Pre-commit hooks will run these automatically before each commit.
+
+### Project Structure
 
 ```
 vocalinux/
-├── docs/                      # Documentation
-│   ├── INSTALL.md            # Installation guide
-│   └── USER_GUIDE.md         # User guide
-├── resources/                 # Resource files
-│   ├── icons/                # Application icons
-│   └── sounds/               # Audio notification sounds
-├── src/                       # Source code
-│   ├── speech_recognition/   # Speech recognition components
-│   ├── text_injection/       # Text injection components
-│   └── ui/                   # User interface components
-├── tests/                     # Test suite
-├── CONTRIBUTING.md           # Contribution guidelines (this file)
-├── install.sh                # Installation script
-├── LICENSE                   # License information
-├── README.md                 # Project overview
-└── setup.py                  # Python package configuration
+├── src/vocalinux/            # Main application code
+│   ├── __init__.py
+│   ├── main.py               # Entry point
+│   ├── version.py            # Version information
+│   ├── common_types.py       # Shared types/enums
+│   ├── speech_recognition/   # Speech recognition engines
+│   │   ├── recognition_manager.py
+│   │   └── command_processor.py
+│   ├── text_injection/       # Text injection (X11/Wayland)
+│   │   └── text_injector.py
+│   ├── ui/                   # GTK UI components
+│   │   ├── tray_indicator.py
+│   │   ├── settings_dialog.py
+│   │   ├── config_manager.py
+│   │   └── ...
+│   └── utils/                # Utility functions
+├── tests/                    # Test suite
+├── resources/                # Icons and sounds
+├── docs/                     # Documentation
+└── web/                      # Website source (Next.js)
 ```
 
-## Pre-commit Hooks
+### Key Files for Common Tasks
 
-We use pre-commit hooks to ensure code quality and consistency. These hooks automatically run before each commit to check your code against our standards.
-
-### Pre-commit Configuration
-
-The pre-commit configuration in `.pre-commit-config.yaml` includes:
-
-1. **black**: Code formatter (line length: 100)
-2. **isort**: Import sorter (configured to be compatible with black)
-3. **flake8**: Linter with plugins for docstrings, comprehensions, and bug detection
-4. **Additional checks**: Trailing whitespace, file endings, YAML/JSON validation, etc.
-
-### Running Pre-commit Manually
-
-You can run the pre-commit checks manually on all files:
-```bash
-pre-commit run --all-files
-```
-
-Or on specific files:
-```bash
-pre-commit run --files path/to/file1.py path/to/file2.py
-```
-
-### Bypassing Pre-commit (Emergency Only)
-
-In emergency situations only, you can bypass pre-commit hooks:
-```bash
-git commit -m "Your message" --no-verify
-```
-
-However, this is strongly discouraged as it may lead to CI pipeline failures.
+| Task | Files |
+|------|-------|
+| Add voice command | `src/vocalinux/speech_recognition/command_processor.py` |
+| UI changes | `src/vocalinux/ui/*.py` |
+| Speech recognition | `src/vocalinux/speech_recognition/recognition_manager.py` |
+| Text injection | `src/vocalinux/text_injection/text_injector.py` |
+| Settings | `src/vocalinux/ui/config_manager.py`, `settings_dialog.py` |
 
 ## Testing
 
-Write tests for all new features and bug fixes:
+### Running Tests
 
 ```bash
+# Activate virtual environment
+source venv/bin/activate
+
 # Run all tests
 pytest
 
-# Run a specific test file
-pytest tests/test_specific_file.py
-
-# Run tests with coverage report
-pytest --cov=src
-
-# Generate HTML coverage report
+# Run with coverage
 pytest --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/test_command_processor.py
+
+# Run with verbose output
+pytest -v
 ```
 
-Aim for at least 80% test coverage for new code.
+### Writing Tests
 
-## Code Style Guidelines
+- Place tests in the `tests/` directory
+- Name test files as `test_*.py`
+- Name test functions as `test_*`
+- Aim for at least 80% coverage for new code
+- Use `pytest-mock` for mocking
 
-We follow these code style conventions:
-
-1. **PEP 8**: With modifications:
-   - Maximum line length: 100 characters
-   - Use Black formatting
-
-2. **Docstrings**: All public methods, classes, and modules should have docstrings
-
-3. **Imports**: Organized using isort with the following sections:
-   - Standard library imports
-   - Third-party imports
-   - Local application imports
-
-4. **Type Annotations**: Use type hints where appropriate
+Example test:
+```python
+def test_command_processor_new_line(mocker):
+    """Test that 'new line' command returns correct action."""
+    processor = CommandProcessor()
+    result = processor.process("new line")
+    assert result.action == "new_line"
+```
 
 ## Pull Request Process
 
-1. Ensure all pre-commit checks pass
-2. Update documentation if necessary
-3. Add or update tests as needed
-4. Create a pull request with a clear description of the changes
-5. Link any related issues
-6. Wait for code review
+### Before Submitting
 
-## Commit Message Guidelines
+- [ ] Code follows the style guidelines
+- [ ] Tests pass locally (`pytest`)
+- [ ] Pre-commit hooks pass
+- [ ] Documentation is updated (if needed)
+- [ ] Commit messages are clear and descriptive
 
-Follow these guidelines for commit messages:
+### Commit Messages
 
-- Use the present tense ("Add feature" not "Added feature")
-- Use the imperative mood ("Move cursor to..." not "Moves cursor to...")
-- Limit the first line to 72 characters or less
-- Reference issues and pull requests after the first line
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) style:
 
-Example:
 ```
-Add voice command for deleting sentences
+type(scope): short description
 
-This implements the "delete that" command functionality
-to remove the last sentence entered by the user.
+Longer description if needed.
 
 Fixes #123
 ```
 
-## Documentation
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
-Update documentation for any new features or changes:
+**Examples:**
+```
+feat(commands): add "select all" voice command
+fix(tray): resolve icon not updating on Wayland
+docs(readme): update installation instructions
+```
 
-- Add docstrings to new functions, classes, and methods
-- Update README.md or relevant docs in the docs/ directory
-- Add or update code examples if applicable
+### Submitting
 
-## Development Workflow Tips
+1. Push your branch to your fork
+2. Open a Pull Request against `main`
+3. Fill out the PR template
+4. Link any related issues
+5. Wait for CI to pass
+6. Request a review
 
-1.  **Virtual Environment**: Always activate the virtual environment before working on the project:
-    ```bash
-    # Activate the environment (assuming it's named venv)
-    source venv/bin/activate
-    # Or use the helper script
-    # source activate-vocalinux.sh 
-    ```
+### Review Process
 
-2.  **Running from Source**: To ensure you are running the latest code from your `src` directory during development (instead of the potentially installed version), use:
-    ```bash
-    # Make sure venv is active
-    python -m vocalinux.main
-    ```
-    This command executes the main module directly from your source files.
+- PRs require at least one approval
+- CI must pass (linting, tests)
+- Maintainers may request changes
+- Once approved, maintainers will merge
 
-3.  **Debugging**: Use the `--debug` flag when running Vocalinux during development:
-    ```bash
-    # When running from source
-    python -m vocalinux.main --debug
-    
-    # If running the installed command (less common during active dev)
-    # vocalinux --debug 
-    ```
+## Release Process
 
-4.  **Branching Strategy**:
-    - Create feature branches from `main`
-    - Name branches descriptively (e.g., `feature/voice-commands`, `fix/tray-icon-bug`)
-    - Keep pull requests focused on a single issue/feature
+Releases are managed through GitHub tags and the release workflow.
 
-5.  **Common Development Tasks**:
-    - Adding a new voice command? Modify `command_processor.py`
-    - UI changes? Look at files in the `ui/` directory
-    - Speech recognition tweaks? Check `speech_recognition/recognition_manager.py`
+### Version Bumping
 
-Thank you for contributing to Vocalinux!
+1. Update version in `src/vocalinux/version.py`
+2. Commit: `git commit -m "chore: bump version to x.y.z"`
+3. Tag: `git tag vx.y.z`
+4. Push: `git push origin main --tags`
+5. GitHub Release will be auto-created with release notes
+
+### Versioning Scheme
+
+We follow [Semantic Versioning](https://semver.org/):
+
+- **MAJOR.MINOR.PATCH** (e.g., `1.2.3`)
+- Pre-release: `x.y.z-alpha`, `x.y.z-beta`, `x.y.z-rc.1`
+
+## Community
+
+### Getting Help
+
+- 💬 [GitHub Discussions](https://github.com/jatinkrmalik/vocalinux/discussions) - Ask questions
+- 🐛 [GitHub Issues](https://github.com/jatinkrmalik/vocalinux/issues) - Report bugs
+
+### Stay Connected
+
+- ⭐ Star the repository to show support
+- 👀 Watch for updates
+- 🐦 Follow [@jatinkrmalik](https://twitter.com/jatinkrmalik) on Twitter
+
+---
+
+Thank you for contributing to Vocalinux! ❤️

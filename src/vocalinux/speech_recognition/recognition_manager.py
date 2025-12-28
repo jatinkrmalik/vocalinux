@@ -53,6 +53,22 @@ from .command_processor import CommandProcessor
 
 logger = logging.getLogger(__name__)
 
+
+def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
+    """Show a desktop notification."""
+    try:
+        import subprocess
+
+        # Use notify-send which is available on most Linux desktops
+        subprocess.Popen(
+            ["notify-send", "-i", icon, "-a", "Vocalinux", title, message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        logger.debug(f"Could not show notification: {e}")
+
+
 # Define constants
 MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
 # Alternative locations for pre-installed models
@@ -70,13 +86,16 @@ class SpeechRecognitionManager:
     speech recognition engines (VOSK and Whisper).
     """
 
-    def __init__(self, engine: str = "vosk", model_size: str = "small", **kwargs):
+    def __init__(
+        self, engine: str = "vosk", model_size: str = "small", defer_download: bool = True, **kwargs
+    ):
         """
         Initialize the speech recognition manager.
 
         Args:
             engine: The speech recognition engine to use ("vosk" or "whisper")
             model_size: The size of the model to use ("small", "medium", "large")
+            defer_download: If True, don't download missing models at startup (default: True)
         """
         self.engine = engine
         self.model_size = model_size
@@ -90,6 +109,12 @@ class SpeechRecognitionManager:
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
         self.action_callbacks: List[Callable[[str], None]] = []
 
+        # Download progress tracking
+        self._download_progress_callback: Optional[Callable[[float, float, str], None]] = None
+        self._download_cancelled = False
+        self._defer_download = defer_download
+        self._model_initialized = False
+
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
@@ -101,9 +126,7 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(
-            f"Initializing speech recognition with {engine} engine and {model_size} model"
-        )
+        logger.info(f"Initializing speech recognition with {engine} engine and {model_size} model")
 
         # Initialize the selected speech recognition engine
         if engine == "vosk":
@@ -121,31 +144,25 @@ class SpeechRecognitionManager:
             self.vosk_model_path = self._get_vosk_model_path()
 
             if not os.path.exists(self.vosk_model_path):
-                logger.info(
-                    f"VOSK model not found at {self.vosk_model_path}. Downloading..."
-                )
-                self._download_vosk_model()
-                # Update path after download
-                self.vosk_model_path = self._get_vosk_model_path()
+                if self._defer_download:
+                    logger.info(
+                        f"VOSK model not found at {self.vosk_model_path}. Will download when needed."
+                    )
+                    self._model_initialized = False
+                    return  # Don't block startup
+                else:
+                    logger.info(f"VOSK model not found at {self.vosk_model_path}. Downloading...")
+                    self._download_vosk_model()
+                    # Update path after download
+                    self.vosk_model_path = self._get_vosk_model_path()
             else:
                 # Check if this is a pre-installed model
-                if any(
-                    self.vosk_model_path.startswith(sys_dir)
-                    for sys_dir in SYSTEM_MODELS_DIRS
-                ):
-                    logger.info(
-                        f"Using pre-installed VOSK model from {self.vosk_model_path}"
-                    )
-                elif os.path.exists(
-                    os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")
-                ):
-                    logger.info(
-                        f"Using installer-provided VOSK model from {self.vosk_model_path}"
-                    )
+                if any(self.vosk_model_path.startswith(sys_dir) for sys_dir in SYSTEM_MODELS_DIRS):
+                    logger.info(f"Using pre-installed VOSK model from {self.vosk_model_path}")
+                elif os.path.exists(os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")):
+                    logger.info(f"Using installer-provided VOSK model from {self.vosk_model_path}")
                 else:
-                    logger.info(
-                        f"Using existing VOSK model from {self.vosk_model_path}"
-                    )
+                    logger.info(f"Using existing VOSK model from {self.vosk_model_path}")
 
             logger.info(f"Loading VOSK model from {self.vosk_model_path}")
             # Ensure previous model/recognizer are released if re-initializing
@@ -153,12 +170,11 @@ class SpeechRecognitionManager:
             self.recognizer = None
             self.model = Model(self.vosk_model_path)
             self.recognizer = KaldiRecognizer(self.model, 16000)
+            self._model_initialized = True
             logger.info("VOSK engine initialized successfully.")
 
         except ImportError:
-            logger.error(
-                "Failed to import VOSK. Please install it with 'pip install vosk'"
-            )
+            logger.error("Failed to import VOSK. Please install it with 'pip install vosk'")
             self.state = RecognitionState.ERROR
             raise
 
@@ -183,13 +199,30 @@ class SpeechRecognitionManager:
                 )
                 self.model_size = "base"
 
+            # Check if model is downloaded
+            whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
+            os.makedirs(whisper_cache_dir, exist_ok=True)
+            model_file = os.path.join(whisper_cache_dir, f"{self.model_size}.pt")
+            default_cache = os.path.expanduser("~/.cache/whisper")
+            default_model_file = os.path.join(default_cache, f"{self.model_size}.pt")
+
+            model_exists = os.path.exists(model_file) or os.path.exists(default_model_file)
+
+            if not model_exists and self._defer_download:
+                logger.info(
+                    f"Whisper model '{self.model_size}' not found. Will download when needed."
+                )
+                self._model_initialized = False
+                return  # Don't block startup
+
+            # If model doesn't exist and we're not deferring, download it with progress
+            if not model_exists:
+                logger.info(f"Downloading Whisper '{self.model_size}' model...")
+                self._download_whisper_model(whisper_cache_dir)
+
             # Determine device (GPU if available, otherwise CPU)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Using device: {device}")
-
-            # Download directory for Whisper models
-            whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
-            os.makedirs(whisper_cache_dir, exist_ok=True)
 
             logger.info(f"Loading Whisper '{self.model_size}' model...")
             # Ensure previous model is released if re-initializing
@@ -200,6 +233,7 @@ class SpeechRecognitionManager:
                 self.model_size, device=device, download_root=whisper_cache_dir
             )
 
+            self._model_initialized = True
             logger.info(f"Whisper model loaded on {device.upper()}")
             logger.info("Whisper engine initialized successfully.")
 
@@ -298,12 +332,30 @@ class SpeechRecognitionManager:
         logger.debug(f"No existing model found, will use: {user_model_path}")
         return user_model_path
 
+    def set_download_progress_callback(
+        self, callback: Optional[Callable[[float, float, str], None]]
+    ):
+        """
+        Set a callback for download progress updates.
+
+        Args:
+            callback: Function(progress_fraction, speed_mbps, status_text)
+                      or None to clear
+        """
+        self._download_progress_callback = callback
+
+    def cancel_download(self):
+        """Request cancellation of the current download."""
+        self._download_cancelled = True
+        logger.info("Download cancellation requested")
+
     def _download_vosk_model(self):
         """Download the VOSK model if it doesn't exist."""
         import zipfile
 
         import requests
-        import tqdm
+
+        self._download_cancelled = False
 
         model_urls = {
             "small": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
@@ -324,9 +376,7 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(
-            f"Downloading VOSK {self.model_size} model to user directory: {model_path}"
-        )
+        logger.info(f"Downloading VOSK {self.model_size} model to user directory: {model_path}")
 
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
@@ -335,15 +385,63 @@ class SpeechRecognitionManager:
             response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
             total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks for smoother progress
 
             with open(zip_path, "wb") as f:
-                for data in tqdm.tqdm(
-                    response.iter_content(chunk_size=1024),
-                    total=total_size // 1024,
-                    unit="KB",
-                    desc=f"Downloading {model_name}",  # Add description to progress bar
-                ):
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(zip_path):
+                            os.remove(zip_path)
+                        raise RuntimeError("Download cancelled")
+
                     f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        # Also log progress periodically
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Update status for extraction phase
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Extracting model...")
 
             # Extract the model
             logger.info(f"Extracting VOSK model to {model_path}")
@@ -353,6 +451,10 @@ class SpeechRecognitionManager:
             # Remove the zip file
             os.remove(zip_path)
             logger.info("VOSK model downloaded and extracted successfully")
+
+            # Final status
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to download VOSK model from {url}: {e}")
@@ -367,14 +469,117 @@ class SpeechRecognitionManager:
                 os.remove(zip_path)
             raise RuntimeError("Downloaded VOSK model file is corrupted.")
         except Exception as e:
-            logger.error(
-                f"An error occurred during VOSK model download/extraction: {e}"
-            )
+            logger.error(f"An error occurred during VOSK model download/extraction: {e}")
             # Clean up potentially corrupted extraction
             if os.path.exists(zip_path):
                 os.remove(zip_path)
             # Consider removing partially extracted model dir if needed
             # if os.path.exists(model_path): shutil.rmtree(model_path)
+            raise
+
+    def _download_whisper_model(self, cache_dir: str):
+        """Download a Whisper model with progress tracking."""
+        import hashlib
+
+        import requests
+
+        self._download_cancelled = False
+
+        # Whisper model URLs (from openai-whisper package)
+        model_urls = {
+            "tiny": "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt",
+            "base": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
+            "small": "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
+            "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
+            "large": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
+        }
+
+        url = model_urls.get(self.model_size)
+        if not url:
+            raise ValueError(f"Unknown Whisper model size: {self.model_size}")
+
+        model_file = os.path.join(cache_dir, f"{self.model_size}.pt")
+        temp_file = model_file + ".tmp"
+
+        os.makedirs(cache_dir, exist_ok=True)
+
+        logger.info(f"Downloading Whisper {self.model_size} model to {model_file}")
+        logger.info(f"Downloading from {url}")
+
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks
+
+            with open(temp_file, "wb") as f:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                        raise RuntimeError("Download cancelled")
+
+                    f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Rename temp file to final
+            os.rename(temp_file, model_file)
+            logger.info("Whisper model downloaded successfully")
+
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download Whisper model from {url}: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise RuntimeError(f"Failed to download Whisper model: {e}") from e
+        except Exception as e:
+            logger.error(f"An error occurred during Whisper model download: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
             raise
 
     def register_text_callback(self, callback: Callable[[str], None]):
@@ -436,10 +641,28 @@ class SpeechRecognitionManager:
         for callback in self.state_callbacks:
             callback(new_state)
 
+    @property
+    def model_ready(self) -> bool:
+        """Check if the model is initialized and ready for recognition."""
+        return self._model_initialized and self.model is not None
+
     def start_recognition(self):
         """Start the speech recognition process."""
         if self.state != RecognitionState.IDLE:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
+            return
+
+        # Check if model is ready
+        if not self.model_ready:
+            logger.warning(
+                "Cannot start recognition: model not downloaded. Please download via Settings."
+            )
+            play_error_sound()
+            _show_notification(
+                "No Speech Model",
+                "Please open Settings and download a speech recognition model to use dictation.",
+                "dialog-warning",
+            )
             return
 
         logger.info("Starting speech recognition")
@@ -500,9 +723,7 @@ class SpeechRecognitionManager:
             import pyaudio
         except ImportError as e:
             logger.error(f"Failed to import required audio libraries: {e}")
-            logger.error(
-                "Please install required dependencies: pip install pyaudio numpy"
-            )
+            logger.error("Please install required dependencies: pip install pyaudio numpy")
             play_error_sound()
             self._update_state(RecognitionState.ERROR)
             return
@@ -545,9 +766,7 @@ class SpeechRecognitionManager:
                     # Ensure vad_sensitivity is treated as integer for calculation
                     try:
                         vad_sens = int(self.vad_sensitivity)
-                        threshold = 500 / max(
-                            1, min(5, vad_sens)
-                        )  # Use self.vad_sensitivity
+                        threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
                     except ValueError:
                         logger.warning(
                             f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
@@ -556,9 +775,7 @@ class SpeechRecognitionManager:
 
                     if volume < threshold:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if (
-                            silence_counter > self.silence_timeout
-                        ):  # Use self.silence_timeout
+                        if silence_counter > self.silence_timeout:  # Use self.silence_timeout
                             logger.debug("Silence detected, processing buffer")
                             self._update_state(RecognitionState.PROCESSING)
                             # Process final buffer
@@ -629,6 +846,7 @@ class SpeechRecognitionManager:
         model_size: Optional[str] = None,
         vad_sensitivity: Optional[int] = None,
         silence_timeout: Optional[float] = None,
+        force_download: bool = True,
         **kwargs,  # Allow for future expansion
     ):
         """
@@ -639,6 +857,7 @@ class SpeechRecognitionManager:
             model_size: The new model size.
             vad_sensitivity: New VAD sensitivity (for VOSK).
             silence_timeout: New silence timeout (for VOSK).
+            force_download: If True, download missing models (default: True for UI-triggered reconfigures).
         """
         logger.info(
             f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, vad={vad_sensitivity}, silence={silence_timeout}"
@@ -661,6 +880,9 @@ class SpeechRecognitionManager:
 
         if restart_needed:
             logger.info("Engine or model changed, re-initializing...")
+            # When reconfiguring from UI, allow downloads
+            old_defer = self._defer_download
+            self._defer_download = not force_download
             # Release old resources explicitly if necessary (Python's GC might handle it)
             self.model = None
             self.recognizer = None
@@ -670,17 +892,15 @@ class SpeechRecognitionManager:
                 elif self.engine == "whisper":
                     self._init_whisper()
                 else:
-                    raise ValueError(
-                        f"Unsupported engine during reconfigure: {self.engine}"
-                    )
+                    raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                 logger.info("Speech engine re-initialized successfully.")
             except Exception as e:
-                logger.error(
-                    f"Failed to re-initialize speech engine: {e}", exc_info=True
-                )
+                logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
                 self._update_state(RecognitionState.ERROR)
                 # Re-raise or handle appropriately
                 raise
+            finally:
+                self._defer_download = old_defer
         else:
             # If only VOSK params changed, just log it
             logger.info("Applied VAD/silence timeout changes.")

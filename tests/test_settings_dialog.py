@@ -81,9 +81,7 @@ class TestSettingsDialog(unittest.TestCase):
         self.test_textview.get_buffer.return_value = buffer_mock
 
         # Mock SettingsDialog to avoid actually creating GTK objects
-        with patch(
-            "vocalinux.ui.settings_dialog.SettingsDialog.__init__", return_value=None
-        ):
+        with patch("vocalinux.ui.settings_dialog.SettingsDialog.__init__", return_value=None):
             self.dialog = SettingsDialog(
                 parent=None,
                 config_manager=mock_config_manager,
@@ -117,6 +115,10 @@ class TestSettingsDialog(unittest.TestCase):
             self.dialog._test_text_callback = Mock()
             self.dialog._stop_test_after_delay = Mock()
             self.dialog.destroy = Mock()
+            # Add missing attributes for apply_settings
+            self.dialog.current_model_size = "small"
+            self.dialog.current_engine = "vosk"
+            self.dialog._populate_model_options = Mock()
 
     def test_apply_settings_success(self):
         """Test the apply_settings method calls config and engine methods."""
@@ -134,14 +136,15 @@ class TestSettingsDialog(unittest.TestCase):
         # Mock the Gtk module for this test
         with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch(
-            "vocalinux.ui.settings_dialog.threading"
-        ) as mock_threading, patch(
+        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging:
-
+        ) as mock_logging, patch(
+            "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
+        ) as mock_vosk_check, patch(
+            "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
+        ) as mock_whisper_check:
             # Call the method under test
             result = self.dialog.apply_settings()
 
@@ -164,14 +167,15 @@ class TestSettingsDialog(unittest.TestCase):
         # Mock the Gtk module for this test
         with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch(
-            "vocalinux.ui.settings_dialog.threading"
-        ) as mock_threading, patch(
+        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging:
-
+        ) as mock_logging, patch(
+            "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
+        ) as mock_vosk_check, patch(
+            "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
+        ) as mock_whisper_check:
             # Call the method under test
             result = self.dialog.apply_settings()
 
@@ -190,14 +194,15 @@ class TestSettingsDialog(unittest.TestCase):
         # Mock the Gtk module for this test
         with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch(
-            "vocalinux.ui.settings_dialog.threading"
-        ) as mock_threading, patch(
+        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging:
-
+        ) as mock_logging, patch(
+            "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
+        ) as mock_vosk_check, patch(
+            "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
+        ) as mock_whisper_check:
             # Mock the message dialog
             mock_dialog = MagicMock()
             mock_gtk.MessageDialog.return_value = mock_dialog
