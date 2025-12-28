@@ -48,32 +48,35 @@ def parse_arguments():
 def check_dependencies():
     """Check for required dependencies and provide helpful error messages."""
     missing_deps = []
-    
+
     try:
         import gi
+
         gi.require_version("Gtk", "3.0")
         gi.require_version("AppIndicator3", "0.1")
         from gi.repository import AppIndicator3, Gtk
     except (ImportError, ValueError) as e:
-        missing_deps.append("GTK3 and AppIndicator3 (install with: sudo apt install python3-gi gir1.2-appindicator3-0.1)")
-    
+        missing_deps.append(
+            "GTK3 and AppIndicator3 (install with: sudo apt install python3-gi gir1.2-appindicator3-0.1)"
+        )
+
     try:
         import pynput
     except ImportError:
         missing_deps.append("pynput (install with: pip install pynput)")
-    
+
     try:
         import requests
     except ImportError:
         missing_deps.append("requests (install with: pip install requests)")
-    
+
     if missing_deps:
         logger.error("Missing required dependencies:")
         for dep in missing_deps:
             logger.error(f"  - {dep}")
         logger.error("Please install the missing dependencies and try again.")
         return False
-    
+
     return True
 
 
@@ -88,6 +91,7 @@ def main():
 
     # Initialize logging manager early
     from .ui.logging_manager import initialize_logging
+
     initialize_logging()
     logger.info("Logging system initialized")
 
@@ -96,14 +100,27 @@ def main():
         logger.error("Cannot start Vocalinux due to missing dependencies")
         sys.exit(1)
 
+    # Load saved configuration to get engine/model settings
+    from .ui.config_manager import ConfigManager
+
+    config_manager = ConfigManager()
+    saved_settings = config_manager.get_settings().get("speech_recognition", {})
+
+    # Use saved settings if no command-line override was provided
+    # Check if args are still at their defaults (user didn't explicitly set them)
+    engine = saved_settings.get("engine", args.engine)
+    model_size = saved_settings.get("model_size", args.model)
+
+    logger.info(f"Using engine={engine}, model={model_size} (from saved config)")
+
     # Initialize main components
     logger.info("Initializing Vocalinux...")
 
     try:
-        # Initialize speech recognition engine
+        # Initialize speech recognition engine with saved/configured settings
         speech_engine = recognition_manager.SpeechRecognitionManager(
-            engine=args.engine,
-            model_size=args.model,
+            engine=engine,
+            model_size=model_size,
         )
 
         # Initialize text injection system
@@ -131,7 +148,7 @@ def main():
 
         # Start the GTK main loop
         indicator.run()
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize Vocalinux: {e}")
         logger.error("Please check the logs above for more details")
