@@ -75,6 +75,7 @@ jobs:
             pkg-config \
             python3-dev \
             libgirepository1.0-dev \
+            gir1.2-girepository-2.0 \
             gobject-introspection \
             libcairo-gobject2 \
             gir1.2-gtk-3.0 \
@@ -85,6 +86,8 @@ jobs:
           python -m venv venv --system-site-packages
           source venv/bin/activate
           python -m pip install --upgrade pip setuptools wheel
+          # Install PyGObject from system packages to avoid building from source
+          pip install --no-build-isolation PyGObject || true
           pip install -e ".[dev]"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
