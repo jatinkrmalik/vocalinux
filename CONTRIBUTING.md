@@ -252,10 +252,10 @@ Releases are managed through GitHub tags and the release workflow.
 ### Version Bumping
 
 1. Update version in `src/vocalinux/version.py`
-2. Update CHANGELOG if present
-3. Commit: `git commit -m "chore: bump version to x.y.z"`
-4. Tag: `git tag vx.y.z`
-5. Push: `git push origin main --tags`
+2. Commit: `git commit -m "chore: bump version to x.y.z"`
+3. Tag: `git tag vx.y.z`
+4. Push: `git push origin main --tags`
+5. GitHub Release will be auto-created with release notes
 
 ### Versioning Scheme
 
