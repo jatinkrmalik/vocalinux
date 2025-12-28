@@ -447,9 +447,6 @@ class SettingsDialog(Gtk.Dialog):
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
 
-        # --- About Section ---
-        self._add_about_section()
-
         # Show everything first
         self.show_all()
 
@@ -458,63 +455,6 @@ class SettingsDialog(Gtk.Dialog):
 
         # Initialization complete - enable auto-apply
         self._initializing = False
-
-    def _add_about_section(self):
-        """Add the About section with open source info and credits."""
-        from ..version import __version__, __url__
-
-        # Add separator
-        self.grid.attach(
-            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 10, 2, 1
-        )
-
-        # About box
-        about_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-
-        # Version info
-        version_label = Gtk.Label(
-            label=f"<b>Vocalinux</b> v{__version__}",
-            use_markup=True,
-            halign=Gtk.Align.CENTER,
-        )
-        about_box.pack_start(version_label, False, False, 5)
-
-        # Open source message
-        oss_label = Gtk.Label(
-            label="🌟 <b>Open Source Project</b> - Contributions Welcome!",
-            use_markup=True,
-            halign=Gtk.Align.CENTER,
-        )
-        about_box.pack_start(oss_label, False, False, 0)
-
-        # Links box
-        links_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        links_box.set_halign(Gtk.Align.CENTER)
-
-        # GitHub link button
-        github_button = Gtk.LinkButton.new_with_label(
-            __url__, "⭐ Star on GitHub"
-        )
-        links_box.pack_start(github_button, False, False, 0)
-
-        # Issues link
-        issues_button = Gtk.LinkButton.new_with_label(
-            f"{__url__}/issues", "🐛 Report Issues"
-        )
-        links_box.pack_start(issues_button, False, False, 0)
-
-        about_box.pack_start(links_box, False, False, 5)
-
-        # Author credit
-        author_label = Gtk.Label(
-            label='<small>Made with ❤️ by <a href="https://github.com/jatinkrmalik">@jatinkrmalik</a> '
-            '| <a href="https://twitter.com/jatinkrmalik">Twitter</a></small>',
-            use_markup=True,
-            halign=Gtk.Align.CENTER,
-        )
-        about_box.pack_start(author_label, False, False, 0)
-
-        self.grid.attach(about_box, 0, 11, 2, 1)
 
     def _get_current_settings(self):
         """Get current settings from config manager."""
