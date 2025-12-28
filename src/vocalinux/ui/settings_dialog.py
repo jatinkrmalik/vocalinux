@@ -537,6 +537,10 @@ class SettingsDialog(Gtk.Dialog):
         elif engine == "vosk":
             recommended_model, _ = _get_recommended_vosk_model()
 
+        # Track which models are downloaded and find smallest downloaded
+        downloaded_models = []
+        smallest_model = None
+
         # Add model sizes for this engine
         if engine in ENGINE_MODELS:
             # Add all options for this engine
@@ -549,6 +553,10 @@ class SettingsDialog(Gtk.Dialog):
                     display_text = (
                         f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
                     )
+                    if is_downloaded:
+                        downloaded_models.append(size)
+                    if smallest_model is None:
+                        smallest_model = size
                 elif engine == "vosk" and size in VOSK_MODEL_INFO:
                     info = VOSK_MODEL_INFO[size]
                     is_downloaded = _is_vosk_model_downloaded(size)
@@ -557,14 +565,30 @@ class SettingsDialog(Gtk.Dialog):
                     display_text = (
                         f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
                     )
+                    if is_downloaded:
+                        downloaded_models.append(size)
+                    if smallest_model is None:
+                        smallest_model = size
                 else:
                     display_text = size.capitalize()
                 # Use lowercase as ID, display text with info
                 self.model_combo.append(size.capitalize(), display_text)
 
-            # Set the active model from settings
-            model_to_set = self.current_model_size.capitalize()
-            logger.info(f"Setting active model to: {model_to_set}")
+            # Determine which model to select:
+            # 1. If saved model is downloaded, use it
+            # 2. Else if any model is downloaded, use the first (smallest) downloaded
+            # 3. Else use the smallest model (but don't auto-download)
+            saved_model = self.current_model_size.lower()
+            if saved_model in downloaded_models:
+                model_to_set = saved_model.capitalize()
+            elif downloaded_models:
+                model_to_set = downloaded_models[0].capitalize()
+            else:
+                model_to_set = smallest_model.capitalize() if smallest_model else "Small"
+
+            logger.info(
+                f"Setting active model to: {model_to_set} (saved={saved_model}, downloaded={downloaded_models})"
+            )
 
             # Try to set by ID
             if not self.model_combo.set_active_id(model_to_set):
@@ -573,7 +597,7 @@ class SettingsDialog(Gtk.Dialog):
                 model = self.model_combo.get_model()
                 model_found = False
                 for i, row in enumerate(model):
-                    if row[0].lower() == self.current_model_size.lower():
+                    if row[0].lower() == model_to_set.lower():
                         self.model_combo.set_active(i)
                         model_found = True
                         logger.info(f"Set model by index {i}")

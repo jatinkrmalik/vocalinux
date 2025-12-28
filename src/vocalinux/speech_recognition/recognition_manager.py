@@ -53,6 +53,22 @@ from .command_processor import CommandProcessor
 
 logger = logging.getLogger(__name__)
 
+
+def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
+    """Show a desktop notification."""
+    try:
+        import subprocess
+
+        # Use notify-send which is available on most Linux desktops
+        subprocess.Popen(
+            ["notify-send", "-i", icon, "-a", "Vocalinux", title, message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        logger.debug(f"Could not show notification: {e}")
+
+
 # Define constants
 MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
 # Alternative locations for pre-installed models
@@ -532,6 +548,11 @@ class SpeechRecognitionManager:
                 "Cannot start recognition: model not downloaded. Please download via Settings."
             )
             play_error_sound()
+            _show_notification(
+                "No Speech Model",
+                "Please open Settings and download a speech recognition model to use dictation.",
+                "dialog-warning",
+            )
             return
 
         logger.info("Starting speech recognition")
