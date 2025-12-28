@@ -16,9 +16,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
     def setUp(self):
         """Set up for tests."""
         # Set up more complete mocks for the keyboard library
-        self.kb_patch = patch(
-            "vocalinux.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", True
-        )
+        self.kb_patch = patch("vocalinux.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", True)
         self.kb_patch.start()
 
         # Create proper Key enum and KeyCode class
@@ -167,9 +165,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
         self.ksm.register_toggle_callback(callback)
 
         # Set up initial state
-        self.ksm.last_ctrl_press_time = (
-            time.time() - 0.2
-        )  # Recent press (within threshold)
+        self.ksm.last_ctrl_press_time = time.time() - 0.2  # Recent press (within threshold)
         self.ksm.last_trigger_time = 0  # No recent triggers
 
         # Simulate second Ctrl press (should trigger callback)
@@ -219,12 +215,8 @@ class TestKeyboardShortcuts(unittest.TestCase):
         self.ksm.register_toggle_callback(callback)
 
         # Set up initial state (recent trigger)
-        self.ksm.last_ctrl_press_time = (
-            time.time() - 0.2
-        )  # Recent press (within threshold)
-        self.ksm.last_trigger_time = (
-            time.time() - 0.2
-        )  # Recent trigger, within debounce
+        self.ksm.last_ctrl_press_time = time.time() - 0.2  # Recent press (within threshold)
+        self.ksm.last_trigger_time = time.time() - 0.2  # Recent trigger, within debounce
 
         # Simulate second Ctrl press (should NOT trigger due to debounce)
         on_press(self.mock_keyboard.Key.ctrl)

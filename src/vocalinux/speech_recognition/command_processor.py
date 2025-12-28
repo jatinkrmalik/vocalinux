@@ -83,25 +83,19 @@ class CommandProcessor:
         """Compile regex patterns for command matching."""
         # Create regex pattern for text commands
         text_cmd_pattern = (
-            r"\b("
-            + "|".join(re.escape(cmd) for cmd in self.text_commands.keys())
-            + r")\b"
+            r"\b(" + "|".join(re.escape(cmd) for cmd in self.text_commands.keys()) + r")\b"
         )
         self.text_cmd_regex = re.compile(text_cmd_pattern, re.IGNORECASE)
 
         # Create regex pattern for action commands
         action_cmd_pattern = (
-            r"\b("
-            + "|".join(re.escape(cmd) for cmd in self.action_commands.keys())
-            + r")\b"
+            r"\b(" + "|".join(re.escape(cmd) for cmd in self.action_commands.keys()) + r")\b"
         )
         self.action_cmd_regex = re.compile(action_cmd_pattern, re.IGNORECASE)
 
         # Create regex pattern for format commands
         format_cmd_pattern = (
-            r"\b("
-            + "|".join(re.escape(cmd) for cmd in self.format_commands.keys())
-            + r")\b"
+            r"\b(" + "|".join(re.escape(cmd) for cmd in self.format_commands.keys()) + r")\b"
         )
         self.format_cmd_regex = re.compile(format_cmd_pattern, re.IGNORECASE)
 
@@ -238,9 +232,7 @@ class CommandProcessor:
                     actions.append(action)
 
                     # Check if there's text after the command
-                    match = re.search(
-                        r"\b" + re.escape(cmd) + r"\s+(.*?)\b", text, re.IGNORECASE
-                    )
+                    match = re.search(r"\b" + re.escape(cmd) + r"\s+(.*?)\b", text, re.IGNORECASE)
                     if match:
                         processed_text = " " + match.group(1)
                     else:
@@ -281,9 +273,7 @@ class CommandProcessor:
 
                 if re.search(cmd_pattern, text, re.IGNORECASE):
                     # Handle format command that modifies next word
-                    match = re.search(
-                        r"\b" + re.escape(cmd) + r"\s+(\w+)", text, re.IGNORECASE
-                    )
+                    match = re.search(r"\b" + re.escape(cmd) + r"\s+(\w+)", text, re.IGNORECASE)
                     if match:
                         word = match.group(1)
                         if format_type == "capitalize_next":

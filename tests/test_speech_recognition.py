@@ -113,9 +113,7 @@ class TestSpeechRecognition(unittest.TestCase):
         self.mock_play_error = self.patcher_play_error.start()
 
         # Patch the download method for vosk models
-        self.patcher_download = patch.object(
-            SpeechRecognitionManager, "_download_vosk_model"
-        )
+        self.patcher_download = patch.object(SpeechRecognitionManager, "_download_vosk_model")
         self.mock_download = self.patcher_download.start()
 
         # Patch os.unlink to avoid file removal errors
@@ -205,9 +203,7 @@ class TestSpeechRecognition(unittest.TestCase):
 
     def test_vosk_model_path(self):
         """Test getting the VOSK model path based on size."""
-        with patch.object(
-            SpeechRecognitionManager, "_get_vosk_model_path"
-        ) as mock_get_path:
+        with patch.object(SpeechRecognitionManager, "_get_vosk_model_path") as mock_get_path:
             # Test small model size
             mock_get_path.return_value = "/path/to/vosk-model-small-en-us-0.15"
             manager_small = SpeechRecognitionManager(engine="vosk", model_size="small")
@@ -217,9 +213,7 @@ class TestSpeechRecognition(unittest.TestCase):
 
             # Test medium model size
             mock_get_path.return_value = "/path/to/vosk-model-en-us-0.22"
-            manager_medium = SpeechRecognitionManager(
-                engine="vosk", model_size="medium"
-            )
+            manager_medium = SpeechRecognitionManager(engine="vosk", model_size="medium")
 
             # Verify the medium model path is constructed correctly
             mock_get_path.assert_called_with()
@@ -342,9 +336,7 @@ class TestSpeechRecognition(unittest.TestCase):
         """Test processing the final audio buffer with Whisper."""
         # Skip the problematic file operations by creating a mock implementation
         # of the _process_final_buffer method
-        with patch.object(
-            SpeechRecognitionManager, "_process_final_buffer"
-        ) as mock_process:
+        with patch.object(SpeechRecognitionManager, "_process_final_buffer") as mock_process:
             # Setup manager with whisper engine (this should work now with mocked torch)
             manager = SpeechRecognitionManager(engine="whisper")
 
@@ -353,9 +345,7 @@ class TestSpeechRecognition(unittest.TestCase):
                 # Access transcription result directly from the model
                 result = {"text": "whisper transcription"}
                 # Simulate processing the result through command processor
-                processed_text, actions = self.mock_cmd.process_text(
-                    "whisper transcription"
-                )
+                processed_text, actions = self.mock_cmd.process_text("whisper transcription")
                 # Call callbacks as the real method would
                 for callback in manager.text_callbacks:
                     callback(processed_text)

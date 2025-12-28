@@ -56,7 +56,7 @@ class TestMainModule(unittest.TestCase):
         """Test that main initializes all the required components."""
         # Mock dependency check to return True
         mock_check_deps.return_value = True
-        
+
         # Mock objects
         mock_speech_instance = MagicMock()
         mock_text_instance = MagicMock()

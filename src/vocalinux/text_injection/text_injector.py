@@ -64,17 +64,12 @@ class TextInjector:
                     ["wtype", "test"], stderr=subprocess.PIPE, text=True, check=False
                 )
                 error_output = result.stderr.lower()
-                if (
-                    "compositor does not support" in error_output
-                    or result.returncode != 0
-                ):
+                if "compositor does not support" in error_output or result.returncode != 0:
                     logger.warning(
                         f"Wayland compositor does not support virtual keyboard protocol: {error_output}"
                     )
                     if shutil.which("xdotool"):
-                        logger.info(
-                            "Automatically switching to XWayland fallback with xdotool"
-                        )
+                        logger.info("Automatically switching to XWayland fallback with xdotool")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                     else:
                         logger.error("No fallback text injection method available")
@@ -111,9 +106,7 @@ class TextInjector:
             elif "DISPLAY" in os.environ:
                 return DesktopEnvironment.X11
             else:
-                logger.warning(
-                    "Could not detect desktop environment, defaulting to X11"
-                )
+                logger.warning("Could not detect desktop environment, defaulting to X11")
                 return DesktopEnvironment.X11
 
     def _check_dependencies(self):
@@ -121,9 +114,7 @@ class TextInjector:
         if self.environment == DesktopEnvironment.X11:
             # Check for xdotool
             if not shutil.which("xdotool"):
-                logger.error(
-                    "xdotool not found. Please install it with: sudo apt install xdotool"
-                )
+                logger.error("xdotool not found. Please install it with: sudo apt install xdotool")
                 raise RuntimeError("Missing required dependency: xdotool")
         else:
             # Check for wtype or ydotool for Wayland
@@ -188,7 +179,7 @@ class TextInjector:
 
         Args:
             text: The text to inject
-            
+
         Returns:
             True if injection was successful, False otherwise
         """
@@ -217,12 +208,8 @@ class TextInjector:
                     self._inject_with_wayland_tool(escaped_text)
                 except subprocess.CalledProcessError as e:
                     logger.warning(f"Wayland tool failed: {e}. Falling back to xdotool")
-                    if "compositor does not support" in str(e).lower() and shutil.which(
-                        "xdotool"
-                    ):
-                        logger.info(
-                            "Automatically switching to XWayland fallback permanently"
-                        )
+                    if "compositor does not support" in str(e).lower() and shutil.which("xdotool"):
+                        logger.info("Automatically switching to XWayland fallback permanently")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         self._inject_with_xdotool(escaped_text)
                     else:
@@ -233,6 +220,7 @@ class TextInjector:
             logger.error(f"Failed to inject text: {e}", exc_info=True)
             try:
                 from ..ui.audio_feedback import play_error_sound
+
                 play_error_sound()  # Play error sound when text injection fails
             except ImportError:
                 logger.warning("Could not import audio feedback module")
@@ -317,14 +305,16 @@ class TextInjector:
         try:
             max_retries = 2
             logger.debug(f"Starting xdotool injection with {max_retries} max retries")
-            
+
             for retry in range(max_retries + 1):
                 try:
                     # Inject in smaller chunks to avoid issues with very long text
                     chunk_size = 20  # Reduced chunk size for better reliability
                     total_chunks = (len(text) + chunk_size - 1) // chunk_size
-                    logger.debug(f"Splitting text into {total_chunks} chunks of max {chunk_size} chars")
-                    
+                    logger.debug(
+                        f"Splitting text into {total_chunks} chunks of max {chunk_size} chars"
+                    )
+
                     for i in range(0, len(text), chunk_size):
                         chunk = text[i : i + chunk_size]
                         chunk_num = (i // chunk_size) + 1
@@ -332,7 +322,7 @@ class TextInjector:
                         # First try with clearmodifiers
                         cmd = ["xdotool", "type", "--clearmodifiers", chunk]
                         logger.debug(f"Injecting chunk {chunk_num}/{total_chunks}: '{chunk}'")
-                        
+
                         result = subprocess.run(
                             cmd, env=env, check=True, stderr=subprocess.PIPE, text=True, timeout=5
                         )
@@ -356,7 +346,9 @@ class TextInjector:
                         raise  # Re-raise on final attempt
                 except subprocess.TimeoutExpired:
                     if retry < max_retries:
-                        logger.warning(f"Text injection timeout, retrying (attempt {retry+1}/{max_retries})")
+                        logger.warning(
+                            f"Text injection timeout, retrying (attempt {retry+1}/{max_retries})"
+                        )
                         time.sleep(0.5)
                     else:
                         logger.error("Text injection timed out on final attempt")
@@ -397,15 +389,15 @@ class TextInjector:
     def _inject_keyboard_shortcut(self, shortcut: str) -> bool:
         """
         Inject a keyboard shortcut.
-        
+
         Args:
             shortcut: The keyboard shortcut to inject (e.g., "ctrl+z", "ctrl+a")
-            
+
         Returns:
             True if injection was successful, False otherwise
         """
         logger.debug(f"Injecting keyboard shortcut: {shortcut}")
-        
+
         try:
             if (
                 self.environment == DesktopEnvironment.X11
@@ -421,22 +413,22 @@ class TextInjector:
     def _inject_shortcut_with_xdotool(self, shortcut: str) -> bool:
         """
         Inject a keyboard shortcut using xdotool.
-        
+
         Args:
             shortcut: The keyboard shortcut to inject
-            
+
         Returns:
             True if successful, False otherwise
         """
         # Create environment with explicit X11 settings for Wayland compatibility
         env = os.environ.copy()
-        
+
         if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
             env["GDK_BACKEND"] = "x11"
             env["QT_QPA_PLATFORM"] = "xcb"
             if "DISPLAY" not in env or not env["DISPLAY"]:
                 env["DISPLAY"] = ":0"
-        
+
         try:
             cmd = ["xdotool", "key", "--clearmodifiers", shortcut]
             subprocess.run(cmd, env=env, check=True, stderr=subprocess.PIPE, text=True)
@@ -449,10 +441,10 @@ class TextInjector:
     def _inject_shortcut_with_wayland_tool(self, shortcut: str) -> bool:
         """
         Inject a keyboard shortcut using a Wayland-compatible tool.
-        
+
         Args:
             shortcut: The keyboard shortcut to inject
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -489,7 +481,7 @@ class TextInjector:
     def _log_x11_window_info(self):
         """Log X11 window information."""
         env = os.environ.copy()
-        
+
         if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
             env["GDK_BACKEND"] = "x11"
             env["QT_QPA_PLATFORM"] = "xcb"
@@ -505,7 +497,7 @@ class TextInjector:
                 stderr=subprocess.PIPE,
                 text=True,
                 check=True,
-                timeout=2
+                timeout=2,
             )
             window_id = result.stdout.strip()
             logger.debug(f"Active window ID: {window_id}")
@@ -518,7 +510,7 @@ class TextInjector:
                 stderr=subprocess.PIPE,
                 text=True,
                 check=True,
-                timeout=2
+                timeout=2,
             )
             window_name = result.stdout.strip()
             logger.info(f"Target window: '{window_name}' (ID: {window_id})")
@@ -531,7 +523,7 @@ class TextInjector:
                 stderr=subprocess.PIPE,
                 text=True,
                 check=True,
-                timeout=2
+                timeout=2,
             )
             window_class = result.stdout.strip()
             logger.debug(f"Window class: {window_class}")
@@ -544,7 +536,7 @@ class TextInjector:
                 stderr=subprocess.PIPE,
                 text=True,
                 check=True,
-                timeout=2
+                timeout=2,
             )
             window_pid = result.stdout.strip()
             logger.debug(f"Window PID: {window_pid}")

@@ -120,9 +120,7 @@ def _get_recommended_whisper_model() -> tuple:
 
                 if torch.cuda.is_available():
                     has_cuda = True
-                    cuda_memory_gb = torch.cuda.get_device_properties(
-                        0
-                    ).total_memory // (1024**3)
+                    cuda_memory_gb = torch.cuda.get_device_properties(0).total_memory // (1024**3)
         except Exception:
             pass
 
@@ -180,9 +178,7 @@ def _get_recommended_vosk_model() -> tuple:
 class ModelDownloadDialog(Gtk.Dialog):
     """Dialog showing model download progress."""
 
-    def __init__(
-        self, parent, model_name: str, model_size_mb: int, engine: str = "whisper"
-    ):
+    def __init__(self, parent, model_name: str, model_size_mb: int, engine: str = "whisper"):
         super().__init__(
             title=f"Downloading {model_name.capitalize()} Model",
             transient_for=parent,
@@ -275,15 +271,11 @@ class SettingsDialog(Gtk.Dialog):
         self.get_content_area().add(self.grid)
 
         # Engine Selection
-        self.grid.attach(
-            Gtk.Label(label="Speech Engine:", halign=Gtk.Align.START), 0, 0, 1, 1
-        )
+        self.grid.attach(Gtk.Label(label="Speech Engine:", halign=Gtk.Align.START), 0, 0, 1, 1)
         self.engine_combo = Gtk.ComboBoxText()
 
         # Model Size Selection
-        self.grid.attach(
-            Gtk.Label(label="Model Size:", halign=Gtk.Align.START), 0, 1, 1, 1
-        )
+        self.grid.attach(Gtk.Label(label="Model Size:", halign=Gtk.Align.START), 0, 1, 1, 1)
         self.model_combo = Gtk.ComboBoxText()
         self.grid.attach(self.model_combo, 1, 1, 1, 1)
 
@@ -296,17 +288,13 @@ class SettingsDialog(Gtk.Dialog):
         self.grid.attach(model_legend, 0, 2, 2, 1)
 
         # VOSK Specific Settings Box (initially hidden)
-        self.vosk_settings_box = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL, spacing=10
-        )
+        self.vosk_settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.vosk_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
         self.vosk_settings_box.pack_start(
             Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 5
         )
         self.vosk_settings_box.pack_start(
-            Gtk.Label(
-                label="<b>VOSK Settings</b>", use_markup=True, halign=Gtk.Align.START
-            ),
+            Gtk.Label(label="<b>VOSK Settings</b>", use_markup=True, halign=Gtk.Align.START),
             False,
             False,
             5,
@@ -377,9 +365,7 @@ class SettingsDialog(Gtk.Dialog):
             halign=Gtk.Align.START,
             wrap=True,
         )
-        self.whisper_info_box.pack_start(
-            self.whisper_recommendation_label, False, False, 5
-        )
+        self.whisper_info_box.pack_start(self.whisper_recommendation_label, False, False, 5)
 
         self.grid.attach(self.whisper_info_box, 0, 3, 2, 1)
 
@@ -387,9 +373,7 @@ class SettingsDialog(Gtk.Dialog):
         self.model_combo.connect("changed", self._on_model_changed)
 
         # Test Area
-        self.grid.attach(
-            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 5, 2, 1
-        )
+        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 5, 2, 1)
         test_label = Gtk.Label(
             label="<b>Test Recognition</b>", use_markup=True, halign=Gtk.Align.START
         )
@@ -511,13 +495,17 @@ class SettingsDialog(Gtk.Dialog):
                     is_downloaded = _is_whisper_model_downloaded(size)
                     status = "✓" if is_downloaded else "↓"
                     rec = " ★" if size == recommended_model else ""
-                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
+                    display_text = (
+                        f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
+                    )
                 elif engine == "vosk" and size in VOSK_MODEL_INFO:
                     info = VOSK_MODEL_INFO[size]
                     is_downloaded = _is_vosk_model_downloaded(size)
                     status = "✓" if is_downloaded else "↓"
                     rec = " ★" if size == recommended_model else ""
-                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
+                    display_text = (
+                        f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
+                    )
                 else:
                     display_text = size.capitalize()
                 # Use lowercase as ID, display text with info
@@ -529,9 +517,7 @@ class SettingsDialog(Gtk.Dialog):
 
             # Try to set by ID
             if not self.model_combo.set_active_id(model_to_set):
-                logger.warning(
-                    f"Could not set model by ID '{model_to_set}', trying by text"
-                )
+                logger.warning(f"Could not set model by ID '{model_to_set}', trying by text")
                 # Find by text as fallback
                 model = self.model_combo.get_model()
                 model_found = False
@@ -643,7 +629,9 @@ class SettingsDialog(Gtk.Dialog):
         if is_downloaded:
             status_text = "<span foreground='green'>✓ Downloaded and ready</span>"
         else:
-            status_text = f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
+            status_text = (
+                f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
+            )
 
         info_text = (
             f"<b>{model_name.capitalize()}</b>: {info['desc']}\n"
@@ -684,7 +672,9 @@ class SettingsDialog(Gtk.Dialog):
         if is_downloaded:
             status_text = "<span foreground='green'>✓ Downloaded and ready</span>"
         else:
-            status_text = f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
+            status_text = (
+                f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
+            )
 
         info_text = (
             f"<b>{model_name.capitalize()}</b>: {info['desc']}\n"
@@ -736,24 +726,20 @@ class SettingsDialog(Gtk.Dialog):
             return
 
         # Ensure settings are applied before testing
-        current_config = self.config_manager.get_settings().get(
-            "speech_recognition", {}
-        )
+        current_config = self.config_manager.get_settings().get("speech_recognition", {})
         selected_settings = self.get_selected_settings()
 
         # Check if settings in dialog differ from saved config
         # This is a basic check; a more robust diff might be needed
         settings_differ = False
-        if current_config.get("engine") != selected_settings.get(
-            "engine"
-        ) or current_config.get("model_size") != selected_settings.get("model_size"):
+        if current_config.get("engine") != selected_settings.get("engine") or current_config.get(
+            "model_size"
+        ) != selected_settings.get("model_size"):
             settings_differ = True
         elif selected_settings.get("engine") == "vosk":
             if current_config.get("vad_sensitivity") != selected_settings.get(
                 "vad_sensitivity"
-            ) or current_config.get("silence_timeout") != selected_settings.get(
-                "silence_timeout"
-            ):
+            ) or current_config.get("silence_timeout") != selected_settings.get("silence_timeout"):
                 settings_differ = True
         # Add checks for other engines if they get specific settings
 
@@ -792,9 +778,7 @@ class SettingsDialog(Gtk.Dialog):
             self.test_buffer.get_start_iter(), self.test_buffer.get_end_iter(), False
         )
         # Add a space if there's existing text
-        separator = (
-            " " if current_text.strip() else ""
-        )  # Check strip() to avoid leading space
+        separator = " " if current_text.strip() else ""  # Check strip() to avoid leading space
         self.test_buffer.insert(self.test_buffer.get_end_iter(), separator + text)
         # Ensure the text view scrolls to the end
         mark = self.test_buffer.get_insert()
@@ -910,9 +894,7 @@ For now, the engine has been reverted to VOSK."""
                             )
                             GLib.idle_add(self._show_whisper_install_dialog)
                         else:
-                            GLib.idle_add(
-                                download_dialog.set_complete, False, error_msg[:100]
-                            )
+                            GLib.idle_add(download_dialog.set_complete, False, error_msg[:100])
 
                 threading.Thread(target=download_and_apply, daemon=True).start()
                 download_dialog.run()
@@ -940,9 +922,7 @@ For now, the engine has been reverted to VOSK."""
                         GLib.idle_add(download_dialog.set_complete, True, "")
                     except Exception as e:
                         error_msg = str(e)
-                        GLib.idle_add(
-                            download_dialog.set_complete, False, error_msg[:100]
-                        )
+                        GLib.idle_add(download_dialog.set_complete, False, error_msg[:100])
 
                 threading.Thread(target=download_and_apply, daemon=True).start()
                 download_dialog.run()

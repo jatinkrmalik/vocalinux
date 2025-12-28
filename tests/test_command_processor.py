@@ -214,9 +214,7 @@ class TestCommandProcessor(unittest.TestCase):
 
         # Test non-matches
         self.assertFalse(self.processor.text_cmd_regex.search("newline"))  # no space
-        self.assertFalse(
-            self.processor.action_cmd_regex.search("deletion")
-        )  # not a command
+        self.assertFalse(self.processor.action_cmd_regex.search("deletion"))  # not a command
 
     def test_compile_patterns_method(self):
         """Test the _compile_patterns method directly."""

@@ -47,9 +47,7 @@ class KeyboardShortcutManager:
         self.double_tap_threshold = 0.3  # seconds between taps to count as double-tap
 
         if not KEYBOARD_AVAILABLE:
-            logger.error(
-                "Keyboard shortcut libraries not available. Shortcuts will not work."
-            )
+            logger.error("Keyboard shortcut libraries not available. Shortcuts will not work.")
             return
 
     def start(self):
@@ -68,9 +66,7 @@ class KeyboardShortcutManager:
 
         try:
             # Start keyboard listener in a separate thread
-            self.listener = keyboard.Listener(
-                on_press=self._on_press, on_release=self._on_release
-            )
+            self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
             self.listener.daemon = True
             self.listener.start()
 
@@ -125,16 +121,11 @@ class KeyboardShortcutManager:
                 current_time = time.time()
                 if current_time - self.last_ctrl_press_time < self.double_tap_threshold:
                     # This is a double-tap Ctrl
-                    if (
-                        self.double_tap_callback
-                        and current_time - self.last_trigger_time > 0.5
-                    ):
+                    if self.double_tap_callback and current_time - self.last_trigger_time > 0.5:
                         logger.debug("Double-tap Ctrl detected")
                         self.last_trigger_time = current_time
                         # Run callback in a separate thread to avoid blocking
-                        threading.Thread(
-                            target=self.double_tap_callback, daemon=True
-                        ).start()
+                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
                 self.last_ctrl_press_time = current_time
 
             # Add to currently pressed modifier keys (only for tracking Ctrl)
