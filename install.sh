@@ -643,19 +643,14 @@ install_python_package() {
             return 1
         }
         
-        # Install Whisper if requested or in non-interactive mode (skip prompt)
-        if [ "$WITH_WHISPER" = "yes" ]; then
-            print_info "Installing Whisper support (this might take a while)..."
+        # Install Whisper - by default in non-interactive mode, or if explicitly requested
+        if [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
+            print_info "Installing Whisper AI support (this might take a while ~5-10 min)..."
+            print_info "This enables high-accuracy speech recognition."
             pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                 print_warning "Failed to install Whisper support."
                 print_warning "Voice recognition will fall back to VOSK."
             }
-        elif [ "$NON_INTERACTIVE" = "yes" ]; then
-            # In non-interactive mode, skip Whisper by default (user can install later)
-            print_info "Skipping Whisper installation (non-interactive mode)."
-            print_info "You can install Whisper later by running:"
-            print_info "  source ~/.local/bin/activate-vocalinux.sh"
-            print_info "  pip install openai-whisper torch torchaudio"
         else
             # Prompt for Whisper installation (interactive mode only)
             read -p "Do you want to install Whisper AI support? This requires additional disk space. (y/n) " -n 1 -r
