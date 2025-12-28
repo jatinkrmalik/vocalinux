@@ -90,6 +90,10 @@ class SpeechRecognitionManager:
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
         self.action_callbacks: List[Callable[[str], None]] = []
 
+        # Download progress tracking
+        self._download_progress_callback: Optional[Callable[[float, float, str], None]] = None
+        self._download_cancelled = False
+
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
@@ -281,12 +285,30 @@ class SpeechRecognitionManager:
         logger.debug(f"No existing model found, will use: {user_model_path}")
         return user_model_path
 
+    def set_download_progress_callback(
+        self, callback: Optional[Callable[[float, float, str], None]]
+    ):
+        """
+        Set a callback for download progress updates.
+
+        Args:
+            callback: Function(progress_fraction, speed_mbps, status_text)
+                      or None to clear
+        """
+        self._download_progress_callback = callback
+
+    def cancel_download(self):
+        """Request cancellation of the current download."""
+        self._download_cancelled = True
+        logger.info("Download cancellation requested")
+
     def _download_vosk_model(self):
         """Download the VOSK model if it doesn't exist."""
         import zipfile
 
         import requests
-        import tqdm
+
+        self._download_cancelled = False
 
         model_urls = {
             "small": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
@@ -316,15 +338,63 @@ class SpeechRecognitionManager:
             response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
             total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks for smoother progress
 
             with open(zip_path, "wb") as f:
-                for data in tqdm.tqdm(
-                    response.iter_content(chunk_size=1024),
-                    total=total_size // 1024,
-                    unit="KB",
-                    desc=f"Downloading {model_name}",  # Add description to progress bar
-                ):
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(zip_path):
+                            os.remove(zip_path)
+                        raise RuntimeError("Download cancelled")
+
                     f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        # Also log progress periodically
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Update status for extraction phase
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Extracting model...")
 
             # Extract the model
             logger.info(f"Extracting VOSK model to {model_path}")
@@ -334,6 +404,10 @@ class SpeechRecognitionManager:
             # Remove the zip file
             os.remove(zip_path)
             logger.info("VOSK model downloaded and extracted successfully")
+
+            # Final status
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to download VOSK model from {url}: {e}")
