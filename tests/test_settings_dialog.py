@@ -115,6 +115,10 @@ class TestSettingsDialog(unittest.TestCase):
             self.dialog._test_text_callback = Mock()
             self.dialog._stop_test_after_delay = Mock()
             self.dialog.destroy = Mock()
+            # Add missing attributes for apply_settings
+            self.dialog.current_model_size = "small"
+            self.dialog.current_engine = "vosk"
+            self.dialog._populate_model_options = Mock()
 
     def test_apply_settings_success(self):
         """Test the apply_settings method calls config and engine methods."""
@@ -137,14 +141,10 @@ class TestSettingsDialog(unittest.TestCase):
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
         ) as mock_logging, patch(
-            "vocalinux.ui.settings_dialog.ModelDownloadDialog"
-        ) as mock_download_dialog:
-            # Mock the download dialog
-            mock_dialog_instance = MagicMock()
-            mock_dialog_instance.run.return_value = mock_gtk.ResponseType.OK
-            mock_dialog_instance.download_successful = True
-            mock_download_dialog.return_value = mock_dialog_instance
-
+            "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
+        ) as mock_vosk_check, patch(
+            "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
+        ) as mock_whisper_check:
             # Call the method under test
             result = self.dialog.apply_settings()
 
@@ -172,14 +172,10 @@ class TestSettingsDialog(unittest.TestCase):
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
         ) as mock_logging, patch(
-            "vocalinux.ui.settings_dialog.ModelDownloadDialog"
-        ) as mock_download_dialog:
-            # Mock the download dialog
-            mock_dialog_instance = MagicMock()
-            mock_dialog_instance.run.return_value = mock_gtk.ResponseType.OK
-            mock_dialog_instance.download_successful = True
-            mock_download_dialog.return_value = mock_dialog_instance
-
+            "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
+        ) as mock_vosk_check, patch(
+            "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
+        ) as mock_whisper_check:
             # Call the method under test
             result = self.dialog.apply_settings()
 
@@ -203,14 +199,10 @@ class TestSettingsDialog(unittest.TestCase):
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
         ) as mock_logging, patch(
-            "vocalinux.ui.settings_dialog.ModelDownloadDialog"
-        ) as mock_download_dialog:
-            # Mock the download dialog
-            mock_dialog_instance = MagicMock()
-            mock_dialog_instance.run.return_value = mock_gtk.ResponseType.OK
-            mock_dialog_instance.download_successful = True
-            mock_download_dialog.return_value = mock_dialog_instance
-
+            "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
+        ) as mock_vosk_check, patch(
+            "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
+        ) as mock_whisper_check:
             # Mock the message dialog
             mock_dialog = MagicMock()
             mock_gtk.MessageDialog.return_value = mock_dialog
