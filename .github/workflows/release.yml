@@ -42,8 +42,8 @@ jobs:
 
       - name: Verify version consistency
         run: |
-          # Get version from Python package
-          PACKAGE_VERSION=$(python -c "from src.vocalinux.version import __version__; print(__version__)")
+          # Get version from version.py file directly (avoid importing full package which needs gi)
+          PACKAGE_VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
           TAG_VERSION=${{ steps.get_version.outputs.VERSION }}
           echo "Package version: $PACKAGE_VERSION"
           echo "Tag version: $TAG_VERSION"
