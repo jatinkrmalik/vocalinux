@@ -32,9 +32,9 @@
 
 ### One-liner Installation (Recommended)
 
-\`\`\`bash
+```bash
 curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
-\`\`\`
+```
 
 This will:
 - Clone the repository
@@ -44,20 +44,20 @@ This will:
 
 ### Alternative: Install from Source
 
-\`\`\`bash
+```bash
 # Clone the repository
 git clone https://github.com/jatinkrmalik/vocalinux.git
 cd vocalinux
 
 # Run the installer
 ./install.sh
-\`\`\`
+```
 
 The installer handles everything: system dependencies, Python environment, speech models, and desktop integration.
 
 ### After Installation
 
-\`\`\`bash
+```bash
 # If ~/.local/bin is in your PATH (recommended):
 vocalinux
 
@@ -67,7 +67,7 @@ vocalinux
 
 # Or run directly:
 ~/.local/share/vocalinux/venv/bin/vocalinux
-\`\`\`
+```
 
 Or launch it from your application menu!
 
@@ -100,19 +100,19 @@ Or launch it from your application menu!
 
 ### Command Line Options
 
-\`\`\`bash
+```bash
 vocalinux --help              # Show all options
 vocalinux --debug             # Enable debug logging
 vocalinux --engine whisper    # Use Whisper AI engine
 vocalinux --model medium      # Use medium-sized model
 vocalinux --wayland           # Force Wayland mode
-\`\`\`
+```
 
 ## ⚙️ Configuration
 
-Configuration is stored in \`~/.config/vocalinux/config.json\`:
+Configuration is stored in `~/.config/vocalinux/config.json`:
 
-\`\`\`json
+```json
 {
   "speech_recognition": {
     "engine": "vosk",
@@ -121,13 +121,13 @@ Configuration is stored in \`~/.config/vocalinux/config.json\`:
     "silence_timeout": 2.0
   }
 }
-\`\`\`
+```
 
 You can also configure settings through the graphical Settings dialog (right-click the tray icon).
 
 ## 🔧 Development Setup
 
-\`\`\`bash
+```bash
 # Clone and install in dev mode
 git clone https://github.com/jatinkrmalik/vocalinux.git
 cd vocalinux
@@ -141,11 +141,11 @@ pytest
 
 # Run from source with debug
 python -m vocalinux.main --debug
-\`\`\`
+```
 
 ## 📁 Project Structure
 
-\`\`\`
+```
 vocalinux/
 ├── src/vocalinux/           # Main application code
 │   ├── speech_recognition/  # Speech recognition engines
@@ -156,7 +156,7 @@ vocalinux/
 ├── resources/               # Icons and sounds
 ├── docs/                    # Documentation
 └── web/                     # Website source
-\`\`\`
+```
 
 ## 📖 Documentation
 
