@@ -578,8 +578,46 @@ class SettingsDialog(Gtk.Dialog):
         if self._test_active:
             return  # Don't apply during testing
 
-        # Apply settings in background to avoid blocking UI
         settings = self.get_selected_settings()
+        engine = settings.get("engine", "vosk")
+        model_name = settings.get("model_size", "small")
+
+        # Check if model needs to be downloaded
+        needs_download = False
+        if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
+            needs_download = True
+            model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
+        elif engine == "vosk" and not _is_vosk_model_downloaded(model_name):
+            needs_download = True
+            model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
+
+        if needs_download:
+            # Show download dialog for models that need downloading
+            logger.info(f"Model {model_name} needs download, showing progress dialog")
+            download_dialog = ModelDownloadDialog(
+                self, model_name, model_info["size_mb"], engine=engine
+            )
+
+            def download_and_apply():
+                try:
+                    self._apply_settings_internal(settings)
+                    GLib.idle_add(download_dialog.set_complete, True, "")
+                    # Refresh model list after download to update icons
+                    GLib.idle_add(self._populate_model_options)
+                except Exception as e:
+                    error_msg = str(e)
+                    if engine == "whisper" and "no module named" in error_msg.lower():
+                        GLib.idle_add(download_dialog.set_complete, False, "Whisper not installed")
+                        GLib.idle_add(self._show_whisper_install_dialog)
+                    else:
+                        GLib.idle_add(download_dialog.set_complete, False, error_msg[:100])
+
+            threading.Thread(target=download_and_apply, daemon=True).start()
+            download_dialog.run()
+            download_dialog.destroy()
+            return
+
+        # Model already downloaded, just apply settings directly
         logger.info(f"Auto-applying settings: {settings}")
 
         try:
