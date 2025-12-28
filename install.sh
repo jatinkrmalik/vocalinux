@@ -28,6 +28,12 @@ DEV_MODE="no"
 VENV_DIR="venv"
 SKIP_MODELS="no"
 WITH_WHISPER="no"
+NON_INTERACTIVE="no"
+
+# Detect if running non-interactively (e.g., via curl | bash)
+if [ ! -t 0 ]; then
+    NON_INTERACTIVE="yes"
+fi
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -51,6 +57,15 @@ while [[ $# -gt 0 ]]; do
             WITH_WHISPER="yes"
             shift
             ;;
+        --no-whisper)
+            WITH_WHISPER="no"
+            NON_INTERACTIVE="yes"  # Skip the prompt
+            shift
+            ;;
+        -y|--yes)
+            NON_INTERACTIVE="yes"
+            shift
+            ;;
         --help)
             echo "Vocalinux Installer"
             echo "Usage: $0 [options]"
@@ -60,6 +75,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)"
             echo "  --skip-models    Skip downloading VOSK models during installation"
             echo "  --with-whisper   Install Whisper AI support (requires more disk space and time)"
+            echo "  --no-whisper     Skip Whisper installation (don't prompt)"
+            echo "  -y, --yes        Non-interactive mode (accept defaults)"
             echo "  --help           Show this help message"
             exit 0
             ;;
@@ -180,18 +197,26 @@ detect_distro
 if [[ "$DISTRO_FAMILY" != "ubuntu" ]]; then
     print_warning "This installer is primarily designed for Ubuntu-based systems. Your system: $DISTRO_NAME"
     print_warning "The application may still work, but you might need to install dependencies manually."
-    read -p "Do you want to continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-else
-    # Check version for Ubuntu-based systems
-    if ! check_ubuntu_version; then
+    if [[ "$NON_INTERACTIVE" == "yes" ]]; then
+        print_info "Non-interactive mode: continuing anyway..."
+    else
         read -p "Do you want to continue anyway? (y/n) " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             exit 1
+        fi
+    fi
+else
+    # Check version for Ubuntu-based systems
+    if ! check_ubuntu_version; then
+        if [[ "$NON_INTERACTIVE" == "yes" ]]; then
+            print_info "Non-interactive mode: continuing anyway..."
+        else
+            read -p "Do you want to continue anyway? (y/n) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
         fi
     fi
 fi
@@ -321,7 +346,11 @@ install_system_dependencies() {
             print_warning "- AppIndicator3 support"
             print_warning "- PortAudio development libraries"
             print_warning "- Python virtual environment support"
-            read -p "Press Enter to continue once dependencies are installed, or Ctrl+C to cancel..." 
+            if [[ "$NON_INTERACTIVE" != "yes" ]]; then
+                read -p "Press Enter to continue once dependencies are installed, or Ctrl+C to cancel..." 
+            else
+                print_info "Non-interactive mode: continuing (dependencies may be missing)..."
+            fi
             ;;
     esac
 }
@@ -502,15 +531,22 @@ setup_virtual_environment() {
     # Check if virtual environment already exists
     if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
         print_warning "Virtual environment already exists in $VENV_DIR"
-        read -p "Do you want to recreate it? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Removing existing virtual environment..."
-            rm -rf "$VENV_DIR"
-        else
-            print_info "Using existing virtual environment."
+        if [[ "$NON_INTERACTIVE" == "yes" ]]; then
+            # In non-interactive mode, reuse existing venv
+            print_info "Non-interactive mode: using existing virtual environment."
             source "$VENV_DIR/bin/activate" || { print_error "Failed to activate virtual environment"; exit 1; }
             return 0
+        else
+            read -p "Do you want to recreate it? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                print_info "Removing existing virtual environment..."
+                rm -rf "$VENV_DIR"
+            else
+                print_info "Using existing virtual environment."
+                source "$VENV_DIR/bin/activate" || { print_error "Failed to activate virtual environment"; exit 1; }
+                return 0
+            fi
         fi
     fi
     
@@ -607,15 +643,21 @@ install_python_package() {
             return 1
         }
         
-        # Install Whisper if requested
+        # Install Whisper if requested or in non-interactive mode (skip prompt)
         if [ "$WITH_WHISPER" = "yes" ]; then
             print_info "Installing Whisper support (this might take a while)..."
             pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                 print_warning "Failed to install Whisper support."
                 print_warning "Voice recognition will fall back to VOSK."
             }
+        elif [ "$NON_INTERACTIVE" = "yes" ]; then
+            # In non-interactive mode, skip Whisper by default (user can install later)
+            print_info "Skipping Whisper installation (non-interactive mode)."
+            print_info "You can install Whisper later by running:"
+            print_info "  source ~/.local/bin/activate-vocalinux.sh"
+            print_info "  pip install openai-whisper torch torchaudio"
         else
-            # Prompt for Whisper installation
+            # Prompt for Whisper installation (interactive mode only)
             read -p "Do you want to install Whisper AI support? This requires additional disk space. (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
