@@ -111,6 +111,7 @@ if python -c "import whisper; import torch; print('✅ Whisper and PyTorch impor
     # Show available models
     python -c "
 import whisper
+import torch
 print('Available Whisper models:', whisper.available_models())
 print('PyTorch version:', torch.__version__)
 print('CUDA available:', torch.cuda.is_available())

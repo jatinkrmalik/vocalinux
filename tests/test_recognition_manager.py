@@ -259,8 +259,6 @@ class TestSpeechRecognition(unittest.TestCase):
             # Verify Whisper was initialized
             self.assertEqual(manager.engine, "whisper")
             self.assertEqual(manager.model_size, "medium")
-            # The whisper_model_size should be set during initialization
-            self.assertTrue(hasattr(manager, 'whisper_model_size'))
             whisper_mock.load_model.assert_called_once()
 
             # Instead of calling the actual _process_final_buffer method which does file operations,

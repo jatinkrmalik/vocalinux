@@ -6,6 +6,7 @@ and other relevant parameters.
 """
 
 import logging
+import os
 import threading
 import time
 from typing import TYPE_CHECKING, Optional
@@ -14,7 +15,7 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 # Need GLib for idle_add
-from gi.repository import GLib, GObject, Gtk
+from gi.repository import GLib, GObject, Gtk, Pango
 
 from ..common_types import RecognitionState
 
@@ -41,6 +42,210 @@ ENGINE_MODELS = {
     ],  # Add more whisper sizes if needed
 }
 
+# Whisper model metadata for display
+WHISPER_MODEL_INFO = {
+    "tiny": {"size_mb": 75, "desc": "Fastest, lowest accuracy", "params": "39M"},
+    "base": {"size_mb": 142, "desc": "Fast, good for basic use", "params": "74M"},
+    "small": {"size_mb": 466, "desc": "Balanced speed/accuracy", "params": "244M"},
+    "medium": {"size_mb": 1500, "desc": "High accuracy, slower", "params": "769M"},
+    "large": {"size_mb": 2900, "desc": "Highest accuracy, slowest", "params": "1550M"},
+}
+
+# VOSK model metadata for display
+VOSK_MODEL_INFO = {
+    "small": {
+        "size_mb": 40,
+        "desc": "Lightweight, fast",
+        "model_name": "vosk-model-small-en-us-0.15",
+    },
+    "medium": {
+        "size_mb": 1800,
+        "desc": "Balanced accuracy/speed",
+        "model_name": "vosk-model-en-us-0.22",
+    },
+    "large": {
+        "size_mb": 1800,
+        "desc": "Same as medium (best available)",
+        "model_name": "vosk-model-en-us-0.22",
+    },
+}
+
+# Models directory
+MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
+SYSTEM_MODELS_DIRS = [
+    "/usr/local/share/vocalinux/models",
+    "/usr/share/vocalinux/models",
+]
+
+
+def _get_whisper_cache_dir() -> str:
+    """Get the Whisper model cache directory."""
+    return os.path.expanduser("~/.local/share/vocalinux/models/whisper")
+
+
+def _is_whisper_model_downloaded(model_name: str) -> bool:
+    """Check if a Whisper model is downloaded."""
+    cache_dir = _get_whisper_cache_dir()
+    model_file = os.path.join(cache_dir, f"{model_name}.pt")
+    if os.path.exists(model_file):
+        return True
+    # Also check default whisper cache
+    default_cache = os.path.expanduser("~/.cache/whisper")
+    return os.path.exists(os.path.join(default_cache, f"{model_name}.pt"))
+
+
+def _format_size(size_mb: int) -> str:
+    """Format size in MB to human readable string."""
+    if size_mb >= 1000:
+        return f"{size_mb / 1000:.1f} GB"
+    return f"{size_mb} MB"
+
+
+def _get_recommended_whisper_model() -> tuple:
+    """Get recommended model based on system configuration."""
+    import warnings
+
+    try:
+        import psutil
+
+        ram_gb = psutil.virtual_memory().total // (1024**3)
+
+        # Check for CUDA - suppress warnings during detection
+        has_cuda = False
+        cuda_memory_gb = 0
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                import torch
+
+                if torch.cuda.is_available():
+                    has_cuda = True
+                    cuda_memory_gb = torch.cuda.get_device_properties(
+                        0
+                    ).total_memory // (1024**3)
+        except Exception:
+            pass
+
+        if has_cuda and cuda_memory_gb >= 8:
+            return "medium", f"GPU with {cuda_memory_gb}GB VRAM"
+        elif has_cuda and cuda_memory_gb >= 4:
+            return "small", f"GPU with {cuda_memory_gb}GB VRAM"
+        elif ram_gb >= 8:
+            return "small", f"{ram_gb}GB RAM - good balance"
+        elif ram_gb >= 4:
+            return "base", f"{ram_gb}GB RAM"
+        else:
+            return "tiny", f"Limited RAM ({ram_gb}GB)"
+    except Exception:
+        return "base", "Default recommendation"
+
+
+def _is_vosk_model_downloaded(model_name: str) -> bool:
+    """Check if a VOSK model is downloaded."""
+    if model_name not in VOSK_MODEL_INFO:
+        return False
+
+    vosk_model_name = VOSK_MODEL_INFO[model_name]["model_name"]
+
+    # Check user's local models directory
+    user_model_path = os.path.join(MODELS_DIR, vosk_model_name)
+    if os.path.exists(user_model_path):
+        return True
+
+    # Check system-wide installation directories
+    for system_dir in SYSTEM_MODELS_DIRS:
+        system_model_path = os.path.join(system_dir, vosk_model_name)
+        if os.path.exists(system_model_path):
+            return True
+
+    return False
+
+
+def _get_recommended_vosk_model() -> tuple:
+    """Get recommended VOSK model based on system configuration."""
+    try:
+        import psutil
+
+        ram_gb = psutil.virtual_memory().total // (1024**3)
+
+        # VOSK models are CPU-based, so we recommend based on RAM and disk space
+        if ram_gb >= 4:
+            return "medium", f"{ram_gb}GB RAM - better accuracy"
+        else:
+            return "small", f"Limited RAM ({ram_gb}GB) - optimized for speed"
+    except Exception:
+        return "small", "Default recommendation"
+
+
+class ModelDownloadDialog(Gtk.Dialog):
+    """Dialog showing model download progress."""
+
+    def __init__(
+        self, parent, model_name: str, model_size_mb: int, engine: str = "whisper"
+    ):
+        super().__init__(
+            title=f"Downloading {model_name.capitalize()} Model",
+            transient_for=parent,
+            flags=Gtk.DialogFlags.MODAL,
+        )
+        self.set_default_size(400, 150)
+        self.set_deletable(False)  # Prevent closing during download
+
+        engine_display = engine.upper() if engine == "vosk" else engine.capitalize()
+
+        box = self.get_content_area()
+        box.set_spacing(15)
+        box.set_margin_start(20)
+        box.set_margin_end(20)
+        box.set_margin_top(20)
+        box.set_margin_bottom(20)
+
+        # Info label
+        self.info_label = Gtk.Label(
+            label=f"Downloading {engine_display} {model_name} model (~{_format_size(model_size_mb)})...\n"
+            f"This may take a few minutes depending on your connection.",
+            wrap=True,
+            justify=Gtk.Justification.CENTER,
+        )
+        box.pack_start(self.info_label, False, False, 0)
+
+        # Progress bar
+        self.progress_bar = Gtk.ProgressBar()
+        self.progress_bar.set_show_text(True)
+        self.progress_bar.set_text("Preparing download...")
+        box.pack_start(self.progress_bar, False, False, 0)
+
+        # Status label
+        self.status_label = Gtk.Label(label="")
+        self.status_label.set_markup("<i>Please wait...</i>")
+        box.pack_start(self.status_label, False, False, 0)
+
+        self.show_all()
+        self._pulse_timeout = GLib.timeout_add(100, self._pulse_progress)
+
+    def _pulse_progress(self):
+        """Pulse the progress bar while downloading."""
+        self.progress_bar.pulse()
+        return True  # Continue pulsing
+
+    def set_complete(self, success: bool, message: str = ""):
+        """Mark download as complete."""
+        if hasattr(self, "_pulse_timeout"):
+            GLib.source_remove(self._pulse_timeout)
+
+        if success:
+            self.progress_bar.set_fraction(1.0)
+            self.progress_bar.set_text("Complete!")
+            self.status_label.set_markup(f"<b>✓ Model ready to use</b>")
+        else:
+            self.progress_bar.set_fraction(0)
+            self.progress_bar.set_text("Failed")
+            self.status_label.set_markup(f"<span color='red'>✗ {message}</span>")
+
+        # Allow closing now
+        self.set_deletable(True)
+        self.add_button("OK", Gtk.ResponseType.OK)
+
 
 class SettingsDialog(Gtk.Dialog):
     """GTK Dialog for configuring Vocalinux settings."""
@@ -56,12 +261,11 @@ class SettingsDialog(Gtk.Dialog):
         self.speech_engine = speech_engine
         self._test_active = False
         self._test_result = ""
+        self._initializing = True  # Flag to prevent auto-apply during initialization
 
         self.add_buttons(
-            Gtk.STOCK_CANCEL,
-            Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_APPLY,
-            Gtk.ResponseType.APPLY,
+            Gtk.STOCK_CLOSE,
+            Gtk.ResponseType.CLOSE,
         )
         self.set_default_size(450, 400)
         self.set_border_width(10)
@@ -83,6 +287,14 @@ class SettingsDialog(Gtk.Dialog):
         self.model_combo = Gtk.ComboBoxText()
         self.grid.attach(self.model_combo, 1, 1, 1, 1)
 
+        # Model legend (applies to both engines)
+        model_legend = Gtk.Label(
+            label="<small>✓ = Downloaded  ↓ = Will download  ★ = Recommended</small>",
+            use_markup=True,
+            halign=Gtk.Align.END,
+        )
+        self.grid.attach(model_legend, 0, 2, 2, 1)
+
         # VOSK Specific Settings Box (initially hidden)
         self.vosk_settings_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=10
@@ -100,27 +312,88 @@ class SettingsDialog(Gtk.Dialog):
             5,
         )
         self.vosk_settings_box.pack_start(self.vosk_grid, False, False, 0)
-        self.grid.attach(self.vosk_settings_box, 0, 2, 2, 1)
+        self.grid.attach(self.vosk_settings_box, 0, 3, 2, 1)
 
         # VAD Sensitivity
         self.vosk_grid.attach(Gtk.Label(label="VAD Sensitivity (1-5):"), 0, 0, 1, 1)
         self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
+        self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.vosk_grid.attach(self.vad_spin, 1, 0, 1, 1)
 
         # Silence Timeout
         self.vosk_grid.attach(Gtk.Label(label="Silence Timeout (sec):"), 0, 1, 1, 1)
         self.silence_spin = Gtk.SpinButton.new_with_range(0.5, 5.0, 0.1)
         self.silence_spin.set_digits(1)
+        self.silence_spin.connect("value-changed", self._on_silence_changed)
         self.vosk_grid.attach(self.silence_spin, 1, 1, 1, 1)
+
+        # VOSK Model info label
+        self.vosk_model_info_label = Gtk.Label(
+            label="",
+            use_markup=True,
+            halign=Gtk.Align.START,
+            wrap=True,
+        )
+        self.vosk_grid.attach(self.vosk_model_info_label, 0, 2, 2, 1)
+
+        # VOSK Recommendation label
+        self.vosk_recommendation_label = Gtk.Label(
+            label="",
+            use_markup=True,
+            halign=Gtk.Align.START,
+            wrap=True,
+        )
+        self.vosk_grid.attach(self.vosk_recommendation_label, 0, 3, 2, 1)
+
+        # Whisper Info Box (initially hidden)
+        self.whisper_info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self.whisper_info_box.pack_start(
+            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 5
+        )
+        self.whisper_info_box.pack_start(
+            Gtk.Label(
+                label="<b>Whisper Model Info</b>",
+                use_markup=True,
+                halign=Gtk.Align.START,
+            ),
+            False,
+            False,
+            5,
+        )
+
+        # Model info label (will be updated based on selection)
+        self.whisper_model_info_label = Gtk.Label(
+            label="",
+            use_markup=True,
+            halign=Gtk.Align.START,
+            wrap=True,
+        )
+        self.whisper_info_box.pack_start(self.whisper_model_info_label, False, False, 0)
+
+        # Recommendation label
+        self.whisper_recommendation_label = Gtk.Label(
+            label="",
+            use_markup=True,
+            halign=Gtk.Align.START,
+            wrap=True,
+        )
+        self.whisper_info_box.pack_start(
+            self.whisper_recommendation_label, False, False, 5
+        )
+
+        self.grid.attach(self.whisper_info_box, 0, 3, 2, 1)
+
+        # Add model change handler
+        self.model_combo.connect("changed", self._on_model_changed)
 
         # Test Area
         self.grid.attach(
-            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 3, 2, 1
+            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 5, 2, 1
         )
         test_label = Gtk.Label(
             label="<b>Test Recognition</b>", use_markup=True, halign=Gtk.Align.START
         )
-        self.grid.attach(test_label, 0, 4, 2, 1)
+        self.grid.attach(test_label, 0, 6, 2, 1)
 
         scrolled_window = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
         scrolled_window.set_min_content_height(100)
@@ -129,11 +402,11 @@ class SettingsDialog(Gtk.Dialog):
         )
         self.test_buffer = self.test_textview.get_buffer()
         scrolled_window.add(self.test_textview)
-        self.grid.attach(scrolled_window, 0, 5, 2, 1)
+        self.grid.attach(scrolled_window, 0, 7, 2, 1)
 
         self.test_button = Gtk.Button(label="Start Test (3 seconds)")
         self.test_button.connect("clicked", self._on_test_clicked)
-        self.grid.attach(self.test_button, 0, 6, 2, 1)
+        self.grid.attach(self.test_button, 0, 8, 2, 1)
 
         # ---- CRITICAL CHANGE ----
         # Load settings FIRST before creating UI connections
@@ -174,11 +447,14 @@ class SettingsDialog(Gtk.Dialog):
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
 
-        # Show/hide VOSK settings based on the engine
+        # Show everything first
+        self.show_all()
+
+        # Then show/hide engine-specific sections (must be after show_all)
         self._update_engine_specific_ui()
 
-        # Show everything
-        self.show_all()
+        # Initialization complete - enable auto-apply
+        self._initializing = False
 
     def _get_current_settings(self):
         """Get current settings from config manager."""
@@ -219,12 +495,33 @@ class SettingsDialog(Gtk.Dialog):
         engine = engine_text.lower()
         logger.info(f"Populating model options for engine: {engine}")
 
+        # Get recommended model based on engine
+        recommended_model = None
+        if engine == "whisper":
+            recommended_model, _ = _get_recommended_whisper_model()
+        elif engine == "vosk":
+            recommended_model, _ = _get_recommended_vosk_model()
+
         # Add model sizes for this engine
         if engine in ENGINE_MODELS:
             # Add all options for this engine
             for size in ENGINE_MODELS[engine]:
-                capitalized_size = size.capitalize()
-                self.model_combo.append(capitalized_size, capitalized_size)
+                if engine == "whisper" and size in WHISPER_MODEL_INFO:
+                    info = WHISPER_MODEL_INFO[size]
+                    is_downloaded = _is_whisper_model_downloaded(size)
+                    status = "✓" if is_downloaded else "↓"
+                    rec = " ★" if size == recommended_model else ""
+                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
+                elif engine == "vosk" and size in VOSK_MODEL_INFO:
+                    info = VOSK_MODEL_INFO[size]
+                    is_downloaded = _is_vosk_model_downloaded(size)
+                    status = "✓" if is_downloaded else "↓"
+                    rec = " ★" if size == recommended_model else ""
+                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
+                else:
+                    display_text = size.capitalize()
+                # Use lowercase as ID, display text with info
+                self.model_combo.append(size.capitalize(), display_text)
 
             # Set the active model from settings
             model_to_set = self.current_model_size.capitalize()
@@ -259,28 +556,164 @@ class SettingsDialog(Gtk.Dialog):
         """Handle changes in the selected engine."""
         self._populate_model_options()
         self._update_engine_specific_ui()
+        self._update_whisper_info()
+        self._auto_apply_settings()
+
+    def _on_model_changed(self, widget):
+        """Handle changes in the selected model."""
+        engine_text = self.engine_combo.get_active_text()
+        if engine_text:
+            engine = engine_text.lower()
+            if engine == "whisper":
+                self._update_whisper_info()
+            elif engine == "vosk":
+                self._update_vosk_info()
+        self._auto_apply_settings()
+
+    def _on_vad_changed(self, widget):
+        """Handle changes in VAD sensitivity."""
+        self._auto_apply_settings()
+
+    def _on_silence_changed(self, widget):
+        """Handle changes in silence timeout."""
+        self._auto_apply_settings()
+
+    def _auto_apply_settings(self):
+        """Automatically apply settings when changed."""
+        if self._initializing:
+            return  # Don't auto-apply during initialization
+
+        if self._test_active:
+            return  # Don't apply during testing
+
+        # Apply settings in background to avoid blocking UI
+        settings = self.get_selected_settings()
+        logger.info(f"Auto-applying settings: {settings}")
+
+        try:
+            # Update config manager
+            self.config_manager.update_speech_recognition_settings(settings)
+            self.config_manager.save_settings()
+
+            # Reconfigure speech engine (don't stop/start if idle)
+            self.speech_engine.reconfigure(**settings)
+            logger.info("Settings auto-applied successfully")
+        except Exception as e:
+            logger.error(f"Failed to auto-apply settings: {e}")
 
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
         selected_engine_text = self.engine_combo.get_active_text()
         if not selected_engine_text:
             self.vosk_settings_box.hide()
+            self.whisper_info_box.hide()
             return
 
         selected_engine = selected_engine_text.lower()
         if selected_engine == "vosk":
             self.vosk_settings_box.show()
+            self.whisper_info_box.hide()
+            self._update_vosk_info()
+        elif selected_engine == "whisper":
+            self.vosk_settings_box.hide()
+            self.whisper_info_box.show()
+            self._update_whisper_info()
         else:
             self.vosk_settings_box.hide()
+            self.whisper_info_box.hide()
+
+    def _update_whisper_info(self):
+        """Update the Whisper model info display."""
+        engine_text = self.engine_combo.get_active_text()
+        if not engine_text or engine_text.lower() != "whisper":
+            return
+
+        model_id = self.model_combo.get_active_id()
+        if not model_id:
+            return
+
+        model_name = model_id.lower()
+        if model_name not in WHISPER_MODEL_INFO:
+            return
+
+        info = WHISPER_MODEL_INFO[model_name]
+        is_downloaded = _is_whisper_model_downloaded(model_name)
+
+        # Build info text
+        if is_downloaded:
+            status_text = "<span foreground='green'>✓ Downloaded and ready</span>"
+        else:
+            status_text = f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
+
+        info_text = (
+            f"<b>{model_name.capitalize()}</b>: {info['desc']}\n"
+            f"Parameters: {info['params']}  •  {status_text}"
+        )
+        self.whisper_model_info_label.set_markup(info_text)
+
+        # Update recommendation
+        recommended, reason = _get_recommended_whisper_model()
+        if model_name == recommended:
+            self.whisper_recommendation_label.set_markup(
+                f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
+            )
+        else:
+            rec_info = WHISPER_MODEL_INFO[recommended]
+            self.whisper_recommendation_label.set_markup(
+                f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
+            )
+
+    def _update_vosk_info(self):
+        """Update the VOSK model info display."""
+        engine_text = self.engine_combo.get_active_text()
+        if not engine_text or engine_text.lower() != "vosk":
+            return
+
+        model_id = self.model_combo.get_active_id()
+        if not model_id:
+            return
+
+        model_name = model_id.lower()
+        if model_name not in VOSK_MODEL_INFO:
+            return
+
+        info = VOSK_MODEL_INFO[model_name]
+        is_downloaded = _is_vosk_model_downloaded(model_name)
+
+        # Build info text
+        if is_downloaded:
+            status_text = "<span foreground='green'>✓ Downloaded and ready</span>"
+        else:
+            status_text = f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
+
+        info_text = (
+            f"<b>{model_name.capitalize()}</b>: {info['desc']}\n"
+            f"Size: {_format_size(info['size_mb'])}  •  {status_text}"
+        )
+        self.vosk_model_info_label.set_markup(info_text)
+
+        # Update recommendation
+        recommended, reason = _get_recommended_vosk_model()
+        if model_name == recommended:
+            self.vosk_recommendation_label.set_markup(
+                f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
+            )
+        else:
+            rec_info = VOSK_MODEL_INFO[recommended]
+            self.vosk_recommendation_label.set_markup(
+                f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
+            )
 
     def get_selected_settings(self) -> dict:
         """Return the currently selected settings from the UI."""
         engine_text = self.engine_combo.get_active_text()
-        model_text = self.model_combo.get_active_text()
+        # Get model by ID (which is the capitalized name) not the display text
+        model_id = self.model_combo.get_active_id()
 
         # Handle cases where combo boxes might be empty (shouldn't happen with defaults)
         engine = engine_text.lower() if engine_text else "vosk"
-        model_size = model_text.lower() if model_text else "small"
+        # Extract model name from ID (which is the capitalized name like "Small")
+        model_size = model_id.lower() if model_id else "small"
 
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
@@ -325,8 +758,12 @@ class SettingsDialog(Gtk.Dialog):
         # Add checks for other engines if they get specific settings
 
         if settings_differ:
-            self.test_buffer.set_text("Please Apply settings before testing.")
-            return
+            # Auto-apply settings before testing
+            self.test_buffer.set_text("Applying settings...")
+            if not self.apply_settings():
+                self.test_buffer.set_text("Failed to apply settings. Please try again.")
+                return
+            self.test_buffer.set_text("Settings applied. Starting test...")
 
         self._test_active = True
         self.test_button.set_sensitive(False)
@@ -334,8 +771,10 @@ class SettingsDialog(Gtk.Dialog):
         self.test_buffer.set_text("")  # Clear previous results
         self._test_result = ""
 
-        # Register a temporary callback for test results
-        self.speech_engine.register_text_callback(self._test_text_callback)
+        # Save existing text callbacks and replace with test-only callback
+        # This prevents the text injector from typing into the dialog during testing
+        self._saved_text_callbacks = self.speech_engine.get_text_callbacks()
+        self.speech_engine.set_text_callbacks([self._test_text_callback])
 
         # Start recognition
         self.speech_engine.start_recognition()
@@ -375,22 +814,30 @@ class SettingsDialog(Gtk.Dialog):
             return False  # Already finalized
 
         self.speech_engine.stop_recognition()
-        # Give a brief moment for final processing if needed
-        # time.sleep(0.2) # May not be needed if stop_recognition is synchronous enough
-        self.speech_engine.unregister_text_callback(self._test_text_callback)
+
+        # Restore the original text callbacks (including text injector)
+        if hasattr(self, "_saved_text_callbacks"):
+            self.speech_engine.set_text_callbacks(self._saved_text_callbacks)
+            del self._saved_text_callbacks
 
         self._test_active = False
         self.test_button.set_sensitive(True)
         self.test_button.set_label("Start Test (3 seconds)")
 
-        # Check if any text was captured
+        # Schedule the "no speech" check after a short delay to allow
+        # any pending callbacks to complete first
+        GLib.timeout_add(200, self._check_test_result)
+
+        return False  # Remove idle callback
+
+    def _check_test_result(self):
+        """Check if any text was captured after all callbacks have run."""
         final_text = self.test_buffer.get_text(
             self.test_buffer.get_start_iter(), self.test_buffer.get_end_iter(), False
         )
         if not final_text.strip():
             self.test_buffer.set_text("(No speech detected during test)")
-
-        return False  # Remove idle callback
+        return False  # Don't repeat
 
     def _show_whisper_install_dialog(self):
         """Show a dialog with instructions for installing Whisper."""
@@ -401,7 +848,7 @@ class SettingsDialog(Gtk.Dialog):
             buttons=Gtk.ButtonsType.OK,
             text="Whisper Not Installed",
         )
-        
+
         install_text = """Whisper AI is not installed. To use Whisper for speech recognition, you need to install it first.
 
 Installation Options:
@@ -419,11 +866,11 @@ Installation Options:
 Note: Whisper requires significant disk space (~1-3GB) and may take time to download.
 
 For now, the engine has been reverted to VOSK."""
-        
+
         dialog.format_secondary_text(install_text)
         dialog.run()
         dialog.destroy()
-        
+
         # Revert the engine selection back to VOSK
         self.engine_combo.set_active_id("Vosk")
         self._populate_model_options()
@@ -433,6 +880,82 @@ For now, the engine has been reverted to VOSK."""
         """Apply the selected settings."""
         settings = self.get_selected_settings()
         logger.info(f"Applying settings: {settings}")
+
+        # Check if we need to download a Whisper model
+        if settings.get("engine") == "whisper":
+            model_name = settings.get("model_size", "base")
+            if not _is_whisper_model_downloaded(model_name):
+                # Show download dialog
+                model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
+                download_dialog = ModelDownloadDialog(
+                    self, model_name, model_info["size_mb"], engine="whisper"
+                )
+
+                # Run the download in a background thread
+                def download_and_apply():
+                    try:
+                        # The actual download happens when we reconfigure the engine
+                        self._apply_settings_internal(settings)
+                        GLib.idle_add(download_dialog.set_complete, True, "")
+                    except Exception as e:
+                        error_msg = str(e)
+                        if (
+                            "whisper" in error_msg.lower()
+                            and "no module named" in error_msg.lower()
+                        ):
+                            GLib.idle_add(
+                                download_dialog.set_complete,
+                                False,
+                                "Whisper not installed",
+                            )
+                            GLib.idle_add(self._show_whisper_install_dialog)
+                        else:
+                            GLib.idle_add(
+                                download_dialog.set_complete, False, error_msg[:100]
+                            )
+
+                threading.Thread(target=download_and_apply, daemon=True).start()
+                download_dialog.run()
+                download_dialog.destroy()
+
+                # Refresh the model list to show updated download status
+                self._populate_model_options()
+                return True
+
+        # Check if we need to download a VOSK model
+        elif settings.get("engine") == "vosk":
+            model_name = settings.get("model_size", "small")
+            if not _is_vosk_model_downloaded(model_name):
+                # Show download dialog
+                model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
+                download_dialog = ModelDownloadDialog(
+                    self, model_name, model_info["size_mb"], engine="vosk"
+                )
+
+                # Run the download in a background thread
+                def download_and_apply():
+                    try:
+                        # The actual download happens when we reconfigure the engine
+                        self._apply_settings_internal(settings)
+                        GLib.idle_add(download_dialog.set_complete, True, "")
+                    except Exception as e:
+                        error_msg = str(e)
+                        GLib.idle_add(
+                            download_dialog.set_complete, False, error_msg[:100]
+                        )
+
+                threading.Thread(target=download_and_apply, daemon=True).start()
+                download_dialog.run()
+                download_dialog.destroy()
+
+                # Refresh the model list to show updated download status
+                self._populate_model_options()
+                return True
+
+        return self._apply_settings_internal(settings)
+
+    def _apply_settings_internal(self, settings: dict) -> bool:
+        """Internal method to apply settings."""
         try:
             # 1. Update Config Manager
             self.config_manager.update_speech_recognition_settings(settings)
@@ -457,7 +980,7 @@ For now, the engine has been reverted to VOSK."""
             return True
         except Exception as e:
             logger.error(f"Failed to apply settings: {e}", exc_info=True)
-            
+
             # Check if this is a Whisper import error
             if "whisper" in str(e).lower() and "no module named" in str(e).lower():
                 self._show_whisper_install_dialog()
