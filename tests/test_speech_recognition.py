@@ -33,10 +33,14 @@ class MockKaldiRecognizer:
         return '{"partial": "test"}'
 
 
+# Create a proper mock vosk module that uses our custom classes
+class MockVoskModule:
+    Model = MockModel
+    KaldiRecognizer = MockKaldiRecognizer
+
+
 # Path modules before importing the recognition_manager
-sys.modules["vosk"] = MagicMock()
-sys.modules["vosk"].Model = MockModel
-sys.modules["vosk"].KaldiRecognizer = MockKaldiRecognizer
+sys.modules["vosk"] = MockVoskModule
 
 # Mock other required modules
 sys.modules["pyaudio"] = MagicMock()
@@ -113,9 +117,7 @@ class TestSpeechRecognition(unittest.TestCase):
         self.mock_play_error = self.patcher_play_error.start()
 
         # Patch the download method for vosk models
-        self.patcher_download = patch.object(
-            SpeechRecognitionManager, "_download_vosk_model"
-        )
+        self.patcher_download = patch.object(SpeechRecognitionManager, "_download_vosk_model")
         self.mock_download = self.patcher_download.start()
 
         # Patch os.unlink to avoid file removal errors
@@ -164,6 +166,12 @@ class TestSpeechRecognition(unittest.TestCase):
         """Test registering and using callbacks."""
         manager = SpeechRecognitionManager(engine="vosk")
 
+        # Replace recognizer with a mock that returns proper JSON
+        mock_recognizer = MagicMock()
+        mock_recognizer.FinalResult.return_value = MOCK_VOSK_RESULT
+        mock_recognizer.AcceptWaveform.return_value = True
+        manager.recognizer = mock_recognizer
+
         # Create mock callbacks
         text_callback = MagicMock()
         state_callback = MagicMock()
@@ -205,9 +213,7 @@ class TestSpeechRecognition(unittest.TestCase):
 
     def test_vosk_model_path(self):
         """Test getting the VOSK model path based on size."""
-        with patch.object(
-            SpeechRecognitionManager, "_get_vosk_model_path"
-        ) as mock_get_path:
+        with patch.object(SpeechRecognitionManager, "_get_vosk_model_path") as mock_get_path:
             # Test small model size
             mock_get_path.return_value = "/path/to/vosk-model-small-en-us-0.15"
             manager_small = SpeechRecognitionManager(engine="vosk", model_size="small")
@@ -217,9 +223,7 @@ class TestSpeechRecognition(unittest.TestCase):
 
             # Test medium model size
             mock_get_path.return_value = "/path/to/vosk-model-en-us-0.22"
-            manager_medium = SpeechRecognitionManager(
-                engine="vosk", model_size="medium"
-            )
+            manager_medium = SpeechRecognitionManager(engine="vosk", model_size="medium")
 
             # Verify the medium model path is constructed correctly
             mock_get_path.assert_called_with()
@@ -235,8 +239,10 @@ class TestSpeechRecognition(unittest.TestCase):
         """Test downloading VOSK model."""
         # Make os.path.exists return False to trigger download
         with patch("os.path.exists", return_value=False):
-            # Instantiate manager which should trigger download
-            manager = SpeechRecognitionManager(engine="vosk", model_size="small")
+            # Instantiate manager with defer_download=False to trigger download
+            manager = SpeechRecognitionManager(
+                engine="vosk", model_size="small", defer_download=False
+            )
 
             # Verify download was attempted
             self.mock_download.assert_called_once()
@@ -316,6 +322,12 @@ class TestSpeechRecognition(unittest.TestCase):
         # Setup manager
         manager = SpeechRecognitionManager(engine="vosk")
 
+        # Replace recognizer with a mock that returns proper JSON
+        mock_recognizer = MagicMock()
+        mock_recognizer.FinalResult.return_value = MOCK_VOSK_RESULT
+        mock_recognizer.AcceptWaveform.return_value = True
+        manager.recognizer = mock_recognizer
+
         # Setup command processor mock
         self.mock_cmd.process_text.return_value = ("processed text", ["action1"])
 
@@ -342,9 +354,7 @@ class TestSpeechRecognition(unittest.TestCase):
         """Test processing the final audio buffer with Whisper."""
         # Skip the problematic file operations by creating a mock implementation
         # of the _process_final_buffer method
-        with patch.object(
-            SpeechRecognitionManager, "_process_final_buffer"
-        ) as mock_process:
+        with patch.object(SpeechRecognitionManager, "_process_final_buffer") as mock_process:
             # Setup manager with whisper engine (this should work now with mocked torch)
             manager = SpeechRecognitionManager(engine="whisper")
 
@@ -353,9 +363,7 @@ class TestSpeechRecognition(unittest.TestCase):
                 # Access transcription result directly from the model
                 result = {"text": "whisper transcription"}
                 # Simulate processing the result through command processor
-                processed_text, actions = self.mock_cmd.process_text(
-                    "whisper transcription"
-                )
+                processed_text, actions = self.mock_cmd.process_text("whisper transcription")
                 # Call callbacks as the real method would
                 for callback in manager.text_callbacks:
                     callback(processed_text)

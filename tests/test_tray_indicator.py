@@ -33,9 +33,7 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_thread_class.return_value.start = fake_start
 
         # Patch the pynput keyboard module
-        self.keyboard_patcher = patch(
-            "vocalinux.ui.keyboard_shortcuts.keyboard", create=True
-        )
+        self.keyboard_patcher = patch("vocalinux.ui.keyboard_shortcuts.keyboard", create=True)
         self.mock_keyboard = self.keyboard_patcher.start()
 
         # Patch keyboard module's KEYBOARD_AVAILABLE constant before importing
@@ -62,16 +60,12 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_ksm = MagicMock()
 
         # Patch keyboard shortcuts manager to return our mock
-        self.ksm_patcher = patch(
-            "vocalinux.ui.keyboard_shortcuts.KeyboardShortcutManager"
-        )
+        self.ksm_patcher = patch("vocalinux.ui.keyboard_shortcuts.KeyboardShortcutManager")
         self.mock_ksm_class = self.ksm_patcher.start()
         self.mock_ksm_class.return_value = self.mock_ksm
 
         # Patch the settings dialog BEFORE importing TrayIndicator
-        self.patcher_settings_dialog = patch(
-            "vocalinux.ui.tray_indicator.SettingsDialog"
-        )
+        self.patcher_settings_dialog = patch("vocalinux.ui.tray_indicator.SettingsDialog")
         self.mock_settings_dialog_class = self.patcher_settings_dialog.start()
         self.mock_settings_dialog = MagicMock()
         self.mock_settings_dialog_class.return_value = self.mock_settings_dialog
@@ -137,9 +131,7 @@ class TestTrayIndicator(unittest.TestCase):
         self.keyboard_patcher.stop()
 
         # Ensure that the keyboard shortcut manager is stopped
-        if hasattr(self, "tray_indicator") and hasattr(
-            self.tray_indicator, "shortcut_manager"
-        ):
+        if hasattr(self, "tray_indicator") and hasattr(self.tray_indicator, "shortcut_manager"):
             self.tray_indicator.shortcut_manager.stop()
 
     def test_initialization(self):
@@ -260,9 +252,7 @@ class TestTrayIndicator(unittest.TestCase):
     def test_run(self):
         """Test run method."""
         # Patch signal.signal and Gtk.main
-        with patch("signal.signal") as mock_signal, patch(
-            "gi.repository.Gtk.main"
-        ) as mock_main:
+        with patch("signal.signal") as mock_signal, patch("gi.repository.Gtk.main") as mock_main:
             # Configure mock_main to return immediately instead of blocking
             mock_main.side_effect = lambda: None
 

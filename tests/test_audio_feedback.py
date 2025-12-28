@@ -46,9 +46,9 @@ class TestAudioFeedback(unittest.TestCase):
         """Test that resource paths are correctly set up."""
         # Import the resource manager to test paths
         from vocalinux.utils.resource_manager import ResourceManager
-        
+
         resource_manager = ResourceManager()
-        
+
         # Verify that resource paths are correctly set and accessible
         self.assertTrue(
             resource_manager.resources_dir.endswith("resources"),

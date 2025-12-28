@@ -39,9 +39,7 @@ def parse_arguments():
         choices=["vosk", "whisper"],
         help="Speech recognition engine to use",
     )
-    parser.add_argument(
-        "--wayland", action="store_true", help="Force Wayland compatibility mode"
-    )
+    parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
     return parser.parse_args()
 
 

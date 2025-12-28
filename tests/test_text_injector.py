@@ -34,9 +34,7 @@ class TestTextInjector(unittest.TestCase):
         self.mock_sleep = self.patch_sleep.start()
 
         # Setup environment variable patching
-        self.env_patcher = patch.dict(
-            "os.environ", {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}
-        )
+        self.env_patcher = patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"})
         self.env_patcher.start()
 
         # Set default return values
@@ -62,9 +60,7 @@ class TestTextInjector(unittest.TestCase):
     def test_detect_x11_environment(self):
         """Test detection of X11 environment."""
         # Force our mock_which to be selective based on command
-        self.mock_which.side_effect = lambda cmd: (
-            "/usr/bin/xdotool" if cmd == "xdotool" else None
-        )
+        self.mock_which.side_effect = lambda cmd: ("/usr/bin/xdotool" if cmd == "xdotool" else None)
 
         # Explicitly set X11 environment
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
@@ -72,9 +68,7 @@ class TestTextInjector(unittest.TestCase):
             injector = TextInjector()
 
             # Force X11 detection by patching the _detect_environment method
-            with patch.object(
-                injector, "_detect_environment", return_value=DesktopEnvironment.X11
-            ):
+            with patch.object(injector, "_detect_environment", return_value=DesktopEnvironment.X11):
                 injector.environment = DesktopEnvironment.X11
 
                 # Verify environment is X11
@@ -84,9 +78,7 @@ class TestTextInjector(unittest.TestCase):
         """Test detection of Wayland environment."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
             # Make wtype available for Wayland
-            self.mock_which.side_effect = lambda cmd: (
-                "/usr/bin/wtype" if cmd == "wtype" else None
-            )
+            self.mock_which.side_effect = lambda cmd: ("/usr/bin/wtype" if cmd == "wtype" else None)
 
             # Mock wtype test call to return success
             mock_process = MagicMock()
@@ -102,9 +94,7 @@ class TestTextInjector(unittest.TestCase):
         """Test forcing Wayland mode."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
             # Make wtype available
-            self.mock_which.side_effect = lambda cmd: (
-                "/usr/bin/wtype" if cmd == "wtype" else None
-            )
+            self.mock_which.side_effect = lambda cmd: ("/usr/bin/wtype" if cmd == "wtype" else None)
 
             # Create injector with wayland_mode=True
             injector = TextInjector(wayland_mode=True)
@@ -124,9 +114,7 @@ class TestTextInjector(unittest.TestCase):
             # Make wtype test fail with compositor error
             mock_process = MagicMock()
             mock_process.returncode = 1
-            mock_process.stderr = (
-                "compositor does not support virtual keyboard protocol"
-            )
+            mock_process.stderr = "compositor does not support virtual keyboard protocol"
             self.mock_subprocess.return_value = mock_process
 
             # Initialize injector
@@ -172,9 +160,7 @@ class TestTextInjector(unittest.TestCase):
         """Test text injection in Wayland environment using wtype."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
             # Make wtype available
-            self.mock_which.side_effect = lambda cmd: (
-                "/usr/bin/wtype" if cmd == "wtype" else None
-            )
+            self.mock_which.side_effect = lambda cmd: ("/usr/bin/wtype" if cmd == "wtype" else None)
 
             # Successful wtype test
             mock_process = MagicMock()
@@ -256,9 +242,7 @@ class TestTextInjector(unittest.TestCase):
                             found_escaped = True
                             break
 
-            self.assertTrue(
-                found_escaped, "Special characters were not properly escaped"
-            )
+            self.assertTrue(found_escaped, "Special characters were not properly escaped")
 
     def test_empty_text_injection(self):
         """Test injecting empty text (should do nothing)."""
@@ -291,9 +275,7 @@ class TestTextInjector(unittest.TestCase):
     def test_xdotool_error_handling(self):
         """Test handling of xdotool errors."""
         # Setup xdotool to fail
-        mock_error = subprocess.CalledProcessError(
-            1, ["xdotool", "type"], stderr="Error"
-        )
+        mock_error = subprocess.CalledProcessError(1, ["xdotool", "type"], stderr="Error")
         self.mock_subprocess.side_effect = mock_error
 
         injector = TextInjector()
