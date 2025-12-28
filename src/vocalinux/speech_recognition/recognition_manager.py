@@ -70,13 +70,16 @@ class SpeechRecognitionManager:
     speech recognition engines (VOSK and Whisper).
     """
 
-    def __init__(self, engine: str = "vosk", model_size: str = "small", **kwargs):
+    def __init__(
+        self, engine: str = "vosk", model_size: str = "small", defer_download: bool = True, **kwargs
+    ):
         """
         Initialize the speech recognition manager.
 
         Args:
             engine: The speech recognition engine to use ("vosk" or "whisper")
             model_size: The size of the model to use ("small", "medium", "large")
+            defer_download: If True, don't download missing models at startup (default: True)
         """
         self.engine = engine
         self.model_size = model_size
@@ -93,6 +96,8 @@ class SpeechRecognitionManager:
         # Download progress tracking
         self._download_progress_callback: Optional[Callable[[float, float, str], None]] = None
         self._download_cancelled = False
+        self._defer_download = defer_download
+        self._model_initialized = False
 
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
@@ -123,10 +128,17 @@ class SpeechRecognitionManager:
             self.vosk_model_path = self._get_vosk_model_path()
 
             if not os.path.exists(self.vosk_model_path):
-                logger.info(f"VOSK model not found at {self.vosk_model_path}. Downloading...")
-                self._download_vosk_model()
-                # Update path after download
-                self.vosk_model_path = self._get_vosk_model_path()
+                if self._defer_download:
+                    logger.info(
+                        f"VOSK model not found at {self.vosk_model_path}. Will download when needed."
+                    )
+                    self._model_initialized = False
+                    return  # Don't block startup
+                else:
+                    logger.info(f"VOSK model not found at {self.vosk_model_path}. Downloading...")
+                    self._download_vosk_model()
+                    # Update path after download
+                    self.vosk_model_path = self._get_vosk_model_path()
             else:
                 # Check if this is a pre-installed model
                 if any(self.vosk_model_path.startswith(sys_dir) for sys_dir in SYSTEM_MODELS_DIRS):
@@ -142,6 +154,7 @@ class SpeechRecognitionManager:
             self.recognizer = None
             self.model = Model(self.vosk_model_path)
             self.recognizer = KaldiRecognizer(self.model, 16000)
+            self._model_initialized = True
             logger.info("VOSK engine initialized successfully.")
 
         except ImportError:
@@ -170,13 +183,25 @@ class SpeechRecognitionManager:
                 )
                 self.model_size = "base"
 
+            # Check if model is downloaded
+            whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
+            os.makedirs(whisper_cache_dir, exist_ok=True)
+            model_file = os.path.join(whisper_cache_dir, f"{self.model_size}.pt")
+            default_cache = os.path.expanduser("~/.cache/whisper")
+            default_model_file = os.path.join(default_cache, f"{self.model_size}.pt")
+
+            model_exists = os.path.exists(model_file) or os.path.exists(default_model_file)
+
+            if not model_exists and self._defer_download:
+                logger.info(
+                    f"Whisper model '{self.model_size}' not found. Will download when needed."
+                )
+                self._model_initialized = False
+                return  # Don't block startup
+
             # Determine device (GPU if available, otherwise CPU)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Using device: {device}")
-
-            # Download directory for Whisper models
-            whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
-            os.makedirs(whisper_cache_dir, exist_ok=True)
 
             logger.info(f"Loading Whisper '{self.model_size}' model...")
             # Ensure previous model is released if re-initializing
@@ -187,6 +212,7 @@ class SpeechRecognitionManager:
                 self.model_size, device=device, download_root=whisper_cache_dir
             )
 
+            self._model_initialized = True
             logger.info(f"Whisper model loaded on {device.upper()}")
             logger.info("Whisper engine initialized successfully.")
 
@@ -489,10 +515,23 @@ class SpeechRecognitionManager:
         for callback in self.state_callbacks:
             callback(new_state)
 
+    @property
+    def model_ready(self) -> bool:
+        """Check if the model is initialized and ready for recognition."""
+        return self._model_initialized and self.model is not None
+
     def start_recognition(self):
         """Start the speech recognition process."""
         if self.state != RecognitionState.IDLE:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
+            return
+
+        # Check if model is ready
+        if not self.model_ready:
+            logger.warning(
+                "Cannot start recognition: model not downloaded. Please download via Settings."
+            )
+            play_error_sound()
             return
 
         logger.info("Starting speech recognition")
@@ -676,6 +715,7 @@ class SpeechRecognitionManager:
         model_size: Optional[str] = None,
         vad_sensitivity: Optional[int] = None,
         silence_timeout: Optional[float] = None,
+        force_download: bool = True,
         **kwargs,  # Allow for future expansion
     ):
         """
@@ -686,6 +726,7 @@ class SpeechRecognitionManager:
             model_size: The new model size.
             vad_sensitivity: New VAD sensitivity (for VOSK).
             silence_timeout: New silence timeout (for VOSK).
+            force_download: If True, download missing models (default: True for UI-triggered reconfigures).
         """
         logger.info(
             f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, vad={vad_sensitivity}, silence={silence_timeout}"
@@ -708,6 +749,9 @@ class SpeechRecognitionManager:
 
         if restart_needed:
             logger.info("Engine or model changed, re-initializing...")
+            # When reconfiguring from UI, allow downloads
+            old_defer = self._defer_download
+            self._defer_download = not force_download
             # Release old resources explicitly if necessary (Python's GC might handle it)
             self.model = None
             self.recognizer = None
@@ -724,6 +768,8 @@ class SpeechRecognitionManager:
                 self._update_state(RecognitionState.ERROR)
                 # Re-raise or handle appropriately
                 raise
+            finally:
+                self._defer_download = old_defer
         else:
             # If only VOSK params changed, just log it
             logger.info("Applied VAD/silence timeout changes.")
