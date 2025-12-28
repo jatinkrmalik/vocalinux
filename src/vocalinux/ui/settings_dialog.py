@@ -373,17 +373,17 @@ class SettingsDialog(Gtk.Dialog):
         )
         self.whisper_info_box.pack_start(self.whisper_recommendation_label, False, False, 5)
 
-        self.grid.attach(self.whisper_info_box, 0, 3, 2, 1)
+        self.grid.attach(self.whisper_info_box, 0, 4, 2, 1)
 
         # Add model change handler
         self.model_combo.connect("changed", self._on_model_changed)
 
         # Test Area
-        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 5, 2, 1)
+        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 6, 2, 1)
         test_label = Gtk.Label(
             label="<b>Test Recognition</b>", use_markup=True, halign=Gtk.Align.START
         )
-        self.grid.attach(test_label, 0, 6, 2, 1)
+        self.grid.attach(test_label, 0, 7, 2, 1)
 
         scrolled_window = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
         scrolled_window.set_min_content_height(100)
@@ -392,11 +392,11 @@ class SettingsDialog(Gtk.Dialog):
         )
         self.test_buffer = self.test_textview.get_buffer()
         scrolled_window.add(self.test_textview)
-        self.grid.attach(scrolled_window, 0, 7, 2, 1)
+        self.grid.attach(scrolled_window, 0, 8, 2, 1)
 
         self.test_button = Gtk.Button(label="Start Test (3 seconds)")
         self.test_button.connect("clicked", self._on_test_clicked)
-        self.grid.attach(self.test_button, 0, 8, 2, 1)
+        self.grid.attach(self.test_button, 0, 9, 2, 1)
 
         # ---- CRITICAL CHANGE ----
         # Load settings FIRST before creating UI connections
