@@ -79,6 +79,14 @@ jobs:
             gir1.2-gtk-3.0 \
             portaudio19-dev
 
+      - name: Install GObject introspection dependencies
+        run: |
+          sudo apt-get update
+          # For Ubuntu 24.04+ (or the latest GitHub Actions runner image)
+          sudo apt-get install -y gir1.2-glib-2.0 libgirepository-2.0-dev pkg-config
+          # Alternatively, for older Ubuntu versions (like 22.04), you might need:
+          # sudo apt-get install -y libgirepository1.0-dev pkg-config
+
       - name: Set up virtual environment
         run: |
           python -m venv venv
