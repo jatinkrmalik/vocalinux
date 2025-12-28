@@ -287,51 +287,57 @@ class SettingsDialog(Gtk.Dialog):
         )
         self.grid.attach(model_legend, 0, 2, 2, 1)
 
-        # VOSK Specific Settings Box (initially hidden)
-        self.vosk_settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        self.vosk_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
-        self.vosk_settings_box.pack_start(
+        # Recognition Settings Box (shared between engines)
+        self.recognition_settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.recognition_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
+        self.recognition_settings_box.pack_start(
             Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 5
         )
-        self.vosk_settings_box.pack_start(
-            Gtk.Label(label="<b>VOSK Settings</b>", use_markup=True, halign=Gtk.Align.START),
+        self.recognition_settings_box.pack_start(
+            Gtk.Label(label="<b>Recognition Settings</b>", use_markup=True, halign=Gtk.Align.START),
             False,
             False,
             5,
         )
-        self.vosk_settings_box.pack_start(self.vosk_grid, False, False, 0)
-        self.grid.attach(self.vosk_settings_box, 0, 3, 2, 1)
+        self.recognition_settings_box.pack_start(self.recognition_grid, False, False, 0)
+        self.grid.attach(self.recognition_settings_box, 0, 3, 2, 1)
 
-        # VAD Sensitivity
-        self.vosk_grid.attach(Gtk.Label(label="VAD Sensitivity (1-5):"), 0, 0, 1, 1)
+        # VAD Sensitivity (controls how sensitive the mic is to speech vs silence)
+        self.recognition_grid.attach(
+            Gtk.Label(label="VAD Sensitivity (1-5):", halign=Gtk.Align.START), 0, 0, 1, 1
+        )
         self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
+        self.vad_spin.set_tooltip_text("Higher = more sensitive to quiet speech")
         self.vad_spin.connect("value-changed", self._on_vad_changed)
-        self.vosk_grid.attach(self.vad_spin, 1, 0, 1, 1)
+        self.recognition_grid.attach(self.vad_spin, 1, 0, 1, 1)
 
-        # Silence Timeout
-        self.vosk_grid.attach(Gtk.Label(label="Silence Timeout (sec):"), 0, 1, 1, 1)
+        # Silence Timeout (how long to wait before processing)
+        self.recognition_grid.attach(
+            Gtk.Label(label="Silence Timeout (sec):", halign=Gtk.Align.START), 0, 1, 1, 1
+        )
         self.silence_spin = Gtk.SpinButton.new_with_range(0.5, 5.0, 0.1)
         self.silence_spin.set_digits(1)
+        self.silence_spin.set_tooltip_text("Wait time after silence before processing speech")
         self.silence_spin.connect("value-changed", self._on_silence_changed)
-        self.vosk_grid.attach(self.silence_spin, 1, 1, 1, 1)
+        self.recognition_grid.attach(self.silence_spin, 1, 1, 1, 1)
 
-        # VOSK Model info label
+        # VOSK Model info label (shown only for VOSK)
         self.vosk_model_info_label = Gtk.Label(
             label="",
             use_markup=True,
             halign=Gtk.Align.START,
             wrap=True,
         )
-        self.vosk_grid.attach(self.vosk_model_info_label, 0, 2, 2, 1)
+        self.recognition_grid.attach(self.vosk_model_info_label, 0, 2, 2, 1)
 
-        # VOSK Recommendation label
+        # VOSK Recommendation label (shown only for VOSK)
         self.vosk_recommendation_label = Gtk.Label(
             label="",
             use_markup=True,
             halign=Gtk.Align.START,
             wrap=True,
         )
-        self.vosk_grid.attach(self.vosk_recommendation_label, 0, 3, 2, 1)
+        self.recognition_grid.attach(self.vosk_recommendation_label, 0, 3, 2, 1)
 
         # Whisper Info Box (initially hidden)
         self.whisper_info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
@@ -591,21 +597,29 @@ class SettingsDialog(Gtk.Dialog):
         """Show/hide UI elements specific to the selected engine."""
         selected_engine_text = self.engine_combo.get_active_text()
         if not selected_engine_text:
-            self.vosk_settings_box.hide()
+            self.recognition_settings_box.hide()
             self.whisper_info_box.hide()
             return
 
         selected_engine = selected_engine_text.lower()
+
+        # Recognition settings (VAD, silence timeout) apply to both engines
+        self.recognition_settings_box.show()
+
         if selected_engine == "vosk":
-            self.vosk_settings_box.show()
+            # Show VOSK-specific info labels
+            self.vosk_model_info_label.show()
+            self.vosk_recommendation_label.show()
             self.whisper_info_box.hide()
             self._update_vosk_info()
         elif selected_engine == "whisper":
-            self.vosk_settings_box.hide()
+            # Hide VOSK-specific info labels, show Whisper info
+            self.vosk_model_info_label.hide()
+            self.vosk_recommendation_label.hide()
             self.whisper_info_box.show()
             self._update_whisper_info()
         else:
-            self.vosk_settings_box.hide()
+            self.recognition_settings_box.hide()
             self.whisper_info_box.hide()
 
     def _update_whisper_info(self):
