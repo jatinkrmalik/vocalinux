@@ -33,10 +33,14 @@ class MockKaldiRecognizer:
         return '{"partial": "test"}'
 
 
+# Create a proper mock vosk module that uses our custom classes
+class MockVoskModule:
+    Model = MockModel
+    KaldiRecognizer = MockKaldiRecognizer
+
+
 # Path modules before importing the recognition_manager
-sys.modules["vosk"] = MagicMock()
-sys.modules["vosk"].Model = MockModel
-sys.modules["vosk"].KaldiRecognizer = MockKaldiRecognizer
+sys.modules["vosk"] = MockVoskModule()
 
 # Mock other required modules
 sys.modules["pyaudio"] = MagicMock()
@@ -229,8 +233,10 @@ class TestSpeechRecognition(unittest.TestCase):
         """Test downloading VOSK model."""
         # Make os.path.exists return False to trigger download
         with patch("os.path.exists", return_value=False):
-            # Instantiate manager which should trigger download
-            manager = SpeechRecognitionManager(engine="vosk", model_size="small")
+            # Instantiate manager with defer_download=False to trigger download
+            manager = SpeechRecognitionManager(
+                engine="vosk", model_size="small", defer_download=False
+            )
 
             # Verify download was attempted
             self.mock_download.assert_called_once()

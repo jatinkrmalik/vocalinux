@@ -136,7 +136,14 @@ class TestSettingsDialog(unittest.TestCase):
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging:
+        ) as mock_logging, patch(
+            "vocalinux.ui.settings_dialog.ModelDownloadDialog"
+        ) as mock_download_dialog:
+            # Mock the download dialog
+            mock_dialog_instance = MagicMock()
+            mock_dialog_instance.run.return_value = mock_gtk.ResponseType.OK
+            mock_dialog_instance.download_successful = True
+            mock_download_dialog.return_value = mock_dialog_instance
 
             # Call the method under test
             result = self.dialog.apply_settings()
@@ -164,7 +171,14 @@ class TestSettingsDialog(unittest.TestCase):
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging:
+        ) as mock_logging, patch(
+            "vocalinux.ui.settings_dialog.ModelDownloadDialog"
+        ) as mock_download_dialog:
+            # Mock the download dialog
+            mock_dialog_instance = MagicMock()
+            mock_dialog_instance.run.return_value = mock_gtk.ResponseType.OK
+            mock_dialog_instance.download_successful = True
+            mock_download_dialog.return_value = mock_dialog_instance
 
             # Call the method under test
             result = self.dialog.apply_settings()
@@ -188,7 +202,14 @@ class TestSettingsDialog(unittest.TestCase):
             "vocalinux.ui.settings_dialog.time"
         ) as mock_time, patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging:
+        ) as mock_logging, patch(
+            "vocalinux.ui.settings_dialog.ModelDownloadDialog"
+        ) as mock_download_dialog:
+            # Mock the download dialog
+            mock_dialog_instance = MagicMock()
+            mock_dialog_instance.run.return_value = mock_gtk.ResponseType.OK
+            mock_dialog_instance.download_successful = True
+            mock_download_dialog.return_value = mock_dialog_instance
 
             # Mock the message dialog
             mock_dialog = MagicMock()

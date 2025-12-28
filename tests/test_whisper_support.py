@@ -99,8 +99,10 @@ class TestWhisperSupport:
                 SpeechRecognitionManager,
             )
 
-            # Create manager with Whisper engine
-            manager = SpeechRecognitionManager(engine="whisper", model_size="base")
+            # Create manager with Whisper engine and defer_download=False to trigger model loading
+            manager = SpeechRecognitionManager(
+                engine="whisper", model_size="base", defer_download=False
+            )
 
             # Verify Whisper was initialized correctly
             assert manager.engine == "whisper"
