@@ -50,7 +50,7 @@ class TestMainModule(unittest.TestCase):
     @patch("vocalinux.text_injection.text_injector.TextInjector")
     @patch("vocalinux.ui.tray_indicator.TrayIndicator")
     @patch("vocalinux.main.logging")
-    @patch("vocalinux.main.ConfigManager")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
     def test_main_initializes_components(
         self,
         mock_config_manager,

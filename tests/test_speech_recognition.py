@@ -40,7 +40,7 @@ class MockVoskModule:
 
 
 # Path modules before importing the recognition_manager
-sys.modules["vosk"] = MockVoskModule()
+sys.modules["vosk"] = MockVoskModule
 
 # Mock other required modules
 sys.modules["pyaudio"] = MagicMock()
@@ -165,6 +165,12 @@ class TestSpeechRecognition(unittest.TestCase):
     def test_callbacks(self):
         """Test registering and using callbacks."""
         manager = SpeechRecognitionManager(engine="vosk")
+
+        # Replace recognizer with a mock that returns proper JSON
+        mock_recognizer = MagicMock()
+        mock_recognizer.FinalResult.return_value = MOCK_VOSK_RESULT
+        mock_recognizer.AcceptWaveform.return_value = True
+        manager.recognizer = mock_recognizer
 
         # Create mock callbacks
         text_callback = MagicMock()
@@ -315,6 +321,12 @@ class TestSpeechRecognition(unittest.TestCase):
         """Test processing the final audio buffer with VOSK."""
         # Setup manager
         manager = SpeechRecognitionManager(engine="vosk")
+
+        # Replace recognizer with a mock that returns proper JSON
+        mock_recognizer = MagicMock()
+        mock_recognizer.FinalResult.return_value = MOCK_VOSK_RESULT
+        mock_recognizer.AcceptWaveform.return_value = True
+        manager.recognizer = mock_recognizer
 
         # Setup command processor mock
         self.mock_cmd.process_text.return_value = ("processed text", ["action1"])
