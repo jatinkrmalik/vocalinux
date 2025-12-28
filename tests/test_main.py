@@ -50,12 +50,25 @@ class TestMainModule(unittest.TestCase):
     @patch("vocalinux.text_injection.text_injector.TextInjector")
     @patch("vocalinux.ui.tray_indicator.TrayIndicator")
     @patch("vocalinux.main.logging")
+    @patch("vocalinux.main.ConfigManager")
     def test_main_initializes_components(
-        self, mock_logging, mock_tray, mock_text, mock_speech, mock_action_handler, mock_check_deps
+        self,
+        mock_config_manager,
+        mock_logging,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_action_handler,
+        mock_check_deps,
     ):
         """Test that main initializes all the required components."""
         # Mock dependency check to return True
         mock_check_deps.return_value = True
+
+        # Mock ConfigManager to return empty settings (use command-line defaults)
+        mock_config_instance = MagicMock()
+        mock_config_instance.get_settings.return_value = {"speech_recognition": {}}
+        mock_config_manager.return_value = mock_config_instance
 
         # Mock objects
         mock_speech_instance = MagicMock()
