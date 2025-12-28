@@ -111,20 +111,24 @@ class TrayIndicator:
     def _validate_resources(self):
         """Validate that required resources are available."""
         validation_results = _resource_manager.validate_resources()
-        
+
         if not validation_results["resources_dir_exists"]:
             logger.warning("Resources directory not found")
-        
+
         if validation_results["missing_icons"]:
             logger.warning(f"Missing icon files: {validation_results['missing_icons']}")
-        
+
         if validation_results["missing_sounds"]:
-            logger.warning(f"Missing sound files: {validation_results['missing_sounds']}")
-        
+            logger.warning(
+                f"Missing sound files: {validation_results['missing_sounds']}"
+            )
+
         # Log successful validation
-        if (validation_results["resources_dir_exists"] and 
-            not validation_results["missing_icons"] and 
-            not validation_results["missing_sounds"]):
+        if (
+            validation_results["resources_dir_exists"]
+            and not validation_results["missing_icons"]
+            and not validation_results["missing_sounds"]
+        ):
             logger.info("All required resources validated successfully")
 
     def _init_indicator(self):
@@ -297,22 +301,12 @@ class TrayIndicator:
 
     def _on_settings_dialog_response(self, dialog, response):
         """Handle responses from the settings dialog."""
-        if response == Gtk.ResponseType.APPLY:
-            logger.info("Applying settings from dialog.")
-            if dialog.apply_settings():
-                logger.info("Settings applied successfully.")
-            else:
-                logger.error("Failed to apply settings.")
-
-            # Don't destroy the dialog - keep it open for further changes
-            return
-
-        elif (
-            response == Gtk.ResponseType.CANCEL
+        # With auto-apply, we just close the dialog on any response
+        if (
+            response == Gtk.ResponseType.CLOSE
             or response == Gtk.ResponseType.DELETE_EVENT
         ):
-            logger.info("Settings dialog cancelled or closed.")
-            # Only destroy the dialog when Cancel is clicked or the window is closed
+            logger.info("Settings dialog closed.")
             dialog.destroy()
 
     def _on_about_clicked(self, widget):
