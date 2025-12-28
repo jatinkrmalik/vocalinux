@@ -215,6 +215,11 @@ class SpeechRecognitionManager:
                 self._model_initialized = False
                 return  # Don't block startup
 
+            # If model doesn't exist and we're not deferring, download it with progress
+            if not model_exists:
+                logger.info(f"Downloading Whisper '{self.model_size}' model...")
+                self._download_whisper_model(whisper_cache_dir)
+
             # Determine device (GPU if available, otherwise CPU)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Using device: {device}")
@@ -470,6 +475,111 @@ class SpeechRecognitionManager:
                 os.remove(zip_path)
             # Consider removing partially extracted model dir if needed
             # if os.path.exists(model_path): shutil.rmtree(model_path)
+            raise
+
+    def _download_whisper_model(self, cache_dir: str):
+        """Download a Whisper model with progress tracking."""
+        import hashlib
+
+        import requests
+
+        self._download_cancelled = False
+
+        # Whisper model URLs (from openai-whisper package)
+        model_urls = {
+            "tiny": "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt",
+            "base": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
+            "small": "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
+            "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
+            "large": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
+        }
+
+        url = model_urls.get(self.model_size)
+        if not url:
+            raise ValueError(f"Unknown Whisper model size: {self.model_size}")
+
+        model_file = os.path.join(cache_dir, f"{self.model_size}.pt")
+        temp_file = model_file + ".tmp"
+
+        os.makedirs(cache_dir, exist_ok=True)
+
+        logger.info(f"Downloading Whisper {self.model_size} model to {model_file}")
+        logger.info(f"Downloading from {url}")
+
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks
+
+            with open(temp_file, "wb") as f:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                        raise RuntimeError("Download cancelled")
+
+                    f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Rename temp file to final
+            os.rename(temp_file, model_file)
+            logger.info("Whisper model downloaded successfully")
+
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download Whisper model from {url}: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise RuntimeError(f"Failed to download Whisper model: {e}") from e
+        except Exception as e:
+            logger.error(f"An error occurred during Whisper model download: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
             raise
 
     def register_text_callback(self, callback: Callable[[str], None]):
