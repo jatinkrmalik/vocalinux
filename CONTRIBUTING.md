@@ -78,10 +78,11 @@ This will:
    pip install -e ".[dev]"
    ```
 
-4. **Install pre-commit hooks:**
+4. **(Optional) Install pre-commit hooks:**
    ```bash
    pre-commit install
    ```
+   > **Note:** Pre-commit hooks are optional. The CI pipeline runs the same checks, so you can skip this if you prefer faster local commits.
 
 ## Making Changes
 
