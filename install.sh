@@ -79,6 +79,45 @@ fi
 print_info "Vocalinux Installer"
 print_info "=============================="
 echo ""
+
+# Check if running from within the vocalinux repo or remotely (via curl)
+REPO_URL="https://github.com/jatinkrmalik/vocalinux.git"
+INSTALL_DIR=""
+CLEANUP_ON_EXIT="no"
+
+if [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
+    # Running from within the repo
+    INSTALL_DIR="$(pwd)"
+    print_info "Running from local repository: $INSTALL_DIR"
+else
+    # Running remotely (e.g., via curl | bash)
+    print_info "Cloning Vocalinux repository..."
+    INSTALL_DIR="$HOME/.local/share/vocalinux-install"
+    mkdir -p "$INSTALL_DIR"
+    
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        print_info "Updating existing clone..."
+        cd "$INSTALL_DIR"
+        git fetch origin main
+        git reset --hard origin/main
+    else
+        rm -rf "$INSTALL_DIR"
+        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" || {
+            print_error "Failed to clone Vocalinux repository"
+            exit 1
+        }
+        cd "$INSTALL_DIR"
+    fi
+    CLEANUP_ON_EXIT="yes"
+    print_info "Repository cloned to: $INSTALL_DIR"
+    
+    # When running remotely, install venv to user's home directory
+    VENV_DIR="$HOME/.local/share/vocalinux/venv"
+fi
+
+# Change to install directory
+cd "$INSTALL_DIR"
+
 print_info "Using virtual environment: $VENV_DIR"
 [[ "$DEV_MODE" == "yes" ]] && print_info "Installing in development mode"
 [[ "$RUN_TESTS" == "yes" ]] && print_info "Tests will be run after installation"
@@ -504,15 +543,24 @@ fi
 setup_virtual_environment
 
 # Create activation script for users
-cat > activate-vocalinux.sh << EOF
+# Put it in ~/.local/bin when running remotely, or current dir when running locally
+if [[ "$CLEANUP_ON_EXIT" == "yes" ]]; then
+    ACTIVATION_SCRIPT_DIR="$HOME/.local/bin"
+    mkdir -p "$ACTIVATION_SCRIPT_DIR"
+else
+    ACTIVATION_SCRIPT_DIR="."
+fi
+ACTIVATION_SCRIPT="$ACTIVATION_SCRIPT_DIR/activate-vocalinux.sh"
+
+cat > "$ACTIVATION_SCRIPT" << EOF
 #!/bin/bash
 # This script activates the Vocalinux virtual environment
-source "\$(dirname "\$(realpath "\$0")")/$VENV_DIR/bin/activate"
+source "$VENV_DIR/bin/activate"
 echo "Vocalinux virtual environment activated."
 echo "To start the application, run: vocalinux"
 EOF
-chmod +x activate-vocalinux.sh
-print_info "Created activation script: activate-vocalinux.sh"
+chmod +x "$ACTIVATION_SCRIPT"
+print_info "Created activation script: $ACTIVATION_SCRIPT"
 
 # Function to install Python package with error handling and verification
 install_python_package() {
@@ -585,6 +633,21 @@ install_python_package() {
         print_success "Vocalinux package installed successfully!"
         # Clean up log file if installation was successful
         rm -rf "$PIP_LOG_DIR"
+        
+        # Create symlink in ~/.local/bin for easy access
+        if [[ "$CLEANUP_ON_EXIT" == "yes" ]]; then
+            mkdir -p "$HOME/.local/bin"
+            ln -sf "$VENV_DIR/bin/vocalinux" "$HOME/.local/bin/vocalinux"
+            print_info "Created symlink: ~/.local/bin/vocalinux"
+            
+            # Check if ~/.local/bin is in PATH
+            if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+                print_warning "~/.local/bin is not in your PATH"
+                print_info "Add this line to your ~/.bashrc or ~/.zshrc:"
+                print_info '  export PATH="$HOME/.local/bin:$PATH"'
+            fi
+        fi
+        
         return 0
     else
         print_error "Vocalinux package installation verification failed."
@@ -947,11 +1010,18 @@ print_installation_summary() {
     
     echo
     print_info "To activate the virtual environment in the future, run:"
-    print_info "  source activate-vocalinux.sh"
+    print_info "  source $ACTIVATION_SCRIPT"
     print_info "You can then launch Vocalinux by running 'vocalinux'"
     
+    # If venv is in a standard location, mention direct launch option
+    if [[ "$VENV_DIR" == "$HOME/.local/share/vocalinux/venv" ]]; then
+        echo
+        print_info "Or run directly with:"
+        print_info "  $VENV_DIR/bin/vocalinux"
+    fi
+    
     echo
-    print_info "For more information, see the documentation in the docs/ directory."
+    print_info "For more information, see: https://github.com/jatinkrmalik/vocalinux"
     
     if [ "$ISSUES" -gt 0 ]; then
         echo

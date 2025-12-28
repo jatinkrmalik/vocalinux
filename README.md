@@ -33,10 +33,16 @@
 ### One-liner Installation (Recommended)
 
 \`\`\`bash
-git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
 \`\`\`
 
-### Or step by step:
+This will:
+- Clone the repository
+- Install all dependencies
+- Set up a virtual environment in `~/.local/share/vocalinux/venv`
+- Create a symlink at `~/.local/bin/vocalinux`
+
+### Alternative: Install from Source
 
 \`\`\`bash
 # Clone the repository
@@ -52,11 +58,15 @@ The installer handles everything: system dependencies, Python environment, speec
 ### After Installation
 
 \`\`\`bash
-# Activate the virtual environment
-source activate-vocalinux.sh
-
-# Run Vocalinux
+# If ~/.local/bin is in your PATH (recommended):
 vocalinux
+
+# Or activate the virtual environment first:
+source ~/.local/bin/activate-vocalinux.sh
+vocalinux
+
+# Or run directly:
+~/.local/share/vocalinux/venv/bin/vocalinux
 \`\`\`
 
 Or launch it from your application menu!
