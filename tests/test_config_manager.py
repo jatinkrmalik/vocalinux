@@ -142,7 +142,7 @@ class TestConfigManager(unittest.TestCase):
         """Test getting an existing configuration value."""
         config_manager = ConfigManager()
         value = config_manager.get("speech_recognition", "engine")
-        self.assertEqual(value, "vosk")
+        self.assertEqual(value, "whisper")  # Default is now whisper
 
     def test_get_nonexistent_value(self):
         """Test getting a nonexistent configuration value."""
@@ -153,9 +153,9 @@ class TestConfigManager(unittest.TestCase):
     def test_set_existing_section(self):
         """Test setting a value in an existing section."""
         config_manager = ConfigManager()
-        result = config_manager.set("speech_recognition", "engine", "whisper")
+        result = config_manager.set("speech_recognition", "engine", "vosk")
         self.assertTrue(result)
-        self.assertEqual(config_manager.config["speech_recognition"]["engine"], "whisper")
+        self.assertEqual(config_manager.config["speech_recognition"]["engine"], "vosk")
 
     def test_set_new_section(self):
         """Test setting a value in a new section."""
