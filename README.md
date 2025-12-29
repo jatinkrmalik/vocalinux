@@ -156,7 +156,7 @@ cd vocalinux
 ./install.sh --dev
 
 # Activate environment
-source activate-vocalinux.sh
+source venv/bin/activate
 
 # Run tests
 pytest
