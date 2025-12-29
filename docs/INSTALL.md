@@ -83,7 +83,7 @@ Options:
 1. **Detects your Linux distribution** and installs appropriate system packages
 2. **Creates a Python virtual environment** with system site-packages access
 3. **Installs the Vocalinux package** and all dependencies
-4. **Downloads speech recognition models** (VOSK small model by default)
+4. **Downloads speech recognition models** (Whisper tiny model by default, VOSK as fallback)
 5. **Installs desktop integration** (icons, .desktop file)
 6. **Creates activation script** for easy environment activation
 
@@ -108,8 +108,9 @@ vocalinux
 ```bash
 vocalinux --help              # Show all options
 vocalinux --debug             # Enable debug logging
-vocalinux --engine whisper    # Use Whisper AI engine
-vocalinux --engine vosk       # Use VOSK engine (default)
+vocalinux --engine whisper    # Use Whisper AI engine (default)
+vocalinux --engine vosk       # Use VOSK engine
+vocalinux --model tiny        # Use tiny model (default, fastest)
 vocalinux --model small       # Use small model
 vocalinux --model medium      # Use medium model
 vocalinux --model large       # Use large model

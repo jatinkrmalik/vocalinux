@@ -42,7 +42,7 @@ This will:
 - Set up a virtual environment in `~/.local/share/vocalinux/venv`
 - Install **both VOSK and Whisper AI** speech engines
 - Create a symlink at `~/.local/bin/vocalinux`
-- Download the default VOSK speech model
+- Download the default **Whisper tiny** speech model (~75MB)
 
 > ⏱️ **Note**: Installation takes ~5-10 minutes due to Whisper AI dependencies (PyTorch).
 

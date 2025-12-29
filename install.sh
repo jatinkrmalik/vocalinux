@@ -699,6 +699,83 @@ if ! install_python_package; then
     exit 1
 fi
 
+# Function to download and install Whisper tiny model
+install_whisper_model() {
+    print_info "Installing Whisper tiny model (~75MB)..."
+    
+    # Create whisper models directory
+    local WHISPER_DIR="$DATA_DIR/models/whisper"
+    mkdir -p "$WHISPER_DIR"
+    
+    # Whisper tiny model URL and path
+    local TINY_MODEL_URL="https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
+    local TINY_MODEL_PATH="$WHISPER_DIR/tiny.pt"
+    
+    # Check if model already exists
+    if [ -f "$TINY_MODEL_PATH" ]; then
+        print_info "Whisper tiny model already exists at $TINY_MODEL_PATH"
+        return 0
+    fi
+    
+    # Check internet connectivity
+    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
+        print_warning "Neither wget nor curl found. Cannot download Whisper model."
+        print_warning "Model will be downloaded on first application run."
+        return 1
+    fi
+    
+    # Test internet connectivity
+    if ! ping -c 1 google.com >/dev/null 2>&1; then
+        print_warning "No internet connection detected."
+        print_warning "Whisper model will be downloaded on first application run."
+        return 1
+    fi
+    
+    print_info "Downloading Whisper tiny model..."
+    print_info "This may take a few minutes depending on your internet connection."
+    
+    local TEMP_FILE="$TINY_MODEL_PATH.tmp"
+    
+    # Download the model
+    if command -v wget >/dev/null 2>&1; then
+        if ! wget --progress=bar:force:noscroll -O "$TEMP_FILE" "$TINY_MODEL_URL" 2>&1; then
+            print_error "Failed to download Whisper model with wget"
+            rm -f "$TEMP_FILE"
+            return 1
+        fi
+    elif command -v curl >/dev/null 2>&1; then
+        if ! curl -L --progress-bar -o "$TEMP_FILE" "$TINY_MODEL_URL"; then
+            print_error "Failed to download Whisper model with curl"
+            rm -f "$TEMP_FILE"
+            return 1
+        fi
+    fi
+    
+    # Verify download
+    if [ ! -f "$TEMP_FILE" ] || [ ! -s "$TEMP_FILE" ]; then
+        print_error "Downloaded model file is empty or missing"
+        rm -f "$TEMP_FILE"
+        return 1
+    fi
+    
+    # Move to final location
+    mv "$TEMP_FILE" "$TINY_MODEL_PATH"
+    
+    # Verify the model file
+    if [ -f "$TINY_MODEL_PATH" ]; then
+        local MODEL_SIZE=$(du -h "$TINY_MODEL_PATH" | cut -f1)
+        print_success "Whisper tiny model installed successfully ($MODEL_SIZE)"
+        
+        # Create a marker file to indicate this model was pre-installed
+        echo "$(date)" > "$WHISPER_DIR/.vocalinux_preinstalled"
+        
+        return 0
+    else
+        print_error "Whisper model installation failed"
+        return 1
+    fi
+}
+
 # Function to download and install VOSK models
 install_vosk_models() {
     print_info "Installing VOSK speech recognition models..."
@@ -906,7 +983,21 @@ install_desktop_entry || print_warning "Desktop entry installation failed"
 # Install icons
 install_icons || print_warning "Icon installation failed"
 
-# Install VOSK models
+# Install Whisper tiny model (if Whisper was installed)
+if [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
+    # Check if Whisper is actually installed before downloading model
+    if python -c "import whisper" 2>/dev/null; then
+        if [ "$SKIP_MODELS" = "no" ]; then
+            install_whisper_model || print_warning "Whisper model download failed - model will be downloaded on first run"
+        else
+            print_info "Skipping Whisper model download (--skip-models specified)"
+        fi
+    else
+        print_info "Whisper not available, skipping model download"
+    fi
+fi
+
+# Install VOSK models (as fallback)
 if [ "$SKIP_MODELS" = "no" ]; then
     install_vosk_models || print_warning "VOSK model installation failed - models will be downloaded on first run"
 else
@@ -1036,9 +1127,16 @@ print_installation_summary() {
     print_info "- Configuration: $CONFIG_DIR"
     print_info "- Data directory: $DATA_DIR"
     
+    # Check if Whisper model was installed
+    if [ -f "$DATA_DIR/models/whisper/tiny.pt" ]; then
+        print_info "- Whisper tiny model: $DATA_DIR/models/whisper/tiny.pt (default engine)"
+    elif python -c "import whisper" 2>/dev/null; then
+        print_info "- Whisper tiny model: Will be downloaded on first run"
+    fi
+    
     # Check if VOSK model was installed
     if [ "$SKIP_MODELS" = "no" ] && [ -d "$DATA_DIR/models/vosk-model-small-en-us-0.15" ]; then
-        print_info "- VOSK small model: $DATA_DIR/models/vosk-model-small-en-us-0.15"
+        print_info "- VOSK small model: $DATA_DIR/models/vosk-model-small-en-us-0.15 (fallback)"
     elif [ "$SKIP_MODELS" = "yes" ]; then
         print_info "- VOSK models: Will be downloaded on first run (--skip-models used)"
     else
