@@ -63,8 +63,8 @@ You can change the speech recognition model for better accuracy or faster perfor
 
 1. Open settings from the tray icon menu
 2. Go to the "Recognition" tab
-3. Select your preferred model size
-4. Choose between VOSK (offline, faster) and Whisper (offline, more accurate)
+3. Select your preferred model size (tiny is the default, use larger models for better accuracy)
+4. Choose between Whisper (default, more accurate) and VOSK (lighter weight, faster)
 
 ## Troubleshooting
 
