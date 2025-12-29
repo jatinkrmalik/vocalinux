@@ -78,7 +78,13 @@ This will:
    pip install -e ".[dev]"
    ```
 
-4. **(Optional) Install pre-commit hooks:**
+4. **Run the application:**
+   ```bash
+   source venv/bin/activate
+   vocalinux --debug
+   ```
+
+5. **(Optional) Install pre-commit hooks:**
    ```bash
    pre-commit install
    ```

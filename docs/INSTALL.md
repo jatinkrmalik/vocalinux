@@ -4,13 +4,21 @@ This guide provides detailed instructions for installing Vocalinux on Linux syst
 
 ## Quick Start
 
-### One-liner Installation
+### One-liner Installation (Recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+```
+
+That's it! The installer handles everything automatically, including Whisper AI support.
+
+> ⏱️ **Note**: Installation takes ~5-10 minutes due to Whisper AI dependencies.
+
+### From Source
 
 ```bash
 git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
 ```
-
-That's it! The installer handles everything automatically.
 
 ## System Requirements
 
@@ -64,7 +72,9 @@ Options:
   --test           Run tests after installation
   --venv-dir=PATH  Specify custom virtual environment directory (default: venv)
   --skip-models    Skip downloading VOSK models during installation
-  --with-whisper   Install Whisper AI support (requires more disk space)
+  --with-whisper   Install Whisper AI support (default in curl install)
+  --no-whisper     Skip Whisper installation (faster, VOSK only)
+  -y, --yes        Non-interactive mode (accept defaults)
   --help           Show this help message
 ```
 
@@ -82,10 +92,14 @@ Options:
 After installation:
 
 ```bash
-# Activate the virtual environment
-source activate-vocalinux.sh
+# If installed via curl (and ~/.local/bin is in PATH):
+vocalinux
 
-# Run Vocalinux
+# Or run directly:
+~/.local/share/vocalinux/venv/bin/vocalinux
+
+# If installed from source:
+source venv/bin/activate
 vocalinux
 ```
 
