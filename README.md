@@ -1,19 +1,37 @@
-# <img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="50" height="50"> Vocalinux
+# <img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="30" height="30"> Vocalinux
+  
+#### Voice-to-text for Linux, finally done right!
 
-[![Vocalinux CI](https://github.com/jatinkrmalik/vocalinux/workflows/Vocalinux%20CI/badge.svg)](https://github.com/jatinkrmalik/vocalinux/actions)
-[![codecov](https://codecov.io/gh/jatinkrmalik/vocalinux/branch/main/graph/badge.svg)](https://codecov.io/gh/jatinkrmalik/vocalinux)
+<!-- Project Status -->
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange)](https://github.com/jatinkrmalik/vocalinux)
+[![GitHub release](https://img.shields.io/github/v/release/jatinkrmalik/vocalinux?include_prereleases)](https://github.com/jatinkrmalik/vocalinux/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+
+<!-- Build & Quality -->
+[![Vocalinux CI](https://github.com/jatinkrmalik/vocalinux/workflows/Vocalinux%20CI/badge.svg)](https://github.com/jatinkrmalik/vocalinux/actions)
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey)](https://github.com/jatinkrmalik/vocalinux)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Made with GTK](https://img.shields.io/badge/Made%20with-GTK-green)](https://www.gtk.org/)
+[![codecov](https://codecov.io/gh/jatinkrmalik/vocalinux/branch/main/graph/badge.svg)](https://codecov.io/gh/jatinkrmalik/vocalinux)
+
+<!-- Tech & Community -->
+[![GitHub stars](https://img.shields.io/github/stars/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/network)
+[![GitHub watchers](https://img.shields.io/github/watchers/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/watchers)
+[![Last commit](https://img.shields.io/github/last-commit/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/commits)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/commits)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![GitHub issues](https://img.shields.io/github/issues/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/issues)
-[![GitHub release](https://img.shields.io/github/v/release/jatinkrmalik/vocalinux?include_prereleases)](https://github.com/jatinkrmalik/vocalinux/releases)
 
 ![Vocalinux Users](https://github.com/user-attachments/assets/e3d8dd16-3d4f-408c-b899-93d85e98b107)
 
-**A seamless voice dictation system for Linux**, comparable to the built-in solutions on macOS and Windows.
+**A seamless free open-source private voice dictation system for Linux**, comparable to the built-in solutions on macOS and Windows.
 
-> 🎉 **Alpha Release!** We're excited to share Vocalinux with the community. Try it out and [let us know what you think](https://github.com/jatinkrmalik/vocalinux/issues)!
+> 🎉 **Alpha Release!** 
+> 
+> We're excited to share Vocalinux with the community.
+> Try it out and [let us know what you think](https://github.com/jatinkrmalik/vocalinux/issues)!
 
 ---
 
@@ -21,7 +39,7 @@
 
 - 🎤 **Double-tap Ctrl** to start/stop voice dictation
 - ⚡ **Real-time transcription** with minimal latency
-- �� **Universal compatibility** across all Linux applications
+- 🌎 **Universal compatibility** across all Linux applications
 - 🔒 **Offline operation** for privacy and reliability (with VOSK)
 - 🤖 **Optional Whisper AI** support for enhanced accuracy
 - 🎨 **System tray integration** with visual status indicators
@@ -207,11 +225,6 @@ We welcome contributions! Whether it's bug reports, feature requests, or code co
 - 💡 [Request a Feature](https://github.com/jatinkrmalik/vocalinux/issues/new?template=feature_request.md)
 - 💬 [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)
 
-## 👨‍💻 Author
-
-**Jatin K Malik**
-- GitHub: [@jatinkrmalik](https://github.com/jatinkrmalik)
-- Twitter: [@jatinkrmalik](https://twitter.com/jatinkrmalik)
 
 ## ⭐ Support
 
@@ -229,6 +242,4 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 
 <p align="center">
   Made with ❤️ for the Linux community
-  <br>
-  <a href="https://github.com/jatinkrmalik/vocalinux">github.com/jatinkrmalik/vocalinux</a>
 </p>
