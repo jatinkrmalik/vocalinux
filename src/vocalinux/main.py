@@ -50,9 +50,7 @@ def check_dependencies():
         gi.require_version("Gtk", "3.0")
         from gi.repository import Gtk
     except (ImportError, ValueError) as e:
-        missing_deps.append(
-            "GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)"
-        )
+        missing_deps.append("GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)")
 
     try:
         import gi
@@ -83,7 +81,9 @@ def check_dependencies():
         logger.error("  sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-appindicator3-0.1")
         logger.error("")
         logger.error("For the best experience, install using the recommended method:")
-        logger.error("  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash")
+        logger.error(
+            "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
+        )
         return False
 
     return True
