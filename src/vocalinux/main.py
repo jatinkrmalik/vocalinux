@@ -15,11 +15,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import from the vocalinux package
-from .speech_recognition import recognition_manager
-from .text_injection import text_injector
-from .ui import tray_indicator
-from .ui.action_handler import ActionHandler
+# Note: GTK-dependent modules (tray_indicator) are imported lazily after
+# dependency checking to provide better error messages for pip/pipx users
 
 
 def parse_arguments():
@@ -51,11 +48,18 @@ def check_dependencies():
         import gi
 
         gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk
+    except (ImportError, ValueError) as e:
+        missing_deps.append("GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)")
+
+    try:
+        import gi
+
         gi.require_version("AppIndicator3", "0.1")
-        from gi.repository import AppIndicator3, Gtk
+        from gi.repository import AppIndicator3
     except (ImportError, ValueError) as e:
         missing_deps.append(
-            "GTK3 and AppIndicator3 (install with: sudo apt install python3-gi gir1.2-appindicator3-0.1)"
+            "AppIndicator3 (install with: sudo apt install gir1.2-appindicator3-0.1)"
         )
 
     try:
@@ -69,10 +73,17 @@ def check_dependencies():
         missing_deps.append("requests (install with: pip install requests)")
 
     if missing_deps:
-        logger.error("Missing required dependencies:")
+        logger.error("Missing required system dependencies:")
         for dep in missing_deps:
             logger.error(f"  - {dep}")
-        logger.error("Please install the missing dependencies and try again.")
+        logger.error("")
+        logger.error("If you installed via pip/pipx, you also need system GTK packages:")
+        logger.error("  sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-appindicator3-0.1")
+        logger.error("")
+        logger.error("For the best experience, install using the recommended method:")
+        logger.error(
+            "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
+        )
         return False
 
     return True
@@ -87,16 +98,22 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug logging enabled")
 
+    # Check dependencies first (before importing GTK-dependent modules)
+    if not check_dependencies():
+        logger.error("Cannot start Vocalinux due to missing dependencies")
+        sys.exit(1)
+
+    # Now it's safe to import GTK-dependent modules
+    from .speech_recognition import recognition_manager
+    from .text_injection import text_injector
+    from .ui import tray_indicator
+    from .ui.action_handler import ActionHandler
+
     # Initialize logging manager early
     from .ui.logging_manager import initialize_logging
 
     initialize_logging()
     logger.info("Logging system initialized")
-
-    # Check dependencies first
-    if not check_dependencies():
-        logger.error("Cannot start Vocalinux due to missing dependencies")
-        sys.exit(1)
 
     # Load saved configuration to get engine/model settings
     from .ui.config_manager import ConfigManager
