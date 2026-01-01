@@ -29,13 +29,15 @@ def parse_arguments():
     parser.add_argument(
         "--model",
         type=str,
-        #default="small", #the default is in the recognition_manager.py
+        default="small",
+        choices=["small", "medium", "large"],
         help="Speech recognition model size (small, medium, large)",
     )
     parser.add_argument(
         "--language",
         type=str,
-        #default="en-us", #the default is from line 115 upwards
+        default="en-us",
+        choices=["en-us", "fr", "de", "ru"],
         help="Speech recognition language (en-us, fr, de, ru)",
     )
     parser.add_argument(
@@ -110,10 +112,6 @@ def main():
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
 
-    # Use saved settings if no command-line override was provided
-    # Check if args are still at their defaults (user didn't explicitly set them)
-    # engine = saved_settings.get("engine", args.engine)
-
     if args.engine :
         engine = args.engine # engine of the command line
     elif saved_settings.get("engine", args.engine) :
@@ -134,9 +132,6 @@ def main():
         model_size = saved_settings.get("model_size", args.model) #model-size of the config.json
     else :
         model_size = "small" #default model-size
-
-    # TODO: rm commented here and above
-    # model_size = saved_settings.get("model_size", args.model)
 
     logger.info(f"Using engine={engine}, language={language}, model={model_size} (from saved config)")
 
