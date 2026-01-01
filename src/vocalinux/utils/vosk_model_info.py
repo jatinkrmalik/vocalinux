@@ -10,7 +10,7 @@ VOSK_MODEL_INFO = {
             "fr": "vosk-model-small-fr-0.22",
             "de": "vosk-model-small-de-0.15",
             "ru": "vosk-model-small-ru-0.22",
-        }
+        },
     },
     "medium": {
         "size_mb": 1800,
@@ -20,7 +20,7 @@ VOSK_MODEL_INFO = {
             "fr": "vosk-model-fr-0.22",
             "de": "vosk-model-de-0.21",
             "ru": "vosk-model-ru-0.22",
-        }
+        },
     },
     "large": {
         "size_mb": 1800,
@@ -30,6 +30,6 @@ VOSK_MODEL_INFO = {
             "fr": "vosk-model-fr-0.22",
             "de": "vosk-model-de-0.21",
             "ru": "vosk-model-ru-0.22",
-        }
+        },
     },
 }

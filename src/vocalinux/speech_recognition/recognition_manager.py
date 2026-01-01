@@ -88,7 +88,12 @@ class SpeechRecognitionManager:
     """
 
     def __init__(
-        self, engine: str = "vosk", model_size: str = "small", language: str = "en-us", defer_download: bool = True, **kwargs
+        self,
+        engine: str = "vosk",
+        model_size: str = "small",
+        language: str = "en-us",
+        defer_download: bool = True,
+        **kwargs,
     ):
         """
         Initialize the speech recognition manager.
@@ -128,7 +133,9 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(f"Initializing speech recognition with {engine} engine, {language} language and {model_size} model")
+        logger.info(
+            f"Initializing speech recognition with {engine} engine, {language} language and {model_size} model"
+        )
 
         # Initialize the selected speech recognition engine
         if engine == "vosk":

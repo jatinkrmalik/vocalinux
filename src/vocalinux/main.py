@@ -110,28 +110,30 @@ def main():
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
 
-    if args.engine :
-        engine = args.engine # engine of the command line
-    elif saved_settings.get("engine", args.engine) :
-        engine = saved_settings.get("engine", args.engine) #engine of the config.json
-    else :
-        engine = "vosk" #default engine
-    
-    if args.language :
-        language = args.language #language of the command line
-    elif saved_settings.get("language", args.language) :
-        language = saved_settings.get("language", args.language)  #language of the config.json
-    else :
-        language = "en-us" # default language
-    
-    if args.model :
-        model_size = args.model #model-size of the command line
-    elif saved_settings.get("model_size", args.model) :
-        model_size = saved_settings.get("model_size", args.model) #model-size of the config.json
-    else :
-        model_size = "small" #default model-size
+    if args.engine:
+        engine = args.engine  # engine of the command line
+    elif saved_settings.get("engine", args.engine):
+        engine = saved_settings.get("engine", args.engine)  # engine of the config.json
+    else:
+        engine = "vosk"  # default engine
 
-    logger.info(f"Using engine={engine}, language={language}, model={model_size} (from saved config)")
+    if args.language:
+        language = args.language  # language of the command line
+    elif saved_settings.get("language", args.language):
+        language = saved_settings.get("language", args.language)  # language of the config.json
+    else:
+        language = "en-us"  # default language
+
+    if args.model:
+        model_size = args.model  # model-size of the command line
+    elif saved_settings.get("model_size", args.model):
+        model_size = saved_settings.get("model_size", args.model)  # model-size of the config.json
+    else:
+        model_size = "small"  # default model-size
+
+    logger.info(
+        f"Using engine={engine}, language={language}, model={model_size} (from saved config)"
+    )
 
     # Initialize main components
     logger.info("Initializing Vocalinux...")

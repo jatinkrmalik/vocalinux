@@ -119,6 +119,7 @@ def _get_recommended_whisper_model() -> tuple:
     except Exception:
         return "base", "Default recommendation"
 
+
 def _is_vosk_model_downloaded(size: str, language: str) -> bool:
     """Check if a VOSK model is downloaded."""
     if size not in VOSK_MODEL_INFO:
@@ -162,7 +163,14 @@ def _get_recommended_vosk_model() -> tuple:
 class ModelDownloadDialog(Gtk.Dialog):
     """Dialog showing model download progress with cancel support."""
 
-    def __init__(self, parent, model_name: str, model_size_mb: int, engine: str = "whisper", language: str = "en-us"):
+    def __init__(
+        self,
+        parent,
+        model_name: str,
+        model_size_mb: int,
+        engine: str = "whisper",
+        language: str = "en-us",
+    ):
         super().__init__(
             title=f"Downloading {model_name.capitalize()} Model",
             transient_for=parent,
@@ -651,7 +659,11 @@ class SettingsDialog(Gtk.Dialog):
             # Show download dialog for models that need downloading
             logger.info(f"Model {model_name} needs download, showing progress dialog")
             download_dialog = ModelDownloadDialog(
-                self, model_name, model_info["size_mb"], engine=engine, language=self.language,
+                self,
+                model_name,
+                model_info["size_mb"],
+                engine=engine,
+                language=self.language,
             )
 
             def progress_callback(fraction, speed, status):
@@ -1009,7 +1021,11 @@ For now, the engine has been reverted to VOSK."""
         if needs_download:
             # Show download dialog
             download_dialog = ModelDownloadDialog(
-                self, model_name, model_info["size_mb"], engine=engine, language=self.language,
+                self,
+                model_name,
+                model_info["size_mb"],
+                engine=engine,
+                language=self.language,
             )
 
             def progress_callback(fraction, speed, status):
