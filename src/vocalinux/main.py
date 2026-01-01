@@ -26,16 +26,22 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Vocalinux")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    # default model, language and engine are loaded from default config due to priority of args over config
     parser.add_argument(
         "--model",
         type=str,
-        default="small",
+        choices=["small", "medium", "large"],
         help="Speech recognition model size (small, medium, large)",
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        choices=["en-us", "fr", "de", "ru"],
+        help="Speech recognition language (en-us, fr, de, ru)",
     )
     parser.add_argument(
         "--engine",
         type=str,
-        default="vosk",
         choices=["vosk", "whisper"],
         help="Speech recognition engine to use",
     )
@@ -104,12 +110,30 @@ def main():
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
 
-    # Use saved settings if no command-line override was provided
-    # Check if args are still at their defaults (user didn't explicitly set them)
-    engine = saved_settings.get("engine", args.engine)
-    model_size = saved_settings.get("model_size", args.model)
+    if args.engine:
+        engine = args.engine  # engine of the command line
+    elif saved_settings.get("engine", args.engine):
+        engine = saved_settings.get("engine", args.engine)  # engine of the config.json
+    else:
+        engine = "vosk"  # default engine
 
-    logger.info(f"Using engine={engine}, model={model_size} (from saved config)")
+    if args.language:
+        language = args.language  # language of the command line
+    elif saved_settings.get("language", args.language):
+        language = saved_settings.get("language", args.language)  # language of the config.json
+    else:
+        language = "en-us"  # default language
+
+    if args.model:
+        model_size = args.model  # model-size of the command line
+    elif saved_settings.get("model_size", args.model):
+        model_size = saved_settings.get("model_size", args.model)  # model-size of the config.json
+    else:
+        model_size = "small"  # default model-size
+
+    logger.info(
+        f"Using engine={engine}, language={language}, model={model_size} (from saved config)"
+    )
 
     # Initialize main components
     logger.info("Initializing Vocalinux...")
@@ -119,6 +143,7 @@ def main():
         speech_engine = recognition_manager.SpeechRecognitionManager(
             engine=engine,
             model_size=model_size,
+            language=language,
         )
 
         # Initialize text injection system

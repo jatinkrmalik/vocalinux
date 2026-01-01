@@ -285,6 +285,8 @@ wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
 unzip vosk-model-small-en-us-0.15.zip
 ```
 
+Model names with more language and size variety can be found in [VOSK Models](https://alphacephei.com/vosk/models) page.
+
 ### Icons Not Displaying
 
 **Symptom:** Tray icon missing or generic
