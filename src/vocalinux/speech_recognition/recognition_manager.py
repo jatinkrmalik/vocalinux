@@ -87,7 +87,7 @@ class SpeechRecognitionManager:
     """
 
     def __init__(
-        self, engine: str = "vosk", model_size: str = "small", defer_download: bool = True, **kwargs
+        self, engine: str = "vosk", model_size: str = "small", language: str = "en_us", defer_download: bool = True, **kwargs
     ):
         """
         Initialize the speech recognition manager.
@@ -99,6 +99,7 @@ class SpeechRecognitionManager:
         """
         self.engine = engine
         self.model_size = model_size
+        self.language = language
         self.state = RecognitionState.IDLE
         self.audio_thread = None
         self.recognition_thread = None
@@ -126,7 +127,7 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(f"Initializing speech recognition with {engine} engine and {model_size} model")
+        logger.info(f"Initializing speech recognition with {engine} engine, {language} language and {model_size} model")
 
         # Initialize the selected speech recognition engine
         if engine == "vosk":
@@ -306,12 +307,45 @@ class SpeechRecognitionManager:
 
     def _get_vosk_model_path(self) -> str:
         """Get the path to the VOSK model based on the selected size."""
-        model_map = {
-            "small": "vosk-model-small-en-us-0.15",
-            "medium": "vosk-model-en-us-0.22",
-            # Use the standard large model URL, as 0.42 seems unavailable
-            "large": "vosk-model-en-us-0.22",
-        }
+        # model_map = {
+        #     "small": f"vosk-model-small-{language}-0.15",
+        #     "medium": f"vosk-model-{language}-0.22",
+        #     # Use the standard large model URL, as 0.42 seems unavailable
+        #     "large": f"vosk-model-{language}-0.22",
+        # }
+        if self.language == "en-us": # english
+            model_map = {
+                "small": "vosk-model-small-en-us-0.15",
+                "medium": "vosk-model-en-us-0.22",
+                # Use the standard large model URL, as 0.42 seems unavailable
+                "large": "vosk-model-en-us-0.22",
+            }
+        elif self.language == "fr": # french
+            model_map = {
+                "small": "vosk-model-small-fr-0.22",
+                "medium": "vosk-model-fr-0.22",
+                "large": "vosk-model-fr-0.22",
+            }
+        elif self.language == "de": # german
+            model_map = {
+                "small": "vosk-model-small-de-0.15",
+                "medium": "vosk-model-de-0.21",
+                "large": "vosk-model-de-0.21",
+            }
+        elif self.language == "ru": # german
+            model_map = {
+                "small": "vosk-model-small-ru-0.22",
+                "medium": "vosk-model-ru-0.22",
+                "large": "vosk-model-ru-0.22",
+            }
+        else:
+            logger.info(f"No installed language {self.language} found! Using en-us.")
+            model_map = {
+                "small": "vosk-model-small-en-us-0.15",
+                "medium": "vosk-model-en-us-0.22",
+                # Use the standard large model URL, as 0.42 seems unavailable
+                "large": "vosk-model-en-us-0.22",
+            }
 
         model_name = model_map.get(self.model_size, model_map["small"])
 
