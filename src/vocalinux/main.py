@@ -26,24 +26,22 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Vocalinux")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    # default model, language and engine are loaded from default config due to priority of args over config
     parser.add_argument(
         "--model",
         type=str,
-        default="small",
         choices=["small", "medium", "large"],
         help="Speech recognition model size (small, medium, large)",
     )
     parser.add_argument(
         "--language",
         type=str,
-        default="en-us",
         choices=["en-us", "fr", "de", "ru"],
         help="Speech recognition language (en-us, fr, de, ru)",
     )
     parser.add_argument(
         "--engine",
         type=str,
-        default="vosk",
         choices=["vosk", "whisper"],
         help="Speech recognition engine to use",
     )

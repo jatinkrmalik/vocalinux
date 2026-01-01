@@ -288,10 +288,14 @@ class SpeechRecognitionManager:
                 import torch
             use_fp16 = self.model.device != torch.device("cpu")
 
+            lang = self.language
+            if self.language == "en-us":
+                lang = "en"
+
             # Transcribe with Whisper (handles variable length audio automatically)
             result = self.model.transcribe(
                 audio_float,
-                language=self.language,
+                language=lang,
                 task="transcribe",
                 verbose=False,
                 temperature=0.0,  # Greedy decoding for consistency
