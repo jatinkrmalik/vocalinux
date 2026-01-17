@@ -15,8 +15,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import from the vocalinux package
-from .ui import tray_indicator
-from .ui.action_handler import ActionHandler
+from .ui import tray_indicator  # noqa: E402
+from .ui.action_handler import ActionHandler  # noqa: E402
 
 
 def parse_arguments():
@@ -36,7 +36,9 @@ def parse_arguments():
         choices=["vosk", "whisper"],
         help="Speech recognition engine to use",
     )
-    parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
+    parser.add_argument(
+        "--wayland", action="store_true", help="Force Wayland compatibility mode"
+    )
     return parser.parse_args()
 
 
@@ -115,9 +117,13 @@ def main():
     silence_timeout = saved_settings.get("silence_timeout", 2.0)
     audio_device_index = audio_settings.get("device_index", None)
 
-    logger.info(f"Using engine={engine}, model={model_size} (from saved config)")
+    logger.info(
+        f"Using engine={engine}, model={model_size} (from saved config)"
+    )
     if audio_device_index is not None:
-        logger.info(f"Using audio device index={audio_device_index} (from saved config)")
+        logger.info(
+            f"Using audio device index={audio_device_index} (from saved config)"
+        )
 
     # Initialize main components
     logger.info("Initializing Vocalinux...")

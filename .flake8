@@ -1,0 +1,18 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203, W503
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    test_venv,
+    build,
+    dist,
+    node_modules,
+    *.egg-info
+
+# Per-file ignores
+per-file-ignores =
+    src/vocalinux/ui/settings_dialog.py:E501
+    src/vocalinux/speech_recognition/recognition_manager.py:E501

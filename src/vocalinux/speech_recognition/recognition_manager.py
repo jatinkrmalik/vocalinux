@@ -924,11 +924,7 @@ class SpeechRecognitionManager:
     def _record_audio(self):
         """Record audio from the microphone."""
         # Lazy import to avoid circular dependency
-        from ..ui.audio_feedback import (
-            play_error_sound,
-            play_start_sound,
-            play_stop_sound,
-        )
+        from ..ui.audio_feedback import play_error_sound  # noqa: F401
 
         try:
             import numpy as np
@@ -1065,7 +1061,8 @@ class SpeechRecognitionManager:
                     else:  # Speech
                         if not speech_detected_in_session:
                             logger.debug(
-                                f"Speech detected (level={normalized_level:.1f}%, threshold={500/max(1,min(5,int(self.vad_sensitivity))):.0f})"
+                                f"Speech detected (level={normalized_level:.1f}%, "
+                                f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
                             )
                             speech_detected_in_session = True
                         silence_counter = 0

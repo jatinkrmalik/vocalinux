@@ -15,14 +15,16 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 # Need GLib for idle_add
-from gi.repository import GLib, Gtk
+from gi.repository import GLib, Gtk  # noqa: E402
 
-from ..common_types import RecognitionState
+from ..common_types import RecognitionState  # noqa: E402
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
-    from ..speech_recognition.recognition_manager import SpeechRecognitionManager
-    from .config_manager import ConfigManager
+    from ..speech_recognition.recognition_manager import (  # noqa: E402
+        SpeechRecognitionManager,
+    )
+    from .config_manager import ConfigManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
