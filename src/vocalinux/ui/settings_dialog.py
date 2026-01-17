@@ -9,20 +9,22 @@ import logging
 import os
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 # Need GLib for idle_add
-from gi.repository import GLib, GObject, Gtk, Pango
+from gi.repository import GLib, Gtk  # noqa: E402
 
-from ..common_types import RecognitionState
+from ..common_types import RecognitionState  # noqa: E402
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
-    from ..speech_recognition.recognition_manager import SpeechRecognitionManager
-    from .config_manager import ConfigManager
+    from ..speech_recognition.recognition_manager import (  # noqa: E402
+        SpeechRecognitionManager,
+    )
+    from .config_manager import ConfigManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -312,17 +314,92 @@ class SettingsDialog(Gtk.Dialog):
         self.set_border_width(10)
 
         # --- UI Elements ---
-        self.grid = Gtk.Grid(column_spacing=10, row_spacing=15)
+        self.grid = Gtk.Grid(column_spacing=10, row_spacing=8)
         self.get_content_area().add(self.grid)
 
+        row = 0
+
+        # ==================== AUDIO INPUT SECTION (TOP) ====================
+        audio_label = Gtk.Label(label="<b>Audio Input</b>", use_markup=True, halign=Gtk.Align.START)
+        self.grid.attach(audio_label, 0, row, 2, 1)
+        row += 1
+
+        # Audio device selection
+        audio_device_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        audio_device_box.pack_start(
+            Gtk.Label(label="Input Device:", halign=Gtk.Align.START), False, False, 0
+        )
+
+        self.audio_device_combo = Gtk.ComboBoxText()
+        self.audio_device_combo.set_tooltip_text(
+            "Select the microphone to use for voice recognition.\n"
+            "If you're having issues with audio detection, try different devices."
+        )
+        self._populate_audio_devices()
+        self.audio_device_combo.connect("changed", self._on_audio_device_changed)
+        audio_device_box.pack_start(self.audio_device_combo, True, True, 0)
+
+        # Refresh button
+        refresh_btn = Gtk.Button()
+        refresh_btn.set_image(Gtk.Image.new_from_icon_name("view-refresh", Gtk.IconSize.BUTTON))
+        refresh_btn.set_tooltip_text("Refresh audio device list")
+        refresh_btn.connect("clicked", self._on_refresh_audio_devices)
+        audio_device_box.pack_start(refresh_btn, False, False, 0)
+
+        self.grid.attach(audio_device_box, 0, row, 2, 1)
+        row += 1
+
+        # Audio level indicator and test button
+        audio_test_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+        level_label = Gtk.Label(label="Level:", halign=Gtk.Align.START)
+        audio_test_box.pack_start(level_label, False, False, 0)
+
+        self.audio_level_bar = Gtk.LevelBar()
+        self.audio_level_bar.set_min_value(0)
+        self.audio_level_bar.set_max_value(100)
+        self.audio_level_bar.set_value(0)
+        self.audio_level_bar.set_size_request(150, -1)
+        audio_test_box.pack_start(self.audio_level_bar, True, True, 0)
+
+        self.test_audio_btn = Gtk.Button(label="Test Mic")
+        self.test_audio_btn.set_tooltip_text(
+            "Test the selected microphone for 2 seconds.\n"
+            "Speak into your microphone to verify it's working."
+        )
+        self.test_audio_btn.connect("clicked", self._on_test_audio_clicked)
+        audio_test_box.pack_start(self.test_audio_btn, False, False, 0)
+
+        self.grid.attach(audio_test_box, 0, row, 2, 1)
+        row += 1
+
+        # Audio test status label
+        self.audio_test_status = Gtk.Label(label="", use_markup=True, halign=Gtk.Align.START)
+        self.grid.attach(self.audio_test_status, 0, row, 2, 1)
+        row += 1
+
+        # ==================== SEPARATOR ====================
+        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
+        row += 1
+
+        # ==================== SPEECH ENGINE SECTION ====================
+        engine_label = Gtk.Label(
+            label="<b>Speech Engine</b>", use_markup=True, halign=Gtk.Align.START
+        )
+        self.grid.attach(engine_label, 0, row, 2, 1)
+        row += 1
+
         # Engine Selection
-        self.grid.attach(Gtk.Label(label="Speech Engine:", halign=Gtk.Align.START), 0, 0, 1, 1)
+        self.grid.attach(Gtk.Label(label="Engine:", halign=Gtk.Align.START), 0, row, 1, 1)
         self.engine_combo = Gtk.ComboBoxText()
+        self.grid.attach(self.engine_combo, 1, row, 1, 1)
+        row += 1
 
         # Model Size Selection
-        self.grid.attach(Gtk.Label(label="Model Size:", halign=Gtk.Align.START), 0, 1, 1, 1)
+        self.grid.attach(Gtk.Label(label="Model Size:", halign=Gtk.Align.START), 0, row, 1, 1)
         self.model_combo = Gtk.ComboBoxText()
-        self.grid.attach(self.model_combo, 1, 1, 1, 1)
+        self.grid.attach(self.model_combo, 1, row, 1, 1)
+        row += 1
 
         # Model legend (applies to both engines)
         model_legend = Gtk.Label(
@@ -330,65 +407,11 @@ class SettingsDialog(Gtk.Dialog):
             use_markup=True,
             halign=Gtk.Align.END,
         )
-        self.grid.attach(model_legend, 0, 2, 2, 1)
-
-        # Recognition Settings Box (shared between engines)
-        self.recognition_settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        self.recognition_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
-        self.recognition_settings_box.pack_start(
-            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 5
-        )
-        self.recognition_settings_box.pack_start(
-            Gtk.Label(label="<b>Recognition Settings</b>", use_markup=True, halign=Gtk.Align.START),
-            False,
-            False,
-            5,
-        )
-        self.recognition_settings_box.pack_start(self.recognition_grid, False, False, 0)
-        self.grid.attach(self.recognition_settings_box, 0, 3, 2, 1)
-
-        # VAD Sensitivity (controls how sensitive the mic is to speech vs silence)
-        self.recognition_grid.attach(
-            Gtk.Label(label="VAD Sensitivity (1-5):", halign=Gtk.Align.START), 0, 0, 1, 1
-        )
-        self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
-        self.vad_spin.set_tooltip_text("Higher = more sensitive to quiet speech")
-        self.vad_spin.connect("value-changed", self._on_vad_changed)
-        self.recognition_grid.attach(self.vad_spin, 1, 0, 1, 1)
-
-        # Silence Timeout (how long to wait before processing)
-        self.recognition_grid.attach(
-            Gtk.Label(label="Silence Timeout (sec):", halign=Gtk.Align.START), 0, 1, 1, 1
-        )
-        self.silence_spin = Gtk.SpinButton.new_with_range(0.5, 5.0, 0.1)
-        self.silence_spin.set_digits(1)
-        self.silence_spin.set_tooltip_text("Wait time after silence before processing speech")
-        self.silence_spin.connect("value-changed", self._on_silence_changed)
-        self.recognition_grid.attach(self.silence_spin, 1, 1, 1, 1)
-
-        # VOSK Model info label (shown only for VOSK)
-        self.vosk_model_info_label = Gtk.Label(
-            label="",
-            use_markup=True,
-            halign=Gtk.Align.START,
-            wrap=True,
-        )
-        self.recognition_grid.attach(self.vosk_model_info_label, 0, 2, 2, 1)
-
-        # VOSK Recommendation label (shown only for VOSK)
-        self.vosk_recommendation_label = Gtk.Label(
-            label="",
-            use_markup=True,
-            halign=Gtk.Align.START,
-            wrap=True,
-        )
-        self.recognition_grid.attach(self.vosk_recommendation_label, 0, 3, 2, 1)
+        self.grid.attach(model_legend, 0, row, 2, 1)
+        row += 1
 
         # Whisper Info Box (initially hidden)
         self.whisper_info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        self.whisper_info_box.pack_start(
-            Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 5
-        )
         self.whisper_info_box.pack_start(
             Gtk.Label(
                 label="<b>Whisper Model Info</b>",
@@ -418,30 +441,93 @@ class SettingsDialog(Gtk.Dialog):
         )
         self.whisper_info_box.pack_start(self.whisper_recommendation_label, False, False, 5)
 
-        self.grid.attach(self.whisper_info_box, 0, 4, 2, 1)
+        self.grid.attach(self.whisper_info_box, 0, row, 2, 1)
+        row += 1
 
         # Add model change handler
         self.model_combo.connect("changed", self._on_model_changed)
 
-        # Test Area
-        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 6, 2, 1)
+        # ==================== SEPARATOR ====================
+        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
+        row += 1
+
+        # ==================== RECOGNITION SETTINGS SECTION ====================
+        recognition_label = Gtk.Label(
+            label="<b>Recognition Settings</b>", use_markup=True, halign=Gtk.Align.START
+        )
+        self.grid.attach(recognition_label, 0, row, 2, 1)
+        row += 1
+
+        # VAD Sensitivity (controls how sensitive the mic is to speech vs silence)
+        self.grid.attach(
+            Gtk.Label(label="VAD Sensitivity (1-5):", halign=Gtk.Align.START), 0, row, 1, 1
+        )
+        self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
+        self.vad_spin.set_tooltip_text("Higher = more sensitive to quiet speech")
+        self.vad_spin.connect("value-changed", self._on_vad_changed)
+        self.grid.attach(self.vad_spin, 1, row, 1, 1)
+        row += 1
+
+        # Silence Timeout (how long to wait before processing)
+        self.grid.attach(
+            Gtk.Label(label="Silence Timeout (sec):", halign=Gtk.Align.START), 0, row, 1, 1
+        )
+        self.silence_spin = Gtk.SpinButton.new_with_range(0.5, 5.0, 0.1)
+        self.silence_spin.set_digits(1)
+        self.silence_spin.set_tooltip_text("Wait time after silence before processing speech")
+        self.silence_spin.connect("value-changed", self._on_silence_changed)
+        self.grid.attach(self.silence_spin, 1, row, 1, 1)
+        row += 1
+
+        # VOSK Model info label (shown only for VOSK)
+        self.vosk_model_info_label = Gtk.Label(
+            label="",
+            use_markup=True,
+            halign=Gtk.Align.START,
+            wrap=True,
+        )
+        self.grid.attach(self.vosk_model_info_label, 0, row, 2, 1)
+        row += 1
+
+        # VOSK Recommendation label (shown only for VOSK)
+        self.vosk_recommendation_label = Gtk.Label(
+            label="",
+            use_markup=True,
+            halign=Gtk.Align.START,
+            wrap=True,
+        )
+        self.grid.attach(self.vosk_recommendation_label, 0, row, 2, 1)
+        row += 1
+
+        # Legacy recognition settings box (for compatibility)
+        self.recognition_settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.recognition_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
+
+        # ==================== SEPARATOR ====================
+        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
+        row += 1
+
+        # ==================== TEST RECOGNITION SECTION ====================
         test_label = Gtk.Label(
             label="<b>Test Recognition</b>", use_markup=True, halign=Gtk.Align.START
         )
-        self.grid.attach(test_label, 0, 7, 2, 1)
+        self.grid.attach(test_label, 0, row, 2, 1)
+        row += 1
 
         scrolled_window = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
-        scrolled_window.set_min_content_height(100)
+        scrolled_window.set_min_content_height(80)
         self.test_textview = Gtk.TextView(
             editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD
         )
         self.test_buffer = self.test_textview.get_buffer()
         scrolled_window.add(self.test_textview)
-        self.grid.attach(scrolled_window, 0, 8, 2, 1)
+        self.grid.attach(scrolled_window, 0, row, 2, 1)
+        row += 1
 
         self.test_button = Gtk.Button(label="Start Test (3 seconds)")
         self.test_button.connect("clicked", self._on_test_clicked)
-        self.grid.attach(self.test_button, 0, 9, 2, 1)
+        self.grid.attach(self.test_button, 0, row, 2, 1)
+        row += 1
 
         # ---- CRITICAL CHANGE ----
         # Load settings FIRST before creating UI connections
@@ -468,7 +554,7 @@ class SettingsDialog(Gtk.Dialog):
         engine_text = self.current_engine.capitalize()
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
-            logger.warning(f"Could not set engine by ID, trying by index")
+            logger.warning("Could not set engine by ID, trying by index")
             # Fallback to setting by index
             if self.current_engine == "vosk":
                 self.engine_combo.set_active(0)
@@ -790,7 +876,6 @@ class SettingsDialog(Gtk.Dialog):
                 f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
             )
         else:
-            rec_info = WHISPER_MODEL_INFO[recommended]
             self.whisper_recommendation_label.set_markup(
                 f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
             )
@@ -833,7 +918,6 @@ class SettingsDialog(Gtk.Dialog):
                 f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
             )
         else:
-            rec_info = VOSK_MODEL_INFO[recommended]
             self.vosk_recommendation_label.set_markup(
                 f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
             )
@@ -1112,3 +1196,123 @@ For now, the engine has been reverted to VOSK."""
                 error_dialog.run()
                 error_dialog.destroy()
             return False
+
+    def _populate_audio_devices(self):
+        """Populate the audio device dropdown with available input devices."""
+        # Lazy import to avoid circular dependency
+        from ..speech_recognition.recognition_manager import get_audio_input_devices
+
+        self.audio_device_combo.remove_all()
+
+        # Add "System Default" option first
+        self.audio_device_combo.append("-1", "System Default")
+
+        # Get available devices
+        devices = get_audio_input_devices()
+
+        for device_index, device_name, is_default in devices:
+            label = device_name
+            if is_default:
+                label += " (default)"
+            self.audio_device_combo.append(str(device_index), label)
+
+        # Get saved device from config
+        saved_device = self.config_manager.get("audio", "device_index", None)
+
+        if saved_device is None:
+            self.audio_device_combo.set_active_id("-1")
+        else:
+            if not self.audio_device_combo.set_active_id(str(saved_device)):
+                # Saved device no longer available, fall back to default
+                logger.warning(f"Saved audio device {saved_device} no longer available")
+                self.audio_device_combo.set_active_id("-1")
+
+        logger.info(f"Found {len(devices)} audio input devices")
+
+    def _on_refresh_audio_devices(self, widget):
+        """Handle refresh button click for audio devices."""
+        self._populate_audio_devices()
+        self.audio_test_status.set_markup("<i>Device list refreshed</i>")
+
+    def _on_audio_device_changed(self, widget):
+        """Handle changes in the selected audio device."""
+        if self._initializing:
+            return
+
+        device_id = self.audio_device_combo.get_active_id()
+        if device_id is None:
+            return
+
+        device_index = int(device_id)
+        device_name = self.audio_device_combo.get_active_text()
+
+        # Save to config
+        if device_index == -1:
+            self.config_manager.set("audio", "device_index", None)
+            self.config_manager.set("audio", "device_name", None)
+        else:
+            self.config_manager.set("audio", "device_index", device_index)
+            self.config_manager.set("audio", "device_name", device_name)
+
+        self.config_manager.save_settings()
+
+        # Update speech engine
+        if device_index == -1:
+            self.speech_engine.set_audio_device(None)
+        else:
+            self.speech_engine.set_audio_device(device_index)
+
+        logger.info(f"Audio device changed to: [{device_index}] {device_name}")
+        self.audio_test_status.set_markup(f"<i>Selected: {device_name}</i>")
+
+    def _on_test_audio_clicked(self, widget):
+        """Handle test audio button click."""
+        self.test_audio_btn.set_sensitive(False)
+        self.test_audio_btn.set_label("Testing...")
+        self.audio_test_status.set_markup("<i>Recording... speak into your microphone</i>")
+        self.audio_level_bar.set_value(0)
+
+        # Get selected device
+        device_id = self.audio_device_combo.get_active_id()
+        device_index = None if device_id == "-1" else int(device_id)
+
+        def run_test():
+            # Lazy import to avoid circular dependency
+            from ..speech_recognition.recognition_manager import test_audio_input
+
+            result = test_audio_input(device_index=device_index, duration=2.0)
+            GLib.idle_add(self._handle_audio_test_result, result)
+
+        threading.Thread(target=run_test, daemon=True).start()
+
+    def _handle_audio_test_result(self, result: dict):
+        """Handle the result of an audio test."""
+        self.test_audio_btn.set_sensitive(True)
+        self.test_audio_btn.set_label("Test Mic")
+
+        if result.get("success"):
+            max_level = result.get("max_amplitude", 0)
+            has_signal = result.get("has_signal", False)
+
+            # Update level bar with max level (normalized to 0-100)
+            level_percent = min(100, (max_level / 327.68))
+            self.audio_level_bar.set_value(level_percent)
+
+            if has_signal:
+                self.audio_test_status.set_markup(
+                    f"<span color='green'>✓ Audio detected!</span> "
+                    f"Peak level: {level_percent:.0f}%"
+                )
+            else:
+                self.audio_test_status.set_markup(
+                    f"<span color='orange'>⚠ Very low audio level</span> "
+                    f"(peak: {level_percent:.1f}%)\n"
+                    "<small>Check if microphone is muted or try a different device</small>"
+                )
+        else:
+            error_msg = result.get("error", "Unknown error")
+            self.audio_test_status.set_markup(
+                f"<span color='red'>✗ Test failed:</span> {error_msg}"
+            )
+
+        return False  # Don't repeat
