@@ -103,13 +103,19 @@ def main():
 
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
+    audio_settings = config_manager.get_settings().get("audio", {})
 
     # Use saved settings if no command-line override was provided
     # Check if args are still at their defaults (user didn't explicitly set them)
     engine = saved_settings.get("engine", args.engine)
     model_size = saved_settings.get("model_size", args.model)
+    vad_sensitivity = saved_settings.get("vad_sensitivity", 3)
+    silence_timeout = saved_settings.get("silence_timeout", 2.0)
+    audio_device_index = audio_settings.get("device_index", None)
 
     logger.info(f"Using engine={engine}, model={model_size} (from saved config)")
+    if audio_device_index is not None:
+        logger.info(f"Using audio device index={audio_device_index} (from saved config)")
 
     # Initialize main components
     logger.info("Initializing Vocalinux...")
@@ -119,6 +125,9 @@ def main():
         speech_engine = recognition_manager.SpeechRecognitionManager(
             engine=engine,
             model_size=model_size,
+            vad_sensitivity=vad_sensitivity,
+            silence_timeout=silence_timeout,
+            audio_device_index=audio_device_index,
         )
 
         # Initialize text injection system

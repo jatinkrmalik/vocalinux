@@ -24,6 +24,10 @@ DEFAULT_CONFIG = {
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5) - Moved here
         "silence_timeout": 2.0,  # Seconds of silence before stopping recognition - Moved here
     },
+    "audio": {
+        "device_index": None,  # Audio input device index (None for system default)
+        "device_name": None,  # Saved device name for display/reference
+    },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap Ctrl
     },
