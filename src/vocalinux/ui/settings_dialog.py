@@ -18,7 +18,6 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, GObject, Gtk, Pango
 
 from ..common_types import RecognitionState
-from ..speech_recognition import get_audio_input_devices, test_audio_input
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -1176,6 +1175,9 @@ For now, the engine has been reverted to VOSK."""
 
     def _populate_audio_devices(self):
         """Populate the audio device dropdown with available input devices."""
+        # Lazy import to avoid circular dependency
+        from ..speech_recognition.recognition_manager import get_audio_input_devices
+        
         self.audio_device_combo.remove_all()
         
         # Add "System Default" option first
@@ -1251,6 +1253,8 @@ For now, the engine has been reverted to VOSK."""
         device_index = None if device_id == "-1" else int(device_id)
         
         def run_test():
+            # Lazy import to avoid circular dependency
+            from ..speech_recognition.recognition_manager import test_audio_input
             result = test_audio_input(device_index=device_index, duration=2.0)
             GLib.idle_add(self._handle_audio_test_result, result)
         
