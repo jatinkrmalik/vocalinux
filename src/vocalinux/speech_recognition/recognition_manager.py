@@ -5,18 +5,16 @@ This module provides a unified interface to different speech recognition engines
 currently supporting VOSK and Whisper.
 """
 
-import contextlib
 import ctypes
 import json
 import logging
 import os
-import sys
 import threading
 import time
-from pathlib import Path
 from typing import Callable, List, Optional
 
 from ..common_types import RecognitionState
+from .command_processor import CommandProcessor
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -53,50 +51,51 @@ _alsa_handler = _setup_alsa_error_handler()
 def get_audio_input_devices() -> list:
     """
     Get a list of available audio input devices.
-    
+
     Returns:
         List of tuples: (device_index, device_name, is_default)
     """
     devices = []
     try:
         import pyaudio
+
         audio = pyaudio.PyAudio()
-        
+
         default_input_device = None
         try:
             default_info = audio.get_default_input_device_info()
             default_input_device = default_info.get("index")
         except (IOError, OSError):
             pass  # No default input device
-        
+
         for i in range(audio.get_device_count()):
             try:
                 info = audio.get_device_info_by_index(i)
                 # Only include devices that have input channels
                 if info.get("maxInputChannels", 0) > 0:
                     name = info.get("name", f"Device {i}")
-                    is_default = (i == default_input_device)
+                    is_default = i == default_input_device
                     devices.append((i, name, is_default))
             except (IOError, OSError):
                 continue
-        
+
         audio.terminate()
     except ImportError:
         logger.error("PyAudio not installed, cannot enumerate audio devices")
     except Exception as e:
         logger.error(f"Error enumerating audio devices: {e}")
-    
+
     return devices
 
 
 def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
     """
     Test audio input from a device and return diagnostic information.
-    
+
     Args:
         device_index: The device index to test (None for default)
         duration: How long to record in seconds
-        
+
     Returns:
         Dictionary with test results including:
         - success: bool
@@ -115,20 +114,20 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
         "max_amplitude": 0.0,
         "mean_amplitude": 0.0,
         "has_signal": False,
-        "error": None
+        "error": None,
     }
-    
+
     try:
         import numpy as np
         import pyaudio
-        
+
         CHUNK = 1024
         FORMAT = pyaudio.paInt16
         CHANNELS = 1
         RATE = 16000
-        
+
         audio = pyaudio.PyAudio()
-        
+
         # Get device info
         try:
             if device_index is not None:
@@ -142,7 +141,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             result["error"] = f"Cannot get device info: {e}"
             audio.terminate()
             return result
-        
+
         # Open stream
         try:
             stream_kwargs = {
@@ -154,17 +153,17 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             }
             if device_index is not None:
                 stream_kwargs["input_device_index"] = device_index
-            
+
             stream = audio.open(**stream_kwargs)
         except (IOError, OSError) as e:
             result["error"] = f"Cannot open audio stream: {e}"
             audio.terminate()
             return result
-        
+
         # Record and analyze
         all_amplitudes = []
         frames_to_read = int(RATE * duration / CHUNK)
-        
+
         for _ in range(frames_to_read):
             try:
                 data = stream.read(CHUNK, exception_on_overflow=False)
@@ -174,11 +173,11 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             except Exception as e:
                 result["error"] = f"Error reading audio: {e}"
                 break
-        
+
         stream.stop_stream()
         stream.close()
         audio.terminate()
-        
+
         if all_amplitudes:
             all_amplitudes = np.array(all_amplitudes)
             result["success"] = True
@@ -188,15 +187,14 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             # Signal present if max amplitude is above typical digital noise floor
             # 16-bit audio has max value of 32768, noise floor is typically < 100
             result["has_signal"] = result["max_amplitude"] > 200
-        
+
     except ImportError as e:
         result["error"] = f"Missing dependency: {e}"
     except Exception as e:
         result["error"] = f"Unexpected error: {e}"
-    
+
     return result
-from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
-from .command_processor import CommandProcessor
+
 
 logger = logging.getLogger(__name__)
 
@@ -266,10 +264,10 @@ class SpeechRecognitionManager:
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
-        
+
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
-        
+
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
         self._audio_level_callbacks: List[Callable[[float], None]] = []
@@ -634,19 +632,27 @@ class SpeechRecognitionManager:
 
     def _download_whisper_model(self, cache_dir: str):
         """Download a Whisper model with progress tracking."""
-        import hashlib
-
         import requests
 
         self._download_cancelled = False
 
         # Whisper model URLs (from openai-whisper package)
         model_urls = {
-            "tiny": "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt",
-            "base": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
-            "small": "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
-            "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
-            "large": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
+            "tiny": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/"
+            "tiny.pt",
+            "base": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/"
+            "base.pt",
+            "small": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/"
+            "small.pt",
+            "medium": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/"
+            "medium.pt",
+            "large": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/"
+            "large-v3.pt",
         }
 
         url = model_urls.get(self.model_size)
@@ -843,6 +849,9 @@ class SpeechRecognitionManager:
 
     def start_recognition(self):
         """Start the speech recognition process."""
+        # Lazy import to avoid circular dependency
+        from ..ui.audio_feedback import play_error_sound, play_start_sound
+
         if self.state != RecognitionState.IDLE:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
             return
@@ -850,12 +859,12 @@ class SpeechRecognitionManager:
         # Check if model is ready
         if not self.model_ready:
             logger.warning(
-                "Cannot start recognition: model not downloaded. Please download via Settings."
+                "Cannot start recognition: model not downloaded. " "Please download via Settings."
             )
             play_error_sound()
             _show_notification(
                 "No Speech Model",
-                "Please open Settings and download a speech recognition model to use dictation.",
+                "Please open Settings and download a speech recognition model " "to use dictation.",
                 "dialog-warning",
             )
             return
@@ -882,6 +891,9 @@ class SpeechRecognitionManager:
 
     def stop_recognition(self):
         """Stop the speech recognition process."""
+        # Lazy import to avoid circular dependency
+        from ..ui.audio_feedback import play_stop_sound
+
         if self.state == RecognitionState.IDLE:
             return
 
@@ -911,9 +923,14 @@ class SpeechRecognitionManager:
 
     def _record_audio(self):
         """Record audio from the microphone."""
-        try:
-            import wave
+        # Lazy import to avoid circular dependency
+        from ..ui.audio_feedback import (
+            play_error_sound,
+            play_start_sound,
+            play_stop_sound,
+        )
 
+        try:
             import numpy as np
             import pyaudio
         except ImportError as e:
@@ -933,14 +950,16 @@ class SpeechRecognitionManager:
 
             # Initialize PyAudio
             audio = pyaudio.PyAudio()
-            
+
             # Log available devices for debugging
             logger.debug("Available audio input devices:")
             for i in range(audio.get_device_count()):
                 try:
                     info = audio.get_device_info_by_index(i)
                     if info.get("maxInputChannels", 0) > 0:
-                        logger.debug(f"  [{i}] {info.get('name')} (inputs: {info.get('maxInputChannels')})")
+                        logger.debug(
+                            f"  [{i}] {info.get('name')} (inputs: {info.get('maxInputChannels')})"
+                        )
                 except (IOError, OSError):
                     continue
 
@@ -952,22 +971,26 @@ class SpeechRecognitionManager:
                 "input": True,
                 "frames_per_buffer": CHUNK,
             }
-            
+
             # Use specified device if set, otherwise use system default
             if self.audio_device_index is not None:
                 stream_kwargs["input_device_index"] = self.audio_device_index
                 try:
                     device_info = audio.get_device_info_by_index(self.audio_device_index)
-                    logger.info(f"Using audio device [{self.audio_device_index}]: {device_info.get('name')}")
+                    logger.info(
+                        f"Using audio device [{self.audio_device_index}]: {device_info.get('name')}"
+                    )
                 except (IOError, OSError):
                     logger.warning(f"Could not get info for device index {self.audio_device_index}")
             else:
                 try:
                     default_device = audio.get_default_input_device_info()
-                    logger.info(f"Using default audio device [{default_device.get('index')}]: {default_device.get('name')}")
+                    logger.info(
+                        f"Using default audio device [{default_device.get('index')}]: {default_device.get('name')}"
+                    )
                 except (IOError, OSError):
                     logger.warning("Could not get default input device info")
-            
+
             try:
                 stream = audio.open(**stream_kwargs)
             except (IOError, OSError) as e:
@@ -985,7 +1008,7 @@ class SpeechRecognitionManager:
             speech_detected_in_session = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
-            
+
             while self.should_record:
                 try:
                     data = stream.read(CHUNK, exception_on_overflow=False)
@@ -994,24 +1017,26 @@ class SpeechRecognitionManager:
                     # Simple Voice Activity Detection (VAD)
                     audio_data = np.frombuffer(data, dtype=np.int16)
                     volume = np.abs(audio_data).mean()
-                    
+
                     # Track max level and notify callbacks
                     # Normalize to 0-100 scale (16-bit audio max is ~32768)
                     normalized_level = min(100.0, (volume / 327.68))
                     self._last_audio_level = normalized_level
                     max_level_seen = max(max_level_seen, normalized_level)
-                    
+
                     # Notify audio level callbacks
                     for callback in self._audio_level_callbacks:
                         try:
                             callback(normalized_level)
                         except Exception as e:
                             logger.debug(f"Audio level callback error: {e}")
-                    
+
                     # Log audio levels periodically for debugging
                     log_level_interval += 1
                     if log_level_interval >= 50:  # Every ~3 seconds at 16kHz/1024 chunks
-                        logger.debug(f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%")
+                        logger.debug(
+                            f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%"
+                        )
                         log_level_interval = 0
 
                     # Threshold based on sensitivity (1-5)
@@ -1039,7 +1064,9 @@ class SpeechRecognitionManager:
                             self._update_state(RecognitionState.LISTENING)
                     else:  # Speech
                         if not speech_detected_in_session:
-                            logger.debug(f"Speech detected (level={normalized_level:.1f}%, threshold={500/max(1,min(5,int(self.vad_sensitivity))):.0f})")
+                            logger.debug(
+                                f"Speech detected (level={normalized_level:.1f}%, threshold={500/max(1,min(5,int(self.vad_sensitivity))):.0f})"
+                            )
                             speech_detected_in_session = True
                         silence_counter = 0
                 except Exception as e:
@@ -1050,12 +1077,15 @@ class SpeechRecognitionManager:
             stream.stop_stream()
             stream.close()
             audio.terminate()
-            
+
             # Log summary
             if not speech_detected_in_session and max_level_seen < 5:
-                logger.warning(f"No speech detected during session. Max audio level was only {max_level_seen:.1f}%. "
-                             "This may indicate the wrong audio device is selected or the microphone is muted.")
-            
+                logger.warning(
+                    f"No speech detected during session. Max audio level was "
+                    f"only {max_level_seen:.1f}%. This may indicate the wrong "
+                    "audio device is selected or the microphone is muted."
+                )
+
             logger.info("Audio recording stopped")
 
         except Exception as e:
@@ -1141,7 +1171,7 @@ class SpeechRecognitionManager:
             self.vad_sensitivity = max(1, min(5, int(vad_sensitivity)))
         if silence_timeout is not None:
             self.silence_timeout = max(0.5, min(5.0, float(silence_timeout)))
-        
+
         # Handle audio device index (-1 means use default/clear selection)
         if audio_device_index is not None:
             if audio_device_index == -1:
