@@ -5,7 +5,6 @@ Main entry point for Vocalinux application.
 
 import argparse
 import logging
-import os
 import sys
 
 # Configure logging
@@ -16,8 +15,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import from the vocalinux package
-from .speech_recognition import recognition_manager
-from .text_injection import text_injector
 from .ui import tray_indicator
 from .ui.action_handler import ActionHandler
 
@@ -47,26 +44,29 @@ def check_dependencies():
     """Check for required dependencies and provide helpful error messages."""
     missing_deps = []
 
+    # pynput is used for keyboard detection but we check at module startup
+    # requests is used by various components
+    # These are intentional checks to provide user-friendly error messages
+    try:
+        import pynput  # noqa: F401
+    except ImportError:
+        missing_deps.append("pynput (install with: pip install pynput)")
+
+    try:
+        import requests  # noqa: F401
+    except ImportError:
+        missing_deps.append("requests (install with: pip install requests)")
+
     try:
         import gi
 
         gi.require_version("Gtk", "3.0")
         gi.require_version("AppIndicator3", "0.1")
-        from gi.repository import AppIndicator3, Gtk
-    except (ImportError, ValueError) as e:
+    except (ImportError, ValueError):
         missing_deps.append(
-            "GTK3 and AppIndicator3 (install with: sudo apt install python3-gi gir1.2-appindicator3-0.1)"
+            "GTK3 and AppIndicator3 (install with: sudo apt install "
+            "python3-gi gir1.2-appindicator3-0.1)"
         )
-
-    try:
-        import pynput
-    except ImportError:
-        missing_deps.append("pynput (install with: pip install pynput)")
-
-    try:
-        import requests
-    except ImportError:
-        missing_deps.append("requests (install with: pip install requests)")
 
     if missing_deps:
         logger.error("Missing required dependencies:")
@@ -99,6 +99,8 @@ def main():
         sys.exit(1)
 
     # Load saved configuration to get engine/model settings
+    from .speech_recognition import recognition_manager
+    from .text_injection import text_injector
     from .ui.config_manager import ConfigManager
 
     config_manager = ConfigManager()

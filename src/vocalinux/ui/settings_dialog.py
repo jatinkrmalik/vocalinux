@@ -9,13 +9,13 @@ import logging
 import os
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 # Need GLib for idle_add
-from gi.repository import GLib, GObject, Gtk, Pango
+from gi.repository import GLib, Gtk
 
 from ..common_types import RecognitionState
 
@@ -318,18 +318,16 @@ class SettingsDialog(Gtk.Dialog):
         row = 0
 
         # ==================== AUDIO INPUT SECTION (TOP) ====================
-        audio_label = Gtk.Label(
-            label="<b>Audio Input</b>", use_markup=True, halign=Gtk.Align.START
-        )
+        audio_label = Gtk.Label(label="<b>Audio Input</b>", use_markup=True, halign=Gtk.Align.START)
         self.grid.attach(audio_label, 0, row, 2, 1)
         row += 1
-        
+
         # Audio device selection
         audio_device_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         audio_device_box.pack_start(
             Gtk.Label(label="Input Device:", halign=Gtk.Align.START), False, False, 0
         )
-        
+
         self.audio_device_combo = Gtk.ComboBoxText()
         self.audio_device_combo.set_tooltip_text(
             "Select the microphone to use for voice recognition.\n"
@@ -338,30 +336,30 @@ class SettingsDialog(Gtk.Dialog):
         self._populate_audio_devices()
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
         audio_device_box.pack_start(self.audio_device_combo, True, True, 0)
-        
+
         # Refresh button
         refresh_btn = Gtk.Button()
         refresh_btn.set_image(Gtk.Image.new_from_icon_name("view-refresh", Gtk.IconSize.BUTTON))
         refresh_btn.set_tooltip_text("Refresh audio device list")
         refresh_btn.connect("clicked", self._on_refresh_audio_devices)
         audio_device_box.pack_start(refresh_btn, False, False, 0)
-        
+
         self.grid.attach(audio_device_box, 0, row, 2, 1)
         row += 1
-        
+
         # Audio level indicator and test button
         audio_test_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        
+
         level_label = Gtk.Label(label="Level:", halign=Gtk.Align.START)
         audio_test_box.pack_start(level_label, False, False, 0)
-        
+
         self.audio_level_bar = Gtk.LevelBar()
         self.audio_level_bar.set_min_value(0)
         self.audio_level_bar.set_max_value(100)
         self.audio_level_bar.set_value(0)
         self.audio_level_bar.set_size_request(150, -1)
         audio_test_box.pack_start(self.audio_level_bar, True, True, 0)
-        
+
         self.test_audio_btn = Gtk.Button(label="Test Mic")
         self.test_audio_btn.set_tooltip_text(
             "Test the selected microphone for 2 seconds.\n"
@@ -369,10 +367,10 @@ class SettingsDialog(Gtk.Dialog):
         )
         self.test_audio_btn.connect("clicked", self._on_test_audio_clicked)
         audio_test_box.pack_start(self.test_audio_btn, False, False, 0)
-        
+
         self.grid.attach(audio_test_box, 0, row, 2, 1)
         row += 1
-        
+
         # Audio test status label
         self.audio_test_status = Gtk.Label(label="", use_markup=True, halign=Gtk.Align.START)
         self.grid.attach(self.audio_test_status, 0, row, 2, 1)
@@ -554,7 +552,7 @@ class SettingsDialog(Gtk.Dialog):
         engine_text = self.current_engine.capitalize()
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
-            logger.warning(f"Could not set engine by ID, trying by index")
+            logger.warning("Could not set engine by ID, trying by index")
             # Fallback to setting by index
             if self.current_engine == "vosk":
                 self.engine_combo.set_active(0)
@@ -876,7 +874,6 @@ class SettingsDialog(Gtk.Dialog):
                 f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
             )
         else:
-            rec_info = WHISPER_MODEL_INFO[recommended]
             self.whisper_recommendation_label.set_markup(
                 f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
             )
@@ -919,7 +916,6 @@ class SettingsDialog(Gtk.Dialog):
                 f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
             )
         else:
-            rec_info = VOSK_MODEL_INFO[recommended]
             self.vosk_recommendation_label.set_markup(
                 f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
             )
@@ -1203,24 +1199,24 @@ For now, the engine has been reverted to VOSK."""
         """Populate the audio device dropdown with available input devices."""
         # Lazy import to avoid circular dependency
         from ..speech_recognition.recognition_manager import get_audio_input_devices
-        
+
         self.audio_device_combo.remove_all()
-        
+
         # Add "System Default" option first
         self.audio_device_combo.append("-1", "System Default")
-        
+
         # Get available devices
         devices = get_audio_input_devices()
-        
+
         for device_index, device_name, is_default in devices:
             label = device_name
             if is_default:
                 label += " (default)"
             self.audio_device_combo.append(str(device_index), label)
-        
+
         # Get saved device from config
         saved_device = self.config_manager.get("audio", "device_index", None)
-        
+
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")
         else:
@@ -1228,7 +1224,7 @@ For now, the engine has been reverted to VOSK."""
                 # Saved device no longer available, fall back to default
                 logger.warning(f"Saved audio device {saved_device} no longer available")
                 self.audio_device_combo.set_active_id("-1")
-        
+
         logger.info(f"Found {len(devices)} audio input devices")
 
     def _on_refresh_audio_devices(self, widget):
@@ -1240,14 +1236,14 @@ For now, the engine has been reverted to VOSK."""
         """Handle changes in the selected audio device."""
         if self._initializing:
             return
-        
+
         device_id = self.audio_device_combo.get_active_id()
         if device_id is None:
             return
-        
+
         device_index = int(device_id)
         device_name = self.audio_device_combo.get_active_text()
-        
+
         # Save to config
         if device_index == -1:
             self.config_manager.set("audio", "device_index", None)
@@ -1255,15 +1251,15 @@ For now, the engine has been reverted to VOSK."""
         else:
             self.config_manager.set("audio", "device_index", device_index)
             self.config_manager.set("audio", "device_name", device_name)
-        
+
         self.config_manager.save_settings()
-        
+
         # Update speech engine
         if device_index == -1:
             self.speech_engine.set_audio_device(None)
         else:
             self.speech_engine.set_audio_device(device_index)
-        
+
         logger.info(f"Audio device changed to: [{device_index}] {device_name}")
         self.audio_test_status.set_markup(f"<i>Selected: {device_name}</i>")
 
@@ -1273,33 +1269,33 @@ For now, the engine has been reverted to VOSK."""
         self.test_audio_btn.set_label("Testing...")
         self.audio_test_status.set_markup("<i>Recording... speak into your microphone</i>")
         self.audio_level_bar.set_value(0)
-        
+
         # Get selected device
         device_id = self.audio_device_combo.get_active_id()
         device_index = None if device_id == "-1" else int(device_id)
-        
+
         def run_test():
             # Lazy import to avoid circular dependency
             from ..speech_recognition.recognition_manager import test_audio_input
+
             result = test_audio_input(device_index=device_index, duration=2.0)
             GLib.idle_add(self._handle_audio_test_result, result)
-        
+
         threading.Thread(target=run_test, daemon=True).start()
 
     def _handle_audio_test_result(self, result: dict):
         """Handle the result of an audio test."""
         self.test_audio_btn.set_sensitive(True)
         self.test_audio_btn.set_label("Test Mic")
-        
+
         if result.get("success"):
             max_level = result.get("max_amplitude", 0)
-            mean_level = result.get("mean_amplitude", 0)
             has_signal = result.get("has_signal", False)
-            
+
             # Update level bar with max level (normalized to 0-100)
             level_percent = min(100, (max_level / 327.68))
             self.audio_level_bar.set_value(level_percent)
-            
+
             if has_signal:
                 self.audio_test_status.set_markup(
                     f"<span color='green'>✓ Audio detected!</span> "
@@ -1316,5 +1312,5 @@ For now, the engine has been reverted to VOSK."""
             self.audio_test_status.set_markup(
                 f"<span color='red'>✗ Test failed:</span> {error_msg}"
             )
-        
+
         return False  # Don't repeat
