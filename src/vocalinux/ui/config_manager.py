@@ -7,6 +7,7 @@ This module handles loading, saving, and accessing user preferences.
 import json
 import logging
 import os
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
