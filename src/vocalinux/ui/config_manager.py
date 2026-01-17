@@ -162,7 +162,11 @@ class ConfigManager:
             source: The source dictionary with updates
         """
         for key, value in source.items():
-            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+            if (
+                key in target
+                and isinstance(target[key], dict)
+                and isinstance(value, dict)
+            ):
                 self._update_dict_recursive(target[key], value)
             else:
                 target[key] = value
