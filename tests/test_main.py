@@ -95,7 +95,13 @@ class TestMainModule(unittest.TestCase):
             main()
 
             # Verify components were initialized correctly
-            mock_speech.assert_called_once_with(engine="vosk", model_size="medium")
+            mock_speech.assert_called_once_with(
+                engine="vosk",
+                model_size="medium",
+                vad_sensitivity=3,
+                silence_timeout=2.0,
+                audio_device_index=None,
+            )
             mock_text.assert_called_once_with(wayland_mode=True)
             mock_action_handler.assert_called_once_with(mock_text_instance)
             mock_tray.assert_called_once_with(

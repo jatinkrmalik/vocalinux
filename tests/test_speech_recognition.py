@@ -101,19 +101,13 @@ class TestSpeechRecognition(unittest.TestCase):
         self.mock_thread_class.return_value = self.mock_thread
 
         # Mock audio feedback functions
-        self.patcher_play_start = patch(
-            "vocalinux.speech_recognition.recognition_manager.play_start_sound"
-        )
+        self.patcher_play_start = patch("vocalinux.ui.audio_feedback.play_start_sound")
         self.mock_play_start = self.patcher_play_start.start()
 
-        self.patcher_play_stop = patch(
-            "vocalinux.speech_recognition.recognition_manager.play_stop_sound"
-        )
+        self.patcher_play_stop = patch("vocalinux.ui.audio_feedback.play_stop_sound")
         self.mock_play_stop = self.patcher_play_stop.start()
 
-        self.patcher_play_error = patch(
-            "vocalinux.speech_recognition.recognition_manager.play_error_sound"
-        )
+        self.patcher_play_error = patch("vocalinux.ui.audio_feedback.play_error_sound")
         self.mock_play_error = self.patcher_play_error.start()
 
         # Patch the download method for vosk models

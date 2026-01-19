@@ -23,10 +23,7 @@ sys.modules["zipfile"] = MagicMock()
 # Update import paths to use the new package structure
 from vocalinux.common_types import RecognitionState
 from vocalinux.speech_recognition.command_processor import CommandProcessor
-from vocalinux.speech_recognition.recognition_manager import (
-    MODELS_DIR,
-    SpeechRecognitionManager,
-)
+from vocalinux.speech_recognition.recognition_manager import MODELS_DIR, SpeechRecognitionManager
 
 # Need to create a mock for audio_feedback module before importing the recognition_manager
 mock_audio_feedback = MagicMock()
@@ -37,15 +34,15 @@ mock_audio_feedback.play_error_sound = MagicMock()
 
 # Use patch to properly mock the modules used by the recognition_manager
 @patch(
-    "vocalinux.speech_recognition.recognition_manager.play_start_sound",
+    "vocalinux.ui.audio_feedback.play_start_sound",
     mock_audio_feedback.play_start_sound,
 )
 @patch(
-    "vocalinux.speech_recognition.recognition_manager.play_stop_sound",
+    "vocalinux.ui.audio_feedback.play_stop_sound",
     mock_audio_feedback.play_stop_sound,
 )
 @patch(
-    "vocalinux.speech_recognition.recognition_manager.play_error_sound",
+    "vocalinux.ui.audio_feedback.play_error_sound",
     mock_audio_feedback.play_error_sound,
 )
 class TestSpeechRecognition(unittest.TestCase):
