@@ -66,6 +66,9 @@ mock_wave_file.__exit__ = MagicMock(return_value=None)
 mock_wave.open = MagicMock(return_value=mock_wave_file)
 sys.modules["wave"] = mock_wave
 
+# Import the shared mock from conftest
+from conftest import mock_audio_feedback
+
 # Update import paths to use the new package structure
 from vocalinux.common_types import RecognitionState
 from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
@@ -100,15 +103,10 @@ class TestSpeechRecognition(unittest.TestCase):
         self.mock_thread = MagicMock()
         self.mock_thread_class.return_value = self.mock_thread
 
-        # Mock audio feedback functions
-        self.patcher_play_start = patch("vocalinux.ui.audio_feedback.play_start_sound")
-        self.mock_play_start = self.patcher_play_start.start()
-
-        self.patcher_play_stop = patch("vocalinux.ui.audio_feedback.play_stop_sound")
-        self.mock_play_stop = self.patcher_play_stop.start()
-
-        self.patcher_play_error = patch("vocalinux.ui.audio_feedback.play_error_sound")
-        self.mock_play_error = self.patcher_play_error.start()
+        # Use the module-level audio feedback mock
+        self.mock_play_start = mock_audio_feedback.play_start_sound
+        self.mock_play_stop = mock_audio_feedback.play_stop_sound
+        self.mock_play_error = mock_audio_feedback.play_error_sound
 
         # Patch the download method for vosk models
         self.patcher_download = patch.object(SpeechRecognitionManager, "_download_vosk_model")
@@ -124,11 +122,11 @@ class TestSpeechRecognition(unittest.TestCase):
         self.patcher_exists.stop()
         self.patcher_cmd.stop()
         self.patcher_thread.stop()
-        self.patcher_play_start.stop()
-        self.patcher_play_stop.stop()
-        self.patcher_play_error.stop()
         self.patcher_download.stop()
         self.patcher_unlink.stop()
+
+        # Reset the audio feedback mocks for the next test
+        mock_audio_feedback.reset_mock()
 
     def test_init_state(self):
         """Test the initial state of the speech recognition manager."""

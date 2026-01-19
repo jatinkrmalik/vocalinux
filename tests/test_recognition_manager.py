@@ -20,31 +20,15 @@ sys.modules["tqdm"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
 sys.modules["zipfile"] = MagicMock()
 
+# Import the shared mock from conftest
+from conftest import mock_audio_feedback
+
 # Update import paths to use the new package structure
 from vocalinux.common_types import RecognitionState
 from vocalinux.speech_recognition.command_processor import CommandProcessor
 from vocalinux.speech_recognition.recognition_manager import MODELS_DIR, SpeechRecognitionManager
 
-# Need to create a mock for audio_feedback module before importing the recognition_manager
-mock_audio_feedback = MagicMock()
-mock_audio_feedback.play_start_sound = MagicMock()
-mock_audio_feedback.play_stop_sound = MagicMock()
-mock_audio_feedback.play_error_sound = MagicMock()
 
-
-# Use patch to properly mock the modules used by the recognition_manager
-@patch(
-    "vocalinux.ui.audio_feedback.play_start_sound",
-    mock_audio_feedback.play_start_sound,
-)
-@patch(
-    "vocalinux.ui.audio_feedback.play_stop_sound",
-    mock_audio_feedback.play_stop_sound,
-)
-@patch(
-    "vocalinux.ui.audio_feedback.play_error_sound",
-    mock_audio_feedback.play_error_sound,
-)
 class TestSpeechRecognition(unittest.TestCase):
     """Test cases for the speech recognition functionality."""
 

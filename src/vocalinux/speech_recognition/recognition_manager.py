@@ -14,6 +14,7 @@ import time
 from typing import Callable, List, Optional
 
 from ..common_types import RecognitionState
+from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from .command_processor import CommandProcessor
 
 
@@ -849,9 +850,6 @@ class SpeechRecognitionManager:
 
     def start_recognition(self):
         """Start the speech recognition process."""
-        # Lazy import to avoid circular dependency
-        from ..ui.audio_feedback import play_error_sound, play_start_sound
-
         if self.state != RecognitionState.IDLE:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
             return
@@ -891,9 +889,6 @@ class SpeechRecognitionManager:
 
     def stop_recognition(self):
         """Stop the speech recognition process."""
-        # Lazy import to avoid circular dependency
-        from ..ui.audio_feedback import play_stop_sound
-
         if self.state == RecognitionState.IDLE:
             return
 
