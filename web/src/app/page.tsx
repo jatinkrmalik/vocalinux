@@ -47,6 +47,10 @@ const oneClickInstallNoWhisper = `curl \\
   -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
   | bash -s -- --no-whisper`;
 
+const uninstallCommand = `curl -fsSL \\
+  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh \\
+  | bash`;
+
 const FeatureCard = ({
   icon,
   title,
@@ -680,21 +684,28 @@ export default function HomePage() {
                 </ul>
               </div>
               <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 min-w-0">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-semibold flex items-center gap-2">
-                    <Terminal className="h-5 w-5 text-primary" />
-                    Uninstall
-                  </h4>
-                  <CopyButton text="curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash" />
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-red-500/10 p-2 rounded-lg">
+                    <Terminal className="h-5 w-5 text-red-500" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold">Uninstall</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Clean removal in one command
+                    </p>
+                  </div>
+                  <CopyButton text={uninstallCommand} />
                 </div>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Clean removal in one command:
-                </p>
                 <div className="overflow-x-auto">
-                  <pre className="bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-4 py-3 rounded text-xs font-mono whitespace-pre overflow-x-auto min-w-0">
-                    {`curl -fsSL \\
-  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash`}
-                  </pre>
+                  <SyntaxHighlighter
+                    language="bash"
+                    style={atomOneDark}
+                    className="rounded-lg text-sm"
+                    customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
+                    wrapLongLines={false}
+                  >
+                    {uninstallCommand}
+                  </SyntaxHighlighter>
                 </div>
               </div>
             </div>
