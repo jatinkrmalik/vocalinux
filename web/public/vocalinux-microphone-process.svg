@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Placeholder for microphone processing icon -->
+  <circle cx="64" cy="64" r="60" fill="#f39c12" />
+  <rect x="44" y="40" width="40" height="60" rx="20" fill="#2c3e50" />
+  <circle cx="64" cy="40" r="8" fill="#f39c12">
+    <animate attributeName="cy" values="40;50;40" dur="1s" repeatCount="indefinite" />
+  </circle>
+  <circle cx="48" cy="60" r="8" fill="#f39c12">
+    <animate attributeName="cy" values="60;70;60" dur="1s" repeatCount="indefinite" />
+  </circle>
+  <circle cx="80" cy="60" r="8" fill="#f39c12">
+    <animate attributeName="cy" values="60;70;60" dur="1s" repeatCount="indefinite" />
+  </circle>
+  <!-- This is a placeholder. Replace with actual custom design. -->
+</svg>

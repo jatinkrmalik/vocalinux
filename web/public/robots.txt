@@ -1,0 +1,8 @@
+# Robots.txt for Vocalinux
+# https://vocalinux.com
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://vocalinux.com/sitemap.xml
