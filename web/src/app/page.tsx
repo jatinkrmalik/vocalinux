@@ -3,8 +3,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { useDoublePress } from "@/hooks/use-double-press";
-import { DictationOverlay } from "@/components/dictation-overlay";
 import { LiveDemo } from "@/components/live-demo";
 import {
   Mic,
@@ -133,13 +131,6 @@ export default function HomePage() {
   const [stars, setStars] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const { isActive: isDictating, resetActive: resetDictation } = useDoublePress({
-    key: "Control",
-    onDoublePress: () => {
-      console.log("Double Ctrl press detected!");
-    },
-  });
-
   useEffect(() => {
     // Fetch actual GitHub stars
     fetch("https://api.github.com/repos/jatinkrmalik/vocalinux")
@@ -165,9 +156,6 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
-      {/* Dictation Overlay */}
-      <DictationOverlay isActive={isDictating} onAnimationComplete={resetDictation} />
-
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
