@@ -6,10 +6,10 @@ import Image from "next/image";
 // Logo component using the actual application icon
 export const VocalinuxLogo: React.FC<{ className?: string }> = ({ className = "" }) => {
   return (
-    <Image 
-      src="/vocalinux.svg" 
-      alt="Vocalinux Logo" 
-      width={36} 
+    <Image
+      src="/vocalinux.svg"
+      alt="Vocalinux Logo"
+      width={36}
       height={36}
       className={className}
       priority

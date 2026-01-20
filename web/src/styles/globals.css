@@ -87,6 +87,28 @@
   }
 }
 
+/* Hide scrollbars but keep scroll functionality */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Hide scrollbars on syntax highlighter code blocks */
+pre[class*="language-"],
+code {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+pre[class*="language-"]::-webkit-scrollbar,
+code::-webkit-scrollbar {
+  display: none;
+}
+
 nextjs-portal {
   display: none;
 }
