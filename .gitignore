@@ -15,6 +15,7 @@ env/
 ENV/
 .env
 .venv/
+activate-vocalinux.sh
 
 # Local development settings
 .vscode/
