@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { useDoublePress } from "@/hooks/use-double-press";
 import { DictationOverlay } from "@/components/dictation-overlay";
+import { LiveDemo } from "@/components/live-demo";
 import {
   Mic,
   Terminal,
@@ -30,9 +32,9 @@ import {
   Volume2,
   Sparkles,
   Heart,
+  ExternalLink,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { VocalinuxLogo } from "@/components/icons";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { useInView } from "react-intersection-observer";
@@ -170,7 +172,14 @@ export default function HomePage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2 group">
-            <VocalinuxLogo className="h-7 w-7 sm:h-8 sm:w-8 text-primary transition-transform group-hover:scale-110" />
+            <Image 
+              src="/vocalinux.svg" 
+              alt="Vocalinux Logo" 
+              width={32} 
+              height={32}
+              className="h-7 w-7 sm:h-8 sm:w-8 transition-transform group-hover:scale-110"
+              priority
+            />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
             <span className="hidden sm:inline-block text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
               v0.2.0 Alpha
@@ -311,29 +320,67 @@ export default function HomePage() {
               </div>
             </motion.div>
 
-            {/* One-Click Install Box */}
+            {/* One-Click Install Box - Redesigned */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="max-w-3xl mx-auto"
+              className="max-w-4xl mx-auto"
             >
-              <div className="bg-zinc-900 rounded-2xl p-6 shadow-2xl border border-zinc-800">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Terminal className="h-5 w-5 text-green-400" />
-                    <span className="text-sm font-medium text-zinc-300">
-                      One-Click Install
+              <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-2xl p-6 sm:p-8 shadow-2xl border border-zinc-800/50 backdrop-blur">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+                  {/* Left side - Instructions */}
+                  <div className="flex-shrink-0 lg:w-auto">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-500/20">
+                        <Terminal className="h-5 w-5 text-green-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">Quick Install</h3>
+                        <p className="text-xs text-zinc-400">Copy & paste in terminal</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right side - Command */}
+                  <div className="flex-1 min-w-0">
+                    <div className="relative group">
+                      <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-900/50">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                            <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                            <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                          </div>
+                          <CopyButton text={oneClickInstallCommand} />
+                        </div>
+                        <div className="p-4 overflow-x-auto">
+                          <code className="font-mono text-sm sm:text-base text-green-400 whitespace-nowrap flex items-center gap-2">
+                            <span className="text-zinc-500 select-none">$</span>
+                            <span>{oneClickInstallCommand}</span>
+                          </code>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom info */}
+                <div className="flex flex-wrap items-center justify-between gap-4 mt-6 pt-6 border-t border-zinc-800/50">
+                  <p className="text-sm text-zinc-400">
+                    <span className="text-zinc-500">Compatible:</span> Ubuntu 22.04+, Fedora, Debian, Arch, and most Linux distros
+                  </p>
+                  <div className="flex items-center gap-4 text-xs text-zinc-500">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      No sudo required
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Zap className="h-3.5 w-3.5 text-yellow-500" />
+                      ~5-10 min install
                     </span>
                   </div>
-                  <CopyButton text={oneClickInstallCommand} />
                 </div>
-                <div className="bg-zinc-950 rounded-lg p-4 font-mono text-sm sm:text-base text-green-400 overflow-x-auto">
-                  <span className="text-zinc-500">$</span> {oneClickInstallCommand}
-                </div>
-                <p className="text-xs text-zinc-500 mt-3 text-center">
-                  Works on Ubuntu 22.04+, Fedora, Debian, and most Linux distros. Takes ~5-10 min.
-                </p>
               </div>
             </motion.div>
 
@@ -365,54 +412,22 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Demo Video Section */}
+      {/* Demo Section - Live Interactive Demo */}
       <section id="demo" className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
         <div className="max-w-5xl mx-auto">
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-                See It In Action
+                Try It Yourself
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Double-tap Ctrl, speak naturally, and watch your words appear instantly. It&apos;s that simple.
+                Experience voice-to-text right here in your browser. Click the microphone and start speaking!
               </p>
             </div>
           </FadeInSection>
 
           <FadeInSection delay={0.1}>
-            <div className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl bg-zinc-900">
-              {/* Placeholder for demo video - using animated mockup */}
-              <div className="absolute inset-0 flex flex-col">
-                {/* Terminal-like header */}
-                <div className="bg-zinc-800 px-4 py-3 flex items-center gap-2">
-                  <div className="flex gap-2">
-                    <div className="h-3 w-3 rounded-full bg-red-500" />
-                    <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                    <div className="h-3 w-3 rounded-full bg-green-500" />
-                  </div>
-                  <span className="text-sm text-zinc-400 ml-4">Vocalinux Demo</span>
-                </div>
-                
-                {/* Demo content */}
-                <div className="flex-1 flex items-center justify-center p-8">
-                  <div className="text-center">
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                      className="inline-flex items-center justify-center h-24 w-24 rounded-full bg-primary/20 mb-6"
-                    >
-                      <Mic className="h-12 w-12 text-primary" />
-                    </motion.div>
-                    <p className="text-zinc-300 text-lg mb-4">
-                      Press <kbd className="px-2 py-1 bg-zinc-700 rounded text-sm mx-1">Ctrl</kbd> twice to start dictating
-                    </p>
-                    <p className="text-zinc-500 text-sm">
-                      Try it right now! This page has the demo built-in.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <LiveDemo />
           </FadeInSection>
 
           {/* Key demo points */}
@@ -422,7 +437,7 @@ export default function HomePage() {
                 {
                   icon: <Keyboard className="h-6 w-6 text-primary" />,
                   title: "Double-tap Ctrl",
-                  description: "Simple, universal activation that works in any app",
+                  description: "In the real app, just double-tap Ctrl to start dictating anywhere",
                 },
                 {
                   icon: <Zap className="h-6 w-6 text-primary" />,
@@ -529,7 +544,7 @@ export default function HomePage() {
                   <div className="relative">
                     <div className="bg-white dark:bg-zinc-800 rounded-2xl p-8 shadow-xl">
                       <div className="flex items-center gap-4 mb-6">
-                        <VocalinuxLogo className="h-16 w-16 text-primary" />
+                        <Image src="/vocalinux.svg" alt="Vocalinux" width={64} height={64} className="h-16 w-16" />
                         <div>
                           <div className="text-2xl font-bold">Vocalinux</div>
                           <div className="text-sm text-muted-foreground">
@@ -958,7 +973,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             <div className="md:col-span-2">
               <a href="/" className="flex items-center gap-2 mb-4">
-                <VocalinuxLogo className="h-8 w-8 text-primary" />
+                <Image src="/vocalinux.svg" alt="Vocalinux" width={32} height={32} className="h-8 w-8" />
                 <span className="text-xl font-bold">Vocalinux</span>
               </a>
               <p className="text-zinc-400 mb-4 max-w-md">
