@@ -343,7 +343,7 @@ export default function HomePage() {
                   </div>
                   <div className="p-4 sm:p-5">
                     <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre">
-<span className="text-zinc-500 select-none">$ </span>{oneClickInstallCommand}
+                      <span className="text-zinc-500 select-none">$ </span>{oneClickInstallCommand}
                     </pre>
                   </div>
                 </div>
@@ -682,7 +682,7 @@ export default function HomePage() {
                   Clean removal in one command:
                 </p>
                 <pre className="bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-4 py-3 rounded text-xs font-mono whitespace-pre overflow-x-auto">
-{`curl -fsSL \\
+                  {`curl -fsSL \\
   https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash`}
                 </pre>
               </div>

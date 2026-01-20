@@ -157,11 +157,7 @@ jobs:
     name: 🚀 Deploy Website
     runs-on: ubuntu-latest
     needs: [python-test, web-build]
-    if: |
-      github.ref == 'refs/heads/main' &&
-      (contains(github.event.head_commit.message, '[web]') ||
-       github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'push' && contains(join(github.event.commits.*.modified, ','), 'web/')))
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
