@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, AlertCircle, Chrome, Globe, Volume2, Sparkles } from "lucide-react";
+import { Mic, MicOff, AlertCircle, Chrome, Globe, Volume2, Sparkles, Keyboard } from "lucide-react";
 
 // Define types for Web Speech API
 interface SpeechRecognitionEvent {
@@ -42,7 +42,15 @@ export function LiveDemo() {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [lastCtrlPress, setLastCtrlPress] = useState<number | null>(null);
+  const [showCtrlHint, setShowCtrlHint] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const isListeningRef = useRef(false);
+
+  // Keep ref in sync with state for use in event handlers
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
 
   // Check for browser support
   useEffect(() => {
@@ -128,10 +136,45 @@ export function LiveDemo() {
     }
   }, []);
 
+  // Toggle listening state
+  const toggleListening = useCallback(() => {
+    if (isListeningRef.current) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [startListening, stopListening]);
+
   const clearTranscript = useCallback(() => {
     setTranscript("");
     setInterimTranscript("");
   }, []);
+
+  // Double-tap Ctrl detection
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Control") return;
+      
+      const now = Date.now();
+      const DOUBLE_TAP_DELAY = 400;
+
+      // Show hint on first Ctrl press
+      setShowCtrlHint(true);
+      setTimeout(() => setShowCtrlHint(false), 600);
+
+      if (lastCtrlPress && now - lastCtrlPress <= DOUBLE_TAP_DELAY) {
+        // Double-tap detected!
+        toggleListening();
+        setLastCtrlPress(null);
+        setShowCtrlHint(false);
+      } else {
+        setLastCtrlPress(now);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lastCtrlPress, toggleListening]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -239,8 +282,23 @@ export function LiveDemo() {
 
         {/* Microphone button */}
         <div className="flex flex-col items-center mb-6">
+          {/* Double-tap Ctrl hint */}
+          <AnimatePresence>
+            {showCtrlHint && !isListening && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-4 px-4 py-2 bg-primary/20 rounded-full text-sm text-primary flex items-center gap-2"
+              >
+                <Keyboard className="h-4 w-4" />
+                Tap Ctrl again to start!
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <motion.button
-            onClick={isListening ? stopListening : startListening}
+            onClick={toggleListening}
             className={`relative h-20 w-20 sm:h-24 sm:w-24 rounded-full flex items-center justify-center transition-all ${
               isListening
                 ? "bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30"
@@ -271,19 +329,26 @@ export function LiveDemo() {
             )}
           </motion.button>
           
-          <p className="text-sm text-zinc-400 mt-4">
+          <div className="text-center mt-4">
             {isListening ? (
-              <span className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              <p className="text-sm text-zinc-400">
+                <span className="flex items-center justify-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                  </span>
+                  Listening... Double-tap <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs mx-1">Ctrl</kbd> or click to stop
                 </span>
-                Listening... Click to stop
-              </span>
+              </p>
             ) : (
-              "Click the microphone to try voice recognition"
+              <div className="space-y-1">
+                <p className="text-sm text-zinc-300">
+                  Double-tap <kbd className="px-1.5 py-0.5 bg-zinc-700 rounded text-xs mx-1">Ctrl</kbd> to start
+                </p>
+                <p className="text-xs text-zinc-500">or click the microphone</p>
+              </div>
             )}
-          </p>
+          </div>
         </div>
 
         {/* Transcript area */}
