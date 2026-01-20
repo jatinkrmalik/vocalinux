@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import { LiveDemo } from "@/components/live-demo";
 import {
   Mic,
@@ -163,7 +164,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2 group">
+          <Link href="/" className="flex items-center gap-2 group">
             <Image
               src="/vocalinux.svg"
               alt="Vocalinux Logo"
@@ -176,7 +177,7 @@ export default function HomePage() {
             <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
               v0.2.0 Alpha
             </span>
-          </a>
+          </Link>
 
           {/* Desktop navigation */}
           <div className="hidden md:flex items-center gap-6">
@@ -951,10 +952,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             <div className="md:col-span-2">
-              <a href="/" className="flex items-center gap-2 mb-4">
+              <Link href="/" className="flex items-center gap-2 mb-4">
                 <Image src="/vocalinux.svg" alt="Vocalinux" width={32} height={32} className="h-8 w-8" />
                 <span className="text-xl font-bold">Vocalinux</span>
-              </a>
+              </Link>
               <p className="text-zinc-400 mb-4 max-w-md">
                 Free, open-source voice dictation for Linux. 100% offline and privacy-focused.
               </p>
