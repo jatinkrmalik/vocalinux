@@ -7,8 +7,7 @@ This module handles loading, saving, and accessing user preferences.
 import json
 import logging
 import os
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +20,12 @@ DEFAULT_CONFIG = {
     "speech_recognition": {  # Changed section name
         "engine": "whisper",  # "vosk" or "whisper"
         "model_size": "tiny",  # "tiny", "small", "medium", or "large"
-        "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5) - Moved here
-        "silence_timeout": 2.0,  # Seconds of silence before stopping recognition - Moved here
+        "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
+        "silence_timeout": 2.0,  # Seconds of silence before stopping
+    },
+    "audio": {
+        "device_index": None,  # Audio input device index (None for system default)
+        "device_name": None,  # Saved device name for display/reference
     },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap Ctrl
@@ -101,7 +104,7 @@ class ConfigManager:
         Get a configuration value.
 
         Args:
-            section: The configuration section (e.g., "speech_recognition", "shortcuts")
+            section: The configuration section
             key: The configuration key within the section
             default: The default value to return if the key doesn't exist
 
@@ -118,7 +121,7 @@ class ConfigManager:
         Set a configuration value.
 
         Args:
-            section: The configuration section (e.g., "speech_recognition", "shortcuts")
+            section: The configuration section
             key: The configuration key within the section
             value: The value to set
 
