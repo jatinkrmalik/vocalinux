@@ -570,7 +570,7 @@ export default function HomePage() {
           </FadeInSection>
 
           <FadeInSection delay={0.1}>
-            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl overflow-hidden border border-zinc-200 dark:border-zinc-700">
+            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 min-w-0">
               <div className="p-6 sm:p-8">
                 {/* Primary install option */}
                 <div className="mb-8">
@@ -586,13 +586,17 @@ export default function HomePage() {
                     </div>
                     <CopyButton text={oneClickInstallCommand} />
                   </div>
-                  <SyntaxHighlighter
-                    language="bash"
-                    style={atomOneDark}
-                    className="rounded-lg text-sm sm:text-base"
-                  >
-                    {oneClickInstallCommand}
-                  </SyntaxHighlighter>
+                  <div className="overflow-x-auto">
+                    <SyntaxHighlighter
+                      language="bash"
+                      style={atomOneDark}
+                      className="rounded-lg text-sm sm:text-base"
+                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
+                      wrapLongLines={false}
+                    >
+                      {oneClickInstallCommand}
+                    </SyntaxHighlighter>
+                  </div>
                 </div>
 
                 {/* Alternative install */}
@@ -609,13 +613,17 @@ export default function HomePage() {
                     </div>
                     <CopyButton text={oneClickInstallNoWhisper} />
                   </div>
-                  <SyntaxHighlighter
-                    language="bash"
-                    style={atomOneDark}
-                    className="rounded-lg text-sm"
-                  >
-                    {oneClickInstallNoWhisper}
-                  </SyntaxHighlighter>
+                  <div className="overflow-x-auto">
+                    <SyntaxHighlighter
+                      language="bash"
+                      style={atomOneDark}
+                      className="rounded-lg text-sm"
+                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
+                      wrapLongLines={false}
+                    >
+                      {oneClickInstallNoWhisper}
+                    </SyntaxHighlighter>
+                  </div>
                 </div>
 
                 {/* What the installer does */}
@@ -658,7 +666,7 @@ export default function HomePage() {
           {/* System requirements */}
           <FadeInSection delay={0.2}>
             <div className="mt-8 grid sm:grid-cols-2 gap-6">
-              <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700">
+              <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 min-w-0">
                 <h4 className="font-semibold mb-4 flex items-center gap-2">
                   <Cpu className="h-5 w-5 text-primary" />
                   System Requirements
@@ -671,7 +679,7 @@ export default function HomePage() {
                   <li>• X11 or Wayland display server</li>
                 </ul>
               </div>
-              <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700">
+              <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 min-w-0">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-semibold flex items-center gap-2">
                     <Terminal className="h-5 w-5 text-primary" />
@@ -682,10 +690,12 @@ export default function HomePage() {
                 <p className="text-sm text-muted-foreground mb-3">
                   Clean removal in one command:
                 </p>
-                <pre className="bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-4 py-3 rounded text-xs font-mono whitespace-pre overflow-x-auto">
-                  {`curl -fsSL \\
+                <div className="overflow-x-auto">
+                  <pre className="bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-4 py-3 rounded text-xs font-mono whitespace-pre overflow-x-auto min-w-0">
+                    {`curl -fsSL \\
   https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash`}
-                </pre>
+                  </pre>
+                </div>
               </div>
             </div>
           </FadeInSection>
