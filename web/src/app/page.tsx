@@ -37,10 +37,14 @@ import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { useInView } from "react-intersection-observer";
 
-// The one-liner install command
-const oneClickInstallCommand = `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash`;
+// The one-liner install command (split into three lines for display)
+const oneClickInstallCommand = `curl \\
+  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
+  | bash`;
 
-const oneClickInstallNoWhisper = `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --no-whisper`;
+const oneClickInstallNoWhisper = `curl \\
+  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
+  | bash -s -- --no-whisper`;
 
 const FeatureCard = ({
   icon,
@@ -147,8 +151,8 @@ export default function HomePage() {
   }, []);
 
   const navLinks = [
-    { href: "#features", label: "Features" },
     { href: "#demo", label: "Demo" },
+    { href: "#features", label: "Features" },
     { href: "#install", label: "Install" },
     { href: "#voice-commands", label: "Commands" },
     { href: "#faq", label: "FAQ" },
@@ -169,7 +173,7 @@ export default function HomePage() {
               priority
             />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
-            <span className="hidden sm:inline-block text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+            <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
               v0.2.0 Alpha
             </span>
           </a>
@@ -293,7 +297,7 @@ export default function HomePage() {
               <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
                 <a
                   href="#install"
-                  className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:scale-105 shadow-lg shadow-primary/25"
+                  className="inline-flex items-center justify-center gap-2 bg-primary text-white dark:text-zinc-900 hover:bg-primary/90 px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:scale-105 shadow-lg shadow-primary/25"
                 >
                   <Download className="h-5 w-5" />
                   Install Now — It&apos;s Free
@@ -313,17 +317,17 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="w-full max-w-5xl mx-auto px-4"
+              className="w-full max-w-6xl mx-auto px-4"
             >
               <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-2xl p-6 sm:p-8 shadow-2xl border border-zinc-800/50 backdrop-blur">
                 {/* Header */}
                 <div className="flex items-center gap-3 mb-5">
-                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-500/20">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-500/20 flex-shrink-0">
                     <Terminal className="h-5 w-5 text-green-400" />
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">Quick Install</h3>
-                    <p className="text-xs text-zinc-400">Copy & paste in your terminal</p>
+                  <div className="text-left">
+                    <h3 className="text-lg font-semibold text-white text-left">Quick Install</h3>
+                    <p className="text-xs text-zinc-400 text-left">Copy & paste in your terminal</p>
                   </div>
                 </div>
 
@@ -338,10 +342,9 @@ export default function HomePage() {
                     <CopyButton text={oneClickInstallCommand} />
                   </div>
                   <div className="p-4 sm:p-5">
-                    <div className="font-mono text-sm sm:text-base text-green-400">
-                      <span className="text-zinc-500 select-none">$ </span>
-                      <span className="break-all">{oneClickInstallCommand}</span>
-                    </div>
+                    <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre">
+<span className="text-zinc-500 select-none">$ </span>{oneClickInstallCommand}
+                    </pre>
                   </div>
                 </div>
 
@@ -394,7 +397,7 @@ export default function HomePage() {
 
       {/* Demo Section - Live Interactive Demo */}
       <section id="demo" className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
@@ -574,25 +577,21 @@ export default function HomePage() {
                     <div className="bg-green-500/10 p-2 rounded-lg">
                       <Sparkles className="h-5 w-5 text-green-500" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-xl font-semibold">Recommended: Full Install</h3>
                       <p className="text-sm text-muted-foreground">
                         Includes Whisper AI for best accuracy (~5-10 min)
                       </p>
                     </div>
+                    <CopyButton text={oneClickInstallCommand} />
                   </div>
-                  <div className="relative">
-                    <SyntaxHighlighter
-                      language="bash"
-                      style={atomOneDark}
-                      className="rounded-lg text-sm sm:text-base"
-                    >
-                      {oneClickInstallCommand}
-                    </SyntaxHighlighter>
-                    <div className="absolute top-2 right-2">
-                      <CopyButton text={oneClickInstallCommand} />
-                    </div>
-                  </div>
+                  <SyntaxHighlighter
+                    language="bash"
+                    style={atomOneDark}
+                    className="rounded-lg text-sm sm:text-base"
+                  >
+                    {oneClickInstallCommand}
+                  </SyntaxHighlighter>
                 </div>
 
                 {/* Alternative install */}
@@ -601,25 +600,21 @@ export default function HomePage() {
                     <div className="bg-blue-500/10 p-2 rounded-lg">
                       <Zap className="h-5 w-5 text-blue-500" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-lg font-semibold">Quick Install (VOSK only)</h3>
                       <p className="text-sm text-muted-foreground">
                         Faster install, lighter on resources (~2-3 min)
                       </p>
                     </div>
+                    <CopyButton text={oneClickInstallNoWhisper} />
                   </div>
-                  <div className="relative">
-                    <SyntaxHighlighter
-                      language="bash"
-                      style={atomOneDark}
-                      className="rounded-lg text-sm"
-                    >
-                      {oneClickInstallNoWhisper}
-                    </SyntaxHighlighter>
-                    <div className="absolute top-2 right-2">
-                      <CopyButton text={oneClickInstallNoWhisper} />
-                    </div>
-                  </div>
+                  <SyntaxHighlighter
+                    language="bash"
+                    style={atomOneDark}
+                    className="rounded-lg text-sm"
+                  >
+                    {oneClickInstallNoWhisper}
+                  </SyntaxHighlighter>
                 </div>
 
                 {/* What the installer does */}
@@ -676,16 +671,20 @@ export default function HomePage() {
                 </ul>
               </div>
               <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                <h4 className="font-semibold mb-4 flex items-center gap-2">
-                  <Terminal className="h-5 w-5 text-primary" />
-                  Uninstall
-                </h4>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Terminal className="h-5 w-5 text-primary" />
+                    Uninstall
+                  </h4>
+                  <CopyButton text="curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash" />
+                </div>
                 <p className="text-sm text-muted-foreground mb-3">
                   Clean removal in one command:
                 </p>
-                <code className="block bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-4 py-2 rounded text-sm overflow-x-auto">
-                  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash
-                </code>
+                <pre className="bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-4 py-3 rounded text-xs font-mono whitespace-pre overflow-x-auto">
+{`curl -fsSL \\
+  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash`}
+                </pre>
               </div>
             </div>
           </FadeInSection>
@@ -928,7 +927,7 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
                 href="#install"
-                className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:scale-105 shadow-lg shadow-primary/25"
+                className="inline-flex items-center justify-center gap-2 bg-primary text-white dark:text-zinc-900 hover:bg-primary/90 px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:scale-105 shadow-lg shadow-primary/25"
               >
                 <Download className="h-5 w-5" />
                 Install Vocalinux
@@ -1052,7 +1051,7 @@ export default function HomePage() {
             <p className="text-zinc-500 text-sm flex items-center gap-1">
               Made with <Heart className="h-4 w-4 text-red-500" /> by{" "}
               <a
-                href="https://github.com/jatinkrmalik"
+                href="https://x.com/intent/user?screen_name=jatinkrmalik"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-zinc-400 hover:text-white transition-colors"

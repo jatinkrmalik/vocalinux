@@ -12,7 +12,7 @@ export function Logo({
   textClassName
 }: LogoProps) {
   return <div className={cn("flex items-center gap-2", className)}>
-      <VocalinuxLogo className={cn("h-8 w-8", iconClassName)} />
-      <span className={cn("font-bold text-xl", textClassName)}>Vocalinux</span>
-    </div>;
+    <VocalinuxLogo className={cn("h-8 w-8", iconClassName)} />
+    <span className={cn("font-bold text-xl", textClassName)}>Vocalinux</span>
+  </div>;
 }
