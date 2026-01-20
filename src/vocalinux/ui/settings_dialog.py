@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         SpeechRecognitionManager,
     )
     from .config_manager import ConfigManager  # noqa: E402
+    from .keyboard_shortcuts import KeyboardShortcutManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -298,10 +299,12 @@ class SettingsDialog(Gtk.Dialog):
         parent: Gtk.Window,
         config_manager: "ConfigManager",
         speech_engine: "SpeechRecognitionManager",
+        shortcut_manager: "KeyboardShortcutManager" = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.config_manager = config_manager
         self.speech_engine = speech_engine
+        self.shortcut_manager = shortcut_manager
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -499,6 +502,48 @@ class SettingsDialog(Gtk.Dialog):
         self.grid.attach(self.vosk_recommendation_label, 0, row, 2, 1)
         row += 1
 
+        # ==================== SEPARATOR ====================
+        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
+        row += 1
+
+        # ==================== SHORTCUTS SECTION ====================
+        shortcut_label = Gtk.Label(
+            label="<b>Shortcuts</b>", use_markup=True, halign=Gtk.Align.START
+        )
+        self.grid.attach(shortcut_label, 0, row, 2, 1)
+        row += 1
+
+        self.grid.attach(
+            Gtk.Label(label="Toggle Recognition:", halign=Gtk.Align.START), 0, row, 1, 1
+        )
+        
+        # Shortcut Box
+        shortcut_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        self.shortcut_entry = Gtk.Entry()
+        self.shortcut_entry.set_placeholder_text("e.g. ctrl+ctrl or <ctrl>+<alt>+v")
+        self.shortcut_entry.set_tooltip_text(
+            "Enter shortcut string.\n"
+            "• 'ctrl+ctrl' for Double Control\n"
+            "• '<ctrl>+<alt>+v' for standard hotkeys"
+        )
+        
+        # Connect change signal
+        # We use focus-out-event or activate to apply, not changed (don't want partial updates)
+        self.shortcut_entry.connect("focus-out-event", self._on_shortcut_focus_out)
+        self.shortcut_entry.connect("activate", self._on_shortcut_activate)
+        
+        shortcut_box.pack_start(self.shortcut_entry, True, True, 0)
+        
+        # Reset button
+        reset_btn = Gtk.Button()
+        reset_btn.set_image(Gtk.Image.new_from_icon_name("edit-undo", Gtk.IconSize.BUTTON))
+        reset_btn.set_tooltip_text("Reset to default (ctrl+ctrl)")
+        reset_btn.connect("clicked", self._on_reset_shortcut)
+        shortcut_box.pack_start(reset_btn, False, False, 0)
+        
+        self.grid.attach(shortcut_box, 1, row, 1, 1)
+        row += 1
+
         # Legacy recognition settings box (for compatibility)
         self.recognition_settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.recognition_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
@@ -536,6 +581,7 @@ class SettingsDialog(Gtk.Dialog):
         self.current_model_size = settings["model_size"]
         self.current_vad = settings.get("vad_sensitivity", 3)
         self.current_silence = settings.get("silence_timeout", 2.0)
+        self.current_shortcut = settings.get("shortcut", "ctrl+ctrl")
 
         logger.info(
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
@@ -567,6 +613,7 @@ class SettingsDialog(Gtk.Dialog):
         # Set non-dependent widgets directly
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
+        self.shortcut_entry.set_text(self.current_shortcut)
 
         # Show everything first
         self.show_all()
@@ -589,10 +636,13 @@ class SettingsDialog(Gtk.Dialog):
         model_size = sr_settings.get("model_size", "small")
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
+        
+        shortcuts = settings.get("shortcuts", {})
+        shortcut = shortcuts.get("toggle_recognition", "ctrl+ctrl")
 
         logger.info(
             f"Loaded current settings: engine={engine}, model_size={model_size}, "
-            f"vad={vad_sensitivity}, silence={silence_timeout}"
+            f"vad={vad_sensitivity}, silence={silence_timeout}, shortcut={shortcut}"
         )
 
         return {
@@ -600,6 +650,7 @@ class SettingsDialog(Gtk.Dialog):
             "model_size": model_size,
             "vad_sensitivity": vad_sensitivity,
             "silence_timeout": silence_timeout,
+            "shortcut": shortcut,
         }
 
     def _populate_model_options(self):
@@ -944,6 +995,60 @@ class SettingsDialog(Gtk.Dialog):
         }
 
         return settings
+
+    def _on_reset_shortcut(self, widget):
+        """Reset shortcut to default."""
+        self.shortcut_entry.set_text("ctrl+ctrl")
+        self._apply_shortcut_change()
+
+    def _on_shortcut_activate(self, widget):
+        """Handle Enter key in shortcut entry."""
+        self._apply_shortcut_change()
+
+    def _on_shortcut_focus_out(self, widget, event):
+        """Handle focus out event on shortcut entry."""
+        self._apply_shortcut_change()
+        # Return False to propagate event (so focus actually leaves)
+        return False
+
+    def _apply_shortcut_change(self):
+        """Apply the shortcut setting change."""
+        if self._initializing:
+            return
+
+        new_shortcut = self.shortcut_entry.get_text().strip()
+        if not new_shortcut:
+            # Revert if empty
+            new_shortcut = "ctrl+ctrl"
+            self.shortcut_entry.set_text(new_shortcut)
+
+        if new_shortcut == self.current_shortcut:
+            return
+
+        logger.info(f"Applying new shortcut: {new_shortcut}")
+
+        # Save to config
+        try:
+            # We need to ensure the shortcuts section exists and preserve structure
+            # ConfigManager.set handles dotted paths or section/key?
+            # ConfigManager structure in previous read_file was:
+            # DEFAULT_CONFIG = { "shortcuts": { "toggle_recognition": ... } }
+            # But ConfigManager implementation details were cut off.
+            # I see self.config_manager.set("audio", "device_index", ...) usages.
+            # So I assume .set(section, key, value) exists.
+            self.config_manager.set("shortcuts", "toggle_recognition", new_shortcut)
+            self.config_manager.save_settings()
+
+            # Update current value
+            self.current_shortcut = new_shortcut
+
+            # Update Manager
+            if self.shortcut_manager:
+                self.shortcut_manager.set_shortcut(new_shortcut)
+                
+            logger.info("Shortcut updated successfully")
+        except Exception as e:
+            logger.error(f"Failed to update shortcut: {e}")
 
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""

@@ -35,20 +35,48 @@ class KeyboardShortcutManager:
     toggle voice typing on and off across the desktop environment.
     """
 
-    def __init__(self):
-        """Initialize the keyboard shortcut manager."""
+    def __init__(self, shortcut: str = "ctrl+ctrl"):
+        """
+        Initialize the keyboard shortcut manager.
+        
+        Args:
+            shortcut: The shortcut string configuration ("ctrl+ctrl" or keys like "<ctrl>+<alt>+v")
+        """
         self.listener = None
         self.active = False
-        self.last_trigger_time = 0  # Track last trigger time to prevent double triggers
-
-        # Double-tap tracking variables
-        self.last_ctrl_press_time = 0
+        self.shortcut = shortcut
+        
+        # State machine variables for double-tap detection
+        self.tap_state = 0  # 0: IDLE, 1: PRESSED_1, 2: RELEASED_1, 3: PRESSED_2
+        self.last_event_time = 0
         self.double_tap_callback = None
-        self.double_tap_threshold = 0.3  # seconds between taps to count as double-tap
+        
+        # Configuration
+        self.max_tap_duration = 0.5  # Max duration to hold key (seconds)
+        self.max_gap_duration = 0.5  # Max duration between taps (seconds)
+        self.min_gap_duration = 0.05 # Min duration to avoid mechanical bounce
 
         if not KEYBOARD_AVAILABLE:
             logger.error("Keyboard shortcut libraries not available. Shortcuts will not work.")
             return
+
+    def set_shortcut(self, shortcut: str):
+        """
+        Update the configured shortcut.
+        
+        Args:
+            shortcut: The new shortcut string
+        """
+        if self.shortcut == shortcut:
+            return
+            
+        logger.info(f"Updating shortcut to: {shortcut}")
+        self.shortcut = shortcut
+        
+        # Restart listener if active
+        if self.active:
+            self.stop()
+            self.start()
 
     def start(self):
         """Start listening for keyboard shortcuts."""
@@ -58,20 +86,35 @@ class KeyboardShortcutManager:
         if self.active:
             return
 
-        logger.info("Starting keyboard shortcut listener")
+        logger.info(f"Starting keyboard shortcut listener (mode: {self.shortcut})")
         self.active = True
-
-        # Track currently pressed modifier keys
-        self.current_keys = set()
-
+        
         try:
-            # Start keyboard listener in a separate thread
-            self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+            if self.shortcut == "ctrl+ctrl":
+                # Use double-tap detection strategy
+                self._reset_state()
+                self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+            else:
+                # Use standard hotkey strategy
+                # We need to wrap the callback because GlobalHotKeys expects a specific dict format
+                if not self.double_tap_callback:
+                    logger.warning("No callback registered, hotkey will verify but do nothing")
+                    
+                def on_activate():
+                    if self.double_tap_callback:
+                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                
+                # Create hotkey dict check
+                # Note: This requires the shortcut to be in pynput format e.g. "<ctrl>+<alt>+h"
+                hotkeys = {self.shortcut: on_activate}
+                self.listener = keyboard.GlobalHotKeys(hotkeys)
+
             self.listener.daemon = True
             self.listener.start()
 
             # Verify the listener started successfully
-            if not self.listener.is_alive():
+            # Check is_alive if the listener supports it (it should invoke thread start)
+            if hasattr(self.listener, "is_alive") and not self.listener.is_alive():
                 logger.error("Failed to start keyboard listener")
                 self.active = False
             else:
@@ -87,6 +130,7 @@ class KeyboardShortcutManager:
 
         logger.info("Stopping keyboard shortcut listener")
         self.active = False
+        self._reset_state()
 
         if self.listener:
             try:
@@ -107,6 +151,11 @@ class KeyboardShortcutManager:
         self.double_tap_callback = callback
         logger.info("Registered shortcut: Double-tap Ctrl")
 
+    def _reset_state(self):
+        """Reset the double-tap detection state."""
+        self.tap_state = 0
+        self.last_event_time = 0
+
     def _on_press(self, key):
         """
         Handle key press events.
@@ -115,28 +164,37 @@ class KeyboardShortcutManager:
             key: The pressed key
         """
         try:
-            # Check for double-tap Ctrl
+            # Check if it is a Ctrl key
             normalized_key = self._normalize_modifier_key(key)
-            if normalized_key == keyboard.Key.ctrl:
-                current_time = time.time()
-                if current_time - self.last_ctrl_press_time < self.double_tap_threshold:
-                    # This is a double-tap Ctrl
-                    if self.double_tap_callback and current_time - self.last_trigger_time > 0.5:
-                        logger.debug("Double-tap Ctrl detected")
-                        self.last_trigger_time = current_time
-                        # Run callback in a separate thread to avoid blocking
-                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
-                self.last_ctrl_press_time = current_time
+            is_ctrl = normalized_key == keyboard.Key.ctrl
+            
+            # Any other key press resets the sequence immediately
+            if not is_ctrl:
+                if self.tap_state != 0:
+                    self._reset_state()
+                return
 
-            # Add to currently pressed modifier keys (only for tracking Ctrl)
-            if key in {
-                keyboard.Key.ctrl,
-                keyboard.Key.ctrl_l,
-                keyboard.Key.ctrl_r,
-            }:
-                # Normalize left/right variants
-                normalized_key = self._normalize_modifier_key(key)
-                self.current_keys.add(normalized_key)
+            current_time = time.time()
+            
+            # State Machine for Double Tap
+            if self.tap_state == 0:  # IDLE -> PRESSED_1
+                self.tap_state = 1
+                self.last_event_time = current_time
+                
+            elif self.tap_state == 2:  # RELEASED_1 -> PRESSED_2
+                time_since_release = current_time - self.last_event_time
+                
+                if self.min_gap_duration < time_since_release < self.max_gap_duration:
+                    self.tap_state = 3
+                    self.last_event_time = current_time
+                else:
+                    # Too slow or too fast - treat as new first tap
+                    self.tap_state = 1
+                    self.last_event_time = current_time
+
+            elif self.tap_state == 1 or self.tap_state == 3:
+                # Already pressed (autorepeat) - ignore
+                pass
 
         except Exception as e:
             logger.error(f"Error in keyboard shortcut handling: {e}")
@@ -149,10 +207,43 @@ class KeyboardShortcutManager:
             key: The released key
         """
         try:
-            # Normalize the key for left/right variants
+            # Check if it is a Ctrl key
             normalized_key = self._normalize_modifier_key(key)
-            # Remove from currently pressed keys
-            self.current_keys.discard(normalized_key)
+            is_ctrl = normalized_key == keyboard.Key.ctrl
+            
+            if not is_ctrl:
+                # Release of other keys doesn't necessarily reset, but we ignore it
+                # Logic: If we were holding 'A', then pressed Ctrl, 'A' press would have reset it.
+                # So this is fine.
+                return
+            
+            current_time = time.time()
+            
+            if self.tap_state == 1:  # PRESSED_1 -> RELEASED_1
+                duration = current_time - self.last_event_time
+                
+                if duration < self.max_tap_duration:
+                    self.tap_state = 2
+                    self.last_event_time = current_time
+                else:
+                    # Held too long - reset
+                    self._reset_state()
+                    
+            elif self.tap_state == 3:  # PRESSED_2 -> TRIGGER
+                duration = current_time - self.last_event_time
+                
+                if duration < self.max_tap_duration:
+                    # Successful Double Tap!
+                    logger.debug("Double-tap Ctrl detected")
+                    if self.double_tap_callback:
+                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                    
+                    # Reset state
+                    self._reset_state()
+                else:
+                    # Held second too long - reset
+                    self._reset_state()
+
         except Exception as e:
             logger.error(f"Error in keyboard release handling: {e}")
 
