@@ -160,10 +160,10 @@ export default function HomePage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2 group">
-            <Image 
-              src="/vocalinux.svg" 
-              alt="Vocalinux Logo" 
-              width={32} 
+            <Image
+              src="/vocalinux.svg"
+              alt="Vocalinux Logo"
+              width={32}
               height={32}
               className="h-7 w-7 sm:h-8 sm:w-8 transition-transform group-hover:scale-110"
               priority
@@ -252,7 +252,7 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="relative pt-28 sm:pt-36 pb-16 sm:pb-24 px-4 sm:px-6 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-purple-500/5 dark:from-primary/10 dark:to-purple-500/10" />
-        
+
         {/* Animated background elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
@@ -316,56 +316,48 @@ export default function HomePage() {
               className="max-w-4xl mx-auto"
             >
               <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-2xl p-6 sm:p-8 shadow-2xl border border-zinc-800/50 backdrop-blur">
-                <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-                  {/* Left side - Instructions */}
-                  <div className="flex-shrink-0 lg:w-auto">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-500/20">
-                        <Terminal className="h-5 w-5 text-green-400" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-white">Quick Install</h3>
-                        <p className="text-xs text-zinc-400">Copy & paste in terminal</p>
-                      </div>
-                    </div>
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-500/20">
+                    <Terminal className="h-5 w-5 text-green-400" />
                   </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Quick Install</h3>
+                    <p className="text-xs text-zinc-400">Copy & paste in your terminal</p>
+                  </div>
+                </div>
 
-                  {/* Right side - Command */}
-                  <div className="flex-1 min-w-0">
-                    <div className="relative group">
-                      <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-900/50">
-                          <div className="flex items-center gap-2">
-                            <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-                            <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                            <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-                          </div>
-                          <CopyButton text={oneClickInstallCommand} />
-                        </div>
-                        <div className="p-4 overflow-x-auto">
-                          <code className="font-mono text-sm sm:text-base text-green-400 whitespace-nowrap flex items-center gap-2">
-                            <span className="text-zinc-500 select-none">$</span>
-                            <span>{oneClickInstallCommand}</span>
-                          </code>
-                        </div>
-                      </div>
+                {/* Command box */}
+                <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                    </div>
+                    <CopyButton text={oneClickInstallCommand} />
+                  </div>
+                  <div className="p-4 sm:p-5">
+                    <div className="font-mono text-sm sm:text-base text-green-400">
+                      <span className="text-zinc-500 select-none">$ </span>
+                      <span className="break-all">{oneClickInstallCommand}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Bottom info */}
-                <div className="flex flex-wrap items-center justify-between gap-4 mt-6 pt-6 border-t border-zinc-800/50">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5 pt-5 border-t border-zinc-800/50">
                   <p className="text-sm text-zinc-400">
-                    <span className="text-zinc-500">Compatible:</span> Ubuntu 22.04+, Fedora, Debian, Arch, and most Linux distros
+                    <span className="text-zinc-500">Compatible:</span> Ubuntu, Fedora, Debian, Arch & more
                   </p>
                   <div className="flex items-center gap-4 text-xs text-zinc-500">
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1.5">
                       <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                       No sudo required
                     </span>
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1.5">
                       <Zap className="h-3.5 w-3.5 text-yellow-500" />
-                      ~5-10 min install
+                      ~5-10 min
                     </span>
                   </div>
                 </div>
@@ -463,7 +455,7 @@ export default function HomePage() {
                 Why Choose Vocalinux?
               </h2>
               <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-                Finally, Linux users get the voice dictation experience they deserve — 
+                Finally, Linux users get the voice dictation experience they deserve —
                 no compromises on privacy, no cloud dependencies, just pure productivity.
               </p>
             </div>
@@ -511,7 +503,7 @@ export default function HomePage() {
                     The Linux Voice Gap, Solved
                   </h3>
                   <p className="text-muted-foreground mb-6">
-                    While macOS and Windows have had built-in voice dictation for years, 
+                    While macOS and Windows have had built-in voice dictation for years,
                     Linux users have been left behind — until now.
                   </p>
                   <ul className="space-y-3">
@@ -930,7 +922,7 @@ export default function HomePage() {
               Ready to Ditch Your Keyboard?
             </h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Join the growing community of Linux users who have discovered the power of voice dictation. 
+              Join the growing community of Linux users who have discovered the power of voice dictation.
               It&apos;s free, it&apos;s private, and it just works.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
