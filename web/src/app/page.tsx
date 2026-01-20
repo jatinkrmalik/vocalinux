@@ -313,7 +313,7 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="max-w-4xl mx-auto"
+              className="w-full max-w-5xl mx-auto px-4"
             >
               <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-2xl p-6 sm:p-8 shadow-2xl border border-zinc-800/50 backdrop-blur">
                 {/* Header */}
