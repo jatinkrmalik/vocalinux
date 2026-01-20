@@ -17,6 +17,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: 🔎 Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      python: ${{ steps.filter.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'web/**'
+            python:
+              - 'src/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - 'setup.py'
+
   python-lint:
     name: 🔍 Lint Python
     runs-on: ubuntu-latest
@@ -123,10 +143,11 @@ jobs:
   web-build:
     name: 🌐 Build Website
     runs-on: ubuntu-latest
+    needs: changes
     if: |
-      contains(github.event.head_commit.message, '[web]') ||
+      needs.changes.outputs.web == 'true' ||
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && contains(join(github.event.commits.*.modified, ','), 'web/'))
+      contains(github.event.head_commit.message, '[web]')
     steps:
       - uses: actions/checkout@v4
 
@@ -156,8 +177,12 @@ jobs:
   deploy-website:
     name: 🚀 Deploy Website
     runs-on: ubuntu-latest
-    needs: [python-test, web-build]
-    if: github.ref == 'refs/heads/main'
+    needs: [changes, python-test, web-build]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')) &&
+      needs.web-build.result == 'success'
     steps:
       - uses: actions/checkout@v4
 
