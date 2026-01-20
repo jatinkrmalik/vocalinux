@@ -74,10 +74,15 @@ class TrayIndicator:
         self.text_injector = text_injector
         self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
 
+        # Load shortcut setting
+        shortcut_config = (
+            self.config_manager.get_settings()
+            .get("shortcuts", {})
+            .get("toggle_recognition", "ctrl+ctrl")
+        )
+
         # Initialize keyboard shortcut manager
-        self.shortcut_manager = (
-            KeyboardShortcutManager()
-        )  # Pass config_manager - Removed config_manager argument
+        self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut_config)
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
@@ -274,6 +279,7 @@ class TrayIndicator:
             parent=None,  # Or get the main window if available
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
+            shortcut_manager=self.shortcut_manager,
         )
 
         # Connect to the response signal

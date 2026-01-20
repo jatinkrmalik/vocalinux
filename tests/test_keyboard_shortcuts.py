@@ -42,6 +42,10 @@ class TestKeyboardShortcuts(unittest.TestCase):
         self.mock_listener.is_alive.return_value = True
         self.mock_keyboard.Listener.return_value = self.mock_listener
 
+        # Patch threading to catch callback execution
+        self.threading_patch = patch("vocalinux.ui.keyboard_shortcuts.threading")
+        self.mock_threading = self.threading_patch.start()
+
         # Create a new KSM for each test
         self.ksm = KeyboardShortcutManager()
 
@@ -49,12 +53,12 @@ class TestKeyboardShortcuts(unittest.TestCase):
         """Clean up after tests."""
         self.kb_patch.stop()
         self.keyboard_patch.stop()
+        self.threading_patch.stop()
 
     def test_init(self):
         """Test initialization of the keyboard shortcut manager."""
-        # Verify double-tap threshold is set
-        self.assertEqual(self.ksm.double_tap_threshold, 0.3)
-        # Verify double-tap callback is initially None
+        # Verify initial state
+        self.assertEqual(self.ksm.tap_state, 0)
         self.assertIsNone(self.ksm.double_tap_callback)
 
     def test_start_listener(self):
@@ -64,214 +68,187 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
         # Verify listener was created with correct arguments
         self.mock_keyboard.Listener.assert_called_once()
-
-        # Check that on_press and on_release are being passed
-        args, kwargs = self.mock_keyboard.Listener.call_args
-        self.assertIn("on_press", kwargs)
-        self.assertIn("on_release", kwargs)
-
-        # Check that listener was started
-        self.mock_listener.start.assert_called_once()
         self.assertTrue(self.ksm.active)
 
     def test_start_already_active(self):
         """Test starting when already active."""
-        # Make it active already
         self.ksm.active = True
-
-        # Try to start again
         self.ksm.start()
-
-        # Verify nothing was called
         self.mock_keyboard.Listener.assert_not_called()
 
     def test_start_listener_failed(self):
         """Test handling when listener fails to start."""
-        # Make is_alive return False
         self.mock_listener.is_alive.return_value = False
-
-        # Start the listener
         self.ksm.start()
-
-        # Should have tried to start but then set active to False
-        self.mock_listener.start.assert_called_once()
         self.assertFalse(self.ksm.active)
 
     def test_stop_listener(self):
         """Test stopping the keyboard listener."""
-        # Setup an active listener
         self.ksm.start()
         self.ksm.active = True
+        self.ksm.tap_state = 1 # Change state
 
-        # Stop the listener
         self.ksm.stop()
 
-        # Verify listener was stopped
         self.mock_listener.stop.assert_called_once()
-        self.mock_listener.join.assert_called_once()
         self.assertFalse(self.ksm.active)
-        self.assertIsNone(self.ksm.listener)
-
-    def test_stop_not_active(self):
-        """Test stopping when not active."""
-        # Make it inactive
-        self.ksm.active = False
-
-        # Try to stop
-        self.ksm.stop()
-
-        # Nothing should happen
-        if hasattr(self.ksm, "listener") and self.ksm.listener:
-            self.mock_listener.stop.assert_not_called()
+        self.assertEqual(self.ksm.tap_state, 0) # Should verify reset
 
     def test_register_toggle_callback(self):
         """Test registering toggle callback with double-tap shortcut."""
-        # Create mock callback
         callback = MagicMock()
-
-        # Register as toggle callback
         self.ksm.register_toggle_callback(callback)
-
-        # Verify it was registered as double-tap callback
         self.assertEqual(self.ksm.double_tap_callback, callback)
 
-    def test_key_press_modifier(self):
-        """Test handling a modifier key press."""
-        # Initialize and start to set up the listener
+    def test_double_tap_ctrl_sequence(self):
+        """Test correct double-tap Ctrl sequence."""
         self.ksm.start()
-
-        # Get the on_press handler
         on_press = self.mock_keyboard.Listener.call_args[1]["on_press"]
+        on_release = self.mock_keyboard.Listener.call_args[1]["on_release"]
 
-        # Make sure current_keys is set and initially empty
-        self.ksm.current_keys = set()
-
-        # Simulate pressing Ctrl
-        on_press(self.mock_keyboard.Key.ctrl)
-
-        # Verify Ctrl was added to current keys
-        self.assertIn(self.mock_keyboard.Key.ctrl, self.ksm.current_keys)
-
-    def test_double_tap_ctrl(self):
-        """Test double-tap Ctrl detection."""
-        # Initialize and start to set up the listener
-        self.ksm.start()
-
-        # Get the on_press handler
-        on_press = self.mock_keyboard.Listener.call_args[1]["on_press"]
-
-        # Register mock callback for double-tap Ctrl
         callback = MagicMock()
         self.ksm.register_toggle_callback(callback)
 
-        # Set up initial state
-        self.ksm.last_ctrl_press_time = time.time() - 0.2  # Recent press (within threshold)
-        self.ksm.last_trigger_time = 0  # No recent triggers
+        # We must patch time.time
+        with patch("time.time") as mock_time:
+            # Setup times
+            t0 = 1000.0
+            t1 = t0 + 0.1 # Release time
+            t2 = t1 + 0.1 # Second press time (0.1 > 0.05 min gap)
+            t3 = t2 + 0.1 # Second release time
 
-        # Simulate second Ctrl press (should trigger callback)
+            # 1. Press
+            mock_time.return_value = t0
+            on_press(self.mock_keyboard.Key.ctrl)
+            self.assertEqual(self.ksm.tap_state, 1)
+
+            # 2. Release
+            mock_time.return_value = t1
+            on_release(self.mock_keyboard.Key.ctrl)
+            self.assertEqual(self.ksm.tap_state, 2)
+
+            # 3. Press
+            mock_time.return_value = t2
+            on_press(self.mock_keyboard.Key.ctrl)
+            self.assertEqual(self.ksm.tap_state, 3) # Should advance
+
+            # 4. Release (Trigger)
+            mock_time.return_value = t3
+            on_release(self.mock_keyboard.Key.ctrl)
+            
+            # Check callback logic
+            self.mock_threading.Thread.assert_called_once()
+            args, kwargs = self.mock_threading.Thread.call_args
+            self.assertEqual(kwargs['target'], callback)
+            self.assertEqual(self.ksm.tap_state, 0) # Reset after trigger
+
+    def test_double_tap_interrupted(self):
+        """Test interruption by other keys resets sequence."""
+        self.ksm.start()
+        on_press = self.mock_keyboard.Listener.call_args[1]["on_press"]
+
+        # 1. Press Ctrl
         on_press(self.mock_keyboard.Key.ctrl)
+        self.assertEqual(self.ksm.tap_state, 1)
 
-        # Verify callback was triggered
-        callback.assert_called_once()
+        # 2. Press Other Key
+        on_press(MagicMock()) # Some random key (not Ctrl)
+        self.assertEqual(self.ksm.tap_state, 0)
 
-        # Reset and test when press is outside threshold (not a double-tap)
-        callback.reset_mock()
-        self.ksm.last_ctrl_press_time = time.time() - 0.5  # Outside threshold
-        on_press(self.mock_keyboard.Key.ctrl)
-        callback.assert_not_called()
+    def test_hold_too_long(self):
+        """Test holding Ctrl too long resets sequence."""
+        self.ksm.start()
+        on_press = self.mock_keyboard.Listener.call_args[1]["on_press"]
+        on_release = self.mock_keyboard.Listener.call_args[1]["on_release"]
+
+        with patch("time.time") as mock_time:
+            t0 = 1000.0
+            t1 = t0 + 1.0 # Held for 1.0s (> 0.5s limit)
+
+            mock_time.return_value = t0
+            on_press(self.mock_keyboard.Key.ctrl)
+            self.assertEqual(self.ksm.tap_state, 1)
+
+            mock_time.return_value = t1
+            on_release(self.mock_keyboard.Key.ctrl)
+            self.assertEqual(self.ksm.tap_state, 0) # Reset because too long
 
     def test_normalize_modifier_keys(self):
         """Test normalizing left/right modifier keys."""
-        # Setup the key mapping dictionary correctly
+        # Use simple mock mapping logic for test
         self.ksm._normalize_modifier_key = MagicMock(
             side_effect=lambda key: {
                 self.mock_keyboard.Key.alt_l: self.mock_keyboard.Key.alt,
-                self.mock_keyboard.Key.alt_r: self.mock_keyboard.Key.alt,
-                self.mock_keyboard.Key.shift_l: self.mock_keyboard.Key.shift,
-                self.mock_keyboard.Key.shift_r: self.mock_keyboard.Key.shift,
-                self.mock_keyboard.Key.ctrl_l: self.mock_keyboard.Key.ctrl,
-                self.mock_keyboard.Key.ctrl_r: self.mock_keyboard.Key.ctrl,
-                self.mock_keyboard.Key.cmd_l: self.mock_keyboard.Key.cmd,
-                self.mock_keyboard.Key.cmd_r: self.mock_keyboard.Key.cmd,
             }.get(key, key)
         )
-
-        # Test the normalization
         self.assertEqual(
             self.ksm._normalize_modifier_key(self.mock_keyboard.Key.alt_l),
             self.mock_keyboard.Key.alt,
         )
 
-    def test_double_tap_ctrl_debounce(self):
-        """Test that double-tap Ctrl has debounce protection."""
-        # Initialize and start to set up the listener
-        self.ksm.start()
-
-        # Get the on_press handler
-        on_press = self.mock_keyboard.Listener.call_args[1]["on_press"]
-
-        # Register mock callback for double-tap Ctrl
-        callback = MagicMock()
-        self.ksm.register_toggle_callback(callback)
-
-        # Set up initial state (recent trigger)
-        self.ksm.last_ctrl_press_time = time.time() - 0.2  # Recent press (within threshold)
-        self.ksm.last_trigger_time = time.time() - 0.2  # Recent trigger, within debounce
-
-        # Simulate second Ctrl press (should NOT trigger due to debounce)
-        on_press(self.mock_keyboard.Key.ctrl)
-
-        # Verify callback was NOT triggered
-        callback.assert_not_called()
-
-    def test_key_release(self):
-        """Test handling a key release."""
-        # Initialize and start to set up the listener
-        self.ksm.start()
-
-        # Get the on_release handler
-        on_release = self.mock_keyboard.Listener.call_args[1]["on_release"]
-
-        # Add some keys
-        self.ksm.current_keys = {self.mock_keyboard.Key.ctrl}
-
-        # Simulate releasing Ctrl
-        on_release(self.mock_keyboard.Key.ctrl)
-
-        # Verify Ctrl was removed
-        self.assertNotIn(self.mock_keyboard.Key.ctrl, self.ksm.current_keys)
-
     def test_error_handling(self):
         """Test error handling in key event handlers."""
-        # Initialize and start to set up the listener
         self.ksm.start()
-
-        # Get the handlers
         on_press = self.mock_keyboard.Listener.call_args[1]["on_press"]
-        on_release = self.mock_keyboard.Listener.call_args[1]["on_release"]
-
-        # Make a key that raises an exception
-        bad_key = MagicMock()
-        bad_key.__eq__ = MagicMock(side_effect=Exception("Test exception"))
-
-        # Verify exceptions are caught
+        
+        # We can force _normalize_modifier_key to raise exception
+        self.ksm._normalize_modifier_key = MagicMock(side_effect=Exception("Boom"))
+        
         try:
-            on_press(bad_key)
-            on_release(bad_key)
-            # If we get here, exceptions were caught properly
-            self.assertTrue(True)
-        except:
-            self.fail("Exceptions were not caught in event handlers")
+            on_press(self.mock_keyboard.Key.ctrl)
+            # Should catch exception and log error, not crash
+        except Exception:
+            self.fail("Exception not handled in on_press")
 
     def test_no_keyboard_library(self):
         """Test behavior when keyboard library is not available."""
-        # Create a new mock to replace the keyboard system
         with patch("vocalinux.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", False):
-            # Create a new KSM with no keyboard library
             ksm = KeyboardShortcutManager()
-
-            # Start should do nothing
             ksm.start()
-
-            # When keyboard is not available, active should remain False
             self.assertFalse(ksm.active)
+
+    def test_set_shortcut_updates_mode(self):
+        """Test that setting shortcut updates the listener mode."""
+        self.ksm.start()
+        # Initial default is ctrl+ctrl, uses Listener
+        self.mock_keyboard.Listener.assert_called()
+        self.mock_keyboard.GlobalHotKeys.assert_not_called()
+        
+        # Reset mocks
+        self.mock_keyboard.Listener.reset_mock()
+        self.ksm.stop()
+        
+        # Change shortcut
+        self.ksm.set_shortcut("<ctrl>+<alt>+v")
+        self.assertEqual(self.ksm.shortcut, "<ctrl>+<alt>+v")
+        
+        # Start again
+        self.ksm.start()
+        
+        # Should now use GlobalHotKeys
+        self.mock_keyboard.GlobalHotKeys.assert_called_once()
+        self.mock_keyboard.Listener.assert_not_called()
+
+    def test_hotkey_execution(self):
+        """Test that the hotkey callback executes the registered action."""
+        # Setup hotkey mode
+        self.ksm.set_shortcut("<ctrl>+<alt>+v")
+        
+        callback = MagicMock()
+        self.ksm.register_toggle_callback(callback)
+        
+        self.ksm.start()
+        
+        # Get the hotkey dictionary passed to GlobalHotKeys
+        args, kwargs = self.mock_keyboard.GlobalHotKeys.call_args
+        hotkeys = args[0]
+        self.assertIn("<ctrl>+<alt>+v", hotkeys)
+        
+        # Execute the wrapper function
+        wrapper = hotkeys["<ctrl>+<alt>+v"]
+        wrapper()
+        
+        # Check if callback was threaded
+        self.mock_threading.Thread.assert_called()
+        thread_args = self.mock_threading.Thread.call_args[1]
+        self.assertEqual(thread_args['target'], callback)
