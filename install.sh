@@ -111,7 +111,7 @@ else
     print_info "Cloning Vocalinux repository..."
     INSTALL_DIR="$HOME/.local/share/vocalinux-install"
     mkdir -p "$INSTALL_DIR"
-    
+
     if [ -d "$INSTALL_DIR/.git" ]; then
         print_info "Updating existing clone..."
         cd "$INSTALL_DIR"
@@ -127,7 +127,7 @@ else
     fi
     CLEANUP_ON_EXIT="yes"
     print_info "Repository cloned to: $INSTALL_DIR"
-    
+
     # When running remotely, install venv to user's home directory
     VENV_DIR="$HOME/.local/share/vocalinux/venv"
 fi
@@ -154,7 +154,7 @@ detect_distro() {
         DISTRO_ID="$ID"
         DISTRO_VERSION="$VERSION_ID"
         DISTRO_FAMILY="unknown"
-        
+
         # Determine distribution family
         if [[ "$ID" == "ubuntu" || "$ID_LIKE" == *"ubuntu"* || "$ID" == "pop" || "$ID" == "linuxmint" || "$ID" == "elementary" || "$ID" == "zorin" ]]; then
             DISTRO_FAMILY="ubuntu"
@@ -167,7 +167,7 @@ detect_distro() {
         elif [[ "$ID" == "opensuse" || "$ID_LIKE" == *"suse"* ]]; then
             DISTRO_FAMILY="suse"
         fi
-        
+
         print_info "Detected: $DISTRO_NAME $DISTRO_VERSION ($DISTRO_FAMILY family)"
         return 0
     else
@@ -244,17 +244,17 @@ pacman_package_installed() {
 # Function to install system dependencies based on the detected distribution
 install_system_dependencies() {
     print_info "Installing system dependencies..."
-    
+
     # Define package names for different distributions
     local APT_PACKAGES="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv wget curl unzip"
     local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
-    
+
     local MISSING_PACKAGES=""
     local INSTALL_CMD=""
     local UPDATE_CMD=""
-    
+
     case "$DISTRO_FAMILY" in
         ubuntu|debian)
             # Check for missing packages
@@ -263,7 +263,7 @@ install_system_dependencies() {
                     MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
                 fi
             done
-            
+
             if [ -n "$MISSING_PACKAGES" ]; then
                 print_info "Installing missing packages:$MISSING_PACKAGES"
                 sudo apt update || { print_error "Failed to update package lists"; exit 1; }
@@ -272,7 +272,7 @@ install_system_dependencies() {
                 print_info "All required packages are already installed."
             fi
             ;;
-            
+
         fedora)
             # For Fedora/RHEL-based systems
             if command_exists dnf; then
@@ -285,14 +285,14 @@ install_system_dependencies() {
                 print_error "No supported package manager found (dnf/yum)"
                 exit 1
             fi
-            
+
             # Check for missing packages
             for pkg in $DNF_PACKAGES; do
                 if ! dnf_package_installed "$pkg"; then
                     MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
                 fi
             done
-            
+
             if [ -n "$MISSING_PACKAGES" ]; then
                 print_info "Installing missing packages:$MISSING_PACKAGES"
                 $UPDATE_CMD
@@ -301,21 +301,21 @@ install_system_dependencies() {
                 print_info "All required packages are already installed."
             fi
             ;;
-            
+
         arch)
             # For Arch-based systems
             if ! command_exists pacman; then
                 print_error "Pacman package manager not found"
                 exit 1
             fi
-            
+
             # Check for missing packages
             for pkg in $PACMAN_PACKAGES; do
                 if ! pacman_package_installed "$pkg"; then
                     MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
                 fi
             done
-            
+
             if [ -n "$MISSING_PACKAGES" ]; then
                 print_info "Installing missing packages:$MISSING_PACKAGES"
                 sudo pacman -Sy
@@ -324,19 +324,19 @@ install_system_dependencies() {
                 print_info "All required packages are already installed."
             fi
             ;;
-            
+
         suse)
             # For openSUSE
             if ! command_exists zypper; then
                 print_error "Zypper package manager not found"
                 exit 1
             fi
-            
+
             print_info "Updating package lists and installing dependencies..."
             sudo zypper refresh
             sudo zypper install -y $ZYPPER_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
             ;;
-            
+
         *)
             print_error "Unsupported distribution family: $DISTRO_FAMILY"
             print_warning "Please install the following dependencies manually:"
@@ -347,7 +347,7 @@ install_system_dependencies() {
             print_warning "- PortAudio development libraries"
             print_warning "- Python virtual environment support"
             if [[ "$NON_INTERACTIVE" != "yes" ]]; then
-                read -p "Press Enter to continue once dependencies are installed, or Ctrl+C to cancel..." 
+                read -p "Press Enter to continue once dependencies are installed, or Ctrl+C to cancel..."
             else
                 print_info "Non-interactive mode: continuing (dependencies may be missing)..."
             fi
@@ -368,7 +368,7 @@ ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 install_text_input_tools() {
     # Detect session type more robustly
     local SESSION_TYPE="unknown"
-    
+
     # Check XDG_SESSION_TYPE first
     if [ -n "$XDG_SESSION_TYPE" ]; then
         SESSION_TYPE="$XDG_SESSION_TYPE"
@@ -382,9 +382,9 @@ install_text_input_tools() {
     elif command_exists loginctl; then
         SESSION_TYPE=$(loginctl show-session $(loginctl | grep $(whoami) | awk '{print $1}') -p Type | cut -d= -f2)
     fi
-    
+
     print_info "Detected session type: $SESSION_TYPE"
-    
+
     # Install appropriate tools based on session type and distribution
     case "$SESSION_TYPE" in
         wayland)
@@ -422,7 +422,7 @@ install_text_input_tools() {
                     ;;
             esac
             ;;
-            
+
         x11|"")
             print_info "Installing X11 text input tools..."
             case "$DISTRO_FAMILY" in
@@ -458,11 +458,11 @@ install_text_input_tools() {
                     ;;
             esac
             ;;
-            
+
         *)
             print_warning "Unknown session type: $SESSION_TYPE"
             print_warning "Installing both Wayland and X11 text input tools for compatibility..."
-            
+
             # Install both tools based on distribution
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
@@ -504,17 +504,17 @@ mkdir -p "$ICON_DIR"
 check_python_version() {
     local MIN_VERSION="3.8"
     local PYTHON_CMD="python3"
-    
+
     # Check if python3 command exists
     if ! command_exists python3; then
         print_error "Python 3 is not installed or not in PATH"
         return 1
     fi
-    
+
     # Get Python version
     local PY_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
     print_info "Detected Python version: $PY_VERSION"
-    
+
     # Compare versions
     if [[ $(echo -e "$PY_VERSION\n$MIN_VERSION" | sort -V | head -n1) == "$MIN_VERSION" || "$PY_VERSION" == "$MIN_VERSION" ]]; then
         return 0
@@ -527,7 +527,7 @@ check_python_version() {
 # Set up virtual environment with error handling
 setup_virtual_environment() {
     print_info "Setting up Python virtual environment in $VENV_DIR..."
-    
+
     # Check if virtual environment already exists
     if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then
         print_warning "Virtual environment already exists in $VENV_DIR"
@@ -549,9 +549,9 @@ setup_virtual_environment() {
             fi
         fi
     fi
-    
+
     # Create virtual environment
-    python3 -m venv "$VENV_DIR" --system-site-packages || { 
+    python3 -m venv "$VENV_DIR" --system-site-packages || {
         print_error "Failed to create virtual environment"
         print_info "Trying without --system-site-packages..."
         python3 -m venv "$VENV_DIR" || {
@@ -559,14 +559,14 @@ setup_virtual_environment() {
             exit 1
         }
     }
-    
+
     # Activate virtual environment
     source "$VENV_DIR/bin/activate" || { print_error "Failed to activate virtual environment"; exit 1; }
-    
+
     # Update pip and setuptools
     print_info "Updating pip, setuptools, and wheel..."
     pip install --upgrade pip setuptools wheel || { print_error "Failed to update pip, setuptools, and wheel"; exit 1; }
-    
+
     print_info "Virtual environment activated successfully."
 }
 
@@ -603,30 +603,30 @@ install_python_package() {
     # Create a temporary directory for pip logs
     local PIP_LOG_DIR=$(mktemp -d)
     local PIP_LOG_FILE="$PIP_LOG_DIR/pip_log.txt"
-    
+
     # Function to verify package installation
     verify_package_installed() {
         local PKG_NAME="vocalinux"
         python -c "import $PKG_NAME" 2>/dev/null
         return $?
     }
-    
+
     if [[ "$DEV_MODE" == "yes" ]]; then
         print_info "Installing Vocalinux in development mode..."
-        
+
         # Install in development mode with logging
         pip install -e . --log "$PIP_LOG_FILE" || {
             print_error "Failed to install Vocalinux in development mode."
             print_error "Check the pip log for details: $PIP_LOG_FILE"
             return 1
         }
-        
+
         # Install test dependencies
         print_info "Installing test dependencies..."
         pip install pytest pytest-mock pytest-cov --log "$PIP_LOG_FILE" || {
             print_warning "Failed to install some test dependencies. Tests may not run correctly."
         }
-        
+
         # Install all optional dependencies for development
         print_info "Installing all optional dependencies for development..."
         pip install ".[whisper,dev]" --log "$PIP_LOG_FILE" || {
@@ -635,25 +635,31 @@ install_python_package() {
         }
     else
         print_info "Installing Vocalinux..."
-        
+
         # Install the package with logging
         pip install . --log "$PIP_LOG_FILE" || {
             print_error "Failed to install Vocalinux."
             print_error "Check the pip log for details: $PIP_LOG_FILE"
             return 1
         }
-        
-        # Install Whisper - by default in non-interactive mode, or if explicitly requested
-        if [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
+
+        # Install Whisper only if explicitly requested with --with-whisper
+        # This prevents OOM errors on low-memory systems (Whisper requires significant RAM)
+        if [ "$WITH_WHISPER" = "yes" ]; then
             print_info "Installing Whisper AI support (this might take a while ~5-10 min)..."
             print_info "This enables high-accuracy speech recognition."
             pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                 print_warning "Failed to install Whisper support."
                 print_warning "Voice recognition will fall back to VOSK."
             }
+        elif [ "$NON_INTERACTIVE" = "yes" ]; then
+            # In non-interactive mode without --with-whisper, skip Whisper
+            # to avoid OOM on low-memory systems
+            print_info "Skipping Whisper installation (use --with-whisper to enable)."
+            print_info "VOSK will be used for speech recognition."
         else
             # Prompt for Whisper installation (interactive mode only)
-            read -p "Do you want to install Whisper AI support? This requires additional disk space. (y/n) " -n 1 -r
+            read -p "Do you want to install Whisper AI support? This requires additional disk space and RAM. (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 print_info "Installing Whisper support (this might take a while)..."
@@ -664,19 +670,19 @@ install_python_package() {
             fi
         fi
     fi
-    
+
     # Verify installation
     if verify_package_installed; then
         print_success "Vocalinux package installed successfully!"
         # Clean up log file if installation was successful
         rm -rf "$PIP_LOG_DIR"
-        
+
         # Create symlink in ~/.local/bin for easy access
         if [[ "$CLEANUP_ON_EXIT" == "yes" ]]; then
             mkdir -p "$HOME/.local/bin"
             ln -sf "$VENV_DIR/bin/vocalinux" "$HOME/.local/bin/vocalinux"
             print_info "Created symlink: ~/.local/bin/vocalinux"
-            
+
             # Check if ~/.local/bin is in PATH
             if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
                 print_warning "~/.local/bin is not in your PATH"
@@ -684,7 +690,7 @@ install_python_package() {
                 print_info '  export PATH="$HOME/.local/bin:$PATH"'
             fi
         fi
-        
+
         return 0
     else
         print_error "Vocalinux package installation verification failed."
@@ -702,40 +708,40 @@ fi
 # Function to download and install Whisper tiny model
 install_whisper_model() {
     print_info "Installing Whisper tiny model (~75MB)..."
-    
+
     # Create whisper models directory
     local WHISPER_DIR="$DATA_DIR/models/whisper"
     mkdir -p "$WHISPER_DIR"
-    
+
     # Whisper tiny model URL and path
     local TINY_MODEL_URL="https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
     local TINY_MODEL_PATH="$WHISPER_DIR/tiny.pt"
-    
+
     # Check if model already exists
     if [ -f "$TINY_MODEL_PATH" ]; then
         print_info "Whisper tiny model already exists at $TINY_MODEL_PATH"
         return 0
     fi
-    
+
     # Check internet connectivity
     if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
         print_warning "Neither wget nor curl found. Cannot download Whisper model."
         print_warning "Model will be downloaded on first application run."
         return 1
     fi
-    
+
     # Test internet connectivity
     if ! ping -c 1 google.com >/dev/null 2>&1; then
         print_warning "No internet connection detected."
         print_warning "Whisper model will be downloaded on first application run."
         return 1
     fi
-    
+
     print_info "Downloading Whisper tiny model..."
     print_info "This may take a few minutes depending on your internet connection."
-    
+
     local TEMP_FILE="$TINY_MODEL_PATH.tmp"
-    
+
     # Download the model
     if command -v wget >/dev/null 2>&1; then
         if ! wget --progress=bar:force:noscroll -O "$TEMP_FILE" "$TINY_MODEL_URL" 2>&1; then
@@ -750,25 +756,25 @@ install_whisper_model() {
             return 1
         fi
     fi
-    
+
     # Verify download
     if [ ! -f "$TEMP_FILE" ] || [ ! -s "$TEMP_FILE" ]; then
         print_error "Downloaded model file is empty or missing"
         rm -f "$TEMP_FILE"
         return 1
     fi
-    
+
     # Move to final location
     mv "$TEMP_FILE" "$TINY_MODEL_PATH"
-    
+
     # Verify the model file
     if [ -f "$TINY_MODEL_PATH" ]; then
         local MODEL_SIZE=$(du -h "$TINY_MODEL_PATH" | cut -f1)
         print_success "Whisper tiny model installed successfully ($MODEL_SIZE)"
-        
+
         # Create a marker file to indicate this model was pre-installed
         echo "$(date)" > "$WHISPER_DIR/.vocalinux_preinstalled"
-        
+
         return 0
     else
         print_error "Whisper model installation failed"
@@ -779,41 +785,41 @@ install_whisper_model() {
 # Function to download and install VOSK models
 install_vosk_models() {
     print_info "Installing VOSK speech recognition models..."
-    
+
     # Create models directory
     local MODELS_DIR="$DATA_DIR/models"
     mkdir -p "$MODELS_DIR"
-    
+
     # Define model information
     local SMALL_MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
     local SMALL_MODEL_NAME="vosk-model-small-en-us-0.15"
     local SMALL_MODEL_PATH="$MODELS_DIR/$SMALL_MODEL_NAME"
-    
+
     # Check if small model already exists
     if [ -d "$SMALL_MODEL_PATH" ]; then
         print_info "Small VOSK model already exists at $SMALL_MODEL_PATH"
         return 0
     fi
-    
+
     # Check internet connectivity
     if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
         print_warning "Neither wget nor curl found. Cannot download VOSK models."
         print_warning "Models will be downloaded on first application run."
         return 1
     fi
-    
+
     # Test internet connectivity
     if ! ping -c 1 google.com >/dev/null 2>&1; then
         print_warning "No internet connection detected."
         print_warning "VOSK models will be downloaded on first application run."
         return 1
     fi
-    
+
     print_info "Downloading small VOSK model (approximately 40MB)..."
     print_info "This may take a few minutes depending on your internet connection."
-    
+
     local TEMP_ZIP="$MODELS_DIR/$(basename $SMALL_MODEL_URL)"
-    
+
     # Download the model
     if command -v wget >/dev/null 2>&1; then
         if ! wget --progress=bar:force:noscroll -O "$TEMP_ZIP" "$SMALL_MODEL_URL" 2>&1; then
@@ -828,16 +834,16 @@ install_vosk_models() {
             return 1
         fi
     fi
-    
+
     # Verify download
     if [ ! -f "$TEMP_ZIP" ] || [ ! -s "$TEMP_ZIP" ]; then
         print_error "Downloaded model file is empty or missing"
         rm -f "$TEMP_ZIP"
         return 1
     fi
-    
+
     print_info "Extracting VOSK model..."
-    
+
     # Extract the model
     if command -v unzip >/dev/null 2>&1; then
         if ! unzip -q "$TEMP_ZIP" -d "$MODELS_DIR"; then
@@ -850,20 +856,20 @@ install_vosk_models() {
         rm -f "$TEMP_ZIP"
         return 1
     fi
-    
+
     # Clean up zip file
     rm -f "$TEMP_ZIP"
-    
+
     # Verify extraction
     if [ -d "$SMALL_MODEL_PATH" ]; then
         print_success "VOSK small model installed successfully at $SMALL_MODEL_PATH"
-        
+
         # Set proper permissions
         chmod -R 755 "$SMALL_MODEL_PATH"
-        
+
         # Create a marker file to indicate this model was pre-installed
         echo "$(date)" > "$SMALL_MODEL_PATH/.vocalinux_preinstalled"
-        
+
         return 0
     else
         print_error "VOSK model extraction failed - directory not found"
@@ -874,25 +880,25 @@ install_vosk_models() {
 # Function to install desktop entry with error handling
 install_desktop_entry() {
     print_info "Installing desktop entry..."
-    
+
     # Check if desktop entry file exists
     if [ ! -f "vocalinux.desktop" ]; then
         print_error "Desktop entry file not found: vocalinux.desktop"
         return 1
     fi
-    
+
     # Create desktop directory if it doesn't exist
     mkdir -p "$DESKTOP_DIR" || {
         print_error "Failed to create desktop directory: $DESKTOP_DIR"
         return 1
     }
-    
+
     # Copy desktop entry
     cp vocalinux.desktop "$DESKTOP_DIR/" || {
         print_error "Failed to copy desktop entry to $DESKTOP_DIR"
         return 1
     }
-    
+
     # Update the desktop entry to use the venv
     VENV_SCRIPT_PATH="$(realpath $VENV_DIR/bin/vocalinux)"
     if [ ! -f "$VENV_SCRIPT_PATH" ]; then
@@ -904,31 +910,31 @@ install_desktop_entry() {
         }
         print_info "Updated desktop entry to use virtual environment"
     fi
-    
+
     # Make desktop entry executable
     chmod +x "$DESKTOP_DIR/vocalinux.desktop" || {
         print_warning "Failed to make desktop entry executable"
     }
-    
+
     return 0
 }
 
 # Function to install icons with error handling
 install_icons() {
     print_info "Installing application icons..."
-    
+
     # Create icon directory if it doesn't exist
     mkdir -p "$ICON_DIR" || {
         print_error "Failed to create icon directory: $ICON_DIR"
         return 1
     }
-    
+
     # Check if icons directory exists
     if [ ! -d "resources/icons/scalable" ]; then
         print_warning "Custom icons not found in resources/icons/scalable directory"
         return 1
     fi
-    
+
     # List of icons to install
     local ICONS=(
         "vocalinux.svg"
@@ -936,7 +942,7 @@ install_icons() {
         "vocalinux-microphone-off.svg"
         "vocalinux-microphone-process.svg"
     )
-    
+
     # Install each icon
     local INSTALLED_COUNT=0
     for icon in "${ICONS[@]}"; do
@@ -950,7 +956,7 @@ install_icons() {
             print_warning "Icon not found: resources/icons/scalable/$icon"
         fi
     done
-    
+
     if [ "$INSTALLED_COUNT" -eq "${#ICONS[@]}" ]; then
         print_success "Installed all custom Vocalinux icons"
         return 0
@@ -966,7 +972,7 @@ install_icons() {
 # Function to update icon cache
 update_icon_cache() {
     print_info "Updating icon cache..."
-    
+
     # Check if gtk-update-icon-cache command exists
     if command_exists gtk-update-icon-cache; then
         gtk-update-icon-cache -f -t "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || {
@@ -1011,7 +1017,7 @@ update_icon_cache
 # Function to run tests with better error handling
 run_tests() {
     print_info "Running tests..."
-    
+
     # Check if pytest is installed
     if ! python -c "import pytest" &>/dev/null; then
         print_info "Installing pytest and related packages..."
@@ -1020,15 +1026,15 @@ run_tests() {
             return 1
         }
     fi
-    
+
     # Create a directory for test results
     local TEST_RESULTS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux/test_results"
     mkdir -p "$TEST_RESULTS_DIR"
     local TEST_RESULTS_FILE="$TEST_RESULTS_DIR/pytest_$(date +%Y%m%d_%H%M%S).xml"
-    
+
     print_info "Running tests with pytest..."
     print_info "This may take a few minutes..."
-    
+
     # Run the tests with pytest and capture output
     local TEST_OUTPUT_FILE=$(mktemp)
     if pytest -v --junitxml="$TEST_RESULTS_FILE" | tee "$TEST_OUTPUT_FILE"; then
@@ -1060,25 +1066,25 @@ fi
 verify_installation() {
     print_info "Verifying installation..."
     local ISSUES=0
-    
+
     # Check if virtual environment exists and is activated
     if [ ! -d "$VENV_DIR" ] || [ ! -f "$VENV_DIR/bin/activate" ]; then
         print_error "Virtual environment not found or incomplete."
         ((ISSUES++))
     fi
-    
+
     # Check if vocalinux command is available
     if ! command -v vocalinux &>/dev/null && [ ! -f "$VENV_DIR/bin/vocalinux" ]; then
         print_error "Vocalinux command not found."
         ((ISSUES++))
     fi
-    
+
     # Check if desktop entry is installed
     if [ ! -f "$DESKTOP_DIR/vocalinux.desktop" ]; then
         print_warning "Desktop entry not found. Application may not appear in application menu."
         ((ISSUES++))
     fi
-    
+
     # Check if icons are installed
     local ICON_COUNT=0
     for icon in vocalinux.svg vocalinux-microphone.svg vocalinux-microphone-off.svg vocalinux-microphone-process.svg; do
@@ -1086,18 +1092,18 @@ verify_installation() {
             ((ICON_COUNT++))
         fi
     done
-    
+
     if [ "$ICON_COUNT" -lt 4 ]; then
         print_warning "Some icons are missing. Application may not display correctly."
         ((ISSUES++))
     fi
-    
+
     # Check if Python package is importable
     if ! python -c "import vocalinux" &>/dev/null; then
         print_error "Vocalinux Python package cannot be imported."
         ((ISSUES++))
     fi
-    
+
     # Return the number of issues found
     return $ISSUES
 }
@@ -1105,20 +1111,20 @@ verify_installation() {
 # Function to print installation summary
 print_installation_summary() {
     local ISSUES=$1
-    
+
     echo
     echo "=============================="
     echo "   INSTALLATION SUMMARY"
     echo "=============================="
     echo
-    
+
     if [ "$ISSUES" -eq 0 ]; then
         print_success "Installation completed successfully with no issues!"
     else
         print_warning "Installation completed with $ISSUES potential issue(s)."
         print_warning "The application may still work, but some features might be limited."
     fi
-    
+
     echo
     print_info "Installation details:"
     print_info "- Virtual environment: $VENV_DIR"
@@ -1126,14 +1132,14 @@ print_installation_summary() {
     print_info "- Icons: $ICON_DIR"
     print_info "- Configuration: $CONFIG_DIR"
     print_info "- Data directory: $DATA_DIR"
-    
+
     # Check if Whisper model was installed
     if [ -f "$DATA_DIR/models/whisper/tiny.pt" ]; then
         print_info "- Whisper tiny model: $DATA_DIR/models/whisper/tiny.pt (default engine)"
     elif python -c "import whisper" 2>/dev/null; then
         print_info "- Whisper tiny model: Will be downloaded on first run"
     fi
-    
+
     # Check if VOSK model was installed
     if [ "$SKIP_MODELS" = "no" ] && [ -d "$DATA_DIR/models/vosk-model-small-en-us-0.15" ]; then
         print_info "- VOSK small model: $DATA_DIR/models/vosk-model-small-en-us-0.15 (fallback)"
@@ -1142,22 +1148,22 @@ print_installation_summary() {
     else
         print_info "- VOSK models: Will be downloaded on first run (installation failed)"
     fi
-    
+
     echo
     print_info "To activate the virtual environment in the future, run:"
     print_info "  source $ACTIVATION_SCRIPT"
     print_info "You can then launch Vocalinux by running 'vocalinux'"
-    
+
     # If venv is in a standard location, mention direct launch option
     if [[ "$VENV_DIR" == "$HOME/.local/share/vocalinux/venv" ]]; then
         echo
         print_info "Or run directly with:"
         print_info "  $VENV_DIR/bin/vocalinux"
     fi
-    
+
     echo
     print_info "For more information, see: https://github.com/jatinkrmalik/vocalinux"
-    
+
     if [ "$ISSUES" -gt 0 ]; then
         echo
         print_warning "If you encounter any problems, please report them at:"
