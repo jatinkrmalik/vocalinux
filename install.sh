@@ -28,6 +28,7 @@ DEV_MODE="no"
 VENV_DIR="venv"
 SKIP_MODELS="no"
 WITH_WHISPER="no"
+NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
 
 # Detect if running non-interactively (e.g., via curl | bash)
@@ -59,6 +60,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-whisper)
             WITH_WHISPER="no"
+            NO_WHISPER_EXPLICIT="yes"
             NON_INTERACTIVE="yes"  # Skip the prompt
             shift
             ;;
@@ -74,8 +76,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)"
             echo "  --skip-models    Skip downloading VOSK models during installation"
-            echo "  --with-whisper   Install Whisper AI support (requires more disk space and time)"
-            echo "  --no-whisper     Skip Whisper installation (don't prompt)"
+            echo "  --with-whisper   Install Whisper AI support (included by default)"
+            echo "  --no-whisper     VOSK-only install for low-RAM systems (skips Whisper, uses VOSK as default)"
             echo "  -y, --yes        Non-interactive mode (accept defaults)"
             echo "  --help           Show this help message"
             exit 0
@@ -643,22 +645,55 @@ install_python_package() {
             return 1
         }
 
-        # Install Whisper only if explicitly requested with --with-whisper
-        # This prevents OOM errors on low-memory systems (Whisper requires significant RAM)
-        if [ "$WITH_WHISPER" = "yes" ]; then
+        # Whisper installation logic:
+        # - Default (non-interactive via curl|bash): Install Whisper
+        # - --no-whisper flag: Skip Whisper, create config with VOSK as default
+        # - Interactive mode: Prompt user
+        if [ "$NO_WHISPER_EXPLICIT" = "yes" ]; then
+            # User explicitly requested --no-whisper (for low-RAM systems)
+            print_info "Skipping Whisper installation (--no-whisper flag)."
+            print_info "VOSK will be used as the default speech recognition engine."
+
+            # Create config file with VOSK as default engine
+            local CONFIG_FILE="$CONFIG_DIR/config.json"
+            if [ ! -f "$CONFIG_FILE" ]; then
+                print_info "Creating config with VOSK as default engine..."
+                cat > "$CONFIG_FILE" << 'VOSK_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "vosk",
+        "model_size": "small",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+VOSK_CONFIG
+            fi
+        elif [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
+            # Default: Install Whisper (either explicitly requested or non-interactive default)
             print_info "Installing Whisper AI support (this might take a while ~5-10 min)..."
             print_info "This enables high-accuracy speech recognition."
             pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                 print_warning "Failed to install Whisper support."
                 print_warning "Voice recognition will fall back to VOSK."
             }
-        elif [ "$NON_INTERACTIVE" = "yes" ]; then
-            # In non-interactive mode without --with-whisper, skip Whisper
-            # to avoid OOM on low-memory systems
-            print_info "Skipping Whisper installation (use --with-whisper to enable)."
-            print_info "VOSK will be used for speech recognition."
         else
-            # Prompt for Whisper installation (interactive mode only)
+            # Interactive mode: Prompt user
             read -p "Do you want to install Whisper AI support? This requires additional disk space and RAM. (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
