@@ -28,6 +28,7 @@ DEV_MODE="no"
 VENV_DIR="venv"
 SKIP_MODELS="no"
 WITH_WHISPER="no"
+WHISPER_CPU="no"
 NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
 
@@ -58,6 +59,11 @@ while [[ $# -gt 0 ]]; do
             WITH_WHISPER="yes"
             shift
             ;;
+        --whisper-cpu)
+            WITH_WHISPER="yes"
+            WHISPER_CPU="yes"
+            shift
+            ;;
         --no-whisper)
             WITH_WHISPER="no"
             NO_WHISPER_EXPLICIT="yes"
@@ -76,8 +82,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)"
             echo "  --skip-models    Skip downloading VOSK models during installation"
-            echo "  --with-whisper   Install Whisper AI support (included by default)"
-            echo "  --no-whisper     VOSK-only install for low-RAM systems (skips Whisper, uses VOSK as default)"
+            echo "  --with-whisper   Install Whisper AI support with GPU/CUDA (included by default)"
+            echo "  --whisper-cpu    Install Whisper with CPU-only PyTorch (smaller download, works on low-RAM)"
+            echo "  --no-whisper     VOSK-only install (skips Whisper entirely, uses VOSK as default)"
             echo "  -y, --yes        Non-interactive mode (accept defaults)"
             echo "  --help           Show this help message"
             exit 0
@@ -684,22 +691,54 @@ install_python_package() {
 }
 VOSK_CONFIG
             fi
+        elif [ "$WHISPER_CPU" = "yes" ]; then
+            # CPU-only Whisper installation (smaller download, works on low-RAM systems)
+            print_info "Installing Whisper AI with CPU-only PyTorch (~200MB instead of ~2.3GB)..."
+            print_info "This is ideal for systems without NVIDIA GPU or with limited RAM."
+
+            # Install CPU-only PyTorch first
+            pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
+                print_warning "Failed to install CPU-only PyTorch."
+                print_warning "Voice recognition will fall back to VOSK."
+            }
+
+            # Install openai-whisper (without its torch dependency since we already installed it)
+            pip install openai-whisper --log "$PIP_LOG_FILE" || {
+                print_warning "Failed to install Whisper."
+                print_warning "Voice recognition will fall back to VOSK."
+            }
         elif [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
-            # Default: Install Whisper (either explicitly requested or non-interactive default)
-            print_info "Installing Whisper AI support (this might take a while ~5-10 min)..."
-            print_info "This enables high-accuracy speech recognition."
+            # Default: Install Whisper with GPU support (either explicitly requested or non-interactive default)
+            print_info "Installing Whisper AI support with GPU/CUDA (~2.3GB download, ~5-10 min)..."
+            print_info "This enables high-accuracy speech recognition with GPU acceleration."
+            print_info "Tip: Use --whisper-cpu for a smaller download if you don't have an NVIDIA GPU."
             pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                 print_warning "Failed to install Whisper support."
                 print_warning "Voice recognition will fall back to VOSK."
             }
         else
             # Interactive mode: Prompt user
-            read -p "Do you want to install Whisper AI support? This requires additional disk space and RAM. (y/n) " -n 1 -r
+            echo ""
+            print_info "Whisper AI provides better accuracy but requires more disk space."
+            print_info "Options:"
+            print_info "  1) Full install with GPU support (~2.3GB) - best if you have NVIDIA GPU"
+            print_info "  2) CPU-only install (~200MB) - works on any system, slightly slower"
+            print_info "  3) Skip Whisper - use VOSK only"
+            read -p "Choose option [1/2/3]: " -n 1 -r
             echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                print_info "Installing Whisper support (this might take a while)..."
+            if [[ $REPLY == "1" ]]; then
+                print_info "Installing Whisper with GPU support (this might take a while)..."
                 pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                     print_warning "Failed to install Whisper support."
+                    print_warning "Voice recognition will fall back to VOSK."
+                }
+            elif [[ $REPLY == "2" ]]; then
+                print_info "Installing Whisper with CPU-only PyTorch..."
+                pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
+                    print_warning "Failed to install CPU-only PyTorch."
+                }
+                pip install openai-whisper --log "$PIP_LOG_FILE" || {
+                    print_warning "Failed to install Whisper."
                     print_warning "Voice recognition will fall back to VOSK."
                 }
             fi
