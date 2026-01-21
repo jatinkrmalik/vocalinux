@@ -670,6 +670,8 @@ install_python_package() {
     "speech_recognition": {
         "engine": "vosk",
         "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
         "vad_sensitivity": 3,
         "silence_timeout": 2.0
     },
