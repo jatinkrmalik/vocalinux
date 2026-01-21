@@ -200,3 +200,76 @@ class TestConfigManager(unittest.TestCase):
         self.assertEqual(target["a"]["e"], 20)  # Added
         self.assertEqual(target["d"], 3)  # Unchanged
         self.assertEqual(target["f"], 30)  # Added
+
+    def test_get_model_size_for_engine(self):
+        """Test getting model size for a specific engine."""
+        config_manager = ConfigManager()
+
+        # Test default values
+        self.assertEqual(config_manager.get_model_size_for_engine("vosk"), "small")
+        self.assertEqual(config_manager.get_model_size_for_engine("whisper"), "tiny")
+
+        # Set specific model sizes
+        config_manager.set_model_size_for_engine("vosk", "medium")
+        config_manager.set_model_size_for_engine("whisper", "small")
+
+        # Verify they are returned correctly
+        self.assertEqual(config_manager.get_model_size_for_engine("vosk"), "medium")
+        self.assertEqual(config_manager.get_model_size_for_engine("whisper"), "small")
+
+    def test_set_model_size_for_engine(self):
+        """Test setting model size for a specific engine."""
+        config_manager = ConfigManager()
+
+        # Set model size for vosk
+        config_manager.set_model_size_for_engine("vosk", "large")
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
+        self.assertEqual(config_manager.config["speech_recognition"]["model_size"], "large")
+
+        # Set model size for whisper
+        config_manager.set_model_size_for_engine("whisper", "medium")
+        self.assertEqual(
+            config_manager.config["speech_recognition"]["whisper_model_size"], "medium"
+        )
+        self.assertEqual(config_manager.config["speech_recognition"]["model_size"], "medium")
+
+    def test_migrate_old_config(self):
+        """Test migration of old config format without per-engine model sizes."""
+        # Create an old-style config file without per-engine model sizes
+        old_config = {
+            "speech_recognition": {
+                "engine": "vosk",
+                "model_size": "medium",
+                "vad_sensitivity": 3,
+                "silence_timeout": 2.0,
+            }
+        }
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(old_config, f)
+
+        # Load the config (should trigger migration)
+        config_manager = ConfigManager()
+
+        # Verify migration added per-engine model sizes
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "medium")
+        self.assertEqual(config_manager.config["speech_recognition"]["whisper_model_size"], "tiny")
+
+    def test_update_speech_recognition_settings_per_engine(self):
+        """Test that update_speech_recognition_settings saves per-engine model sizes."""
+        config_manager = ConfigManager()
+
+        # Update settings for vosk
+        config_manager.update_speech_recognition_settings({"engine": "vosk", "model_size": "large"})
+
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
+
+        # Update settings for whisper
+        config_manager.update_speech_recognition_settings(
+            {"engine": "whisper", "model_size": "small"}
+        )
+
+        self.assertEqual(config_manager.config["speech_recognition"]["whisper_model_size"], "small")
+
+        # Verify the vosk setting wasn't changed
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
