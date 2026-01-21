@@ -107,15 +107,32 @@ def main():
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
     audio_settings = config_manager.get_settings().get("audio", {})
 
-    # Use saved settings if no command-line override was provided
-    # Check if args are still at their defaults (user didn't explicitly set them)
-    engine = saved_settings.get("engine", args.engine)
-    model_size = saved_settings.get("model_size", args.model)
+    # CLI arguments take precedence over saved config
+    # We need to check if the user explicitly provided arguments
+    # by examining sys.argv since argparse defaults don't tell us this
+    cli_engine_set = any(arg.startswith("--engine") for arg in sys.argv[1:])
+    cli_model_set = any(arg.startswith("--model") for arg in sys.argv[1:])
+
+    # Use CLI args if explicitly set, otherwise fall back to saved config, then defaults
+    if cli_engine_set:
+        engine = args.engine
+        logger.info(f"Using engine={engine} (from command line)")
+    else:
+        engine = saved_settings.get("engine", args.engine)
+        logger.info(f"Using engine={engine} (from saved config)")
+
+    if cli_model_set:
+        model_size = args.model
+        logger.info(f"Using model={model_size} (from command line)")
+    else:
+        model_size = saved_settings.get("model_size", args.model)
+        logger.info(f"Using model={model_size} (from saved config)")
+
     vad_sensitivity = saved_settings.get("vad_sensitivity", 3)
     silence_timeout = saved_settings.get("silence_timeout", 2.0)
     audio_device_index = audio_settings.get("device_index", None)
 
-    logger.info(f"Using engine={engine}, model={model_size} (from saved config)")
+    logger.info(f"Final settings: engine={engine}, model={model_size}")
     if audio_device_index is not None:
         logger.info(f"Using audio device index={audio_device_index} (from saved config)")
 
