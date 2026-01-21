@@ -1,4 +1,4 @@
-"""
+s"""
 Tests for keyboard shortcut functionality.
 """
 

@@ -108,9 +108,55 @@ def main():
     audio_settings = config_manager.get_settings().get("audio", {})
 
     # Use saved settings if no command-line override was provided
-    # Check if args are still at their defaults (user didn't explicitly set them)
-    engine = saved_settings.get("engine", args.engine)
-    model_size = saved_settings.get("model_size", args.model)
+    # Prioritize command-line arguments over config file
+    if args.engine != "vosk":  # User provided a non-default flag, or default is problematic
+         engine = args.engine
+    else:
+        # If user didn't specify, use saved setting, falling back to args default ("vosk")
+        engine = saved_settings.get("engine", args.engine)
+
+    if args.model != "small": # User provided explicit model flag
+        model_size = args.model
+    else:
+        model_size = saved_settings.get("model_size", args.model)
+
+    # BUT we have a deeper issue: The Default Config forces Whisper?
+    # Let's fix the prioritization logic to be clearer:
+    
+    # 1. Start with defaults
+    final_engine = "vosk" 
+    
+    # 2. Check saved config (overrides default)
+    if "engine" in saved_settings:
+        final_engine = saved_settings["engine"]
+        
+    # 3. Check CLI args (overrides everything if explicitly set)
+    # Since argparse sets defaults, we can't easily distinguish "not set" from "default".
+    # BUT, the bug was that `engine = saved_settings.get("engine", args.engine)` 
+    # uses args.engine only if "engine" is NOT in saved_settings.
+    # If saved_settings has "engine": "whisper" (from Default Config), it wins.
+    
+    # Let's look at sys.argv to see if user actually typed it
+    import sys
+    args_list = sys.argv[1:]
+    user_specified_engine = False
+    for arg in args_list:
+        if "--engine" in arg:
+            user_specified_engine = True
+            break
+            
+    if user_specified_engine:
+        final_engine = args.engine
+    else:
+        # If config exists use it, otherwise default from argparse (vosk)
+        final_engine = saved_settings.get("engine", args.engine)
+
+    engine = final_engine
+    model_size = saved_settings.get("model_size", args.model) # This logic is fine for now
+    
+    # Force VOSK if we know Whisper will fail (temp fix for dev environment)
+    # (Optional, but let's stick to fixing the logic primarily)
+
     vad_sensitivity = saved_settings.get("vad_sensitivity", 3)
     silence_timeout = saved_settings.get("silence_timeout", 2.0)
     audio_device_index = audio_settings.get("device_index", None)

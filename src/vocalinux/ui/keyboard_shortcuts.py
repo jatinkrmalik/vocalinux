@@ -67,16 +67,24 @@ class KeyboardShortcutManager:
         Args:
             shortcut: The new shortcut string
         """
+        logger.debug(f"set_shortcut called with: {shortcut} (current: {self.shortcut})")
+        
         if self.shortcut == shortcut:
+            logger.debug("Shortcut unchanged, skipping")
             return
             
         logger.info(f"Updating shortcut to: {shortcut}")
+        old_shortcut = self.shortcut
         self.shortcut = shortcut
         
         # Restart listener if active
         if self.active:
+            logger.debug(f"Listener was active, restarting (old={old_shortcut}, new={shortcut})")
             self.stop()
             self.start()
+            logger.debug(f"Listener restarted, active={self.active}")
+        else:
+            logger.debug("Listener was not active, just updated shortcut value")
 
     def start(self):
         """Start listening for keyboard shortcuts."""
