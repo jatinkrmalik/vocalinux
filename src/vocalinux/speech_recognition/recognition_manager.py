@@ -437,7 +437,7 @@ class SpeechRecognitionManager:
             # Transcribe with Whisper (handles variable length audio automatically)
             result = self.model.transcribe(
                 audio_float,
-                language="en",
+                # language="en",
                 task="transcribe",
                 verbose=False,
                 temperature=0.0,  # Greedy decoding for consistency
