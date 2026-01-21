@@ -612,7 +612,7 @@ export default function HomePage() {
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold">Quick Install (VOSK only)</h3>
                       <p className="text-sm text-muted-foreground">
-                        Faster install, lighter on resources (~2-3 min)
+                        For low-RAM systems (8GB or less) - skips Whisper, uses VOSK as default (~2-3 min)
                       </p>
                     </div>
                     <CopyButton text={oneClickInstallNoWhisper} />
