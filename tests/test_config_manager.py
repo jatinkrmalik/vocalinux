@@ -9,12 +9,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Update import path to use the new package structure
-from vocalinux.ui.config_manager import (
-    CONFIG_DIR,
-    CONFIG_FILE,
-    DEFAULT_CONFIG,
-    ConfigManager,
-)
+from vocalinux.ui.config_manager import CONFIG_DIR, CONFIG_FILE, DEFAULT_CONFIG, ConfigManager
 
 
 class TestConfigManager(unittest.TestCase):
@@ -142,7 +137,7 @@ class TestConfigManager(unittest.TestCase):
         """Test getting an existing configuration value."""
         config_manager = ConfigManager()
         value = config_manager.get("speech_recognition", "engine")
-        self.assertEqual(value, "whisper")  # Default is now whisper
+        self.assertEqual(value, "vosk")  # Default is vosk (works on low-memory systems)
 
     def test_get_nonexistent_value(self):
         """Test getting a nonexistent configuration value."""
