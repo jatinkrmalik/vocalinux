@@ -18,8 +18,8 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 # Default configuration
 DEFAULT_CONFIG = {
     "speech_recognition": {  # Changed section name
-        "engine": "vosk",  # "vosk" or "whisper" - vosk is default as it works on low-memory systems
-        "model_size": "small",  # "tiny", "small", "medium", or "large"
+        "engine": "whisper",  # "vosk" or "whisper" - whisper is default for better accuracy
+        "model_size": "tiny",  # "tiny", "small", "medium", or "large"
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
     },
