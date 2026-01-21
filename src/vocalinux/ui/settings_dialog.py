@@ -21,9 +21,7 @@ from ..common_types import RecognitionState  # noqa: E402
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
-    from ..speech_recognition.recognition_manager import (  # noqa: E402
-        SpeechRecognitionManager,
-    )
+    from ..speech_recognition.recognition_manager import SpeechRecognitionManager  # noqa: E402
     from .config_manager import ConfigManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -586,7 +584,8 @@ class SettingsDialog(Gtk.Dialog):
         # Use .get with defaults for robustness
         sr_settings = settings.get("speech_recognition", {})
         engine = sr_settings.get("engine", "vosk")
-        model_size = sr_settings.get("model_size", "small")
+        # Get model size for the specific engine
+        model_size = self.config_manager.get_model_size_for_engine(engine)
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
 
@@ -616,12 +615,9 @@ class SettingsDialog(Gtk.Dialog):
         engine = engine_text.lower()
         logger.info(f"Populating model options for engine: {engine}")
 
-        # Get recommended model based on engine
-        recommended_model = None
-        if engine == "whisper":
-            recommended_model, _ = _get_recommended_whisper_model()
-        elif engine == "vosk":
-            recommended_model, _ = _get_recommended_vosk_model()
+        # Get the saved model size for THIS specific engine (not the generic one)
+        saved_model_for_engine = self.config_manager.get_model_size_for_engine(engine)
+        logger.info(f"Saved model for {engine}: {saved_model_for_engine}")
 
         # Track which models are downloaded and find smallest downloaded
         downloaded_models = []
@@ -635,10 +631,7 @@ class SettingsDialog(Gtk.Dialog):
                     info = WHISPER_MODEL_INFO[size]
                     is_downloaded = _is_whisper_model_downloaded(size)
                     status = "✓" if is_downloaded else "↓"
-                    rec = " ★" if size == recommended_model else ""
-                    display_text = (
-                        f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
-                    )
+                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
                     if is_downloaded:
                         downloaded_models.append(size)
                     if smallest_model is None:
@@ -647,10 +640,7 @@ class SettingsDialog(Gtk.Dialog):
                     info = VOSK_MODEL_INFO[size]
                     is_downloaded = _is_vosk_model_downloaded(size)
                     status = "✓" if is_downloaded else "↓"
-                    rec = " ★" if size == recommended_model else ""
-                    display_text = (
-                        f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}{rec}"
-                    )
+                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
                     if is_downloaded:
                         downloaded_models.append(size)
                     if smallest_model is None:
@@ -661,19 +651,29 @@ class SettingsDialog(Gtk.Dialog):
                 self.model_combo.append(size.capitalize(), display_text)
 
             # Determine which model to select:
-            # 1. If saved model is downloaded, use it
-            # 2. Else if any model is downloaded, use the first (smallest) downloaded
-            # 3. Else use the smallest model (but don't auto-download)
-            saved_model = self.current_model_size.lower()
-            if saved_model in downloaded_models:
+            # 1. If saved model for this engine is downloaded, use it
+            # 2. Else if saved model for this engine exists (even if not downloaded), use it
+            #    (user will be prompted to download when applying)
+            # 3. Else if any model is downloaded, use the smallest downloaded
+            # 4. Else use the smallest model for this engine
+            saved_model = saved_model_for_engine.lower()
+
+            # Check if the saved model is valid for this engine
+            valid_models = [m.lower() for m in ENGINE_MODELS.get(engine, [])]
+
+            if saved_model in valid_models:
+                # Use the saved model for this engine (whether downloaded or not)
                 model_to_set = saved_model.capitalize()
             elif downloaded_models:
+                # Saved model isn't valid for this engine, use smallest downloaded
                 model_to_set = downloaded_models[0].capitalize()
             else:
+                # No downloaded models, use the smallest model for this engine
                 model_to_set = smallest_model.capitalize() if smallest_model else "Small"
 
             logger.info(
-                f"Setting active model to: {model_to_set} (saved={saved_model}, downloaded={downloaded_models})"
+                f"Setting active model to: {model_to_set} (saved_for_engine={saved_model}, "
+                f"valid={saved_model in valid_models}, downloaded={downloaded_models})"
             )
 
             # Try to set by ID
