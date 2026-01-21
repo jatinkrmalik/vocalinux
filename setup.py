@@ -21,7 +21,7 @@ if sys.version_info < MIN_PYTHON_VERSION:
 
 def get_version():
     """Get version from version.py file."""
-    version = "0.2.0-alpha"
+    version = "0.3.0-alpha"
     version_file = os.path.join(
         os.path.dirname(__file__), "src", "vocalinux", "version.py"
     )
