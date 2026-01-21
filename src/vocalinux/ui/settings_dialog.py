@@ -528,15 +528,21 @@ class SettingsDialog(Gtk.Dialog):
         )
         
         # Connect change signal
-        # We use focus-out-event or activate to apply, not changed (don't want partial updates)
-        self.shortcut_entry.connect("focus-out-event", self._on_shortcut_focus_out)
+        # We handle activation (Enter) and have an Apply button for clarity
         self.shortcut_entry.connect("activate", self._on_shortcut_activate)
         
         shortcut_box.pack_start(self.shortcut_entry, True, True, 0)
         
+        # Apply button
+        apply_btn = Gtk.Button()
+        apply_btn.set_image(Gtk.Image.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON))
+        apply_btn.set_tooltip_text("Apply shortcut")
+        apply_btn.connect("clicked", self._on_shortcut_activate)
+        shortcut_box.pack_start(apply_btn, False, False, 0)
+        
         # Reset button
         reset_btn = Gtk.Button()
-        reset_btn.set_image(Gtk.Image.new_from_icon_name("edit-undo", Gtk.IconSize.BUTTON))
+        reset_btn.set_image(Gtk.Image.new_from_icon_name("edit-undo-symbolic", Gtk.IconSize.BUTTON))
         reset_btn.set_tooltip_text("Reset to default (ctrl+ctrl)")
         reset_btn.connect("clicked", self._on_reset_shortcut)
         shortcut_box.pack_start(reset_btn, False, False, 0)
@@ -1002,14 +1008,8 @@ class SettingsDialog(Gtk.Dialog):
         self._apply_shortcut_change()
 
     def _on_shortcut_activate(self, widget):
-        """Handle Enter key in shortcut entry."""
+        """Handle Enter key or Apply button in shortcut entry."""
         self._apply_shortcut_change()
-
-    def _on_shortcut_focus_out(self, widget, event):
-        """Handle focus out event on shortcut entry."""
-        self._apply_shortcut_change()
-        # Return False to propagate event (so focus actually leaves)
-        return False
 
     def _apply_shortcut_change(self):
         """Apply the shortcut setting change."""
@@ -1029,13 +1029,6 @@ class SettingsDialog(Gtk.Dialog):
 
         # Save to config
         try:
-            # We need to ensure the shortcuts section exists and preserve structure
-            # ConfigManager.set handles dotted paths or section/key?
-            # ConfigManager structure in previous read_file was:
-            # DEFAULT_CONFIG = { "shortcuts": { "toggle_recognition": ... } }
-            # But ConfigManager implementation details were cut off.
-            # I see self.config_manager.set("audio", "device_index", ...) usages.
-            # So I assume .set(section, key, value) exists.
             self.config_manager.set("shortcuts", "toggle_recognition", new_shortcut)
             self.config_manager.save_settings()
 
@@ -1044,11 +1037,17 @@ class SettingsDialog(Gtk.Dialog):
 
             # Update Manager
             if self.shortcut_manager:
+                logger.debug(f"Shortcut manager exists, calling set_shortcut({new_shortcut})")
+                logger.debug(f"Manager active state before: {self.shortcut_manager.active}")
                 self.shortcut_manager.set_shortcut(new_shortcut)
+                logger.debug(f"Manager active state after: {self.shortcut_manager.active}")
+                logger.debug(f"Manager shortcut value: {self.shortcut_manager.shortcut}")
+            else:
+                logger.warning("shortcut_manager is None, cannot update live shortcut!")
                 
             logger.info("Shortcut updated successfully")
         except Exception as e:
-            logger.error(f"Failed to update shortcut: {e}")
+            logger.error(f"Failed to update shortcut: {e}", exc_info=True)
 
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""
