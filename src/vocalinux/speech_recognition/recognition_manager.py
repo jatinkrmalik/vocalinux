@@ -15,8 +15,8 @@ from typing import Callable, List, Optional
 
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
-from .command_processor import CommandProcessor
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
+from .command_processor import CommandProcessor
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
