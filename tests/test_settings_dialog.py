@@ -34,6 +34,7 @@ mock_config_manager.get = Mock(
     return_value={
         "speech_recognition": {
             "engine": "vosk",
+            "language": "en-us",
             "model_size": "small",
             "vad_sensitivity": 3,
             "silence_timeout": 2.0,
@@ -68,6 +69,9 @@ class TestSettingsDialog(unittest.TestCase):
         self.silence_spin = Mock()
         self.silence_spin.get_value.return_value = 2.0
 
+        self.language_combo = Mock()
+        self.language_combo.get_active_id.return_value = "en-us"
+
         self.vosk_settings_box = Mock()
         self.vosk_settings_box.is_visible.return_value = True
 
@@ -92,6 +96,7 @@ class TestSettingsDialog(unittest.TestCase):
             self.dialog.model_combo = self.model_combo
             self.dialog.vad_spin = self.vad_spin
             self.dialog.silence_spin = self.silence_spin
+            self.dialog.language_combo = self.language_combo
             self.dialog.vosk_settings_box = self.vosk_settings_box
             self.dialog.test_button = self.test_button
             self.dialog.test_textview = self.test_textview
@@ -102,6 +107,7 @@ class TestSettingsDialog(unittest.TestCase):
             self.dialog.get_selected_settings = Mock(
                 return_value={
                     "engine": "vosk",
+                    "language": "en-us",
                     "model_size": "small",
                     "vad_sensitivity": 3,
                     "silence_timeout": 2.0,
@@ -118,6 +124,7 @@ class TestSettingsDialog(unittest.TestCase):
             # Add missing attributes for apply_settings
             self.dialog.current_model_size = "small"
             self.dialog.current_engine = "vosk"
+            self.dialog.language = "en-us"
             self.dialog._populate_model_options = Mock()
 
     def test_apply_settings_success(self):
@@ -125,6 +132,7 @@ class TestSettingsDialog(unittest.TestCase):
         # Change the returned settings for this test
         self.dialog.get_selected_settings.return_value = {
             "engine": "vosk",
+            "language": "en-us",
             "model_size": "large",
             "vad_sensitivity": 3,
             "silence_timeout": 2.0,

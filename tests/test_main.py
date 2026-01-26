@@ -15,13 +15,13 @@ class TestMainModule(unittest.TestCase):
 
     def test_parse_arguments_defaults(self):
         """Test argument parsing with defaults."""
-        # Test with no arguments
+        # Test with no arguments (model/engine/language will be None without defaults)
         with patch("sys.argv", ["vocalinux"]):
             args = parse_arguments()
             self.assertFalse(args.debug)
-            self.assertEqual(args.model, "small")
-            self.assertEqual(args.engine, "vosk")
-            self.assertEqual(args.language, "en-us")
+            self.assertIsNone(args.model)  # No default set, loaded from config instead
+            self.assertIsNone(args.engine)
+            self.assertIsNone(args.language)
             self.assertFalse(args.wayland)
 
     def test_parse_arguments_custom(self):
