@@ -524,9 +524,9 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
 
         model_urls = {
-            "small": f"https://alphacephei.com/vosk/models/{self.vosk_model_map["small"]}.zip",
-            "medium": f"https://alphacephei.com/vosk/models/{self.vosk_model_map["medium"]}.zip",
-            "large": f"https://alphacephei.com/vosk/models/{self.vosk_model_map["large"]}.zip",
+            "small": f'https://alphacephei.com/vosk/models/{self.vosk_model_map["small"]}.zip',
+            "medium": f'https://alphacephei.com/vosk/models/{self.vosk_model_map["medium"]}.zip',
+            "large": f'https://alphacephei.com/vosk/models/{self.vosk_model_map["large"]}.zip',
         }
 
         url = model_urls.get(self.model_size)
