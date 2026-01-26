@@ -21,6 +21,7 @@ class TestMainModule(unittest.TestCase):
             self.assertFalse(args.debug)
             self.assertEqual(args.model, "small")
             self.assertEqual(args.engine, "vosk")
+            self.assertEqual(args.language, "en-us")
             self.assertFalse(args.wayland)
 
     def test_parse_arguments_custom(self):
@@ -35,6 +36,8 @@ class TestMainModule(unittest.TestCase):
                 "large",
                 "--engine",
                 "whisper",
+                "--language",
+                "fr",
                 "--wayland",
             ],
         ):
@@ -42,6 +45,7 @@ class TestMainModule(unittest.TestCase):
             self.assertTrue(args.debug)
             self.assertEqual(args.model, "large")
             self.assertEqual(args.engine, "whisper")
+            self.assertEqual(args.language, "fr")
             self.assertTrue(args.wayland)
 
     @patch("vocalinux.main.check_dependencies")
@@ -88,6 +92,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.debug = False
             mock_args.model = "medium"
             mock_args.engine = "vosk"
+            mock_args.language = "en-us"
             mock_args.wayland = True
             mock_parse.return_value = mock_args
 
@@ -97,6 +102,7 @@ class TestMainModule(unittest.TestCase):
             # Verify components were initialized correctly
             mock_speech.assert_called_once_with(
                 engine="vosk",
+                language="en-us",
                 model_size="medium",
                 vad_sensitivity=3,
                 silence_timeout=2.0,
