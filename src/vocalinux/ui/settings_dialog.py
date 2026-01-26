@@ -18,6 +18,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
+from ..utils.vosk_model_info import VOSK_MODEL_INFO
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ ENGINE_MODELS = {
         "small",
         "medium",
         "large",
-    ],  # Note: 'large' maps to vosk-en-us-0.22 internally
+    ],  # Note: 'large' maps to medium internally, as higher version wasn't available
     "whisper": [
         "tiny",
         "base",
@@ -49,25 +50,6 @@ WHISPER_MODEL_INFO = {
     "small": {"size_mb": 466, "desc": "Balanced speed/accuracy", "params": "244M"},
     "medium": {"size_mb": 1500, "desc": "High accuracy, slower", "params": "769M"},
     "large": {"size_mb": 2900, "desc": "Highest accuracy, slowest", "params": "1550M"},
-}
-
-# VOSK model metadata for display
-VOSK_MODEL_INFO = {
-    "small": {
-        "size_mb": 40,
-        "desc": "Lightweight, fast",
-        "model_name": "vosk-model-small-en-us-0.15",
-    },
-    "medium": {
-        "size_mb": 1800,
-        "desc": "Balanced accuracy/speed",
-        "model_name": "vosk-model-en-us-0.22",
-    },
-    "large": {
-        "size_mb": 1800,
-        "desc": "Same as medium (best available)",
-        "model_name": "vosk-model-en-us-0.22",
-    },
 }
 
 # Models directory
@@ -138,21 +120,24 @@ def _get_recommended_whisper_model() -> tuple:
         return "base", "Default recommendation"
 
 
-def _is_vosk_model_downloaded(model_name: str) -> bool:
+def _is_vosk_model_downloaded(size: str, language: str) -> bool:
     """Check if a VOSK model is downloaded."""
-    if model_name not in VOSK_MODEL_INFO:
+    if size not in VOSK_MODEL_INFO:
         return False
 
-    vosk_model_name = VOSK_MODEL_INFO[model_name]["model_name"]
+    if language not in VOSK_MODEL_INFO[size]["languages"]:
+        language = "en-us"  # Fallback to en-us if language not found
+
+    model_name = VOSK_MODEL_INFO[size]["languages"][language]
 
     # Check user's local models directory
-    user_model_path = os.path.join(MODELS_DIR, vosk_model_name)
+    user_model_path = os.path.join(MODELS_DIR, model_name)
     if os.path.exists(user_model_path):
         return True
 
     # Check system-wide installation directories
     for system_dir in SYSTEM_MODELS_DIRS:
-        system_model_path = os.path.join(system_dir, vosk_model_name)
+        system_model_path = os.path.join(system_dir, model_name)
         if os.path.exists(system_model_path):
             return True
 
@@ -178,7 +163,14 @@ def _get_recommended_vosk_model() -> tuple:
 class ModelDownloadDialog(Gtk.Dialog):
     """Dialog showing model download progress with cancel support."""
 
-    def __init__(self, parent, model_name: str, model_size_mb: int, engine: str = "whisper"):
+    def __init__(
+        self,
+        parent,
+        model_name: str,
+        model_size_mb: int,
+        engine: str = "whisper",
+        language: str = "en-us",
+    ):
         super().__init__(
             title=f"Downloading {model_name.capitalize()} Model",
             transient_for=parent,
@@ -531,6 +523,7 @@ class SettingsDialog(Gtk.Dialog):
         # Load settings FIRST before creating UI connections
         settings = self._get_current_settings()
         self.current_engine = settings["engine"]
+        self.language = settings["language"]
         self.current_model_size = settings["model_size"]
         self.current_vad = settings.get("vad_sensitivity", 3)
         self.current_silence = settings.get("silence_timeout", 2.0)
@@ -584,18 +577,20 @@ class SettingsDialog(Gtk.Dialog):
         # Use .get with defaults for robustness
         sr_settings = settings.get("speech_recognition", {})
         engine = sr_settings.get("engine", "vosk")
+        language = sr_settings.get("language", "en-us")
         # Get model size for the specific engine
         model_size = self.config_manager.get_model_size_for_engine(engine)
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
 
         logger.info(
-            f"Loaded current settings: engine={engine}, model_size={model_size}, "
+            f"Loaded current settings: engine={engine}, language={language}, model_size={model_size}, "
             f"vad={vad_sensitivity}, silence={silence_timeout}"
         )
 
         return {
             "engine": engine,
+            "language": language,
             "model_size": model_size,
             "vad_sensitivity": vad_sensitivity,
             "silence_timeout": silence_timeout,
@@ -638,7 +633,7 @@ class SettingsDialog(Gtk.Dialog):
                         smallest_model = size
                 elif engine == "vosk" and size in VOSK_MODEL_INFO:
                     info = VOSK_MODEL_INFO[size]
-                    is_downloaded = _is_vosk_model_downloaded(size)
+                    is_downloaded = _is_vosk_model_downloaded(size, self.language)
                     status = "✓" if is_downloaded else "↓"
                     display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
                     if is_downloaded:
@@ -742,7 +737,7 @@ class SettingsDialog(Gtk.Dialog):
         if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
             needs_download = True
             model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
-        elif engine == "vosk" and not _is_vosk_model_downloaded(model_name):
+        elif engine == "vosk" and not _is_vosk_model_downloaded(model_name, self.language):
             needs_download = True
             model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
 
@@ -750,7 +745,11 @@ class SettingsDialog(Gtk.Dialog):
             # Show download dialog for models that need downloading
             logger.info(f"Model {model_name} needs download, showing progress dialog")
             download_dialog = ModelDownloadDialog(
-                self, model_name, model_info["size_mb"], engine=engine
+                self,
+                model_name,
+                model_info["size_mb"],
+                engine=engine,
+                language=self.language,
             )
 
             def progress_callback(fraction, speed, status):
@@ -895,7 +894,7 @@ class SettingsDialog(Gtk.Dialog):
             return
 
         info = VOSK_MODEL_INFO[model_name]
-        is_downloaded = _is_vosk_model_downloaded(model_name)
+        is_downloaded = _is_vosk_model_downloaded(model_name, self.language)
 
         # Build info text
         if is_downloaded:
@@ -952,6 +951,7 @@ class SettingsDialog(Gtk.Dialog):
             return
 
         # Ensure settings are applied before testing
+        # TODO @violog: add language selection into GUI and here
         current_config = self.config_manager.get_settings().get("speech_recognition", {})
         selected_settings = self.get_selected_settings()
 
@@ -1099,14 +1099,18 @@ For now, the engine has been reverted to VOSK."""
         if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
             needs_download = True
             model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
-        elif engine == "vosk" and not _is_vosk_model_downloaded(model_name):
+        elif engine == "vosk" and not _is_vosk_model_downloaded(model_name, self.language):
             needs_download = True
             model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
 
         if needs_download:
             # Show download dialog
             download_dialog = ModelDownloadDialog(
-                self, model_name, model_info["size_mb"], engine=engine
+                self,
+                model_name,
+                model_info["size_mb"],
+                engine=engine,
+                language=self.language,
             )
 
             def progress_callback(fraction, speed, status):

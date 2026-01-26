@@ -23,16 +23,22 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Vocalinux")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    # default model, language and engine are loaded from default config due to priority of args over config
     parser.add_argument(
         "--model",
         type=str,
-        default="small",
+        choices=["small", "medium", "large"],
         help="Speech recognition model size (small, medium, large)",
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        choices=["en-us", "fr", "de", "ru"],
+        help="Speech recognition language (en-us, fr, de, ru)",
     )
     parser.add_argument(
         "--engine",
         type=str,
-        default="vosk",
         choices=["vosk", "whisper"],
         help="Speech recognition engine to use",
     )
@@ -112,6 +118,7 @@ def main():
     # by examining sys.argv since argparse defaults don't tell us this
     cli_engine_set = any(arg.startswith("--engine") for arg in sys.argv[1:])
     cli_model_set = any(arg.startswith("--model") for arg in sys.argv[1:])
+    cli_language_set = any(arg.startswith("--language") for arg in sys.argv[1:])
 
     # Use CLI args if explicitly set, otherwise fall back to saved config, then defaults
     if cli_engine_set:
@@ -120,6 +127,13 @@ def main():
     else:
         engine = saved_settings.get("engine", args.engine)
         logger.info(f"Using engine={engine} (from saved config)")
+
+    if cli_language_set:
+        language = args.language
+        logger.info(f"Using language={language} (from command line)")
+    else:
+        language = saved_settings.get("language", args.language)
+        logger.info(f"Using language={language} (from saved config)")
 
     if cli_model_set:
         model_size = args.model
@@ -132,7 +146,7 @@ def main():
     silence_timeout = saved_settings.get("silence_timeout", 2.0)
     audio_device_index = audio_settings.get("device_index", None)
 
-    logger.info(f"Final settings: engine={engine}, model={model_size}")
+    logger.info(f"Final settings: engine={engine}, language={language}, model={model_size}")
     if audio_device_index is not None:
         logger.info(f"Using audio device index={audio_device_index} (from saved config)")
 
@@ -144,6 +158,7 @@ def main():
         speech_engine = recognition_manager.SpeechRecognitionManager(
             engine=engine,
             model_size=model_size,
+            language=language,
             vad_sensitivity=vad_sensitivity,
             silence_timeout=silence_timeout,
             audio_device_index=audio_device_index,
