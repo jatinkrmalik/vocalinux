@@ -1,5 +1,5 @@
 # <img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="30" height="30"> Vocalinux
-  
+
 #### Voice-to-text for Linux, finally done right!
 
 <!-- Project Status -->
@@ -28,8 +28,8 @@
 
 **A seamless free open-source private voice dictation system for Linux**, comparable to the built-in solutions on macOS and Windows.
 
-> 🎉 **Alpha Release!** 
-> 
+> 🎉 **Alpha Release!**
+>
 > We're excited to share Vocalinux with the community.
 > Try it out and [let us know what you think](https://github.com/jatinkrmalik/vocalinux/issues)!
 
@@ -62,12 +62,19 @@ This will:
 - Create a symlink at `~/.local/bin/vocalinux`
 - Download the default **Whisper tiny** speech model (~75MB)
 
-> ⏱️ **Note**: Installation takes ~5-10 minutes due to Whisper AI dependencies (PyTorch).
+> ⏱️ **Note**: Installation takes ~5-10 minutes due to Whisper AI dependencies (PyTorch with CUDA support, ~2.3GB).
 
-**Without Whisper (faster install, VOSK only):**
+**Whisper with CPU-only PyTorch (no NVIDIA GPU needed):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --whisper-cpu
+```
+This installs Whisper with CPU-only PyTorch (~200MB instead of ~2.3GB). Works great for systems without NVIDIA GPU.
+
+**For low-RAM systems (8GB or less) - VOSK only:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --no-whisper
 ```
+This skips Whisper installation entirely and configures VOSK as the default engine.
 
 ### Alternative: Install from Source
 
