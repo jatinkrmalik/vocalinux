@@ -70,6 +70,10 @@ while [[ $# -gt 0 ]]; do
             NON_INTERACTIVE="yes"  # Skip the prompt
             shift
             ;;
+        --tag=*)
+            INSTALL_TAG="${1#*=}"
+            shift
+            ;;
         -y|--yes)
             NON_INTERACTIVE="yes"
             shift
@@ -85,6 +89,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --with-whisper   Install Whisper AI support with GPU/CUDA (included by default)"
             echo "  --whisper-cpu    Install Whisper with CPU-only PyTorch (smaller download, works on low-RAM)"
             echo "  --no-whisper     VOSK-only install (skips Whisper entirely, uses VOSK as default)"
+            echo "  --tag=TAG        Install specific release tag (default: v0.3.0-alpha)"
             echo "  -y, --yes        Non-interactive mode (accept defaults)"
             echo "  --help           Show this help message"
             exit 0
@@ -106,6 +111,9 @@ print_info "Vocalinux Installer"
 print_info "=============================="
 echo ""
 
+# Default to installing from latest stable release instead of main branch
+INSTALL_TAG="${INSTALL_TAG:-v0.3.0-alpha}"
+
 # Check if running from within the vocalinux repo or remotely (via curl)
 REPO_URL="https://github.com/jatinkrmalik/vocalinux.git"
 INSTALL_DIR=""
@@ -117,18 +125,18 @@ if [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
     print_info "Running from local repository: $INSTALL_DIR"
 else
     # Running remotely (e.g., via curl | bash)
-    print_info "Cloning Vocalinux repository..."
+    print_info "Installing Vocalinux version: ${INSTALL_TAG}"
     INSTALL_DIR="$HOME/.local/share/vocalinux-install"
     mkdir -p "$INSTALL_DIR"
 
     if [ -d "$INSTALL_DIR/.git" ]; then
         print_info "Updating existing clone..."
         cd "$INSTALL_DIR"
-        git fetch origin main
-        git reset --hard origin/main
+        git fetch origin "$INSTALL_TAG"
+        git reset --hard "origin/$INSTALL_TAG"
     else
         rm -rf "$INSTALL_DIR"
-        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" || {
+        git clone --depth 1 --branch "$INSTALL_TAG" "$REPO_URL" "$INSTALL_DIR" || {
             print_error "Failed to clone Vocalinux repository"
             exit 1
         }

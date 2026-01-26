@@ -39,19 +39,19 @@ import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { useInView } from "react-intersection-observer";
 
 // The one-liner install command (split into three lines for display)
-// Uses the latest stable release tag instead of main branch
+// Uses the latest stable release tag and passes it to the script
 const getInstallCommands = (latestRelease: string) => ({
   oneClickInstallCommand: `curl \\
   -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh \\
-  | bash`,
+  | bash -s -- --tag=${latestRelease}`,
 
   oneClickInstallWhisperCpu: `curl \\
   -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh \\
-  | bash -s -- --whisper-cpu`,
+  | bash -s -- --tag=${latestRelease} --whisper-cpu`,
 
   oneClickInstallNoWhisper: `curl \\
   -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh \\
-  | bash -s -- --no-whisper`,
+  | bash -s -- --tag=${latestRelease} --no-whisper`,
 
   uninstallCommand: `curl -fsSL \\
   https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/uninstall.sh \\
