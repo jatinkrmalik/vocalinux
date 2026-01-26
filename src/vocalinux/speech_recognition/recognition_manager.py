@@ -16,6 +16,7 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from .command_processor import CommandProcessor
+from ..utils.vosk_model_info import VOSK_MODEL_INFO
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -233,7 +234,12 @@ class SpeechRecognitionManager:
     """
 
     def __init__(
-        self, engine: str = "vosk", model_size: str = "small", defer_download: bool = True, **kwargs
+        self,
+        engine: str = "vosk",
+        model_size: str = "small",
+        language: str = "en-us",
+        defer_download: bool = True,
+        **kwargs,
     ):
         """
         Initialize the speech recognition manager.
@@ -246,6 +252,7 @@ class SpeechRecognitionManager:
         """
         self.engine = engine
         self.model_size = model_size
+        self.language = language
         self.state = RecognitionState.IDLE
         self.audio_thread = None
         self.recognition_thread = None
@@ -280,7 +287,9 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(f"Initializing speech recognition with {engine} engine and {model_size} model")
+        logger.info(
+            f"Initializing speech recognition with {engine} engine, {language} language and {model_size} model"
+        )
 
         # Initialize the selected speech recognition engine
         if engine == "vosk":
@@ -292,6 +301,12 @@ class SpeechRecognitionManager:
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
+        self.vosk_model_map = {
+            "small": VOSK_MODEL_INFO["small"]["languages"].get(self.language),
+            "medium": VOSK_MODEL_INFO["medium"]["languages"].get(self.language),
+            "large": VOSK_MODEL_INFO["large"]["languages"].get(self.language),
+        }
+
         try:
             from vosk import KaldiRecognizer, Model
 
@@ -434,10 +449,14 @@ class SpeechRecognitionManager:
                 import torch
             use_fp16 = self.model.device != torch.device("cpu")
 
+            lang = self.language
+            if self.language == "en-us":
+                lang = "en"
+
             # Transcribe with Whisper (handles variable length audio automatically)
             result = self.model.transcribe(
                 audio_float,
-                language="en",
+                language=lang,
                 task="transcribe",
                 verbose=False,
                 temperature=0.0,  # Greedy decoding for consistency
@@ -459,15 +478,8 @@ class SpeechRecognitionManager:
             return ""
 
     def _get_vosk_model_path(self) -> str:
-        """Get the path to the VOSK model based on the selected size."""
-        model_map = {
-            "small": "vosk-model-small-en-us-0.15",
-            "medium": "vosk-model-en-us-0.22",
-            # Use the standard large model URL, as 0.42 seems unavailable
-            "large": "vosk-model-en-us-0.22",
-        }
-
-        model_name = model_map.get(self.model_size, model_map["small"])
+        """Get the path to the VOSK model based on the selected size and language."""
+        model_name = self.vosk_model_map.get(self.model_size, self.vosk_model_map["small"])
 
         # First, check user's local models directory
         user_model_path = os.path.join(MODELS_DIR, model_name)
@@ -512,9 +524,9 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
 
         model_urls = {
-            "small": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
-            "medium": "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip",
-            "large": "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip",  # Use 0.22 as 0.42 is not available
+            "small": f"https://alphacephei.com/vosk/models/{self.vosk_model_map["small"]}.zip",
+            "medium": f"https://alphacephei.com/vosk/models/{self.vosk_model_map["medium"]}.zip",
+            "large": f"https://alphacephei.com/vosk/models/{self.vosk_model_map["large"]}.zip",
         }
 
         url = model_urls.get(self.model_size)
