@@ -142,9 +142,15 @@ sudo apt update
 sudo apt install -y \
     python3-pip python3-venv python3-dev \
     python3-gi python3-gi-cairo \
-    gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 \
+    gir1.2-gtk-3.0 \
     libgirepository1.0-dev portaudio19-dev \
     wget curl unzip
+
+# For appindicator (system tray icon):
+# - On older Ubuntu/Debian versions:
+sudo apt install -y gir1.2-appindicator3-0.1
+# - On Debian 13+ (trixie) or newer Ubuntu versions:
+sudo apt install -y gir1.2-ayatana-appindicator3
 
 # For X11
 sudo apt install -y xdotool
@@ -246,7 +252,12 @@ source venv/bin/activate
 **Solution:**
 ```bash
 # Reinstall GTK dependencies
-sudo apt install python3-gi python3-gi-cairo gir1.2-appindicator3-0.1
+sudo apt install python3-gi python3-gi-cairo
+
+# For appindicator (system tray icon) - try one of these:
+sudo apt install gir1.2-appindicator3-0.1  # For older Debian/Ubuntu
+# OR
+sudo apt install gir1.2-ayatana-appindicator3  # For Debian 13+ or newer Ubuntu
 
 # Recreate venv with system packages
 rm -rf venv
