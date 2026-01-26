@@ -7,8 +7,10 @@ This guide provides detailed instructions for installing Vocalinux on Linux syst
 ### One-liner Installation (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.3.0-alpha/install.sh | bash
 ```
+
+> **Note**: Installs the latest stable release. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 That's it! The installer handles everything automatically, including Whisper AI support.
 
