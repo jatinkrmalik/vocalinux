@@ -43,6 +43,15 @@ ENGINE_MODELS = {
     ],  # Add more whisper sizes if needed
 }
 
+# Language options for speech recognition
+LANGUAGE_OPTIONS = {
+    "auto": "Auto-detect (Whisper only)",
+    "en-us": "English (US)",
+    "fr": "French",
+    "de": "German",
+    "ru": "Russian",
+}
+
 # Whisper model metadata for display
 WHISPER_MODEL_INFO = {
     "tiny": {"size_mb": 75, "desc": "Fastest, lowest accuracy", "params": "39M"},
@@ -391,6 +400,12 @@ class SettingsDialog(Gtk.Dialog):
         self.grid.attach(self.model_combo, 1, row, 1, 1)
         row += 1
 
+        # Language Selection
+        self.grid.attach(Gtk.Label(label="Language:", halign=Gtk.Align.START), 0, row, 1, 1)
+        self.language_combo = Gtk.ComboBoxText()
+        self.grid.attach(self.language_combo, 1, row, 1, 1)
+        row += 1
+
         # Model legend (applies to both engines)
         model_legend = Gtk.Label(
             label="<small>✓ = Downloaded  ↓ = Will download  ★ = Recommended</small>",
@@ -540,6 +555,19 @@ class SettingsDialog(Gtk.Dialog):
         # Add engine change handler AFTER populating, but before setting active
         self.engine_combo.connect("changed", self._on_engine_changed)
         self.grid.attach(self.engine_combo, 1, 0, 1, 1)
+
+        # Populate language combo
+        for lang_code, lang_name in LANGUAGE_OPTIONS.items():
+            self.language_combo.append(lang_code, lang_name)
+
+        # Add language change handler
+        self.language_combo.connect("changed", self._on_language_changed)
+        self.grid.attach(self.language_combo, 1, 2, 1, 1)  # Attached at row 2 (after model)
+
+        # Set language active
+        if not self.language_combo.set_active_id(self.language):
+            logger.warning(f"Could not set language by ID: {self.language}, falling back to en-us")
+            self.language_combo.set_active_id("en-us")
 
         # Set engine active
         engine_text = self.current_engine.capitalize()
@@ -710,6 +738,10 @@ class SettingsDialog(Gtk.Dialog):
                 self._update_whisper_info()
             elif engine == "vosk":
                 self._update_vosk_info()
+        self._auto_apply_settings()
+
+    def _on_language_changed(self, widget):
+        """Handle changes in the selected language."""
         self._auto_apply_settings()
 
     def _on_vad_changed(self, widget):
@@ -934,9 +966,13 @@ class SettingsDialog(Gtk.Dialog):
 
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
+        # Get language by ID (the language code)
+        language_id = self.language_combo.get_active_id()
+        language = language_id if language_id else "en-us"
 
         settings = {
             "engine": engine,
+            "language": language,
             "model_size": model_size,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
@@ -951,7 +987,6 @@ class SettingsDialog(Gtk.Dialog):
             return
 
         # Ensure settings are applied before testing
-        # TODO @violog: add language selection into GUI and here
         current_config = self.config_manager.get_settings().get("speech_recognition", {})
         selected_settings = self.get_selected_settings()
 

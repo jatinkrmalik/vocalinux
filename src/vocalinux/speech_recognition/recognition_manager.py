@@ -301,10 +301,13 @@ class SpeechRecognitionManager:
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
+        # VOSK doesn't support auto-detection, fall back to en-us for "auto"
+        vosk_language = "en-us" if self.language == "auto" else self.language
+
         self.vosk_model_map = {
-            "small": VOSK_MODEL_INFO["small"]["languages"].get(self.language),
-            "medium": VOSK_MODEL_INFO["medium"]["languages"].get(self.language),
-            "large": VOSK_MODEL_INFO["large"]["languages"].get(self.language),
+            "small": VOSK_MODEL_INFO["small"]["languages"].get(vosk_language),
+            "medium": VOSK_MODEL_INFO["medium"]["languages"].get(vosk_language),
+            "large": VOSK_MODEL_INFO["large"]["languages"].get(vosk_language),
         }
 
         try:
@@ -449,9 +452,12 @@ class SpeechRecognitionManager:
                 import torch
             use_fp16 = self.model.device != torch.device("cpu")
 
+            # Handle language parameter - "auto" enables Whisper's auto-detection
             lang = self.language
             if self.language == "en-us":
                 lang = "en"
+            elif self.language == "auto":
+                lang = None  # None enables Whisper's auto language detection
 
             # Transcribe with Whisper (handles variable length audio automatically)
             result = self.model.transcribe(

@@ -33,8 +33,8 @@ def parse_arguments():
     parser.add_argument(
         "--language",
         type=str,
-        choices=["en-us", "fr", "de", "ru"],
-        help="Speech recognition language (en-us, fr, de, ru)",
+        choices=["auto", "en-us", "fr", "de", "ru"],
+        help="Speech recognition language (auto for Whisper auto-detect, en-us, fr, de, ru)",
     )
     parser.add_argument(
         "--engine",

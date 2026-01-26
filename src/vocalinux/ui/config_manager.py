@@ -19,7 +19,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 DEFAULT_CONFIG = {
     "speech_recognition": {  # Changed section name
         "engine": "whisper",  # "vosk" or "whisper" - whisper is default for better accuracy
-        "language": "en-us",  # "en-us", "fr", "de" or "ru"
+        "language": "en-us",  # "auto" for Whisper auto-detect, "en-us", "fr", "de", or "ru"
         "model_size": "tiny",  # Current model size (for backward compatibility)
         "vosk_model_size": "small",  # Default model for VOSK engine
         "whisper_model_size": "tiny",  # Default model for Whisper engine
