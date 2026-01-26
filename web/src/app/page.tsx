@@ -39,21 +39,24 @@ import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { useInView } from "react-intersection-observer";
 
 // The one-liner install command (split into three lines for display)
-const oneClickInstallCommand = `curl \\
-  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
-  | bash`;
+// Uses the latest stable release tag instead of main branch
+const getInstallCommands = (latestRelease: string) => ({
+  oneClickInstallCommand: `curl \\
+  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh \\
+  | bash`,
 
-const oneClickInstallWhisperCpu = `curl \\
-  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
-  | bash -s -- --whisper-cpu`;
+  oneClickInstallWhisperCpu: `curl \\
+  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh \\
+  | bash -s -- --whisper-cpu`,
 
-const oneClickInstallNoWhisper = `curl \\
-  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
-  | bash -s -- --no-whisper`;
+  oneClickInstallNoWhisper: `curl \\
+  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh \\
+  | bash -s -- --no-whisper`,
 
-const uninstallCommand = `curl -fsSL \\
-  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh \\
-  | bash`;
+  uninstallCommand: `curl -fsSL \\
+  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/uninstall.sh \\
+  | bash`,
+});
 
 const FeatureCard = ({
   icon,
@@ -142,10 +145,11 @@ const FadeInSection = ({
 
 export default function HomePage() {
   const [stars, setStars] = useState<number | null>(null);
+  const [latestRelease, setLatestRelease] = useState<string>("main"); // Default to main for safety
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Fetch actual GitHub stars
+    // Fetch actual GitHub stars and latest release
     fetch("https://api.github.com/repos/jatinkrmalik/vocalinux")
       .then((res) => res.json())
       .then((data) => {
@@ -157,6 +161,19 @@ export default function HomePage() {
         // Fallback if API fails
         setStars(null);
       });
+
+    // Fetch latest release tag for stable install commands
+    fetch("https://api.github.com/repos/jatinkrmalik/vocalinux/releases/latest")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.tag_name) {
+          setLatestRelease(data.tag_name);
+        }
+      })
+      .catch(() => {
+        // Fallback to main if API fails
+        setLatestRelease("main");
+      });
   }, []);
 
   const navLinks = [
@@ -166,6 +183,10 @@ export default function HomePage() {
     { href: "#voice-commands", label: "Commands" },
     { href: "#faq", label: "FAQ" },
   ];
+
+  // Get install commands based on the latest release
+  const installCommands = getInstallCommands(latestRelease);
+  const { oneClickInstallCommand, oneClickInstallWhisperCpu, oneClickInstallNoWhisper, uninstallCommand } = installCommands;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">

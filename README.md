@@ -51,8 +51,10 @@
 ### One-liner Installation (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.3.0-alpha/install.sh | bash
 ```
+
+> **Note**: Installs the latest stable release. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 This will:
 - Clone the repository to `~/.local/share/vocalinux-install`
@@ -66,13 +68,13 @@ This will:
 
 **Whisper with CPU-only PyTorch (no NVIDIA GPU needed):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --whisper-cpu
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.3.0-alpha/install.sh | bash -s -- --whisper-cpu
 ```
 This installs Whisper with CPU-only PyTorch (~200MB instead of ~2.3GB). Works great for systems without NVIDIA GPU.
 
 **For low-RAM systems (8GB or less) - VOSK only:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --no-whisper
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.3.0-alpha/install.sh | bash -s -- --no-whisper
 ```
 This skips Whisper installation entirely and configures VOSK as the default engine.
 
@@ -112,7 +114,7 @@ Or launch it from your application menu!
 
 ```bash
 # If installed via curl:
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.3.0-alpha/uninstall.sh | bash
 
 # If installed from source:
 ./uninstall.sh
