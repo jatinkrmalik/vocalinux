@@ -60,7 +60,9 @@ This will:
 - Clone the repository to `~/.local/share/vocalinux-install`
 - Install all system dependencies
 - Set up a virtual environment in `~/.local/share/vocalinux/venv`
-- Install **both VOSK and Whisper AI** speech engines
+- Install **both VOSK and Whisper AI** speech engines:
+  - **VOSK**: installs the `vosk` Python package from PyPI
+  - **Whisper**: installs the `openai-whisper` package from PyPI, which also pulls in PyTorch (the ML framework Whisper requires)
 - Create a symlink at `~/.local/bin/vocalinux`
 - Download the default **Whisper tiny** speech model (~75MB)
 
