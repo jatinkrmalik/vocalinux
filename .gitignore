@@ -145,3 +145,4 @@ temp/
 
 # Local Netlify folder
 .netlify
+.claude-workflow-rules.md
