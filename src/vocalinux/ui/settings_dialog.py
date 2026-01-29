@@ -296,6 +296,11 @@ class SettingsDialog(Gtk.Dialog):
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
+        self._populating_models = False  # Flag to prevent model change handler during population
+        self._processing_language_change = (
+            False  # Flag to prevent recursive language change handling
+        )
+        self._applying_settings = False  # Flag to prevent recursive settings application
 
         self.add_buttons(
             Gtk.STOCK_CLOSE,
@@ -625,52 +630,59 @@ class SettingsDialog(Gtk.Dialog):
 
     def _populate_model_options(self):
         """Populate model options based on the current engine selection."""
-        # Clear existing items
-        self.model_combo.remove_all()
+        # Set flag to prevent model change handler from firing during population
+        self._populating_models = True
+        try:
+            # Clear existing items
+            self.model_combo.remove_all()
 
-        # Get the current engine text and convert to lowercase for lookup
-        engine_text = self.engine_combo.get_active_text()
-        if not engine_text:
-            logger.warning("No engine selected during model options population")
-            return
+            # Get the current engine text and convert to lowercase for lookup
+            engine_text = self.engine_combo.get_active_text()
+            if not engine_text:
+                logger.warning("No engine selected during model options population")
+                return
 
-        engine = engine_text.lower()
-        logger.info(f"Populating model options for engine: {engine}")
+            engine = engine_text.lower()
+            logger.info(f"Populating model options for engine: {engine}")
 
-        # Get the saved model size for THIS specific engine (not the generic one)
-        saved_model_for_engine = self.config_manager.get_model_size_for_engine(engine)
-        logger.info(f"Saved model for {engine}: {saved_model_for_engine}")
+            # Get the saved model size for THIS specific engine (not the generic one)
+            saved_model_for_engine = self.config_manager.get_model_size_for_engine(engine)
+            logger.info(f"Saved model for {engine}: {saved_model_for_engine}")
 
-        # Track which models are downloaded and find smallest downloaded
-        downloaded_models = []
-        smallest_model = None
+            # Track which models are downloaded and find smallest downloaded
+            downloaded_models = []
+            smallest_model = None
 
-        # Add model sizes for this engine
-        if engine in ENGINE_MODELS:
-            # Add all options for this engine
-            for size in ENGINE_MODELS[engine]:
-                if engine == "whisper" and size in WHISPER_MODEL_INFO:
-                    info = WHISPER_MODEL_INFO[size]
-                    is_downloaded = _is_whisper_model_downloaded(size)
-                    status = "✓" if is_downloaded else "↓"
-                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
-                    if is_downloaded:
-                        downloaded_models.append(size)
-                    if smallest_model is None:
-                        smallest_model = size
-                elif engine == "vosk" and size in VOSK_MODEL_INFO:
-                    info = VOSK_MODEL_INFO[size]
-                    is_downloaded = _is_vosk_model_downloaded(size, self.language)
-                    status = "✓" if is_downloaded else "↓"
-                    display_text = f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
-                    if is_downloaded:
-                        downloaded_models.append(size)
-                    if smallest_model is None:
-                        smallest_model = size
-                else:
-                    display_text = size.capitalize()
-                # Use lowercase as ID, display text with info
-                self.model_combo.append(size.capitalize(), display_text)
+            # Add model sizes for this engine
+            if engine in ENGINE_MODELS:
+                # Add all options for this engine
+                for size in ENGINE_MODELS[engine]:
+                    if engine == "whisper" and size in WHISPER_MODEL_INFO:
+                        info = WHISPER_MODEL_INFO[size]
+                        is_downloaded = _is_whisper_model_downloaded(size)
+                        status = "✓" if is_downloaded else "↓"
+                        display_text = (
+                            f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
+                        )
+                        if is_downloaded:
+                            downloaded_models.append(size)
+                        if smallest_model is None:
+                            smallest_model = size
+                    elif engine == "vosk" and size in VOSK_MODEL_INFO:
+                        info = VOSK_MODEL_INFO[size]
+                        is_downloaded = _is_vosk_model_downloaded(size, self.language)
+                        status = "✓" if is_downloaded else "↓"
+                        display_text = (
+                            f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
+                        )
+                        if is_downloaded:
+                            downloaded_models.append(size)
+                        if smallest_model is None:
+                            smallest_model = size
+                    else:
+                        display_text = size.capitalize()
+                    # Use lowercase as ID, display text with info
+                    self.model_combo.append(size.capitalize(), display_text)
 
             # Determine which model to select:
             # 1. If saved model for this engine is downloaded, use it
@@ -720,6 +732,9 @@ class SettingsDialog(Gtk.Dialog):
 
             # Log final selection
             logger.info(f"Final selected model: {self.model_combo.get_active_text()}")
+        finally:
+            # Clear flag to re-enable model change handler
+            self._populating_models = False
 
     def _on_engine_changed(self, widget):
         """Handle changes in the selected engine."""
@@ -731,6 +746,10 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_model_changed(self, widget):
         """Handle changes in the selected model."""
+        # Don't process if we're populating models (prevents recursive calls)
+        if self._populating_models:
+            return
+
         engine_text = self.engine_combo.get_active_text()
         if engine_text:
             engine = engine_text.lower()
@@ -775,6 +794,10 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_language_changed(self, widget):
         """Handle language selection change."""
+        # Guard against recursive calls
+        if self._processing_language_change:
+            return
+
         lang_code = self.language_combo.get_active_id()
         if not lang_code:
             return
@@ -783,107 +806,121 @@ class SettingsDialog(Gtk.Dialog):
         if not engine:
             return
 
-        engine = engine.lower()
-        lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
+        self._processing_language_change = True
+        try:
+            engine = engine.lower()
+            lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
 
-        # Update warning label based on language and engine
-        if lang_info.get("warning"):
-            self.language_warning.set_markup(
-                f"<span foreground='orange'>⚠ {lang_info['warning']}</span>"
-            )
-        elif engine == "vosk" and lang_info.get("vosk") is None:
-            self.language_warning.set_markup(
-                "<span foreground='orange'>⚠ This language requires Whisper engine</span>"
-            )
-        else:
-            self.language_warning.set_markup("")
+            # Update warning label based on language and engine
+            if lang_info.get("warning"):
+                self.language_warning.set_markup(
+                    f"<span foreground='orange'>⚠ {lang_info['warning']}</span>"
+                )
+            elif engine == "vosk" and lang_info.get("vosk") is None:
+                self.language_warning.set_markup(
+                    "<span foreground='orange'>⚠ This language requires Whisper engine</span>"
+                )
+            else:
+                self.language_warning.set_markup("")
 
-        # Update self.language for VOSK model download checks
-        self.language = lang_code
+            # Update self.language for VOSK model download checks
+            self.language = lang_code
 
-        # Refresh model options to update download status indicators
-        self._populate_model_options()
+            # Refresh model options to update download status indicators
+            self._populate_model_options()
 
-        self._auto_apply_settings()
+            self._auto_apply_settings()
+        finally:
+            self._processing_language_change = False
 
     def _auto_apply_settings(self):
         """Automatically apply settings when changed."""
+        # Guard against recursive calls
+        if self._applying_settings:
+            return
+
         if self._initializing:
             return  # Don't auto-apply during initialization
 
         if self._test_active:
             return  # Don't apply during testing
 
-        settings = self.get_selected_settings()
-        engine = settings.get("engine", "vosk")
-        model_name = settings.get("model_size", "small")
+        if self._processing_language_change or self._populating_models:
+            return  # Don't apply during UI updates
 
-        # Check if model needs to be downloaded
-        needs_download = False
-        if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
-            needs_download = True
-            model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
-        elif engine == "vosk" and not _is_vosk_model_downloaded(model_name, self.language):
-            needs_download = True
-            model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
-
-        if needs_download:
-            # Show download dialog for models that need downloading
-            logger.info(f"Model {model_name} needs download, showing progress dialog")
-            download_dialog = ModelDownloadDialog(
-                self,
-                model_name,
-                model_info["size_mb"],
-                engine=engine,
-                language=self.language,
-            )
-
-            def progress_callback(fraction, speed, status):
-                """Update UI with download progress."""
-                GLib.idle_add(download_dialog.update_progress, fraction, speed, status)
-
-            def download_and_apply():
-                try:
-                    # Set up progress callback for downloads (both VOSK and Whisper)
-                    self.speech_engine.set_download_progress_callback(progress_callback)
-
-                    # Check for cancellation periodically
-                    def check_cancelled():
-                        if download_dialog.cancelled:
-                            self.speech_engine.cancel_download()
-                        return not download_dialog.cancelled
-
-                    # Start cancellation checker
-                    cancel_check_id = GLib.timeout_add(100, check_cancelled)
-
-                    try:
-                        self._apply_settings_internal(settings)
-                        GLib.idle_add(download_dialog.set_complete, True, "")
-                        # Refresh model list after download to update icons
-                        GLib.idle_add(self._populate_model_options)
-                    finally:
-                        GLib.source_remove(cancel_check_id)
-                        self.speech_engine.set_download_progress_callback(None)
-
-                except Exception as e:
-                    error_msg = str(e)
-                    if "cancelled" in error_msg.lower():
-                        GLib.idle_add(download_dialog.set_complete, False, "Download cancelled")
-                    elif engine == "whisper" and "no module named" in error_msg.lower():
-                        GLib.idle_add(download_dialog.set_complete, False, "Whisper not installed")
-                        GLib.idle_add(self._show_whisper_install_dialog)
-                    else:
-                        GLib.idle_add(download_dialog.set_complete, False, error_msg[:100])
-
-            threading.Thread(target=download_and_apply, daemon=True).start()
-            download_dialog.run()
-            download_dialog.destroy()
-            return
-
-        # Model already downloaded, just apply settings directly
-        logger.info(f"Auto-applying settings: {settings}")
-
+        self._applying_settings = True
         try:
+            settings = self.get_selected_settings()
+            engine = settings.get("engine", "vosk")
+            model_name = settings.get("model_size", "small")
+
+            # Check if model needs to be downloaded
+            needs_download = False
+            if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
+                needs_download = True
+                model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
+            elif engine == "vosk" and not _is_vosk_model_downloaded(model_name, self.language):
+                needs_download = True
+                model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
+
+            if needs_download:
+                # Show download dialog for models that need downloading
+                logger.info(f"Model {model_name} needs download, showing progress dialog")
+                download_dialog = ModelDownloadDialog(
+                    self,
+                    model_name,
+                    model_info["size_mb"],
+                    engine=engine,
+                    language=self.language,
+                )
+
+                def progress_callback(fraction, speed, status):
+                    """Update UI with download progress."""
+                    GLib.idle_add(download_dialog.update_progress, fraction, speed, status)
+
+                def download_and_apply():
+                    try:
+                        # Set up progress callback for downloads (both VOSK and Whisper)
+                        self.speech_engine.set_download_progress_callback(progress_callback)
+
+                        # Check for cancellation periodically
+                        def check_cancelled():
+                            if download_dialog.cancelled:
+                                self.speech_engine.cancel_download()
+                            return not download_dialog.cancelled
+
+                        # Start cancellation checker
+                        cancel_check_id = GLib.timeout_add(100, check_cancelled)
+
+                        try:
+                            self._apply_settings_internal(settings)
+                            GLib.idle_add(download_dialog.set_complete, True, "")
+                            # Refresh model list after download to update icons
+                            GLib.idle_add(self._populate_model_options)
+                        finally:
+                            GLib.source_remove(cancel_check_id)
+                            self.speech_engine.set_download_progress_callback(None)
+
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "cancelled" in error_msg.lower():
+                            GLib.idle_add(download_dialog.set_complete, False, "Download cancelled")
+                        elif engine == "whisper" and "no module named" in error_msg.lower():
+                            GLib.idle_add(
+                                download_dialog.set_complete, False, "Whisper not installed"
+                            )
+                            GLib.idle_add(self._show_whisper_install_dialog)
+                        else:
+                            GLib.idle_add(download_dialog.set_complete, False, error_msg[:100])
+
+                threading.Thread(target=download_and_apply, daemon=True).start()
+                download_dialog.run()
+                download_dialog.destroy()
+                return
+
+            # Model already downloaded, just apply settings directly
+            logger.info(f"Auto-applying settings: {settings}")
+
             # Update config manager
             self.config_manager.update_speech_recognition_settings(settings)
             self.config_manager.save_settings()
@@ -893,6 +930,8 @@ class SettingsDialog(Gtk.Dialog):
             logger.info("Settings auto-applied successfully")
         except Exception as e:
             logger.error(f"Failed to auto-apply settings: {e}")
+        finally:
+            self._applying_settings = False
 
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
