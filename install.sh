@@ -1023,16 +1023,17 @@ install_desktop_entry() {
         return 1
     }
 
-    # Update the desktop entry to use the wrapper script
+    # Update the desktop entry to use the wrapper script with GI_TYPELIB_PATH
     WRAPPER_SCRIPT="$HOME/.local/bin/vocalinux-gui"
     if [ ! -f "$WRAPPER_SCRIPT" ]; then
         print_warning "Wrapper script not found at $WRAPPER_SCRIPT"
         print_warning "Desktop entry may not work correctly"
     else
-        sed -i "s|^Exec=vocalinux|Exec=$WRAPPER_SCRIPT|" "$DESKTOP_DIR/vocalinux.desktop" || {
+        # Update Exec line to include GI_TYPELIB_PATH for PyGObject
+        sed -i "s|^Exec=vocalinux|Exec=env GI_TYPELIB_PATH=/usr/lib/girepository-1.0 $WRAPPER_SCRIPT|" "$DESKTOP_DIR/vocalinux.desktop" || {
             print_warning "Failed to update desktop entry path"
         }
-        print_info "Updated desktop entry to use wrapper script"
+        print_info "Updated desktop entry to use wrapper script with GI_TYPELIB_PATH"
     fi
 
     # Make desktop entry executable
