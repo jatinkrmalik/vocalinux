@@ -150,7 +150,7 @@ sudo apt install -y \
 # - On older Ubuntu versions:
 sudo apt install -y gir1.2-appindicator3-0.1
 # - On newer Ubuntu versions:
-sudo apt install -y gir1.2-ayatana-appindicator3
+sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 
 # For X11
 sudo apt install -y xdotool
@@ -170,7 +170,7 @@ sudo apt install -y \
     wget curl unzip
 
 # For appindicator (system tray icon):
-sudo apt install -y gir1.2-ayatana-appindicator3
+sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 
 # For X11
 sudo apt install -y xdotool

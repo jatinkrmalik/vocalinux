@@ -266,7 +266,7 @@ install_system_dependencies() {
 
     # Define package names for different distributions
     local APT_PACKAGES="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
-    local APT_PACKAGES_DEBIAN="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ayatana-appindicator3 libgirepository-2.0-dev libcairo2-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
+    local APT_PACKAGES_DEBIAN="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 libgirepository-2.0-dev libcairo2-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv wget curl unzip"
     local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
