@@ -23,6 +23,7 @@ jobs:
     outputs:
       web: ${{ steps.filter.outputs.web }}
       python: ${{ steps.filter.outputs.python }}
+      deploy_website: ${{ steps.deploy_check.outputs.deploy }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -36,6 +37,18 @@ jobs:
               - 'tests/**'
               - 'pyproject.toml'
               - 'setup.py'
+      - name: Check if website should deploy
+        id: deploy_check
+        run: |
+          # Deploy if web files changed OR python files changed (for version updates)
+          if [[ "${{ steps.filter.outputs.web }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.python }}" == "true" ]] || \
+             [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
+             [[ "${{ github.event.head_commit.message }}" == *"[web]"* ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+          fi
 
   python-lint:
     name: 🔍 Lint Python
@@ -144,10 +157,7 @@ jobs:
     name: 🌐 Build Website
     runs-on: ubuntu-latest
     needs: changes
-    if: |
-      needs.changes.outputs.web == 'true' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.message, '[web]')
+    if: needs.changes.outputs.deploy_website == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -161,6 +171,21 @@ jobs:
       - name: Install dependencies
         working-directory: ./web
         run: npm ci || npm install
+
+      - name: Sync version from source code
+        run: |
+          VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
+          echo "Syncing version: $VERSION"
+          # Update softwareVersion in layout.tsx
+          sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/layout.tsx
+          # Update package.json version (remove -alpha suffix for npm)
+          NPM_VERSION=${VERSION%-*}
+          sed -i 's/"version": "[^"]*"/"version": "'"$NPM_VERSION"'"/' web/package.json
+          # Verify the changes
+          echo "Updated layout.tsx version:"
+          grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/layout.tsx
+          echo "Updated package.json version:"
+          grep -oP '"version":\s*"\K[^"]+' web/package.json
 
       - name: Lint
         working-directory: ./web
@@ -177,11 +202,11 @@ jobs:
   deploy-website:
     name: 🚀 Deploy Website
     runs-on: ubuntu-latest
-    needs: [changes, python-test, web-build]
+    needs: [changes, web-build]
     if: |
       always() &&
       github.ref == 'refs/heads/main' &&
-      (needs.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[web]')) &&
+      needs.changes.outputs.deploy_website == 'true' &&
       needs.web-build.result == 'success'
     steps:
       - uses: actions/checkout@v4
