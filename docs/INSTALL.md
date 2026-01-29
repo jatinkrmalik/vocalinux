@@ -7,10 +7,10 @@ This guide provides detailed instructions for installing Vocalinux on Linux syst
 ### One-liner Installation (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.3.0-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha
 ```
 
-> **Note**: Installs the latest stable release (v0.3.0-alpha). For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.4.0-alpha. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 That's it! The installer handles everything automatically, including Whisper AI support.
 
@@ -341,8 +341,18 @@ rm -f ~/.local/share/icons/hicolor/scalable/apps/vocalinux*.svg
 gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 ```
 
+## Updating Vocalinux
+
+Already have Vocalinux installed? See the [Update Guide](UPDATE.md) for instructions on upgrading to the latest version.
+
+Quick update command:
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha
+```
+
 ## Getting Help
 
 - 📖 [User Guide](USER_GUIDE.md)
+- 📖 [Update Guide](UPDATE.md)
 - 🐛 [Report Issues](https://github.com/jatinkrmalik/vocalinux/issues)
 - 💬 [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)

@@ -51,10 +51,10 @@
 ### One-liner Installation (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.3.0-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha
 ```
 
-> **Note**: Installs the latest stable release (v0.3.0-alpha). For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.4.0-alpha. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 This will:
 - Clone the repository to `~/.local/share/vocalinux-install`
@@ -70,13 +70,13 @@ This will:
 
 **Whisper with CPU-only PyTorch (no NVIDIA GPU needed):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.3.0-alpha --whisper-cpu
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha --whisper-cpu
 ```
 This installs Whisper with CPU-only PyTorch (~200MB instead of ~2.3GB). Works great for systems without NVIDIA GPU.
 
 **For low-RAM systems (8GB or less) - VOSK only:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.3.0-alpha --no-whisper
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha --no-whisper
 ```
 This skips Whisper installation entirely and configures VOSK as the default engine.
 
@@ -212,6 +212,7 @@ vocalinux/
 ## 📖 Documentation
 
 - [Installation Guide](docs/INSTALL.md) - Detailed installation instructions
+- [Update Guide](docs/UPDATE.md) - How to update Vocalinux
 - [User Guide](docs/USER_GUIDE.md) - Complete user documentation
 - [Contributing](CONTRIBUTING.md) - Development setup and contribution guidelines
 
@@ -220,7 +221,8 @@ vocalinux/
 - [x] ~~Custom icon design~~ ✅
 - [x] ~~Graphical settings dialog~~ ✅
 - [x] ~~Whisper AI support~~ ✅
-- [ ] Multi-language support
+- [x] ~~Multi-language support (FR, DE, RU)~~ ✅
+- [ ] In-app update mechanism
 - [ ] Application-specific commands
 - [ ] Debian/Ubuntu package (.deb)
 - [ ] Improved Wayland support
