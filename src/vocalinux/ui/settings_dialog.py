@@ -738,11 +738,33 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_engine_changed(self, widget):
         """Handle changes in the selected engine."""
+        engine_text = self.engine_combo.get_active_text()
+        if not engine_text:
+            return
+
+        engine = engine_text.lower()
+
+        # Check if current language is supported by the new engine
+        current_lang = self.language_combo.get_active_id()
+        if current_lang:
+            if engine == "vosk" and (
+                current_lang == "auto" or not SUPPORTED_LANGUAGES.get(current_lang, {}).get("vosk")
+            ):
+                # Switching to VOSK with unsupported language, fall back to en-us
+                self.language = "en-us"
+            elif engine == "whisper" and not current_lang:
+                # No language selected, default to auto for Whisper
+                self.language = "auto"
+
         self._populate_model_options()
         self._populate_language_options()
+
+        # Set the active language in the combo after repopulating
+        # This will trigger _on_language_changed which will apply settings
+        self.language_combo.set_active_id(self.language)
+
         self._update_engine_specific_ui()
         self._update_whisper_info()
-        self._auto_apply_settings()
 
     def _on_model_changed(self, widget):
         """Handle changes in the selected model."""
@@ -779,16 +801,20 @@ class SettingsDialog(Gtk.Dialog):
         for lang_code, lang_info in SUPPORTED_LANGUAGES.items():
             display_text = lang_info["name"]
 
-            # Add status indicators based on engine
+            # Filter languages based on engine support
             if engine == "vosk":
+                # VOSK: only show languages with available models (skip "auto" since VOSK doesn't support it)
                 has_model = lang_info["vosk"] is not None
-                if not has_model:
-                    display_text += " (Whisper only)"
-                else:
-                    is_downloaded = _is_vosk_model_downloaded("small", lang_code)
-                    display_text += " ✓" if is_downloaded else " ↓"
-            elif engine == "whisper" and lang_code == "auto":
-                display_text += " ⚠"
+                if not has_model or lang_code == "auto":
+                    continue  # Skip languages not supported by VOSK
+                is_downloaded = _is_vosk_model_downloaded("small", lang_code)
+                display_text += " ✓" if is_downloaded else " ↓"
+            elif engine == "whisper":
+                # Whisper: show all languages, add warning for auto-detect
+                if lang_code == "auto":
+                    display_text += " ⚠"
+            else:
+                continue  # Unknown engine
 
             self.language_combo.append(lang_code, display_text)
 
@@ -811,14 +837,10 @@ class SettingsDialog(Gtk.Dialog):
             engine = engine.lower()
             lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
 
-            # Update warning label based on language and engine
+            # Update warning label for auto-detect only
             if lang_info.get("warning"):
                 self.language_warning.set_markup(
                     f"<span foreground='orange'>⚠ {lang_info['warning']}</span>"
-                )
-            elif engine == "vosk" and lang_info.get("vosk") is None:
-                self.language_warning.set_markup(
-                    "<span foreground='orange'>⚠ This language requires Whisper engine</span>"
                 )
             else:
                 self.language_warning.set_markup("")
@@ -845,8 +867,8 @@ class SettingsDialog(Gtk.Dialog):
         if self._test_active:
             return  # Don't apply during testing
 
-        if self._processing_language_change or self._populating_models:
-            return  # Don't apply during UI updates
+        if self._populating_models:
+            return  # Don't apply during model population
 
         self._applying_settings = True
         try:
