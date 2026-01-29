@@ -31,6 +31,7 @@ WITH_WHISPER="no"
 WHISPER_CPU="no"
 NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
+GIT_TAG=""
 
 # Detect if running non-interactively (e.g., via curl | bash)
 if [ ! -t 0 ]; then
@@ -74,6 +75,10 @@ while [[ $# -gt 0 ]]; do
             NON_INTERACTIVE="yes"
             shift
             ;;
+        --tag=*)
+            GIT_TAG="${1#*=}"
+            shift
+            ;;
         --help)
             echo "Vocalinux Installer"
             echo "Usage: $0 [options]"
@@ -85,6 +90,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --with-whisper   Install Whisper AI support with GPU/CUDA (included by default)"
             echo "  --whisper-cpu    Install Whisper with CPU-only PyTorch (smaller download, works on low-RAM)"
             echo "  --no-whisper     VOSK-only install (skips Whisper entirely, uses VOSK as default)"
+            echo "  --tag=TAG        Install a specific release tag (default: latest stable release)"
             echo "  -y, --yes        Non-interactive mode (accept defaults)"
             echo "  --help           Show this help message"
             exit 0
@@ -121,16 +127,38 @@ else
     INSTALL_DIR="$HOME/.local/share/vocalinux-install"
     mkdir -p "$INSTALL_DIR"
 
+    # Determine the branch/tag to clone
+    if [ -n "$GIT_TAG" ]; then
+        GIT_REF="$GIT_TAG"
+        print_info "Installing from specified tag: $GIT_TAG"
+    else
+        # Fetch the latest release tag from GitHub API
+        print_info "Fetching latest release tag..."
+        LATEST_TAG=$(curl -s "https://api.github.com/repos/jatinkrmalik/vocalinux/releases" | grep -m 1 '"tag_name":' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+        if [ -n "$LATEST_TAG" ]; then
+            GIT_REF="$LATEST_TAG"
+            print_info "Installing from latest release: $LATEST_TAG"
+        else
+            GIT_REF="main"
+            print_warning "Could not fetch latest release tag, using main branch"
+        fi
+    fi
+
     if [ -d "$INSTALL_DIR/.git" ]; then
         print_info "Updating existing clone..."
         cd "$INSTALL_DIR"
-        git fetch origin main
-        git reset --hard origin/main
+        git fetch origin "$GIT_REF"
+        git checkout "$GIT_REF" || git reset --hard "origin/$GIT_REF" 2>/dev/null || git reset --hard "$GIT_REF"
     else
         rm -rf "$INSTALL_DIR"
-        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" || {
-            print_error "Failed to clone Vocalinux repository"
-            exit 1
+        git clone --depth 1 --branch "$GIT_REF" "$REPO_URL" "$INSTALL_DIR" || {
+            print_error "Failed to clone Vocalinux repository (tag: $GIT_REF)"
+            # Fallback to main if tag checkout fails
+            print_info "Retrying with main branch..."
+            git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" || {
+                print_error "Failed to clone Vocalinux repository"
+                exit 1
+            }
         }
         cd "$INSTALL_DIR"
     fi
