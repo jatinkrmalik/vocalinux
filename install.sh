@@ -123,6 +123,8 @@ if [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
     # Running from within the repo
     INSTALL_DIR="$(pwd)"
     print_info "Running from local repository: $INSTALL_DIR"
+    # Convert VENV_DIR to absolute path for wrapper scripts
+    VENV_DIR="$INSTALL_DIR/$VENV_DIR"
 else
     # Running remotely (e.g., via curl | bash)
     print_info "Installing Vocalinux version: ${INSTALL_TAG}"
