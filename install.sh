@@ -784,35 +784,33 @@ VOSK_CONFIG
         rm -rf "$PIP_LOG_DIR"
 
         # Create wrapper scripts in ~/.local/bin for easy access
-        if [[ "$CLEANUP_ON_EXIT" == "yes" ]]; then
-            mkdir -p "$HOME/.local/bin"
+        mkdir -p "$HOME/.local/bin"
 
-            # Create vocalinux wrapper script
-            cat > "$HOME/.local/bin/vocalinux" << WRAPPER_EOF
+        # Create vocalinux wrapper script
+        cat > "$HOME/.local/bin/vocalinux" << WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux that sets required environment variables
 export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
 exec "$VENV_DIR/bin/vocalinux" "\$@"
 WRAPPER_EOF
-            chmod +x "$HOME/.local/bin/vocalinux"
-            print_info "Created wrapper: ~/.local/bin/vocalinux"
+        chmod +x "$HOME/.local/bin/vocalinux"
+        print_info "Created wrapper: ~/.local/bin/vocalinux"
 
-            # Create vocalinux-gui wrapper script
-            cat > "$HOME/.local/bin/vocalinux-gui" << WRAPPER_EOF
+        # Create vocalinux-gui wrapper script
+        cat > "$HOME/.local/bin/vocalinux-gui" << WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux GUI that sets required environment variables
 export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
 exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
 WRAPPER_EOF
-            chmod +x "$HOME/.local/bin/vocalinux-gui"
-            print_info "Created wrapper: ~/.local/bin/vocalinux-gui"
+        chmod +x "$HOME/.local/bin/vocalinux-gui"
+        print_info "Created wrapper: ~/.local/bin/vocalinux-gui"
 
-            # Check if ~/.local/bin is in PATH
-            if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-                print_warning "~/.local/bin is not in your PATH"
-                print_info "Add this line to your ~/.bashrc or ~/.zshrc:"
-                print_info '  export PATH="$HOME/.local/bin:$PATH"'
-            fi
+        # Check if ~/.local/bin is in PATH
+        if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+            print_warning "~/.local/bin is not in your PATH"
+            print_info "Add this line to your ~/.bashrc or ~/.zshrc:"
+            print_info '  export PATH="$HOME/.local/bin:$PATH"'
         fi
 
         return 0
