@@ -2,7 +2,6 @@
 Tests for keyboard shortcut functionality.
 """
 
-import time
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
@@ -138,7 +137,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
         # Start the listener
         with patch("vocalinux.ui.keyboard_shortcuts.logger") as mock_logger:
-            result = self.ksm.start()
+            self.ksm.start()
 
             # Verify permission hint was logged
             mock_logger.warning.assert_called()
@@ -152,7 +151,10 @@ class TestPynputBackend(unittest.TestCase):
     def setUp(self):
         """Set up for pynput backend tests."""
         # Mock pynput
-        self.pynput_patch = patch("vocalinux.ui.keyboard_backends.pynput_backend.PYNPUT_AVAILABLE", True)
+        self.pynput_patch = patch(
+            "vocalinux.ui.keyboard_backends.pynput_backend.PYNPUT_AVAILABLE",
+            True
+        )
         self.pynput_patch.start()
 
         self.keyboard_patch = patch("vocalinux.ui.keyboard_backends.pynput_backend.keyboard")
@@ -274,7 +276,6 @@ class TestEvdevBackend(unittest.TestCase):
         self.mock_evdev_backend.EvdevKeyboardBackend = MagicMock
 
         # Create backend instance
-        backend_cls = self.mock_evdev_backend.EvdevKeyboardBackend
         backend = MagicMock()
         backend.is_available.return_value = False
 
