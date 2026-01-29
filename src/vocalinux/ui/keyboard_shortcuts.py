@@ -14,9 +14,9 @@ from typing import Callable, Optional
 
 # Import the backend system
 from .keyboard_backends import (
-    DesktopEnvironment,
     EVDEV_AVAILABLE,
     PYNPUT_AVAILABLE,
+    DesktopEnvironment,
     create_backend,
 )
 
@@ -33,6 +33,7 @@ def _init_legacy_keyboard():
     global keyboard
     try:
         from pynput import keyboard as pynput_keyboard
+
         keyboard = pynput_keyboard
     except ImportError:
         pass
@@ -142,7 +143,7 @@ class KeyboardShortcutManager:
 
         Returns the underlying backend object if using pynput backend.
         """
-        if self.backend_instance and hasattr(self.backend_instance, 'listener'):
+        if self.backend_instance and hasattr(self.backend_instance, "listener"):
             return self.backend_instance.listener
         return None
 

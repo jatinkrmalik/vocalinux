@@ -152,8 +152,7 @@ class TestPynputBackend(unittest.TestCase):
         """Set up for pynput backend tests."""
         # Mock pynput
         self.pynput_patch = patch(
-            "vocalinux.ui.keyboard_backends.pynput_backend.PYNPUT_AVAILABLE",
-            True
+            "vocalinux.ui.keyboard_backends.pynput_backend.PYNPUT_AVAILABLE", True
         )
         self.pynput_patch.start()
 
@@ -251,15 +250,18 @@ class TestEvdevBackend(unittest.TestCase):
 
         # Need to reload the keyboard_backends module to pick up the mock
         import importlib
+
         from vocalinux.ui import keyboard_backends
+
         importlib.reload(keyboard_backends)
 
         self.keyboard_backends = keyboard_backends
 
     def tearDown(self):
         """Clean up after evdev tests."""
-        import sys
         import importlib
+        import sys
+
         from vocalinux.ui import keyboard_backends
 
         # Remove mock modules
@@ -330,8 +332,9 @@ class TestBackendFactory(unittest.TestCase):
         """Test forcing pynput backend."""
         from vocalinux.ui.keyboard_backends import create_backend
 
-        with patch("vocalinux.ui.keyboard_backends.PYNPUT_AVAILABLE", True), \
-             patch("vocalinux.ui.keyboard_backends.PynputKeyboardBackend") as MockPynput:
+        with patch("vocalinux.ui.keyboard_backends.PYNPUT_AVAILABLE", True), patch(
+            "vocalinux.ui.keyboard_backends.PynputKeyboardBackend"
+        ) as MockPynput:
             mock_backend = MagicMock()
             MockPynput.return_value = mock_backend
 
@@ -344,8 +347,9 @@ class TestBackendFactory(unittest.TestCase):
         """Test forcing evdev backend."""
         from vocalinux.ui.keyboard_backends import create_backend
 
-        with patch("vocalinux.ui.keyboard_backends.EVDEV_AVAILABLE", True), \
-             patch("vocalinux.ui.keyboard_backends.EvdevKeyboardBackend") as MockEvdev:
+        with patch("vocalinux.ui.keyboard_backends.EVDEV_AVAILABLE", True), patch(
+            "vocalinux.ui.keyboard_backends.EvdevKeyboardBackend"
+        ) as MockEvdev:
             mock_backend = MagicMock()
             MockEvdev.return_value = mock_backend
 

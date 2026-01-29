@@ -17,6 +17,7 @@ from typing import List, Optional, Set
 try:
     import evdev
     from evdev import InputDevice, ecodes
+
     EVDEV_AVAILABLE = True
 except ImportError:
     evdev = None  # type: ignore
@@ -134,8 +135,10 @@ class EvdevKeyboardBackend(KeyboardBackend):
                     return None  # Successfully opened, permissions OK
                 except (OSError, IOError) as e:
                     if "Permission denied" in str(e) or e.errno == errno.EACCES:
-                        return ("Add your user to the 'input' group and log out/in:\\n"
-                                "sudo usermod -a -G input $USER")
+                        return (
+                            "Add your user to the 'input' group and log out/in:\\n"
+                            "sudo usermod -a -G input $USER"
+                        )
         except Exception:
             pass
 
@@ -184,10 +187,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
         # Start monitoring thread
         self.running = True
-        self.monitor_thread = threading.Thread(
-            target=self._monitor_devices,
-            daemon=True
-        )
+        self.monitor_thread = threading.Thread(target=self._monitor_devices, daemon=True)
         self.monitor_thread.start()
 
         logger.info("Evdev keyboard listener started successfully")
@@ -228,12 +228,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                 if not self.device_fds:
                     break
 
-                readable, _, _ = select.select(
-                    self.device_fds,
-                    [],
-                    [],
-                    1.0  # 1 second timeout
-                )
+                readable, _, _ = select.select(self.device_fds, [], [], 1.0)  # 1 second timeout
 
                 for fd in readable:
                     try:
@@ -278,15 +273,14 @@ class EvdevKeyboardBackend(KeyboardBackend):
                     current_time = time.time()
 
                     # Check for double-tap
-                    if (current_time - self.last_ctrl_press_time < self.double_tap_threshold and
-                            self.double_tap_callback is not None and
-                            current_time - self.last_trigger_time > 0.5):
+                    if (
+                        current_time - self.last_ctrl_press_time < self.double_tap_threshold
+                        and self.double_tap_callback is not None
+                        and current_time - self.last_trigger_time > 0.5
+                    ):
                         logger.debug("Double-tap Ctrl detected (evdev)")
                         self.last_trigger_time = current_time
-                        threading.Thread(
-                            target=self.double_tap_callback,
-                            daemon=True
-                        ).start()
+                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
 
                     self.last_ctrl_press_time = current_time
 
