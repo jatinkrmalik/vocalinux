@@ -204,7 +204,7 @@ export default function HomePage() {
             />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
             <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
-              v0.3.0 Alpha
+              v0.4.0 Alpha
             </span>
           </Link>
 
