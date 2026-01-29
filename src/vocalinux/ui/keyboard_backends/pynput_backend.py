@@ -13,6 +13,7 @@ from typing import Optional
 # Try to import pynput
 try:
     from pynput import keyboard
+
     PYNPUT_AVAILABLE = True
 except ImportError:
     keyboard = None  # type: ignore
@@ -74,10 +75,7 @@ class PynputKeyboardBackend(KeyboardBackend):
         self.current_keys = set()
 
         try:
-            self.listener = keyboard.Listener(
-                on_press=self._on_press,
-                on_release=self._on_release
-            )
+            self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
             self.listener.daemon = True
             self.listener.start()
 
@@ -116,15 +114,14 @@ class PynputKeyboardBackend(KeyboardBackend):
             normalized_key = self._normalize_modifier_key(key)
             if normalized_key == keyboard.Key.ctrl:
                 current_time = time.time()
-                if (current_time - self.last_ctrl_press_time < self.double_tap_threshold and
-                        self.double_tap_callback is not None and
-                        current_time - self.last_trigger_time > 0.5):
+                if (
+                    current_time - self.last_ctrl_press_time < self.double_tap_threshold
+                    and self.double_tap_callback is not None
+                    and current_time - self.last_trigger_time > 0.5
+                ):
                     logger.debug("Double-tap Ctrl detected (pynput)")
                     self.last_trigger_time = current_time
-                    threading.Thread(
-                        target=self.double_tap_callback,
-                        daemon=True
-                    ).start()
+                    threading.Thread(target=self.double_tap_callback, daemon=True).start()
                 self.last_ctrl_press_time = current_time
 
             if key in {keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}:
