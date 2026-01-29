@@ -635,13 +635,13 @@ export default function HomePage() {
                 {/* Primary install option */}
                 <div className="mb-8">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-green-500/10 p-2 rounded-lg">
-                      <Sparkles className="h-5 w-5 text-green-500" />
+                    <div className="bg-blue-500/10 p-2 rounded-lg">
+                      <Zap className="h-5 w-5 text-blue-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold">Recommended: Full Install</h3>
+                      <h3 className="text-xl font-semibold">Quick Install (Auto-detect)</h3>
                       <p className="text-sm text-muted-foreground">
-                        Includes Whisper AI for best accuracy (~5-10 min)
+                        Fastest for power users - no prompts (~3-10 min)
                       </p>
                     </div>
                     <CopyButton text={oneClickInstallCommand} />
@@ -665,9 +665,9 @@ export default function HomePage() {
                       <Cpu className="h-5 w-5 text-blue-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold">Whisper CPU-only</h3>
+                      <h3 className="text-lg font-semibold">CPU-only Install</h3>
                       <p className="text-sm text-muted-foreground">
-                        Smaller download (~200MB vs ~2.3GB) - no NVIDIA GPU needed (~3-4 min)
+                        Smaller download (~200MB vs ~2.3GB) - for systems without NVIDIA GPU (~3-4 min)
                       </p>
                     </div>
                     <CopyButton text={oneClickInstallWhisperCpu} />
@@ -687,11 +687,11 @@ export default function HomePage() {
                 {/* Alternative install - VOSK only */}
                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-green-500/10 p-2 rounded-lg">
-                      <Zap className="h-5 w-5 text-green-500" />
+                    <div className="bg-orange-500/10 p-2 rounded-lg">
+                      <Zap className="h-5 w-5 text-orange-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold">VOSK only (lightest)</h3>
+                      <h3 className="text-lg font-semibold">VOSK Only (Lightweight)</h3>
                       <p className="text-sm text-muted-foreground">
                         For low-RAM systems (8GB or less) - skips Whisper entirely (~2-3 min)
                       </p>
