@@ -289,7 +289,7 @@ install_system_dependencies() {
                 # Try the old package first, fall back to ayatana-appindicator if unavailable
                 if echo "$MISSING_PACKAGES" | grep -q "gir1.2-appindicator3-0.1"; then
                     # Remove appindicator from the package list for special handling
-                    FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/gir1.2-appindicator3-0.1//')
+                    FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/gir1.2-appindicator3-0.1//' | xargs)
 
                     # Try to install the old package first (for older Debian/Ubuntu versions)
                     if ! sudo apt install -y gir1.2-appindicator3-0.1 2>/dev/null; then
