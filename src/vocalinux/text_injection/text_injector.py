@@ -207,8 +207,13 @@ class TextInjector:
                 try:
                     self._inject_with_wayland_tool(escaped_text)
                 except subprocess.CalledProcessError as e:
-                    logger.warning(f"Wayland tool failed: {e}. Falling back to xdotool")
-                    if "compositor does not support" in str(e).lower() and shutil.which("xdotool"):
+                    stderr_msg = e.stderr.strip() if e.stderr else "No stderr output"
+                    logger.warning(
+                        f"Wayland tool failed: {e}. stderr: {stderr_msg}. Falling back to xdotool"
+                    )
+                    if "compositor does not support" in str(
+                        e
+                    ).lower() + " " + stderr_msg.lower() and shutil.which("xdotool"):
                         logger.info("Automatically switching to XWayland fallback permanently")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         self._inject_with_xdotool(escaped_text)
@@ -375,13 +380,23 @@ class TextInjector:
 
         Args:
             text: The text to inject (already escaped)
+
+        Raises:
+            subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
         if self.wayland_tool == "wtype":
             cmd = ["wtype", text]
         else:  # ydotool
             cmd = ["ydotool", "type", text]
 
-        result = subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+        try:
+            result = subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            # Re-raise with stderr preserved for better diagnostics
+            raise subprocess.CalledProcessError(
+                e.returncode, e.cmd, output=e.output, stderr=e.stderr
+            ) from e
+
         logger.info(
             f"Text injected using {self.wayland_tool}: '{text[:20]}...' ({len(text)} chars)"
         )
