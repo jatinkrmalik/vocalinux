@@ -783,11 +783,29 @@ VOSK_CONFIG
         # Clean up log file if installation was successful
         rm -rf "$PIP_LOG_DIR"
 
-        # Create symlink in ~/.local/bin for easy access
+        # Create wrapper scripts in ~/.local/bin for easy access
         if [[ "$CLEANUP_ON_EXIT" == "yes" ]]; then
             mkdir -p "$HOME/.local/bin"
-            ln -sf "$VENV_DIR/bin/vocalinux" "$HOME/.local/bin/vocalinux"
-            print_info "Created symlink: ~/.local/bin/vocalinux"
+
+            # Create vocalinux wrapper script
+            cat > "$HOME/.local/bin/vocalinux" << WRAPPER_EOF
+#!/bin/bash
+# Wrapper script for Vocalinux that sets required environment variables
+export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
+exec "$VENV_DIR/bin/vocalinux" "\$@"
+WRAPPER_EOF
+            chmod +x "$HOME/.local/bin/vocalinux"
+            print_info "Created wrapper: ~/.local/bin/vocalinux"
+
+            # Create vocalinux-gui wrapper script
+            cat > "$HOME/.local/bin/vocalinux-gui" << WRAPPER_EOF
+#!/bin/bash
+# Wrapper script for Vocalinux GUI that sets required environment variables
+export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
+exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
+WRAPPER_EOF
+            chmod +x "$HOME/.local/bin/vocalinux-gui"
+            print_info "Created wrapper: ~/.local/bin/vocalinux-gui"
 
             # Check if ~/.local/bin is in PATH
             if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -1005,16 +1023,16 @@ install_desktop_entry() {
         return 1
     }
 
-    # Update the desktop entry to use the venv
-    VENV_SCRIPT_PATH="$(realpath $VENV_DIR/bin/vocalinux)"
-    if [ ! -f "$VENV_SCRIPT_PATH" ]; then
-        print_warning "Vocalinux script not found at $VENV_SCRIPT_PATH"
+    # Update the desktop entry to use the wrapper script
+    WRAPPER_SCRIPT="$HOME/.local/bin/vocalinux-gui"
+    if [ ! -f "$WRAPPER_SCRIPT" ]; then
+        print_warning "Wrapper script not found at $WRAPPER_SCRIPT"
         print_warning "Desktop entry may not work correctly"
     else
-        sed -i "s|^Exec=vocalinux|Exec=$VENV_SCRIPT_PATH|" "$DESKTOP_DIR/vocalinux.desktop" || {
+        sed -i "s|^Exec=vocalinux|Exec=$WRAPPER_SCRIPT|" "$DESKTOP_DIR/vocalinux.desktop" || {
             print_warning "Failed to update desktop entry path"
         }
-        print_info "Updated desktop entry to use virtual environment"
+        print_info "Updated desktop entry to use wrapper script"
     fi
 
     # Make desktop entry executable
