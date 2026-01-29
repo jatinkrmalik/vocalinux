@@ -48,10 +48,13 @@ export const metadata: Metadata = {
   publisher: "Vocalinux",
   icons: {
     icon: [
-      { url: "/vocalinux.svg", type: "image/svg+xml" },
+      { url: "/vocalinux.png", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
     ],
-    apple: [{ url: "/vocalinux.svg", type: "image/svg+xml" }],
-    shortcut: "/vocalinux.svg"
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: "/vocalinux.png"
   },
   manifest: "/site.webmanifest",
   appleWebApp: {
@@ -104,7 +107,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const jsonLd = {
+  // SoftwareApplication schema
+  const softwareAppJsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Vocalinux",
@@ -116,7 +120,7 @@ export default function RootLayout({
       "priceCurrency": "USD"
     },
     "description": "Free, open-source voice dictation for Linux. 100% offline with Whisper AI and VOSK. Works with X11 and Wayland.",
-    "softwareVersion": "0.4.1-alpha",
+    "softwareVersion": "0.0.0",
     "author": {
       "@type": "Person",
       "name": "Jatin K Malik",
@@ -136,6 +140,47 @@ export default function RootLayout({
       "System tray integration"
     ]
   };
+
+  // Organization schema
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Vocalinux",
+    "url": "https://vocalinux.com",
+    "logo": "https://vocalinux.com/vocalinux.png",
+    "description": "Free, open-source voice dictation for Linux",
+    "sameAs": [
+      "https://github.com/jatinkrmalik/vocalinux"
+    ],
+    "author": {
+      "@type": "Person",
+      "name": "Jatin K Malik",
+      "url": "https://github.com/jatinkrmalik"
+    }
+  };
+
+  // WebSite schema
+  const webSiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Vocalinux",
+    "url": "https://vocalinux.com",
+    "description": "Voice dictation for Linux, finally done right. 100% offline and privacy-focused.",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://github.com/jatinkrmalik/vocalinux/issues?q={search_term_string}"
+      },
+      "query-input": {
+        "@type": "PropertyValueSpecification",
+        "valueRequired": true,
+        "valueName": "search_term_string"
+      }
+    }
+  };
+
+  const jsonLd = [softwareAppJsonLd, organizationJsonLd, webSiteJsonLd];
 
   return (
     <html lang="en" className={`${GeistSans.variable} scroll-smooth`} suppressHydrationWarning>
