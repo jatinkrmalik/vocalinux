@@ -16,7 +16,7 @@ from typing import List, Optional, Set
 # Try to import evdev
 try:
     import evdev
-    from evdev import InputDevice, ecodes, categorize
+    from evdev import InputDevice, ecodes
     EVDEV_AVAILABLE = True
 except ImportError:
     evdev = None  # type: ignore
@@ -130,7 +130,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
             # Try to open the first device to check permissions
             for device_path in devices[:1]:  # Just check the first one
                 try:
-                    dev = InputDevice(device_path)
+                    InputDevice(device_path)
                     return None  # Successfully opened, permissions OK
                 except (OSError, IOError) as e:
                     if "Permission denied" in str(e) or e.errno == errno.EACCES:
