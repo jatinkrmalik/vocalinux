@@ -288,19 +288,19 @@ install_system_dependencies() {
                 sudo apt update || { print_error "Failed to update package lists"; exit 1; }
 
                 # Handle appindicator package: old package was deprecated in Debian 13+
-                # Try the old package first, fall back to ayatana-appindicator if unavailable
+                # Try the old package first, fall back to gir1.2-ayatanaappindicator3-0.1 if unavailable
                 if echo "$MISSING_PACKAGES" | grep -q "gir1.2-appindicator3-0.1"; then
                     # Remove appindicator from the package list for special handling
                     FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/gir1.2-appindicator3-0.1//' | xargs)
 
                     # Try to install the old package first (for older Debian/Ubuntu versions)
                     if ! sudo apt install -y gir1.2-appindicator3-0.1 2>/dev/null; then
-                        print_info "gir1.2-appindicator3-0.1 not available, trying gir1.2-ayatana-appindicator3..."
-                        if ! sudo apt install -y gir1.2-ayatana-appindicator3; then
-                            print_error "Failed to install appindicator package (tried both gir1.2-appindicator3-0.1 and gir1.2-ayatana-appindicator3)"
+                        print_info "gir1.2-appindicator3-0.1 not available, trying gir1.2-ayatanaappindicator3-0.1..."
+                        if ! sudo apt install -y gir1.2-ayatanaappindicator3-0.1; then
+                            print_error "Failed to install appindicator package (tried both gir1.2-appindicator3-0.1 and gir1.2-ayatanaappindicator3-0.1)"
                             exit 1
                         fi
-                        print_info "Successfully installed gir1.2-ayatana-appindicator3 (modern replacement)"
+                        print_info "Successfully installed gir1.2-ayatanaappindicator3-0.1 (modern replacement)"
                     fi
 
                     # Install remaining packages
