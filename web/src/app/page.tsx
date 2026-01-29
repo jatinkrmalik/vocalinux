@@ -40,6 +40,10 @@ import { useInView } from "react-intersection-observer";
 // The one-liner install command (split into three lines for display)
 // Downloads install.sh from main (which has --tag support) and passes the latest release tag
 const getInstallCommands = (latestRelease: string) => ({
+  interactiveInstallCommand: `curl \\
+  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
+  | bash -s -- --tag=${latestRelease} --interactive`,
+
   oneClickInstallCommand: `curl \\
   -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
   | bash -s -- --tag=${latestRelease}`,
@@ -185,7 +189,7 @@ export default function HomePage() {
 
   // Get install commands based on the latest release
   const installCommands = getInstallCommands(latestRelease);
-  const { oneClickInstallCommand, oneClickInstallWhisperCpu, oneClickInstallNoWhisper, uninstallCommand } = installCommands;
+  const { interactiveInstallCommand, oneClickInstallCommand, oneClickInstallWhisperCpu, oneClickInstallNoWhisper, uninstallCommand } = installCommands;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
@@ -598,6 +602,36 @@ export default function HomePage() {
           <FadeInSection delay={0.1}>
             <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 min-w-0">
               <div className="p-6 sm:p-8">
+                {/* Interactive Install - NEW PRIMARY OPTION */}
+                <div className="mb-8 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-xl p-6 -mx-6 -mt-8 sm:-mx-8 sm:-mt-8 border border-purple-500/20">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-purple-500/10 p-2 rounded-lg">
+                      <Sparkles className="h-5 w-5 text-purple-500" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold">Interactive Install (Recommended)</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Guided installation with smart hardware detection
+                      </p>
+                    </div>
+                    <CopyButton text={interactiveInstallCommand} />
+                  </div>
+                  <div className="overflow-x-auto">
+                    <SyntaxHighlighter
+                      language="bash"
+                      style={atomOneDark}
+                      className="rounded-lg text-sm sm:text-base"
+                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
+                      wrapLongLines={false}
+                    >
+                      {interactiveInstallCommand}
+                    </SyntaxHighlighter>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Detects your GPU and recommends the best option. Prompts for your preferences.
+                  </p>
+                </div>
+
                 {/* Primary install option */}
                 <div className="mb-8">
                   <div className="flex items-center gap-3 mb-4">
