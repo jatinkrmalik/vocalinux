@@ -568,13 +568,11 @@ setup_virtual_environment() {
     fi
 
     # Create virtual environment
-    python3 -m venv "$VENV_DIR" --system-site-packages || {
-        print_error "Failed to create virtual environment"
-        print_info "Trying without --system-site-packages..."
-        python3 -m venv "$VENV_DIR" || {
-            print_error "Failed to create virtual environment. Please check your Python installation."
-            exit 1
-        }
+    # Note: We don't use --system-site-packages to avoid conflicts with system packages
+    # that may be incompatible with Python 3.12+ (e.g., old coverage versions)
+    python3 -m venv "$VENV_DIR" || {
+        print_error "Failed to create virtual environment. Please check your Python installation."
+        exit 1
     }
 
     # Activate virtual environment
