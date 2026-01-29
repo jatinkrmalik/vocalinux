@@ -301,10 +301,13 @@ class SpeechRecognitionManager:
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
+        # VOSK doesn't support auto-detect, so fall back to en-us for "auto"
+        vosk_language = "en-us" if self.language == "auto" else self.language
+
         self.vosk_model_map = {
-            "small": VOSK_MODEL_INFO["small"]["languages"].get(self.language),
-            "medium": VOSK_MODEL_INFO["medium"]["languages"].get(self.language),
-            "large": VOSK_MODEL_INFO["large"]["languages"].get(self.language),
+            "small": VOSK_MODEL_INFO["small"]["languages"].get(vosk_language),
+            "medium": VOSK_MODEL_INFO["medium"]["languages"].get(vosk_language),
+            "large": VOSK_MODEL_INFO["large"]["languages"].get(vosk_language),
         }
 
         try:
@@ -452,6 +455,8 @@ class SpeechRecognitionManager:
             lang = self.language
             if self.language == "en-us":
                 lang = "en"
+            elif self.language == "auto":
+                lang = None  # Auto-detect
 
             # Transcribe with Whisper (handles variable length audio automatically)
             result = self.model.transcribe(
@@ -1140,6 +1145,7 @@ class SpeechRecognitionManager:
         self,
         engine: Optional[str] = None,
         model_size: Optional[str] = None,
+        language: Optional[str] = None,
         vad_sensitivity: Optional[int] = None,
         silence_timeout: Optional[float] = None,
         audio_device_index: Optional[int] = None,
@@ -1152,13 +1158,14 @@ class SpeechRecognitionManager:
         Args:
             engine: The new speech recognition engine ("vosk" or "whisper").
             model_size: The new model size.
+            language: The new language code (e.g., "en-us", "hi", "auto").
             vad_sensitivity: New VAD sensitivity (for VOSK).
             silence_timeout: New silence timeout (for VOSK).
             audio_device_index: Audio input device index (None for default, -1 to clear).
             force_download: If True, download missing models (default: True for UI-triggered reconfigures).
         """
         logger.info(
-            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, vad={vad_sensitivity}, silence={silence_timeout}, audio_device={audio_device_index}"
+            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, language={language}, vad={vad_sensitivity}, silence={silence_timeout}, audio_device={audio_device_index}"
         )
 
         restart_needed = False
@@ -1168,6 +1175,13 @@ class SpeechRecognitionManager:
 
         if model_size is not None and model_size != self.model_size:
             self.model_size = model_size
+            restart_needed = True
+
+        # Language change requires restart for both engines
+        # Whisper needs to know the language for transcription
+        # VOSK needs to load a different model for the new language
+        if language is not None and language != self.language:
+            self.language = language
             restart_needed = True
 
         # Update VOSK specific params if provided
