@@ -211,10 +211,9 @@ class TextInjector:
                     logger.warning(
                         f"Wayland tool failed: {e}. stderr: {stderr_msg}. Falling back to xdotool"
                     )
-                    if (
-                        "compositor does not support" in str(e).lower() + " " + stderr_msg.lower()
-                        and shutil.which("xdotool")
-                    ):
+                    if "compositor does not support" in str(
+                        e
+                    ).lower() + " " + stderr_msg.lower() and shutil.which("xdotool"):
                         logger.info("Automatically switching to XWayland fallback permanently")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         self._inject_with_xdotool(escaped_text)
