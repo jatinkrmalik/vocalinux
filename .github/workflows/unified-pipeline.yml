@@ -41,10 +41,11 @@ jobs:
         id: deploy_check
         run: |
           # Deploy if web files changed OR python files changed (for version updates)
+          COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
           if [[ "${{ steps.filter.outputs.web }}" == "true" ]] || \
              [[ "${{ steps.filter.outputs.python }}" == "true" ]] || \
              [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
-             [[ "${{ github.event.head_commit.message }}" == *"[web]"* ]]; then
+             [[ "$COMMIT_MESSAGE" == *"[web]"* ]]; then
             echo "deploy=true" >> $GITHUB_OUTPUT
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
