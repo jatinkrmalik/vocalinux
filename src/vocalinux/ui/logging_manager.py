@@ -246,6 +246,8 @@ class LoggingHandler(logging.Handler):
     def __init__(self, logging_manager: LoggingManager):
         super().__init__()
         self.logging_manager = logging_manager
+        # Track depth to prevent recursive logging
+        self._emitting = False
 
     def emit(self, record: logging.LogRecord):
         """
@@ -254,7 +256,13 @@ class LoggingHandler(logging.Handler):
         Args:
             record: The logging record to emit
         """
+        # Prevent recursive calls
+        if self._emitting:
+            return
+
         try:
+            self._emitting = True
+
             # Create our custom log record
             log_record = LogRecord(
                 timestamp=datetime.fromtimestamp(record.created),
@@ -270,6 +278,8 @@ class LoggingHandler(logging.Handler):
         except Exception:
             # Don't let logging errors break the application
             self.handleError(record)
+        finally:
+            self._emitting = False
 
 
 # Global logging manager instance
