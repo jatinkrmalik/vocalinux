@@ -116,7 +116,7 @@ export default function RootLayout({
       "priceCurrency": "USD"
     },
     "description": "Free, open-source voice dictation for Linux. 100% offline with Whisper AI and VOSK. Works with X11 and Wayland.",
-    "softwareVersion": "0.4.0-alpha",
+    "softwareVersion": "0.4.1-alpha",
     "author": {
       "@type": "Person",
       "name": "Jatin K Malik",

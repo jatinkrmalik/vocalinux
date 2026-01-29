@@ -9,7 +9,7 @@ This guide explains how to update Vocalinux to the latest version.
 Simply re-run the installation command with the new version tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
 ```
 
 The installer will:
@@ -24,7 +24,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.4.0-alpha
+git checkout v0.4.1-alpha
 ./install.sh
 ```
 
@@ -47,10 +47,10 @@ The installer handles everything automatically:
 ```bash
 # From the repo (if you have it cloned)
 cd vocalinux
-./install.sh --tag=v0.4.0-alpha
+./install.sh --tag=v0.4.1-alpha
 
 # Or via curl (for any installation)
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
 ```
 
 **What gets preserved:**
@@ -68,7 +68,7 @@ cd vocalinux
 
 # 2. Pull the latest changes
 git fetch origin
-git checkout v0.4.0-alpha
+git checkout v0.4.1-alpha
 
 # 3. Activate your virtual environment
 source venv/bin/activate
@@ -97,14 +97,25 @@ git describe --tags
 
 ---
 
-## What's New in v0.4.0-alpha
+## What's New in v0.4.1-alpha
+
+- **Language selector UI**: Choose from 10 languages with auto-detection support for Whisper
+- **App drawer launch fix**: Desktop entry now works when installing from local repo
+- **Better commit handling**: Fixed error with special characters in commit messages
+- **Improved update mechanism**: Corrected git fetch syntax for tag-based updates
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.4.1-alpha).
+
+---
+
+## Previous Versions
+
+### v0.4.0-alpha
 
 - **Multi-language support**: French, German, and Russian
 - **Debian 13+ compatibility**: Fixed appindicator package issues
 - **Python 3.12+ support**: Improved venv handling
 - **Better install script**: Tag-based version selection
-
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.4.0-alpha).
 
 ---
 
@@ -121,7 +132,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 ./uninstall.sh --keep-config --keep-data
 
 # Reinstall
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
 ```
 
 ### Old Version Still Running

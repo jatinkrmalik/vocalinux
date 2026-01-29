@@ -112,7 +112,7 @@ print_info "=============================="
 echo ""
 
 # Default to installing from latest stable release instead of main branch
-INSTALL_TAG="${INSTALL_TAG:-v0.3.0-alpha}"
+INSTALL_TAG="${INSTALL_TAG:-v0.4.1-alpha}"
 
 # Check if running from within the vocalinux repo or remotely (via curl)
 REPO_URL="https://github.com/jatinkrmalik/vocalinux.git"
