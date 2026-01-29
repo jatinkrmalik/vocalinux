@@ -532,8 +532,49 @@ install_text_input_tools() {
     esac
 }
 
+# Setup keyboard shortcuts for Wayland
+setup_wayland_keyboard_shortcuts() {
+    # Detect session type
+    local SESSION_TYPE="unknown"
+    if [ -n "$XDG_SESSION_TYPE" ]; then
+        SESSION_TYPE="$XDG_SESSION_TYPE"
+    elif [ -n "$WAYLAND_DISPLAY" ]; then
+        SESSION_TYPE="wayland"
+    elif [ -n "$DISPLAY" ]; then
+        SESSION_TYPE="x11"
+    fi
+
+    # Only setup for Wayland sessions
+    if [[ "$SESSION_TYPE" != "wayland" ]]; then
+        return
+    fi
+
+    print_info "Detected Wayland session - setting up keyboard shortcuts..."
+
+    # Check if user is already in input group
+    if groups | grep -q '\binput\b'; then
+        print_info "User is already in 'input' group - keyboard shortcuts will work!"
+        return
+    fi
+
+    # Add user to input group
+    print_warning "Keyboard shortcuts on Wayland require 'input' group membership."
+    if sudo usermod -a -G input "$USER" 2>/dev/null; then
+        print_info "Added your user to the 'input' group."
+        print_warning "============================================================"
+        print_warning "IMPORTANT: Log out and log back in for changes to take effect"
+        print_warning "============================================================"
+    else
+        print_warning "Failed to add user to 'input' group. Keyboard shortcuts may not work."
+        print_info "Run manually: sudo usermod -a -G input \$USER"
+    fi
+}
+
 # Install text input tools based on session type
 install_text_input_tools
+
+# Setup keyboard shortcuts for Wayland
+setup_wayland_keyboard_shortcuts
 
 # Create necessary directories
 print_info "Creating application directories..."
