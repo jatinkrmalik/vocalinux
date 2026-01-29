@@ -195,7 +195,7 @@ export default function HomePage() {
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
             <Image
-              src="/vocalinux.svg"
+              src="/vocalinux.png"
               alt="Vocalinux Logo"
               width={32}
               height={32}
@@ -557,7 +557,7 @@ export default function HomePage() {
                   <div className="relative">
                     <div className="bg-white dark:bg-zinc-800 rounded-2xl p-8 shadow-xl">
                       <div className="flex items-center gap-4 mb-6">
-                        <Image src="/vocalinux.svg" alt="Vocalinux" width={64} height={64} className="h-16 w-16" />
+                        <Image src="/vocalinux.png" alt="Vocalinux" width={64} height={64} className="h-16 w-16" />
                         <div>
                           <div className="text-2xl font-bold">Vocalinux</div>
                           <div className="text-sm text-muted-foreground">
@@ -1026,7 +1026,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             <div className="md:col-span-2">
               <Link href="/" className="flex items-center gap-2 mb-4">
-                <Image src="/vocalinux.svg" alt="Vocalinux" width={32} height={32} className="h-8 w-8" />
+                <Image src="/vocalinux.png" alt="Vocalinux" width={32} height={32} className="h-8 w-8" />
                 <span className="text-xl font-bold">Vocalinux</span>
               </Link>
               <p className="text-zinc-400 mb-4 max-w-md">

@@ -7,7 +7,7 @@ import Image from "next/image";
 export const VocalinuxLogo: React.FC<{ className?: string }> = ({ className = "" }) => {
   return (
     <Image
-      src="/vocalinux.svg"
+      src="/vocalinux.png"
       alt="Vocalinux Logo"
       width={36}
       height={36}
