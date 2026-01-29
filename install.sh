@@ -132,8 +132,8 @@ else
     if [ -d "$INSTALL_DIR/.git" ]; then
         print_info "Updating existing clone..."
         cd "$INSTALL_DIR"
-        git fetch origin "$INSTALL_TAG"
-        git reset --hard "origin/$INSTALL_TAG"
+        git fetch origin "tag" "$INSTALL_TAG"
+        git reset --hard "$INSTALL_TAG"
     else
         rm -rf "$INSTALL_DIR"
         git clone --depth 1 --branch "$INSTALL_TAG" "$REPO_URL" "$INSTALL_DIR" || {
