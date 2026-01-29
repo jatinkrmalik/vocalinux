@@ -18,7 +18,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
-from ..utils.vosk_model_info import VOSK_MODEL_INFO
+from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -125,8 +125,9 @@ def _is_vosk_model_downloaded(size: str, language: str) -> bool:
     if size not in VOSK_MODEL_INFO:
         return False
 
-    if language not in VOSK_MODEL_INFO[size]["languages"]:
-        language = "en-us"  # Fallback to en-us if language not found
+    # Auto-detect is not supported by VOSK, fall back to en-us
+    if language == "auto" or language not in VOSK_MODEL_INFO[size]["languages"]:
+        language = "en-us"
 
     model_name = VOSK_MODEL_INFO[size]["languages"][language]
 
@@ -391,6 +392,19 @@ class SettingsDialog(Gtk.Dialog):
         self.grid.attach(self.model_combo, 1, row, 1, 1)
         row += 1
 
+        # Language Selection
+        self.grid.attach(Gtk.Label(label="Language:", halign=Gtk.Align.START), 0, row, 1, 1)
+        self.language_combo = Gtk.ComboBoxText()
+        self.language_combo.set_tooltip_text("Select primary language for speech recognition")
+        self.grid.attach(self.language_combo, 1, row, 1, 1)
+        row += 1
+
+        # Language warning label (shown for auto/unsupported)
+        self.language_warning = Gtk.Label(label="", use_markup=True, halign=Gtk.Align.START)
+        self.language_warning.set_margin_bottom(5)
+        self.grid.attach(self.language_warning, 0, row, 2, 1)
+        row += 1
+
         # Model legend (applies to both engines)
         model_legend = Gtk.Label(
             label="<small>✓ = Downloaded  ↓ = Will download  ★ = Recommended</small>",
@@ -436,6 +450,9 @@ class SettingsDialog(Gtk.Dialog):
 
         # Add model change handler
         self.model_combo.connect("changed", self._on_model_changed)
+
+        # Add language change handler
+        self.language_combo.connect("changed", self._on_language_changed)
 
         # ==================== SEPARATOR ====================
         self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
@@ -554,6 +571,16 @@ class SettingsDialog(Gtk.Dialog):
 
         # Populate model options for the selected engine
         self._populate_model_options()
+
+        # Populate language options
+        self._populate_language_options()
+        # Set the current language from settings
+        if self.language:
+            if not self.language_combo.set_active_id(self.language):
+                # Fallback to auto if language not found
+                logger.warning(f"Language '{self.language}' not found in options, using auto")
+                self.language_combo.set_active_id("auto")
+                self.language = "auto"
 
         # Set non-dependent widgets directly
         self.vad_spin.set_value(self.current_vad)
@@ -697,6 +724,7 @@ class SettingsDialog(Gtk.Dialog):
     def _on_engine_changed(self, widget):
         """Handle changes in the selected engine."""
         self._populate_model_options()
+        self._populate_language_options()
         self._update_engine_specific_ui()
         self._update_whisper_info()
         self._auto_apply_settings()
@@ -718,6 +746,64 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_silence_changed(self, widget):
         """Handle changes in silence timeout."""
+        self._auto_apply_settings()
+
+    def _populate_language_options(self):
+        """Populate language dropdown with supported languages."""
+        self.language_combo.remove_all()
+        engine = self.engine_combo.get_active_text()
+        if not engine:
+            return
+
+        engine = engine.lower()
+
+        for lang_code, lang_info in SUPPORTED_LANGUAGES.items():
+            display_text = lang_info["name"]
+
+            # Add status indicators based on engine
+            if engine == "vosk":
+                has_model = lang_info["vosk"] is not None
+                if not has_model:
+                    display_text += " (Whisper only)"
+                else:
+                    is_downloaded = _is_vosk_model_downloaded("small", lang_code)
+                    display_text += " ✓" if is_downloaded else " ↓"
+            elif engine == "whisper" and lang_code == "auto":
+                display_text += " ⚠"
+
+            self.language_combo.append(lang_code, display_text)
+
+    def _on_language_changed(self, widget):
+        """Handle language selection change."""
+        lang_code = self.language_combo.get_active_id()
+        if not lang_code:
+            return
+
+        engine = self.engine_combo.get_active_text()
+        if not engine:
+            return
+
+        engine = engine.lower()
+        lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
+
+        # Update warning label based on language and engine
+        if lang_info.get("warning"):
+            self.language_warning.set_markup(
+                f"<span foreground='orange'>⚠ {lang_info['warning']}</span>"
+            )
+        elif engine == "vosk" and lang_info.get("vosk") is None:
+            self.language_warning.set_markup(
+                "<span foreground='orange'>⚠ This language requires Whisper engine</span>"
+            )
+        else:
+            self.language_warning.set_markup("")
+
+        # Update self.language for VOSK model download checks
+        self.language = lang_code
+
+        # Refresh model options to update download status indicators
+        self._populate_model_options()
+
         self._auto_apply_settings()
 
     def _auto_apply_settings(self):
@@ -926,11 +1012,15 @@ class SettingsDialog(Gtk.Dialog):
         engine_text = self.engine_combo.get_active_text()
         # Get model by ID (which is the capitalized name) not the display text
         model_id = self.model_combo.get_active_id()
+        # Get language by ID
+        language_id = self.language_combo.get_active_id()
 
         # Handle cases where combo boxes might be empty (shouldn't happen with defaults)
         engine = engine_text.lower() if engine_text else "vosk"
         # Extract model name from ID (which is the capitalized name like "Small")
         model_size = model_id.lower() if model_id else "small"
+        # Get language code (use "auto" as default)
+        language = language_id if language_id else "auto"
 
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
@@ -938,6 +1028,7 @@ class SettingsDialog(Gtk.Dialog):
         settings = {
             "engine": engine,
             "model_size": model_size,
+            "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
         }

@@ -33,8 +33,8 @@ def parse_arguments():
     parser.add_argument(
         "--language",
         type=str,
-        choices=["en-us", "fr", "de", "ru"],
-        help="Speech recognition language (en-us, fr, de, ru)",
+        choices=["auto", "en-us", "en-in", "hi", "es", "fr", "de", "it", "pt", "ru", "zh", "ja", "ko", "ar"],
+        help="Speech recognition language (auto for auto-detect, en-us, hi, es, fr, de, it, pt, ru, zh, etc.)",
     )
     parser.add_argument(
         "--engine",
