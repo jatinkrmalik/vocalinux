@@ -661,8 +661,8 @@ export default function HomePage() {
                 {/* Alternative install - CPU only */}
                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-blue-500/10 p-2 rounded-lg">
-                      <Cpu className="h-5 w-5 text-blue-500" />
+                    <div className="bg-cyan-500/10 p-2 rounded-lg">
+                      <Cpu className="h-5 w-5 text-cyan-500" />
                     </div>
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold">CPU-only Install</h3>
