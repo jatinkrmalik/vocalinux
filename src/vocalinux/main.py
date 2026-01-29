@@ -71,7 +71,8 @@ def check_dependencies():
     except (ImportError, ValueError):
         missing_deps.append(
             "GTK3 and AppIndicator3 (install with: sudo apt install "
-            "python3-gi gir1.2-appindicator3-0.1)"
+            "python3-gi gir1.2-appindicator3-0.1) "
+            "Note: On Debian 13+ use gir1.2-ayatana-appindicator3 instead"
         )
 
     if missing_deps:

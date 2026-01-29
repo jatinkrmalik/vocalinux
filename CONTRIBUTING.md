@@ -66,8 +66,14 @@ This will:
    # Ubuntu/Debian
    sudo apt update
    sudo apt install -y python3-pip python3-gi python3-gi-cairo \
-       gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev \
+       gir1.2-gtk-3.0 libgirepository1.0-dev \
        python3-dev portaudio19-dev python3-venv xdotool
+
+   # For appindicator (system tray icon):
+   # On older Ubuntu/Debian:
+   sudo apt install -y gir1.2-appindicator3-0.1
+   # On Debian 13+ (trixie) or newer:
+   sudo apt install -y gir1.2-ayatana-appindicator3
    ```
 
 3. **Set up Python environment:**
