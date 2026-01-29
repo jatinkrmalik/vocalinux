@@ -645,7 +645,8 @@ install_python_package() {
     # Function to verify package installation
     verify_package_installed() {
         local PKG_NAME="vocalinux"
-        python -c "import $PKG_NAME" 2>/dev/null
+        # Use venv python and set GI_TYPELIB_PATH for PyGObject
+        GI_TYPELIB_PATH=/usr/lib/girepository-1.0 "$VENV_DIR/bin/python" -c "import $PKG_NAME" 2>/dev/null
         return $?
     }
 
