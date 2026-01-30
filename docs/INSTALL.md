@@ -277,7 +277,7 @@ sudo apt install python3-gi python3-gi-cairo
 # For appindicator (system tray icon) - try one of these:
 sudo apt install gir1.2-appindicator3-0.1  # For older Debian/Ubuntu
 # OR
-sudo apt install gir1.2-ayatana-appindicator3  # For Debian 11+ or newer Ubuntu
+sudo apt install gir1.2-ayatanaappindicator3-0.1  # For Debian 13+ or newer Ubuntu
 
 # Recreate venv with system packages
 rm -rf venv

@@ -79,7 +79,7 @@ This will:
    # On older Ubuntu:
    sudo apt install -y gir1.2-appindicator3-0.1
    # On Debian 11, 12, & 13:
-   sudo apt install -y  gir1.2-ayatanaappindicator3-0.1
+   sudo apt install -y gir1.2-ayatanaappindicator3-0.1
    ```
 
 3. **Set up Python environment:**
