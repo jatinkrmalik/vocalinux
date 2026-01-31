@@ -1,0 +1,12 @@
+# Modern browsers for optimal bundle size and performance
+# Targets browsers with >0.2% market share, last 2 versions, and not dead
+> 0.2%
+last 2 versions
+not dead
+
+# Exclude very old browsers to reduce polyfill size
+# This saves ~12KB in bundle size by removing legacy browser support
+not ie 11
+not op_mini all
+not samsung 4
+not android 4
