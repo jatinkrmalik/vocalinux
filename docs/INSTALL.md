@@ -136,7 +136,7 @@ If you prefer manual installation or the automatic installer doesn't work:
 
 ### 1. Install System Dependencies
 
-**Ubuntu/Debian:**
+**Ubuntu:**
 ```bash
 sudo apt update
 sudo apt install -y \
@@ -147,9 +147,29 @@ sudo apt install -y \
     wget curl unzip
 
 # For appindicator (system tray icon):
-# - On older Ubuntu/Debian versions:
+# - On older Ubuntu versions:
 sudo apt install -y gir1.2-appindicator3-0.1
-# - On Debian 13+ (trixie) or newer Ubuntu versions:
+# - On newer Ubuntu versions:
+sudo apt install -y gir1.2-ayatanaappindicator3-0.1
+
+# For X11
+sudo apt install -y xdotool
+
+# For Wayland
+sudo apt install -y wtype
+```
+
+**Debian:**
+```bash
+sudo apt update
+sudo apt install -y \
+    python3-pip python3-venv python3-dev \
+    python3-gi python3-gi-cairo \
+    gir1.2-gtk-3.0 \
+    libgirepository-2.0-dev libcairo2-dev portaudio19-dev \
+    wget curl unzip
+
+# For appindicator (system tray icon):
 sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 
 # For X11
