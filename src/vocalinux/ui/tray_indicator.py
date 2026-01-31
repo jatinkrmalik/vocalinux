@@ -223,7 +223,7 @@ class TrayIndicator:
         """
         # Update the UI in the GTK main thread
         GLib.idle_add(self._update_ui, state)
-        
+
         # Update visual feedback indicator
         GLib.idle_add(self.visual_feedback.update_state, state)
 
@@ -370,7 +370,7 @@ class TrayIndicator:
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
-        
+
         # Clean up visual feedback indicator
         self.visual_feedback.cleanup()
 
