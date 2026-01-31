@@ -2,7 +2,7 @@
 Speech recognition manager module for Vocalinux.
 
 This module provides a unified interface to different speech recognition engines,
-currently supporting VOSK and Whisper.
+currently supporting VOSK, Whisper, and whisper.cpp (with Vulkan GPU acceleration).
 """
 
 import ctypes
@@ -17,6 +17,20 @@ from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from .command_processor import CommandProcessor
+
+# Import whisper.cpp integration (optional, will be None if not available)
+try:
+    from .whisper_cpp_integration import (
+        WhisperCppIntegration,
+        WhisperCppError,
+        get_whisper_cpp_integration,
+    )
+    WHISPER_CPP_AVAILABLE = True
+except ImportError:
+    WHISPER_CPP_AVAILABLE = False
+    WhisperCppIntegration = None
+    WhisperCppError = None
+    get_whisper_cpp_integration = None
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -230,7 +244,7 @@ class SpeechRecognitionManager:
     Manager class for speech recognition engines.
 
     This class provides a unified interface for working with different
-    speech recognition engines (VOSK and Whisper).
+    speech recognition engines (VOSK, Whisper, and whisper.cpp with Vulkan support).
     """
 
     def __init__(
@@ -258,6 +272,7 @@ class SpeechRecognitionManager:
         self.recognition_thread = None
         self.model = None
         self.recognizer = None  # Added for VOSK
+        self.whisper_cpp_integration = None  # For whisper.cpp engine
         self.command_processor = CommandProcessor()
         self.text_callbacks: List[Callable[[str], None]] = []
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
@@ -296,6 +311,8 @@ class SpeechRecognitionManager:
             self._init_vosk()
         elif engine == "whisper":
             self._init_whisper()
+        elif engine == "whisper.cpp":
+            self._init_whisper_cpp()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
 
@@ -416,6 +433,81 @@ class SpeechRecognitionManager:
             raise
         except Exception as e:
             logger.error(f"Failed to initialize Whisper engine: {e}")
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _init_whisper_cpp(self):
+        """Initialize the whisper.cpp speech recognition engine with Vulkan support."""
+        if not WHISPER_CPP_AVAILABLE:
+            logger.error(
+                "whisper.cpp is not available. "
+                "Please install whisper.cpp with Vulkan support. "
+                "See: https://github.com/ggerganov/whisper.cpp"
+            )
+            self.state = RecognitionState.ERROR
+            raise ImportError("whisper.cpp is not available")
+
+        try:
+            # Map Vocalinux model sizes to whisper.cpp model sizes
+            model_size_map = {
+                "tiny": "base",  # whisper.cpp tiny is very small, use base as equivalent
+                "small": "small",
+                "medium": "medium",
+                "large": "large-v3",
+            }
+            cpp_model_size = model_size_map.get(self.model_size, "base")
+
+            # Check if GGML model exists
+            whisper_cpp_dir = os.path.join(MODELS_DIR, "whisper_cpp")
+            os.makedirs(whisper_cpp_dir, exist_ok=True)
+            
+            ggml_model_file = os.path.join(whisper_cpp_dir, f"ggml-{cpp_model_size}.bin")
+            
+            if not os.path.exists(ggml_model_file) and self._defer_download:
+                logger.info(
+                    f"whisper.cpp model not found at {ggml_model_file}. "
+                    "Will download when needed."
+                )
+                self._model_initialized = False
+                return
+
+            # Normalize language for whisper.cpp
+            lang = "en" if self.language == "en-us" else self.language
+            if lang == "auto":
+                lang = "en"  # Default to English for auto
+
+            # Initialize whisper.cpp integration
+            prefer_gpu = True  # Try Vulkan first, fallback to CPU
+            n_threads = 4
+            
+            logger.info(f"Initializing whisper.cpp with model: {cpp_model_size}, language: {lang}")
+            
+            self.whisper_cpp_integration = get_whisper_cpp_integration(
+                model_size=cpp_model_size,
+                language=lang,
+                prefer_gpu=prefer_gpu,
+                n_threads=n_threads,
+                verbose=self._defer_download is False,  # Verbose if not deferring
+            )
+
+            # Log backend info
+            backend_info = self.whisper_cpp_integration.get_backend_info()
+            gpu_accelerated = self.whisper_cpp_integration.is_gpu_accelerated()
+            
+            logger.info(
+                f"whisper.cpp initialized successfully. "
+                f"Backend: {backend_info.get('backend', 'unknown')}, "
+                f"GPU accelerated: {gpu_accelerated}"
+            )
+            
+            self._model_initialized = True
+
+        except WhisperCppError as e:
+            logger.error(f"Failed to initialize whisper.cpp: {e}")
+            self.state = RecognitionState.ERROR
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error initializing whisper.cpp: {e}", exc_info=True)
             self.state = RecognitionState.ERROR
             raise
 
@@ -863,6 +955,8 @@ class SpeechRecognitionManager:
     @property
     def model_ready(self) -> bool:
         """Check if the model is initialized and ready for recognition."""
+        if self.engine == "whisper.cpp":
+            return self._model_initialized and self.whisper_cpp_integration is not None
         return self._model_initialized and self.model is not None
 
     def start_recognition(self):
@@ -1116,7 +1210,12 @@ class SpeechRecognitionManager:
 
         elif self.engine == "whisper":
             text = self._transcribe_with_whisper(self.audio_buffer)
-
+        elif self.engine == "whisper.cpp":
+            if self.whisper_cpp_integration:
+                text = self.whisper_cpp_integration.transcribe(self.audio_buffer)
+            else:
+                logger.error("whisper.cpp integration not initialized")
+                return
         else:
             logger.error(f"Unknown engine: {self.engine}")
             return
@@ -1210,6 +1309,8 @@ class SpeechRecognitionManager:
                     self._init_vosk()
                 elif self.engine == "whisper":
                     self._init_whisper()
+                elif self.engine == "whisper.cpp":
+                    self._init_whisper_cpp()
                 else:
                     raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                 logger.info("Speech engine re-initialized successfully.")
