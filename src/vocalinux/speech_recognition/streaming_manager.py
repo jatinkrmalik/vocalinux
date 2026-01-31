@@ -33,7 +33,7 @@ SYSTEM_MODELS_DIRS = [
 class StreamingRecognitionManager:
     """
     Enhanced speech recognition manager with streaming support.
-    
+
     This manager provides both traditional batch processing and real-time
     streaming capabilities with configurable latency preferences.
     """
@@ -50,7 +50,7 @@ class StreamingRecognitionManager:
         silence_timeout: float = 1.0,
         min_speech_duration_ms: int = 250,
         defer_download: bool = True,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize the streaming recognition manager.
@@ -77,40 +77,40 @@ class StreamingRecognitionManager:
         self.silence_timeout = silence_timeout
         self.min_speech_duration_ms = min_speech_duration_ms
         self.defer_download = defer_download
-        
+
         # State management
         self.state = RecognitionState.IDLE
         self.is_streaming = False
-        
+
         # Model initialization
         self.model = None
         self._model_initialized = False
-        
+
         # Callbacks
         self.text_callbacks: List[Callable[[str], None]] = []
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
         self.action_callbacks: List[Callable[[str], None]] = []
-        
+
         # Processing components
         self.command_processor = CommandProcessor()
         self.streaming_recognizer = None
         self.audio_thread = None
-        
+
         # Performance tracking
         self.performance_stats = {
             "total_processing_time": 0.0,
             "total_audio_chunks": 0,
             "average_latency_ms": 0.0,
-            "streaming_mode": enable_streaming
+            "streaming_mode": enable_streaming,
         }
-        
+
         # Audio device
         self.audio_device_index = kwargs.get("audio_device_index", None)
-        
+
         # Initialize the streaming recognizer if enabled
         if self.enable_streaming:
             self._init_streaming_recognizer()
-        
+
         logger.info(
             f"Initialized streaming recognition manager: {engine} engine, "
             f"streaming={enable_streaming}, chunk_size={streaming_chunk_size}"
@@ -121,7 +121,7 @@ class StreamingRecognitionManager:
         try:
             # Convert VAD sensitivity to threshold (0.0-1.0)
             vad_threshold = max(0.1, min(0.9, self.vad_sensitivity / 5.0))
-            
+
             self.streaming_recognizer = StreamingSpeechRecognizer(
                 engine=self.engine,
                 model_size=self.model_size,
@@ -130,22 +130,16 @@ class StreamingRecognitionManager:
                 vad_enabled=self.vad_enabled,
                 vad_threshold=vad_threshold,
                 min_speech_duration_ms=self.min_speech_duration_ms,
-                silence_timeout_ms=int(self.silence_timeout * 1000)
+                silence_timeout_ms=int(self.silence_timeout * 1000),
             )
-            
+
             # Register callbacks
-            self.streaming_recognizer.register_partial_result_callback(
-                self._on_partial_result
-            )
-            self.streaming_recognizer.register_final_result_callback(
-                self._on_final_result
-            )
-            self.streaming_recognizer.register_error_callback(
-                self._on_streaming_error
-            )
-            
+            self.streaming_recognizer.register_partial_result_callback(self._on_partial_result)
+            self.streaming_recognizer.register_final_result_callback(self._on_final_result)
+            self.streaming_recognizer.register_error_callback(self._on_streaming_error)
+
             logger.info("Streaming recognizer initialized successfully")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize streaming recognizer: {e}")
             # Fall back to non-streaming mode
@@ -163,17 +157,17 @@ class StreamingRecognitionManager:
         """Handle final streaming results."""
         if not text:
             return
-            
+
         logger.debug(f"Final result: {text}")
-        
+
         # Process commands in the recognized text
         processed_text, actions = self.command_processor.process_text(text)
-        
+
         # Call text callbacks with processed text
         if processed_text:
             for callback in self.text_callbacks:
                 callback(processed_text)
-        
+
         # Call action callbacks for each action
         for action in actions:
             for callback in self.action_callbacks:
@@ -217,12 +211,12 @@ class StreamingRecognitionManager:
             # Start streaming recognition
             self.is_streaming = True
             self.streaming_recognizer.start_streaming()
-            
+
             # Start audio recording thread
             self.audio_thread = threading.Thread(target=self._record_audio_streaming)
             self.audio_thread.daemon = True
             self.audio_thread.start()
-            
+
             logger.info("Started streaming speech recognition")
         else:
             # Fall back to batch processing
@@ -277,14 +271,14 @@ class StreamingRecognitionManager:
             while self.is_streaming:
                 try:
                     data = stream.read(CHUNK, exception_on_overflow=False)
-                    
+
                     # Process chunk through streaming recognizer
                     if self.streaming_recognizer:
                         self.streaming_recognizer.process_audio_chunk(data)
-                        
+
                         # Update performance stats
                         self.performance_stats["total_audio_chunks"] += 1
-                        
+
                 except Exception as e:
                     logger.error(f"Error reading audio: {e}")
                     break
@@ -293,7 +287,7 @@ class StreamingRecognitionManager:
             stream.stop_stream()
             stream.close()
             audio.terminate()
-            
+
             logger.info("Audio recording stopped")
 
         except Exception as e:
@@ -306,7 +300,7 @@ class StreamingRecognitionManager:
         # Import the original recognition manager for batch processing
         try:
             from .recognition_manager import SpeechRecognitionManager
-            
+
             # Create batch manager as fallback
             self.batch_manager = SpeechRecognitionManager(
                 engine=self.engine,
@@ -315,9 +309,9 @@ class StreamingRecognitionManager:
                 defer_download=self.defer_download,
                 vad_sensitivity=self.vad_sensitivity,
                 silence_timeout=self.silence_timeout,
-                audio_device_index=self.audio_device_index
+                audio_device_index=self.audio_device_index,
             )
-            
+
             # Transfer callbacks to batch manager
             for callback in self.text_callbacks:
                 self.batch_manager.register_text_callback(callback)
@@ -325,10 +319,10 @@ class StreamingRecognitionManager:
                 self.batch_manager.register_state_callback(callback)
             for callback in self.action_callbacks:
                 self.batch_manager.register_action_callback(callback)
-            
+
             # Start batch recognition
             self.batch_manager.start_recognition()
-            
+
         except Exception as e:
             logger.error(f"Failed to start batch recognition: {e}")
             self._update_state(RecognitionState.ERROR)
@@ -346,12 +340,12 @@ class StreamingRecognitionManager:
             # Stop streaming recognition
             self.is_streaming = False
             self.streaming_recognizer.stop_streaming()
-            
+
             # Wait for audio thread to finish
             if self.audio_thread and self.audio_thread.is_alive():
                 self.audio_thread.join(timeout=1.0)
-                
-        elif hasattr(self, 'batch_manager') and self.batch_manager:
+
+        elif hasattr(self, "batch_manager") and self.batch_manager:
             # Stop batch recognition
             self.batch_manager.stop_recognition()
 
@@ -370,11 +364,11 @@ class StreamingRecognitionManager:
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get performance statistics."""
         base_stats = self.performance_stats.copy()
-        
+
         if self.streaming_recognizer:
             streaming_stats = self.streaming_recognizer.get_statistics()
             base_stats.update(streaming_stats)
-        
+
         return base_stats
 
     def is_streaming_enabled(self) -> bool:
@@ -390,7 +384,7 @@ class StreamingRecognitionManager:
         vad_sensitivity: Optional[int] = None,
         silence_timeout: Optional[float] = None,
         audio_device_index: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Reconfigure the recognition manager.
@@ -405,30 +399,30 @@ class StreamingRecognitionManager:
             audio_device_index: Audio device index
         """
         logger.info(f"Reconfiguring recognition manager")
-        
+
         # Update configuration
         if engine is not None and engine != self.engine:
             self.engine = engine
             self._reinitialize_needed = True
-            
+
         if model_size is not None and model_size != self.model_size:
             self.model_size = model_size
             self._reinitialize_needed = True
-            
+
         if language is not None and language != self.language:
             self.language = language
             self._reinitialize_needed = True
-            
+
         if enable_streaming is not None and enable_streaming != self.enable_streaming:
             self.enable_streaming = enable_streaming
             self._reinitialize_needed = True
-            
+
         if vad_sensitivity is not None:
             self.vad_sensitivity = max(1, min(5, int(vad_sensitivity)))
-            
+
         if silence_timeout is not None:
             self.silence_timeout = max(0.5, min(5.0, float(silence_timeout)))
-            
+
         if audio_device_index is not None:
             if audio_device_index == -1:
                 self.audio_device_index = None
@@ -436,18 +430,18 @@ class StreamingRecognitionManager:
                 self.audio_device_index = audio_device_index
 
         # Reinitialize if needed
-        if hasattr(self, '_reinitialize_needed') and self._reinitialize_needed:
+        if hasattr(self, "_reinitialize_needed") and self._reinitialize_needed:
             logger.info("Reinitializing recognition manager")
-            
+
             # Clean up existing components
             if self.streaming_recognizer:
                 self.streaming_recognizer.stop_streaming()
                 self.streaming_recognizer = None
-                
+
             # Reinitialize streaming recognizer if enabled
             if self.enable_streaming:
                 self._init_streaming_recognizer()
-                
-            delattr(self, '_reinitialize_needed')
-            
+
+            delattr(self, "_reinitialize_needed")
+
         logger.info("Recognition manager reconfigured")

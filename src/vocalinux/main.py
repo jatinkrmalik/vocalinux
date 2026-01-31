@@ -179,12 +179,13 @@ def main():
             "silence_timeout": saved_settings.get("streaming_silence_timeout_ms", 1000) / 1000.0,
             "min_speech_duration_ms": saved_settings.get("streaming_min_speech_duration_ms", 250),
         }
-        
+
         # Initialize speech recognition engine with saved/configured settings
         if streaming_enabled:
             try:
                 # Try to use streaming manager for lower latency
                 from .speech_recognition.streaming_manager import StreamingRecognitionManager
+
                 speech_engine = StreamingRecognitionManager(
                     engine=engine,
                     model_size=model_size,
@@ -199,7 +200,9 @@ def main():
                 )
                 logger.info("✓ Initialized with streaming recognition for lower latency")
             except Exception as e:
-                logger.warning(f"Streaming initialization failed ({e}), falling back to batch processing")
+                logger.warning(
+                    f"Streaming initialization failed ({e}), falling back to batch processing"
+                )
                 # Fall back to traditional batch processing
                 speech_engine = recognition_manager.SpeechRecognitionManager(
                     engine=engine,

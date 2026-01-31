@@ -11,10 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 # Mock vosk module for streaming tests
 class MockModel:
     def __init__(self, path):
         pass
+
 
 class MockKaldiRecognizer:
     def __init__(self, model, rate):
@@ -22,36 +24,40 @@ class MockKaldiRecognizer:
         self.rate = rate
         self.partial_count = 0
         self.final_count = 0
-    
+
     def AcceptWaveform(self, data):
         self.final_count += 1
         return self.final_count > 2  # Return True after a few chunks
-    
+
     def FinalResult(self):
         return '{"text": "streaming transcription"}'
-    
+
     def PartialResult(self):
         self.partial_count += 1
         partial_texts = ["str", "stream", "streaming", "streaming trans", "streaming transcription"]
         if self.partial_count <= len(partial_texts):
             return f'{{"partial": "{partial_texts[self.partial_count - 1]}"}}'
         return '{"partial": ""}'
-    
+
     def SetWords(self, enabled):
         pass
+
 
 class MockVoskModule:
     Model = MockModel
     KaldiRecognizer = MockKaldiRecognizer
+
 
 # Mock whisper module
 class MockWhisperModel:
     def transcribe(self, audio_data, **kwargs):
         return {"text": "whisper streaming result"}
 
+
 class MockWhisperModule:
     def load_model(self, model_size, **kwargs):
         return MockWhisperModel()
+
 
 # Mock torch for VAD
 class MockTorchModule:
@@ -59,14 +65,16 @@ class MockTorchModule:
         @staticmethod
         def is_available():
             return False
-    
+
     @staticmethod
     def hub():
         class Hub:
             @staticmethod
             def load(*args, **kwargs):
                 return MagicMock()
+
         return Hub()
+
 
 # Mock audio modules
 sys.modules["vosk"] = MockVoskModule()
@@ -101,7 +109,7 @@ class TestStreamingSpeechRecognizer(unittest.TestCase):
             sample_rate=16000,
             vad_enabled=False,  # Disable VAD for simpler testing
             min_speech_duration_ms=100,
-            silence_timeout_ms=500
+            silence_timeout_ms=500,
         )
 
     def tearDown(self):
@@ -159,7 +167,7 @@ class TestStreamingSpeechRecognizer(unittest.TestCase):
 
         # Process some audio chunks
         audio_chunk = b"test_audio_data" * 32  # Make it large enough
-        
+
         # Process several chunks to trigger both partial and final results
         for _ in range(5):
             self.recognizer.process_audio_chunk(audio_chunk)
@@ -184,7 +192,7 @@ class TestStreamingSpeechRecognizer(unittest.TestCase):
             language="en",
             vad_enabled=False,  # Disable VAD for simpler testing
             min_speech_duration_ms=50,
-            silence_timeout_ms=200
+            silence_timeout_ms=200,
         )
 
         final_callback = MagicMock()
@@ -195,7 +203,7 @@ class TestStreamingSpeechRecognizer(unittest.TestCase):
 
         # Process audio chunks
         audio_chunk = b"whisper_audio_data" * 32
-        
+
         for _ in range(3):
             whisper_recognizer.process_audio_chunk(audio_chunk)
             time.sleep(0.01)
@@ -235,7 +243,7 @@ class TestStreamingSpeechRecognizer(unittest.TestCase):
 
         # Start streaming and process some chunks
         self.recognizer.start_streaming()
-        
+
         audio_chunk = b"stats_test_data" * 16
         for _ in range(3):
             self.recognizer.process_audio_chunk(audio_chunk)
@@ -267,7 +275,7 @@ class TestStreamingRecognitionManager(unittest.TestCase):
             enable_streaming=True,
             streaming_chunk_size=1024,
             vad_enabled=False,
-            defer_download=True
+            defer_download=True,
         )
 
     def tearDown(self):
@@ -287,10 +295,7 @@ class TestStreamingRecognitionManager(unittest.TestCase):
         self.assertTrue(self.manager.is_streaming_enabled())
 
         # Test with streaming disabled
-        manager_no_streaming = StreamingRecognitionManager(
-            engine="vosk",
-            enable_streaming=False
-        )
+        manager_no_streaming = StreamingRecognitionManager(engine="vosk", enable_streaming=False)
         self.assertFalse(manager_no_streaming.is_streaming_enabled())
 
     def test_callback_registration(self):
@@ -311,7 +316,7 @@ class TestStreamingRecognitionManager(unittest.TestCase):
     def test_start_stop_recognition(self):
         """Test starting and stopping recognition."""
         # Mock the audio thread to avoid actual audio recording
-        with patch.object(self.manager, '_record_audio_streaming') as mock_record:
+        with patch.object(self.manager, "_record_audio_streaming") as mock_record:
             # Start recognition
             self.manager.start_recognition()
             self.assertEqual(self.manager.state, RecognitionState.LISTENING)
@@ -325,13 +330,13 @@ class TestStreamingRecognitionManager(unittest.TestCase):
     def test_performance_stats(self):
         """Test getting performance statistics."""
         stats = self.manager.get_performance_stats()
-        
+
         # Check that basic stats are present
         self.assertIn("total_processing_time", stats)
         self.assertIn("total_audio_chunks", stats)
         self.assertIn("average_latency_ms", stats)
         self.assertIn("streaming_mode", stats)
-        
+
         # Verify streaming mode is enabled
         self.assertTrue(stats["streaming_mode"])
 
@@ -342,11 +347,7 @@ class TestStreamingRecognitionManager(unittest.TestCase):
         self.assertEqual(self.manager.silence_timeout, 1.0)
 
         # Reconfigure
-        self.manager.reconfigure(
-            vad_sensitivity=2,
-            silence_timeout=2.0,
-            audio_device_index=1
-        )
+        self.manager.reconfigure(vad_sensitivity=2, silence_timeout=2.0, audio_device_index=1)
 
         # Verify changes
         self.assertEqual(self.manager.vad_sensitivity, 2)
@@ -366,15 +367,12 @@ class TestStreamingRecognitionManager(unittest.TestCase):
     def test_batch_fallback(self):
         """Test fallback to batch processing when streaming fails."""
         # Create a manager that will fail to initialize streaming
-        with patch.object(StreamingRecognitionManager, '_init_streaming_recognizer') as mock_init:
+        with patch.object(StreamingRecognitionManager, "_init_streaming_recognizer") as mock_init:
             mock_init.side_effect = Exception("Streaming initialization failed")
-            
+
             # This should fall back to non-streaming mode
-            manager = StreamingRecognitionManager(
-                engine="vosk",
-                enable_streaming=True
-            )
-            
+            manager = StreamingRecognitionManager(engine="vosk", enable_streaming=True)
+
             # Should have disabled streaming
             self.assertFalse(manager.enable_streaming)
             self.assertIsNone(manager.streaming_recognizer)
@@ -398,28 +396,29 @@ class TestStreamingIntegration(unittest.TestCase):
         manager = StreamingRecognitionManager(
             engine="vosk",
             enable_streaming=True,
-            vad_enabled=False  # Disable VAD for predictable testing
+            vad_enabled=False,  # Disable VAD for predictable testing
         )
 
         # Set up callbacks to capture results
         results = []
+
         def capture_text(text):
             results.append(text)
 
         manager.register_text_callback(capture_text)
 
         # Mock the recording to avoid actual audio I/O
-        with patch.object(manager, '_record_audio_streaming') as mock_record:
+        with patch.object(manager, "_record_audio_streaming") as mock_record:
             # Start recognition
             manager.start_recognition()
-            
+
             # Simulate some audio processing by directly calling the streaming recognizer
             if manager.streaming_recognizer:
                 audio_chunk = b"end_to_end_test" * 16
                 for _ in range(3):
                     manager.streaming_recognizer.process_audio_chunk(audio_chunk)
                     time.sleep(0.01)
-            
+
             # Stop recognition
             manager.stop_recognition()
 
@@ -430,18 +429,18 @@ class TestStreamingIntegration(unittest.TestCase):
         """Test that streaming provides lower latency than batch processing."""
         # This is a conceptual test - in practice, latency would depend on
         # actual audio processing timing
-        
+
         # Create streaming manager
         streaming_manager = StreamingRecognitionManager(
             engine="vosk",
             enable_streaming=True,
             streaming_chunk_size=512,  # Smaller chunks for lower latency
-            vad_enabled=False
+            vad_enabled=False,
         )
 
         # Get initial stats
         initial_stats = streaming_manager.get_performance_stats()
-        
+
         # The key metric is that streaming mode is enabled
         self.assertTrue(initial_stats["streaming_mode"])
         self.assertEqual(streaming_manager.streaming_chunk_size, 512)
