@@ -460,9 +460,9 @@ class SpeechRecognitionManager:
             # Check if GGML model exists
             whisper_cpp_dir = os.path.join(MODELS_DIR, "whisper_cpp")
             os.makedirs(whisper_cpp_dir, exist_ok=True)
-            
+
             ggml_model_file = os.path.join(whisper_cpp_dir, f"ggml-{cpp_model_size}.bin")
-            
+
             if not os.path.exists(ggml_model_file) and self._defer_download:
                 logger.info(
                     f"whisper.cpp model not found at {ggml_model_file}. "
@@ -479,9 +479,9 @@ class SpeechRecognitionManager:
             # Initialize whisper.cpp integration
             prefer_gpu = True  # Try Vulkan first, fallback to CPU
             n_threads = 4
-            
+
             logger.info(f"Initializing whisper.cpp with model: {cpp_model_size}, language: {lang}")
-            
+
             self.whisper_cpp_integration = get_whisper_cpp_integration(
                 model_size=cpp_model_size,
                 language=lang,
@@ -493,13 +493,13 @@ class SpeechRecognitionManager:
             # Log backend info
             backend_info = self.whisper_cpp_integration.get_backend_info()
             gpu_accelerated = self.whisper_cpp_integration.is_gpu_accelerated()
-            
+
             logger.info(
                 f"whisper.cpp initialized successfully. "
                 f"Backend: {backend_info.get('backend', 'unknown')}, "
                 f"GPU accelerated: {gpu_accelerated}"
             )
-            
+
             self._model_initialized = True
 
         except WhisperCppError as e:
