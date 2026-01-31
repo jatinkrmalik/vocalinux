@@ -15,10 +15,41 @@ import threading
 import time
 from typing import Callable, List, Optional
 
-from ..common_types import RecognitionState
-from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
-from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from .command_processor import CommandProcessor
+# Import local modules with fallbacks for standalone testing
+try:
+    from ..common_types import RecognitionState
+    from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
+    from ..utils.vosk_model_info import VOSK_MODEL_INFO
+    from .command_processor import CommandProcessor
+except ImportError:
+    # Fallback for standalone testing
+    class RecognitionState:
+        IDLE = "idle"
+        LISTENING = "listening"
+        PROCESSING = "processing"
+        ERROR = "error"
+    
+    class MockAudioFeedback:
+        @staticmethod
+        def play_error_sound(): pass
+        @staticmethod 
+        def play_start_sound(): pass
+        @staticmethod
+        def play_stop_sound(): pass
+    
+    play_error_sound = MockAudioFeedback.play_error_sound
+    play_start_sound = MockAudioFeedback.play_start_sound
+    play_stop_sound = MockAudioFeedback.play_stop_sound
+    
+    VOSK_MODEL_INFO = {
+        "small": {"languages": {"en-us": "vosk-model-small-en-us-0.15"}},
+        "medium": {"languages": {"en-us": "vosk-model-medium-en-us-0.15"}},
+        "large": {"languages": {"en-us": "vosk-model-large-en-us-0.15"}},
+    }
+    
+    class CommandProcessor:
+        def process_text(self, text):
+            return text, []
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -241,7 +272,6 @@ class SpeechRecognitionManager:
         engine: str = "vosk",
         model_size: str = "small",
         language: str = "en-us",
-        defer_download: bool = True,
         **kwargs,
     ):
         """
@@ -251,7 +281,6 @@ class SpeechRecognitionManager:
             engine: The speech recognition engine to use ("vosk" or "whisper")
             model_size: The size of the model to use ("small", "medium", "large")
             language: The language code (e.g., "en-us", "hi", "auto")
-            defer_download: If True, don't download missing models at startup (default: True)
             audio_device_index: Optional audio input device index (None for default)
         """
         self.engine = engine
@@ -270,7 +299,6 @@ class SpeechRecognitionManager:
         # Download progress tracking
         self._download_progress_callback: Optional[Callable[[float, float, str], None]] = None
         self._download_cancelled = False
-        self._defer_download = defer_download
         self._model_initialized = False
 
         # Speech detection parameters (load defaults, will be overridden by configure)
@@ -447,18 +475,6 @@ class SpeechRecognitionManager:
         except Exception as e:
             logger.error(f"Failed to initialize Whisper engine: {e}")
             raise
-
-    def _init_vosk(self):
-        """Initialize the VOSK speech recognition engine (legacy compatibility)."""
-        # For lazy loading, this is now a no-op - models are loaded on demand
-        logger.info("VOSK initialization deferred (lazy loading)")
-        pass
-
-    def _init_whisper(self):
-        """Initialize the Whisper speech recognition engine (legacy compatibility)."""
-        # For lazy loading, this is now a no-op - models are loaded on demand
-        logger.info("Whisper initialization deferred (lazy loading)")
-        pass
 
     def _transcribe_with_whisper(self, audio_buffer: List[bytes]) -> str:
         """
@@ -915,24 +931,8 @@ class SpeechRecognitionManager:
         # LAZY LOADING: Load model only when starting recognition
         if not self.model_ready:
             logger.info("Model not loaded - loading on demand (lazy loading)")
-            
-            # Show loading notification
-            _show_notification(
-                "Preparing Speech Recognition",
-                f"Loading {self.engine} {self.model_size} model...",
-                "document-open"
-            )
-            
             try:
                 self._ensure_model_loaded()
-                
-                # Show success notification
-                _show_notification(
-                    "Speech Recognition Ready",
-                    f"{self.engine.title()} model loaded successfully",
-                    "dialog-ok"
-                )
-                
             except Exception as e:
                 logger.error(f"Failed to load model for recognition: {e}")
                 play_error_sound()
