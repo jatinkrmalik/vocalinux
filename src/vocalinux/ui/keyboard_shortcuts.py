@@ -85,10 +85,33 @@ class KeyboardShortcutManager:
             logger.warning("2. Add your user to the 'input' group:")
             logger.warning("   sudo usermod -a -G input $USER")
             logger.warning("3. Log out and log back in")
+            logger.warning("")
+            logger.warning("SECURITY NOTE: evdev requires access to keyboard devices.")
+            logger.warning("Only proceed if you trust this application.")
+            logger.warning("=" * 60)
+        elif env == DesktopEnvironment.X11:
+            logger.warning("=" * 60)
+            logger.warning("Keyboard shortcuts not available on X11")
+            logger.warning("=" * 60)
+            logger.warning("To enable keyboard shortcuts on X11:")
+            logger.warning("1. Install pynput (preferred):")
+            logger.warning("   pip install pynput")
+            logger.warning("2. OR install evdev (alternative):")
+            logger.warning("   pip install evdev")
+            logger.warning("   sudo usermod -a -G input $USER")
+            logger.warning("")
+            logger.warning("NOTE: pynput is recommended for X11 as it's more secure")
             logger.warning("=" * 60)
         else:
-            logger.warning("Keyboard shortcuts require pynput or evdev:")
-            logger.warning("  pip install pynput evdev")
+            logger.warning("=" * 60)
+            logger.warning("Could not detect desktop environment")
+            logger.warning("=" * 60)
+            logger.warning("To enable keyboard shortcuts:")
+            logger.warning("1. For X11: pip install pynput")
+            logger.warning("2. For Wayland: pip install evdev && sudo usermod -a -G input $USER")
+            logger.warning("3. Set WAYLAND_DISPLAY or DISPLAY environment variable")
+            logger.warning("   if automatic detection fails")
+            logger.warning("=" * 60)
 
     def start(self) -> bool:
         """
@@ -146,6 +169,37 @@ class KeyboardShortcutManager:
         if self.backend_instance and hasattr(self.backend_instance, "listener"):
             return self.backend_instance.listener
         return None
+
+    def get_status_info(self) -> dict:
+        """
+        Get detailed status information about the keyboard shortcut system.
+
+        Returns:
+            Dictionary with status information
+        """
+        env = DesktopEnvironment.detect()
+        
+        info = {
+            "environment": env,
+            "backend_available": self.backend_instance is not None,
+            "active": self.active,
+            "backend_type": None,
+            "evdev_available": EVDEV_AVAILABLE,
+            "pynput_available": PYNPUT_AVAILABLE,
+            "permission_hint": None
+        }
+        
+        if self.backend_instance:
+            if hasattr(self.backend_instance, 'evdev'):
+                info["backend_type"] = "evdev"
+            elif hasattr(self.backend_instance, 'pynput'):
+                info["backend_type"] = "pynput"
+            else:
+                info["backend_type"] = "unknown"
+            
+            info["permission_hint"] = self.backend_instance.get_permission_hint()
+        
+        return info
 
 
 # For backward compatibility with tests

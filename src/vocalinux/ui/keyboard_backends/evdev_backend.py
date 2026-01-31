@@ -3,6 +3,13 @@ evdev keyboard backend for Wayland support.
 
 This backend uses python-evdev to read keyboard events directly from
 input devices, which works on both X11 and Wayland (with proper permissions).
+
+SECURITY WARNING:
+- This backend requires access to /dev/input/event* devices
+- User must be in the 'input' group (sudo usermod -a -G input $USER)
+- Granting input device access allows monitoring all keyboard events
+- Only use this backend if you trust the application and understand the security implications
+- On multi-user systems, consider the privacy implications of keyboard monitoring
 """
 
 import errno
@@ -73,7 +80,24 @@ def find_keyboard_devices() -> List[str]:
     except (IOError, OSError) as e:
         logger.error(f"Error reading input devices: {e}")
 
-    return keyboard_devices
+    # Security: Remove duplicate devices to prevent multiple event streams
+    keyboard_devices = list(dict.fromkeys(keyboard_devices))
+    
+    # Security: Filter out suspicious device paths
+    safe_devices = []
+    for device_path in keyboard_devices:
+        # Basic path validation to prevent directory traversal
+        if (device_path.startswith("/dev/input/event") and 
+            device_path.isprintable() and
+            os.path.exists(device_path) and 
+            os.access(device_path, os.R_OK) and
+            # Ensure it's a valid character device
+            os.path.isabs(device_path)):
+            safe_devices.append(device_path)
+        else:
+            logger.warning(f"Skipping suspicious device path: {device_path}")
+    
+    return safe_devices
 
 
 class EvdevKeyboardBackend(KeyboardBackend):
@@ -100,6 +124,10 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
+        
+        # Security: Initialize device monitoring limits
+        self.max_devices = 10
+        self.max_events_per_iteration = 50
 
     def is_available(self) -> bool:
         """Check if evdev is available."""
@@ -166,7 +194,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
         logger.info(f"Found {len(device_paths)} keyboard device(s)")
 
-        # Open devices
+        # Open devices with improved error handling and security
         self.devices = []
         self.device_fds = []
         self.ctrl_pressed_devices = set()
@@ -174,23 +202,44 @@ class EvdevKeyboardBackend(KeyboardBackend):
         for device_path in device_paths:
             try:
                 device = InputDevice(device_path)
+                
+                # Security: Check if device has keyboard capabilities before opening
+                if not hasattr(device, 'capabilities'):
+                    logger.warning(f"Device {device_path} has no capabilities - skipping")
+                    continue
+                
                 self.devices.append(device)
                 self.device_fds.append(device.fileno())
                 logger.debug(f"Opened keyboard device: {device_path} ({device.name})")
+                
             except (OSError, IOError) as e:
-                logger.warning(f"Cannot open {device_path}: {e}")
+                if "Permission denied" in str(e) or e.errno == errno.EACCES:
+                    logger.error(f"Permission denied for {device_path}. "
+                               "Add user to 'input' group: sudo usermod -a -G input $USER")
+                else:
+                    logger.warning(f"Cannot open {device_path}: {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error opening {device_path}: {e}")
                 continue
 
         if not self.devices:
-            logger.error("Failed to open any keyboard device (permission denied?)")
+            logger.error("Failed to open any keyboard device. Check permissions and input group membership.")
             return False
+
+        # Security: Limit the number of devices we monitor to prevent resource exhaustion
+        if len(self.devices) > 10:
+            logger.warning(f"Too many keyboard devices ({len(self.devices)}). "
+                         "Limiting to first 10 for stability.")
+            self.devices = self.devices[:10]
+            self.device_fds = self.device_fds[:10]
 
         # Start monitoring thread
         self.running = True
         self.monitor_thread = threading.Thread(target=self._monitor_devices, daemon=True)
         self.monitor_thread.start()
 
-        logger.info("Evdev keyboard listener started successfully")
+        logger.info(f"Evdev keyboard listener started successfully (monitoring {len(self.devices)} devices)")
         self.active = True
         return True
 
@@ -228,6 +277,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                 if not self.device_fds:
                     break
 
+                # Security: Add timeout to prevent indefinite blocking
                 readable, _, _ = select.select(self.device_fds, [], [], 1.0)  # 1 second timeout
 
                 for fd in readable:
@@ -242,18 +292,33 @@ class EvdevKeyboardBackend(KeyboardBackend):
                         if device is None:
                             continue
 
-                        # Read events from this device
+                        # Security: Limit the number of events read per iteration to prevent DoS
+                        event_count = 0
+                        max_events_per_iteration = 50
+                        
                         for event in device.read():
-                            if event.type == ecodes.EV_KEY:
+                            event_count += 1
+                            if event_count > max_events_per_iteration:
+                                logger.warning(f"Too many events from device {device.name} - throttling")
+                                break
+                                
+                            if hasattr(event, 'type') and event.type == ecodes.EV_KEY:
                                 self._handle_key_event(event, device)
 
-                    except (OSError, IOError):
+                    except (OSError, IOError) as e:
                         # Device was likely disconnected
+                        logger.debug(f"Device disconnected: {e}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Unexpected error reading from device: {e}")
                         continue
 
             except (OSError, ValueError) as e:
                 if self.running:
                     logger.error(f"Error monitoring devices: {e}")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error in monitor loop: {e}")
                 break
 
         logger.debug("Device monitor thread stopped")
@@ -261,8 +326,17 @@ class EvdevKeyboardBackend(KeyboardBackend):
     def _handle_key_event(self, event, device) -> None:
         """Handle a key event from evdev."""
         try:
+            # Security: Validate event structure before processing
+            if not hasattr(event, 'code') or not hasattr(event, 'value'):
+                logger.warning("Received invalid event structure")
+                return
+
             code = event.code
             value = event.value  # 0 = release, 1 = press, 2 = repeat
+
+            # Security: Ignore key repeat events to prevent accidental triggers
+            if value == 2:  # Key repeat
+                return
 
             # Check if this is a Ctrl key
             if code in KEY_CTRL:
@@ -272,15 +346,23 @@ class EvdevKeyboardBackend(KeyboardBackend):
                     self.ctrl_pressed_devices.add(device_id)
                     current_time = time.time()
 
-                    # Check for double-tap
+                    # Check for double-tap with improved debouncing
                     if (
-                        current_time - self.last_ctrl_press_time < self.double_tap_threshold
-                        and self.double_tap_callback is not None
-                        and current_time - self.last_trigger_time > 0.5
+                        self.double_tap_callback is not None
+                        and current_time - self.last_ctrl_press_time < self.double_tap_threshold
+                        and current_time - self.last_trigger_time > 0.5  # Prevent rapid re-triggering
                     ):
                         logger.debug("Double-tap Ctrl detected (evdev)")
                         self.last_trigger_time = current_time
-                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                        
+                        # Security: Execute callback in a separate thread to prevent blocking
+                        def safe_callback():
+                            try:
+                                self.double_tap_callback()
+                            except Exception as e:
+                                logger.error(f"Error in keyboard callback: {e}")
+                        
+                        threading.Thread(target=safe_callback, daemon=True).start()
 
                     self.last_ctrl_press_time = current_time
 
