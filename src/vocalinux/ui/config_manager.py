@@ -25,6 +25,11 @@ DEFAULT_CONFIG = {
         "whisper_model_size": "tiny",  # Default model for Whisper engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
+        "enable_streaming": True,  # Enable real-time streaming for lower latency
+        "streaming_chunk_size": 1024,  # Audio chunk size for streaming (bytes)
+        "streaming_vad_enabled": True,  # Enable Voice Activity Detection for streaming
+        "streaming_min_speech_duration_ms": 250,  # Minimum speech duration (ms)
+        "streaming_silence_timeout_ms": 1000,  # Silence timeout for streaming (ms)
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
