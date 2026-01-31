@@ -349,7 +349,7 @@ class SpeechRecognitionManager:
             return True  # Model already loaded
 
         logger.info("Loading model on demand (lazy loading)")
-        
+
         try:
             if self.engine == "vosk":
                 self._load_vosk_model()
@@ -371,6 +371,7 @@ class SpeechRecognitionManager:
         """Load VOSK model (called by lazy loader)."""
         try:
             from vosk import KaldiRecognizer, Model
+
             # Ensure Model is callable (class, not instance)
             if not callable(Model):
                 raise ImportError("VOSK Model is not callable")
@@ -389,7 +390,7 @@ class SpeechRecognitionManager:
                 logger.info(f"Using existing VOSK model from {self.vosk_model_path}")
 
             logger.info(f"Loading VOSK model from {self.vosk_model_path}")
-            
+
             # Load the model
             self.model = Model(self.vosk_model_path)
             self.recognizer = KaldiRecognizer(self.model, 16000)
@@ -409,7 +410,7 @@ class SpeechRecognitionManager:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 import torch
-            
+
             # Ensure whisper.load_model is callable
             if not callable(whisper.load_model):
                 raise ImportError("whisper.load_model is not callable")
@@ -432,7 +433,7 @@ class SpeechRecognitionManager:
             logger.info(f"Using device: {device}")
 
             logger.info(f"Loading Whisper '{self.model_size}' model...")
-            
+
             # Load model with device and custom cache directory
             self.model = whisper.load_model(
                 self.model_size, device=device, download_root=whisper_cache_dir
@@ -915,24 +916,24 @@ class SpeechRecognitionManager:
         # LAZY LOADING: Load model only when starting recognition
         if not self.model_ready:
             logger.info("Model not loaded - loading on demand (lazy loading)")
-            
+
             # Show loading notification
             _show_notification(
                 "Preparing Speech Recognition",
                 f"Loading {self.engine} {self.model_size} model...",
-                "document-open"
+                "document-open",
             )
-            
+
             try:
                 self._ensure_model_loaded()
-                
+
                 # Show success notification
                 _show_notification(
                     "Speech Recognition Ready",
                     f"{self.engine.title()} model loaded successfully",
-                    "dialog-ok"
+                    "dialog-ok",
                 )
-                
+
             except Exception as e:
                 logger.error(f"Failed to load model for recognition: {e}")
                 play_error_sound()
@@ -1267,24 +1268,26 @@ class SpeechRecognitionManager:
             self.model = None
             self.recognizer = None
             self._model_initialized = False
-            
+
             # Update configuration for lazy loading
-            self._engine_config.update({
-                "engine": self.engine,
-                "model_size": self.model_size,
-                "language": self.language,
-                "vad_sensitivity": self.vad_sensitivity,
-                "silence_timeout": self.silence_timeout,
-                "audio_device_index": self.audio_device_index,
-            })
-            
+            self._engine_config.update(
+                {
+                    "engine": self.engine,
+                    "model_size": self.model_size,
+                    "language": self.language,
+                    "vad_sensitivity": self.vad_sensitivity,
+                    "silence_timeout": self.silence_timeout,
+                    "audio_device_index": self.audio_device_index,
+                }
+            )
+
             # For lazy loading, we don't load immediately
             # The model will be loaded when needed via _ensure_model_loaded
             if self.engine == "vosk":
                 self._init_vosk_model_mapping()
             elif self.engine == "whisper":
                 self._validate_whisper_model_size()
-                
+
             logger.info("Speech engine reconfigured (model loading deferred)")
         else:
             # If only VOSK params changed, just log it
