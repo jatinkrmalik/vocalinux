@@ -44,17 +44,17 @@ def check_dependencies():
     """Check for required dependencies and provide helpful error messages."""
     missing_deps = []
 
+    # Check for GTK3
     try:
         import gi
-
         gi.require_version("Gtk", "3.0")
         from gi.repository import Gtk
     except (ImportError, ValueError) as e:
         missing_deps.append("GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)")
 
+    # Check for AppIndicator3
     try:
         import gi
-
         gi.require_version("AppIndicator3", "0.1")
         from gi.repository import AppIndicator3
     except (ImportError, ValueError) as e:
@@ -62,6 +62,7 @@ def check_dependencies():
             "AppIndicator3 (install with: sudo apt install gir1.2-appindicator3-0.1)"
         )
 
+    # Check for Python package dependencies
     try:
         import pynput
     except ImportError:
@@ -73,7 +74,7 @@ def check_dependencies():
         missing_deps.append("requests (install with: pip install requests)")
 
     if missing_deps:
-        logger.error("Missing required system dependencies:")
+        logger.error("Missing required dependencies:")
         for dep in missing_deps:
             logger.error(f"  - {dep}")
         logger.error("")

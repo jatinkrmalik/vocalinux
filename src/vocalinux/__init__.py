@@ -7,7 +7,7 @@ This is important for pip/pipx installations where PyGObject is installed
 but system typelibs (AppIndicator3, etc.) may not be accessible.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.1-alpha"
 
 # Import common types first to avoid circular imports
 from .common_types import RecognitionState
