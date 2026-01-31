@@ -45,6 +45,7 @@
 - 🎨 **System tray integration** with visual status indicators
 - 🔊 **Audio feedback** for recording status
 - ⚙️ **Graphical settings** dialog for easy configuration
+- 👁️ **Visual feedback indicator** at cursor position during voice typing
 
 ## 🚀 Quick Install
 
@@ -148,6 +149,20 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninsta
 | "exclamation mark" | Types an exclamation mark (!) |
 | "delete that" | Deletes the last sentence |
 | "capitalize" | Capitalizes the next word |
+
+### Visual Feedback Indicator
+
+Vocalinux now includes a visual feedback indicator that appears at your cursor position during voice typing:
+
+- **🔵 Blue pulsing circle**: Shows when the system is actively listening for speech
+- **🟠 Orange pulsing circle**: Indicates that speech is being processed
+- **No indicator**: The system is idle or not recording
+
+The visual indicator:
+- Follows your cursor in real-time
+- Provides clear, unobtrusive feedback
+- Works across all applications
+- Automatically hides when not needed
 
 ### Command Line Options
 
