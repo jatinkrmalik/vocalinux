@@ -34,6 +34,7 @@ from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, T
 from .config_manager import ConfigManager  # noqa: E402
 from .keyboard_shortcuts import KeyboardShortcutManager  # noqa: E402
 from .settings_dialog import SettingsDialog  # noqa: E402
+from .visual_feedback import VisualFeedbackIndicator  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,9 @@ class TrayIndicator:
         self.shortcut_manager = (
             KeyboardShortcutManager()
         )  # Pass config_manager - Removed config_manager argument
+
+        # Initialize visual feedback indicator
+        self.visual_feedback = VisualFeedbackIndicator()
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
@@ -219,6 +223,9 @@ class TrayIndicator:
         """
         # Update the UI in the GTK main thread
         GLib.idle_add(self._update_ui, state)
+        
+        # Update visual feedback indicator
+        GLib.idle_add(self.visual_feedback.update_state, state)
 
     def _update_ui(self, state: RecognitionState):
         """
@@ -363,6 +370,9 @@ class TrayIndicator:
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
+        
+        # Clean up visual feedback indicator
+        self.visual_feedback.cleanup()
 
         Gtk.main_quit()
 

@@ -20,9 +20,23 @@ from typing import TYPE_CHECKING
 
 import gi
 
-gi.require_version("Gtk", "3.0")
-# Need GLib for idle_add
-from gi.repository import GLib, Gtk  # noqa: E402
+# Try to import GTK, but handle gracefully if not available
+GTK_AVAILABLE = False
+try:
+    gi.require_version("Gtk", "3.0")
+    # Need GLib for idle_add
+    from gi.repository import GLib, Gtk  # noqa: E402
+    GTK_AVAILABLE = True
+except (ImportError, ValueError) as e:
+    logging.warning(f"GTK not available for settings dialog: {e}")
+    # Create dummy classes for when GTK is not available
+    class Gtk:
+        class Window:
+            def __init__(self, *args, **kwargs):
+                pass
+        class Dialog:
+            def __init__(self, *args, **kwargs):
+                pass
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
