@@ -3,8 +3,11 @@
 import React from "react";
 import Image from "next/image";
 
-// Logo component using the actual application icon
-export const VocalinuxLogo: React.FC<{ className?: string }> = ({ className = "" }) => {
+// Re-export from optimized-image component for backward compatibility
+export { VocalinuxLogo } from "./optimized-image";
+
+// Legacy export - use VocalinuxLogo from optimized-image instead
+export const VocalinuxLogoLegacy: React.FC<{ className?: string }> = ({ className = "" }) => {
   return (
     <Image
       src="/vocalinux.png"

@@ -7,6 +7,7 @@ const config = {
 	distDir: 'out',
 	images: {
 		unoptimized: true,
+		formats: ['image/avif', 'image/webp'],
 		remotePatterns: [
 			{
 				protocol: 'https',
@@ -22,7 +23,11 @@ const config = {
 		ignoreBuildErrors: true,
 	},
 	productionBrowserSourceMaps: true,
-	webpack: (config, { isServer }) => {
+	// Use modern JavaScript for better performance and smaller bundle sizes
+	experimental: {
+		optimizePackageImports: ['lucide-react', 'framer-motion'],
+	},
+	webpack: (config, { isServer, webpack }) => {
 		config.stats = "verbose";
 		config.devtool = 'source-map'
 		// Enhanced node polyfills for postgres and other modules
@@ -41,6 +46,19 @@ const config = {
 				child_process: false,
 				dns: false,
 			};
+
+			// Configure swc to output modern JavaScript (ES2022) instead of ES5
+			// This eliminates unnecessary polyfills and reduces bundle size
+			if (config.optimization && config.optimization.minimizer) {
+				config.optimization.minimizer.forEach((minimizer) => {
+					if (minimizer.constructor.name === 'TerserPlugin') {
+						minimizer.options.compress = {
+							...minimizer.options.compress,
+							pure_funcs: ['console.log', 'console.debug'],
+						};
+					}
+				});
+			}
 		}
 		return config;
 	},
