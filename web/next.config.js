@@ -5,6 +5,31 @@ const config = {
 	trailingSlash: true,
 	// Configuration for custom domain deployment
 	distDir: 'out',
+
+	// Configure cache headers for static assets
+	// This generates a _headers file for platforms like Netlify/Vercel
+	async headers() {
+		return [
+			{
+				source: '/_next/static/:path*',
+				headers: [
+					{
+						key: 'Cache-Control',
+						value: 'public, max-age=31536000, immutable',
+					},
+				],
+			},
+			{
+				source: '/:all*(svg|jpg|jpeg|png|webp|avif|ico|woff|woff2)',
+				headers: [
+					{
+						key: 'Cache-Control',
+						value: 'public, max-age=31536000, immutable',
+					},
+				],
+			},
+		];
+	},
 	images: {
 		unoptimized: true,
 		remotePatterns: [
@@ -21,10 +46,13 @@ const config = {
 	typescript: {
 		ignoreBuildErrors: true,
 	},
-	productionBrowserSourceMaps: true,
-	webpack: (config, { isServer }) => {
-		config.stats = "verbose";
-		config.devtool = 'source-map'
+	// Disable source maps in production to reduce bundle size
+	productionBrowserSourceMaps: false,
+	webpack: (config, { isServer, dev }) => {
+		// Only use source maps in development
+		if (!dev) {
+			config.devtool = false;
+		}
 		// Enhanced node polyfills for postgres and other modules
 		if (!isServer) {
 			config.resolve.fallback = {

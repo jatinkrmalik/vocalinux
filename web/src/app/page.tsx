@@ -34,8 +34,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import SyntaxHighlighter from "react-syntax-highlighter";
-import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
+import { CodeBlock } from "@/components/code-block";
 import { useInView } from "react-intersection-observer";
 
 // The one-liner install command (split into three lines for display)
@@ -616,15 +615,14 @@ export default function HomePage() {
                     <CopyButton text={oneClickInstallCommand} />
                   </div>
                   <div className="overflow-x-auto">
-                    <SyntaxHighlighter
+                    <CodeBlock
                       language="bash"
-                      style={atomOneDark}
                       className="rounded-lg text-sm sm:text-base"
                       customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
                       wrapLongLines={false}
                     >
                       {oneClickInstallCommand}
-                    </SyntaxHighlighter>
+                    </CodeBlock>
                   </div>
                 </div>
 
@@ -643,15 +641,14 @@ export default function HomePage() {
                     <CopyButton text={oneClickInstallWhisperCpu} />
                   </div>
                   <div className="overflow-x-auto">
-                    <SyntaxHighlighter
+                    <CodeBlock
                       language="bash"
-                      style={atomOneDark}
                       className="rounded-lg text-sm"
                       customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
                       wrapLongLines={false}
                     >
                       {oneClickInstallWhisperCpu}
-                    </SyntaxHighlighter>
+                    </CodeBlock>
                   </div>
                 </div>
 
@@ -670,15 +667,14 @@ export default function HomePage() {
                     <CopyButton text={oneClickInstallNoWhisper} />
                   </div>
                   <div className="overflow-x-auto">
-                    <SyntaxHighlighter
+                    <CodeBlock
                       language="bash"
-                      style={atomOneDark}
                       className="rounded-lg text-sm"
                       customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
                       wrapLongLines={false}
                     >
                       {oneClickInstallNoWhisper}
-                    </SyntaxHighlighter>
+                    </CodeBlock>
                   </div>
                 </div>
 
@@ -749,15 +745,14 @@ export default function HomePage() {
                   <CopyButton text={uninstallCommand} />
                 </div>
                 <div className="overflow-x-auto">
-                  <SyntaxHighlighter
+                  <CodeBlock
                     language="bash"
-                    style={atomOneDark}
                     className="rounded-lg text-sm"
                     customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
                     wrapLongLines={false}
                   >
                     {uninstallCommand}
-                  </SyntaxHighlighter>
+                  </CodeBlock>
                 </div>
               </div>
             </div>
@@ -1119,10 +1114,10 @@ export default function HomePage() {
           </div>
 
           <div className="pt-8 border-t border-zinc-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-zinc-500 text-sm">
+            <p className="text-zinc-400 text-sm">
               © {new Date().getFullYear()} Vocalinux. Open-source under GPL-3.0 License.
             </p>
-            <p className="text-zinc-500 text-sm flex items-center gap-1">
+            <p className="text-zinc-400 text-sm flex items-center gap-1">
               Made with <Heart className="h-4 w-4 text-red-500" /> by{" "}
               <a
                 href="https://x.com/intent/user?screen_name=jatinkrmalik"

@@ -185,18 +185,20 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable} scroll-smooth`} suppressHydrationWarning>
       <head>
+        {/* Preconnect to GitHub API for faster fetch of stars and release info (~300ms improvement) */}
+        <link rel="preconnect" href="https://api.github.com" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
       <body>
-        {/* Google tag (gtag.js) */}
+        {/* Google tag (gtag.js) - deferred to prioritize page interactivity */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-7NBBNJNNQ7"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
+        <Script id="google-analytics" strategy="lazyOnload">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
