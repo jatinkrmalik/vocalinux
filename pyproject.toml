@@ -31,6 +31,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Desktop Environment :: Gnome",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
     "Topic :: Text Processing",
@@ -94,7 +95,7 @@ version = {attr = "vocalinux.version.__version__"}
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312', 'py313']
 include = '\.pyi?$'
 exclude = '''
 /(
