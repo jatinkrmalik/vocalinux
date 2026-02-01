@@ -118,15 +118,16 @@ class TextInjector:
                 raise RuntimeError("Missing required dependency: xdotool")
         else:
             # Check for wtype or ydotool for Wayland
+            # Prefer ydotool as it works universally (including GNOME Wayland)
             wtype_available = shutil.which("wtype") is not None
             ydotool_available = shutil.which("ydotool") is not None
             xdotool_available = shutil.which("xdotool") is not None
 
-            if wtype_available:
-                self.wayland_tool = "wtype"
-                logger.info(f"Using {self.wayland_tool} for Wayland text injection")
-            elif ydotool_available:
+            if ydotool_available:
                 self.wayland_tool = "ydotool"
+                logger.info(f"Using {self.wayland_tool} for Wayland text injection (universal compatibility)")
+            elif wtype_available:
+                self.wayland_tool = "wtype"
                 logger.info(f"Using {self.wayland_tool} for Wayland text injection")
             elif xdotool_available:
                 # Fallback to xdotool with XWayland
