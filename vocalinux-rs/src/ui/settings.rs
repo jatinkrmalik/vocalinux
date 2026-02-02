@@ -1,20 +1,26 @@
 //! Settings dialog.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
+use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, ComboBoxText, Entry, Grid, Label, Orientation,
-    ProgressBar, Scale, SpinButton, Switch, Window,
+    Align, Box as GtkBox, Button, Label, LevelBar, Orientation,
+    ProgressBar, Scale, Separator, SpinButton,
 };
 use libadwaita as adw;
 use libadwaita::prelude::*;
 use parking_lot::Mutex;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::audio::get_input_devices;
 use crate::config::{AppConfig, ModelSize, SpeechEngine};
-use crate::speech::SpeechManager;
+use crate::speech::{
+    get_whisper_model, recommend_whisper_model, GpuInfo, SystemMemory,
+    SpeechManager, WHISPER_LANGUAGES, WHISPER_MODELS,
+};
 
 /// Settings dialog
 pub struct SettingsDialog {
@@ -31,7 +37,7 @@ impl SettingsDialog {
     }
 
     /// Show the settings dialog
-    pub fn show(&self, parent: Option<&impl IsA<Window>>) {
+    pub fn show(&self, parent: Option<&impl IsA<gtk4::Window>>) {
         let dialog = adw::PreferencesWindow::builder()
             .title("Vocalinux Settings")
             .modal(true)
@@ -43,6 +49,7 @@ impl SettingsDialog {
 
         // Add preference pages
         dialog.add(&self.create_speech_page());
+        dialog.add(&self.create_whisper_page());
         dialog.add(&self.create_audio_page());
         dialog.add(&self.create_soniox_page());
         dialog.add(&self.create_ui_page());
@@ -68,7 +75,11 @@ impl SettingsDialog {
             .subtitle("Select speech recognition engine")
             .build();
 
-        let engine_model = gtk4::StringList::new(&["VOSK (Offline)", "Whisper (Offline)", "Soniox (Cloud Realtime)"]);
+        let engine_model = gtk4::StringList::new(&[
+            "VOSK (Offline)",
+            "Whisper (Offline)",
+            "Soniox (Cloud Realtime)"
+        ]);
         engine_row.set_model(Some(&engine_model));
 
         let current_engine = match self.config.lock().speech.engine {
@@ -92,76 +103,12 @@ impl SettingsDialog {
         });
 
         engine_group.add(&engine_row);
-
-        // Language row
-        let language_row = adw::ComboRow::builder()
-            .title("Language")
-            .subtitle("Recognition language")
-            .build();
-
-        let languages = gtk4::StringList::new(&[
-            "English (US)", "Russian", "Spanish", "German", "French",
-            "Italian", "Portuguese", "Chinese", "Hindi", "Auto-detect"
-        ]);
-        language_row.set_model(Some(&languages));
-
-        engine_group.add(&language_row);
-
-        // Model size row
-        let model_row = adw::ComboRow::builder()
-            .title("Model Size")
-            .subtitle("Larger models are more accurate but slower")
-            .build();
-
-        let models = gtk4::StringList::new(&["Tiny", "Small", "Base", "Medium", "Large"]);
-        model_row.set_model(Some(&models));
-
-        let current_size = match self.config.lock().speech.model_size {
-            ModelSize::Tiny => 0,
-            ModelSize::Small => 1,
-            ModelSize::Base => 2,
-            ModelSize::Medium => 3,
-            ModelSize::Large => 4,
-        };
-        model_row.set_selected(current_size);
-
-        let config = self.config.clone();
-        model_row.connect_selected_notify(move |row| {
-            let mut cfg = config.lock();
-            cfg.speech.model_size = match row.selected() {
-                0 => ModelSize::Tiny,
-                1 => ModelSize::Small,
-                2 => ModelSize::Base,
-                3 => ModelSize::Medium,
-                _ => ModelSize::Large,
-            };
-            if let Err(e) = cfg.save() {
-                error!("Failed to save config: {}", e);
-            }
-        });
-
-        engine_group.add(&model_row);
-
-        // Download model button
-        let download_row = adw::ActionRow::builder()
-            .title("Download Model")
-            .subtitle("Download the selected model for offline use")
-            .build();
-
-        let download_button = Button::builder()
-            .label("Download")
-            .valign(Align::Center)
-            .build();
-
-        download_row.add_suffix(&download_button);
-        engine_group.add(&download_row);
-
         page.add(&engine_group);
 
         // VAD settings group
         let vad_group = adw::PreferencesGroup::builder()
             .title("Voice Activity Detection")
-            .description("Settings for detecting speech")
+            .description("Settings for detecting speech (VOSK/Whisper only)")
             .build();
 
         let sensitivity_row = adw::ActionRow::builder()
@@ -208,6 +155,283 @@ impl SettingsDialog {
         vad_group.add(&silence_row);
 
         page.add(&vad_group);
+
+        page
+    }
+
+    /// Create Whisper-specific settings page with GPU info
+    fn create_whisper_page(&self) -> adw::PreferencesPage {
+        let page = adw::PreferencesPage::builder()
+            .title("Whisper")
+            .icon_name("applications-science-symbolic")
+            .build();
+
+        // Detect GPU info
+        let gpu_info = GpuInfo::detect();
+        let sys_memory = SystemMemory::detect();
+        let recommendation = recommend_whisper_model(gpu_info.as_ref());
+
+        // System Info Group
+        let system_group = adw::PreferencesGroup::builder()
+            .title("System Information")
+            .description("GPU and memory status")
+            .build();
+
+        // GPU Status
+        if let Some(ref gpu) = gpu_info {
+            let gpu_row = adw::ActionRow::builder()
+                .title("GPU")
+                .subtitle(&gpu.name)
+                .build();
+
+            let cuda_label = Label::new(Some(&format!(
+                "CUDA {}",
+                gpu.cuda_version.as_deref().unwrap_or("N/A")
+            )));
+            cuda_label.add_css_class("success");
+            gpu_row.add_suffix(&cuda_label);
+            system_group.add(&gpu_row);
+
+            // VRAM Usage
+            let vram_row = adw::ActionRow::builder()
+                .title("GPU Memory (VRAM)")
+                .subtitle(&format!(
+                    "{} MB used / {} MB total ({} MB free)",
+                    gpu.used_memory_mb, gpu.total_memory_mb, gpu.free_memory_mb
+                ))
+                .build();
+
+            let vram_bar = LevelBar::for_interval(0.0, gpu.total_memory_mb as f64);
+            vram_bar.set_value(gpu.used_memory_mb as f64);
+            vram_bar.set_width_request(150);
+            vram_bar.set_valign(Align::Center);
+            vram_row.add_suffix(&vram_bar);
+            system_group.add(&vram_row);
+        } else {
+            let no_gpu_row = adw::ActionRow::builder()
+                .title("GPU")
+                .subtitle("No CUDA GPU detected - will use CPU")
+                .build();
+
+            let cpu_label = Label::new(Some("CPU Mode"));
+            cpu_label.add_css_class("warning");
+            no_gpu_row.add_suffix(&cpu_label);
+            system_group.add(&no_gpu_row);
+        }
+
+        // System RAM
+        let ram_row = adw::ActionRow::builder()
+            .title("System Memory (RAM)")
+            .subtitle(&format!(
+                "{} MB available / {} MB total",
+                sys_memory.available_mb, sys_memory.total_mb
+            ))
+            .build();
+
+        if sys_memory.total_mb > 0 {
+            let ram_bar = LevelBar::for_interval(0.0, sys_memory.total_mb as f64);
+            ram_bar.set_value((sys_memory.total_mb - sys_memory.available_mb) as f64);
+            ram_bar.set_width_request(150);
+            ram_bar.set_valign(Align::Center);
+            ram_row.add_suffix(&ram_bar);
+        }
+        system_group.add(&ram_row);
+
+        page.add(&system_group);
+
+        // Recommendation Group
+        let rec_group = adw::PreferencesGroup::builder()
+            .title("Recommendation")
+            .build();
+
+        let rec_row = adw::ActionRow::builder()
+            .title(&format!("Recommended: {} model", recommendation.recommended_model.to_uppercase()))
+            .subtitle(&recommendation.reason)
+            .build();
+
+        let mode_label = Label::new(Some(if recommendation.will_use_gpu {
+            "GPU"
+        } else {
+            "CPU"
+        }));
+        mode_label.add_css_class(if recommendation.will_use_gpu { "success" } else { "warning" });
+        rec_row.add_suffix(&mode_label);
+        rec_group.add(&rec_row);
+
+        let speed_row = adw::ActionRow::builder()
+            .title("Expected Performance")
+            .subtitle(recommendation.estimated_speed)
+            .build();
+        rec_group.add(&speed_row);
+
+        page.add(&rec_group);
+
+        // Model Selection Group
+        let model_group = adw::PreferencesGroup::builder()
+            .title("Model Selection")
+            .description("Choose Whisper model size")
+            .build();
+
+        // Create model entries with VRAM requirements
+        let model_names: Vec<String> = WHISPER_MODELS.iter().map(|m| {
+            let gpu_fit = gpu_info.as_ref()
+                .map(|g| g.can_fit_model(m.vram_required_mb))
+                .unwrap_or(false);
+
+            let status = if gpu_fit {
+                "✓ GPU"
+            } else if sys_memory.available_mb >= m.ram_required_mb {
+                "○ CPU"
+            } else {
+                "✗ Low mem"
+            };
+
+            format!("{} [{}]", m.display_name, status)
+        }).collect();
+
+        let model_row = adw::ComboRow::builder()
+            .title("Model")
+            .subtitle("Larger = more accurate but slower")
+            .build();
+
+        let model_list = gtk4::StringList::new(
+            &model_names.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+        );
+        model_row.set_model(Some(&model_list));
+
+        // Set current selection
+        let current_size = match self.config.lock().speech.model_size {
+            ModelSize::Tiny => 0,
+            ModelSize::Base => 1,
+            ModelSize::Small => 2,
+            ModelSize::Medium => 3,
+            ModelSize::Large => 4,
+        };
+        model_row.set_selected(current_size);
+
+        let config = self.config.clone();
+        model_row.connect_selected_notify(move |row| {
+            let mut cfg = config.lock();
+            cfg.speech.model_size = match row.selected() {
+                0 => ModelSize::Tiny,
+                1 => ModelSize::Base,
+                2 => ModelSize::Small,
+                3 => ModelSize::Medium,
+                _ => ModelSize::Large,
+            };
+            if let Err(e) = cfg.save() {
+                error!("Failed to save config: {}", e);
+            }
+        });
+
+        model_group.add(&model_row);
+
+        // Model info display
+        let current_model = get_whisper_model(
+            match self.config.lock().speech.model_size {
+                ModelSize::Tiny => "tiny",
+                ModelSize::Base => "base",
+                ModelSize::Small => "small",
+                ModelSize::Medium => "medium",
+                ModelSize::Large => "large",
+            }
+        );
+
+        if let Some(model) = current_model {
+            let info_row = adw::ActionRow::builder()
+                .title("Memory Requirements")
+                .subtitle(&format!(
+                    "GPU: {} MB VRAM | CPU: {} MB RAM",
+                    model.vram_required_mb, model.ram_required_mb
+                ))
+                .build();
+            model_group.add(&info_row);
+        }
+
+        // Download button
+        let download_row = adw::ActionRow::builder()
+            .title("Download Model")
+            .subtitle("Download selected model for offline use")
+            .build();
+
+        let download_button = Button::builder()
+            .label("Download")
+            .valign(Align::Center)
+            .build();
+
+        download_row.add_suffix(&download_button);
+        model_group.add(&download_row);
+
+        page.add(&model_group);
+
+        // Language Selection Group
+        let lang_group = adw::PreferencesGroup::builder()
+            .title("Language")
+            .description("Whisper supports 99+ languages")
+            .build();
+
+        let lang_row = adw::ComboRow::builder()
+            .title("Language")
+            .subtitle("Select recognition language or auto-detect")
+            .build();
+
+        let lang_names: Vec<&str> = WHISPER_LANGUAGES.iter().map(|(_, name)| *name).collect();
+        let lang_list = gtk4::StringList::new(&lang_names);
+        lang_row.set_model(Some(&lang_list));
+
+        // Find current language index
+        let current_lang = &self.config.lock().speech.language;
+        let lang_idx = WHISPER_LANGUAGES.iter()
+            .position(|(code, _)| code == current_lang)
+            .unwrap_or(0);
+        lang_row.set_selected(lang_idx as u32);
+
+        let config = self.config.clone();
+        lang_row.connect_selected_notify(move |row| {
+            let idx = row.selected() as usize;
+            if let Some((code, _)) = WHISPER_LANGUAGES.get(idx) {
+                let mut cfg = config.lock();
+                cfg.speech.language = code.to_string();
+                if let Err(e) = cfg.save() {
+                    error!("Failed to save config: {}", e);
+                }
+            }
+        });
+
+        lang_group.add(&lang_row);
+
+        // Language info
+        let lang_info = adw::ActionRow::builder()
+            .title("Auto-detect")
+            .subtitle("Whisper can automatically detect the spoken language")
+            .build();
+        lang_group.add(&lang_info);
+
+        page.add(&lang_group);
+
+        // Refresh GPU button
+        let refresh_group = adw::PreferencesGroup::new();
+
+        let refresh_row = adw::ActionRow::builder()
+            .title("Refresh GPU Information")
+            .subtitle("Update GPU memory usage")
+            .build();
+
+        let refresh_button = Button::builder()
+            .label("Refresh")
+            .valign(Align::Center)
+            .build();
+
+        refresh_button.connect_clicked(move |_| {
+            // In a real app, this would refresh the GPU info
+            // For now, just show it would need to reload the dialog
+            info!("GPU info refresh requested");
+        });
+
+        refresh_row.add_suffix(&refresh_button);
+        refresh_group.add(&refresh_row);
+
+        page.add(&refresh_group);
 
         page
     }
@@ -379,6 +603,41 @@ impl SettingsDialog {
 
         page.add(&group);
 
+        // Soniox language hints
+        let lang_group = adw::PreferencesGroup::builder()
+            .title("Language Hints")
+            .description("Improve accuracy by specifying expected languages")
+            .build();
+
+        let lang_row = adw::ComboRow::builder()
+            .title("Primary Language")
+            .subtitle("Main language you'll be speaking")
+            .build();
+
+        // Soniox supports many languages
+        let soniox_langs = gtk4::StringList::new(&[
+            "Auto-detect",
+            "English",
+            "Russian",
+            "Spanish",
+            "German",
+            "French",
+            "Chinese",
+            "Japanese",
+            "Korean",
+            "Portuguese",
+            "Italian",
+            "Dutch",
+            "Polish",
+            "Turkish",
+            "Arabic",
+            "Hindi",
+        ]);
+        lang_row.set_model(Some(&soniox_langs));
+
+        lang_group.add(&lang_row);
+        page.add(&lang_group);
+
         // Info group
         let info_group = adw::PreferencesGroup::builder()
             .title("About Soniox")
@@ -395,6 +654,17 @@ impl SettingsDialog {
         });
 
         info_group.add(&info_row);
+
+        let realtime_row = adw::ActionRow::builder()
+            .title("Realtime Streaming")
+            .subtitle("Text appears instantly as you speak (<200ms latency)")
+            .build();
+
+        let realtime_label = Label::new(Some("Live"));
+        realtime_label.add_css_class("success");
+        realtime_row.add_suffix(&realtime_label);
+        info_group.add(&realtime_row);
+
         page.add(&info_group);
 
         page
