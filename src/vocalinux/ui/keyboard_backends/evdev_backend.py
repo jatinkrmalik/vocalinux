@@ -18,7 +18,7 @@ import os
 import select
 import threading
 import time
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 # Try to import evdev
 try:
@@ -118,9 +118,10 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.monitor_thread: Optional[threading.Thread] = None
 
         self.last_trigger_time = 0
-        self.last_ctrl_press_time = 0
+        self.last_ctrl_press_time: Dict[int, float] = {}  # device_id -> timestamp
         self.double_tap_threshold = 0.3  # seconds
         self.ctrl_pressed_devices: Set[int] = set()
+        self._state_lock = threading.Lock()  # Thread safety for shared state
 
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
@@ -278,7 +279,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                     break
 
                 # Security: Add timeout to prevent indefinite blocking
-                readable, _, _ = select.select(self.device_fds, [], [], 1.0)  # 1 second timeout
+                readable, _, _ = select.select(self.device_fds, [], [], 0.1)  # 100ms timeout for responsiveness
 
                 for fd in readable:
                     try:
@@ -341,33 +342,36 @@ class EvdevKeyboardBackend(KeyboardBackend):
             # Check if this is a Ctrl key
             if code in KEY_CTRL:
                 device_id = id(device)
+                current_time = time.time()
 
-                if value == 1:  # Key press
-                    self.ctrl_pressed_devices.add(device_id)
-                    current_time = time.time()
+                with self._state_lock:
+                    if value == 1:  # Key press
+                        self.ctrl_pressed_devices.add(device_id)
 
-                    # Check for double-tap with improved debouncing
-                    if (
-                        self.double_tap_callback is not None
-                        and current_time - self.last_ctrl_press_time < self.double_tap_threshold
-                        and current_time - self.last_trigger_time > 0.5  # Prevent rapid re-triggering
-                    ):
-                        logger.debug("Double-tap Ctrl detected (evdev)")
-                        self.last_trigger_time = current_time
-                        
-                        # Security: Execute callback in a separate thread to prevent blocking
-                        def safe_callback():
-                            try:
-                                self.double_tap_callback()
-                            except Exception as e:
-                                logger.error(f"Error in keyboard callback: {e}")
-                        
-                        threading.Thread(target=safe_callback, daemon=True).start()
+                        # Check for double-tap with improved debouncing
+                        # Track per-device timing to avoid cross-device false triggers
+                        last_press = self.last_ctrl_press_time.get(device_id, 0)
+                        if (
+                            self.double_tap_callback is not None
+                            and current_time - last_press < self.double_tap_threshold
+                            and current_time - self.last_trigger_time > 0.5  # Prevent rapid re-triggering
+                        ):
+                            logger.debug("Double-tap Ctrl detected (evdev)")
+                            self.last_trigger_time = current_time
+                            
+                            # Security: Execute callback in a separate thread to prevent blocking
+                            def safe_callback():
+                                try:
+                                    self.double_tap_callback()
+                                except Exception as e:
+                                    logger.error(f"Error in keyboard callback: {e}")
+                            
+                            threading.Thread(target=safe_callback, daemon=True).start()
 
-                    self.last_ctrl_press_time = current_time
+                        self.last_ctrl_press_time[device_id] = current_time
 
-                elif value == 0:  # Key release
-                    self.ctrl_pressed_devices.discard(device_id)
+                    elif value == 0:  # Key release
+                        self.ctrl_pressed_devices.discard(device_id)
 
         except Exception as e:
             logger.error(f"Error handling key event: {e}")
