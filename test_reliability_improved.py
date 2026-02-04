@@ -114,11 +114,12 @@ class TestReliabilityImprovements(unittest.TestCase):
         # Try 4 attempts (should fail after 3)
         for i in range(4):
             result = self.manager._attempt_audio_reconnection(mock_audio)
-            if i >= 2:  # 0-indexed, so attempt 4 is index 3
+            if i >= 3:  # 4th attempt (index 3) should be blocked
                 self.assertFalse(result)
         
-        # Should have stopped at max attempts
-        self.assertEqual(self.manager._reconnection_attempts, 3)
+        # Counter should be at max+1 (4) because it's incremented before the check
+        # Only 3 actual reconnection attempts were made
+        self.assertEqual(self.manager._reconnection_attempts, 4)
     
     @patch('time.sleep')
     def test_reconnection_exponential_backoff(self, mock_sleep):

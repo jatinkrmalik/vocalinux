@@ -283,6 +283,7 @@ class SpeechRecognitionManager:
         # Recording control flags
         self.should_record = False
         self.audio_buffer = []
+        self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
@@ -934,11 +935,12 @@ class SpeechRecognitionManager:
             self.recognition_thread.join(timeout=1.0)
 
         # Process any remaining audio in the buffer before going idle
-        if self.audio_buffer:
-            logger.debug("Processing remaining audio buffer before stopping")
-            self._update_state(RecognitionState.PROCESSING)
-            self._process_final_buffer()
-            self.audio_buffer = []
+        with self._buffer_lock:
+            if self.audio_buffer:
+                logger.debug("Processing remaining audio buffer before stopping")
+                self._update_state(RecognitionState.PROCESSING)
+                self._process_final_buffer()
+                self.audio_buffer = []
 
         self._update_state(RecognitionState.IDLE)
 
@@ -1035,16 +1037,17 @@ class SpeechRecognitionManager:
 
             while self.should_record:
                 try:
-                    # Check buffer size and enforce limits
-                    if len(self.audio_buffer) >= self._max_buffer_size:
-                        logger.warning(f"Audio buffer limit reached ({len(self.audio_buffer)} chunks). Clearing oldest data.")
-                        # Remove oldest 25% of data to prevent memory issues
-                        remove_count = self._max_buffer_size // 4
-                        self.audio_buffer = self.audio_buffer[remove_count:]
-                        logger.info(f"Buffer trimmed by {remove_count} chunks")
+                    # Check buffer size and enforce limits (with lock for thread safety)
+                    with self._buffer_lock:
+                        if len(self.audio_buffer) >= self._max_buffer_size:
+                            logger.warning(f"Audio buffer limit reached ({len(self.audio_buffer)} chunks). Clearing oldest data.")
+                            # Remove oldest 25% of data to prevent memory issues
+                            remove_count = self._max_buffer_size // 4
+                            self.audio_buffer = self.audio_buffer[remove_count:]
+                            logger.info(f"Buffer trimmed by {remove_count} chunks")
 
-                    data = stream.read(CHUNK, exception_on_overflow=False)
-                    self.audio_buffer.append(data)
+                        data = stream.read(CHUNK, exception_on_overflow=False)
+                        self.audio_buffer.append(data)
 
                     # Simple Voice Activity Detection (VAD)
                     audio_data = np.frombuffer(data, dtype=np.int16)
@@ -1138,10 +1141,11 @@ class SpeechRecognitionManager:
                 except Exception as e:
                     logger.warning(f"Error terminating PyAudio: {e}")
 
-            # Reset audio stream reference
+            # Reset audio stream reference and reconnection state
             self._audio_stream = None
             self._pyaudio_instance = None
             self._reconnection_attempts = 0
+            self._last_audio_error_time = 0
 
             # Log summary
             if not speech_detected_in_session and max_level_seen < 5:
@@ -1382,11 +1386,13 @@ class SpeechRecognitionManager:
         Returns:
             dict: Buffer statistics including size, memory usage, etc.
         """
-        total_memory = sum(len(chunk) for chunk in self.audio_buffer)
+        with self._buffer_lock:
+            total_memory = sum(len(chunk) for chunk in self.audio_buffer)
+            buffer_size = len(self.audio_buffer)
         return {
-            "buffer_size": len(self.audio_buffer),
+            "buffer_size": buffer_size,
             "buffer_limit": self._max_buffer_size,
             "memory_usage_bytes": total_memory,
             "memory_usage_mb": total_memory / (1024 * 1024),
-            "buffer_full_percentage": (len(self.audio_buffer) / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
+            "buffer_full_percentage": (buffer_size / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
         }
