@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

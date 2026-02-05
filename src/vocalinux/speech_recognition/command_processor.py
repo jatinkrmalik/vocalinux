@@ -7,7 +7,7 @@ This module processes text commands from speech recognition, such as
 
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 

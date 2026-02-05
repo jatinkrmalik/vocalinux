@@ -4,7 +4,7 @@ This module provides type definitions to avoid circular imports.
 """
 
 from enum import Enum, auto
-from typing import Callable, List, Optional, Protocol
+from typing import Callable, List, Optional, Protocol  # noqa: F401
 
 
 class RecognitionState(Enum):

@@ -15,7 +15,8 @@ from setuptools import find_packages, setup
 MIN_PYTHON_VERSION = (3, 8)
 if sys.version_info < MIN_PYTHON_VERSION:
     sys.exit(
-        f"Error: Vocalinux requires Python {MIN_PYTHON_VERSION[0]}.{MIN_PYTHON_VERSION[1]} or higher"
+        f"Error: Vocalinux requires Python {MIN_PYTHON_VERSION[0]}."
+        f"{MIN_PYTHON_VERSION[1]} or higher"
     )
 
 

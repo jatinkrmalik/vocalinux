@@ -6,17 +6,15 @@ application logs for debugging purposes.
 """
 
 import logging
-import os
-import threading
 from datetime import datetime
 from typing import Optional
 
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, GObject, Gtk
+from gi.repository import GLib, Gtk  # noqa: E402
 
-from .logging_manager import LogRecord, get_logging_manager
+from .logging_manager import LogRecord, get_logging_manager  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +168,7 @@ class LoggingDialog(Gtk.Dialog):
         debug_tag.set_property("foreground", "#666666")
 
         # Info - default color
-        info_tag = self.text_buffer.create_tag("INFO")
+        self.text_buffer.create_tag("INFO")
 
         # Warning - orange
         warning_tag = self.text_buffer.create_tag("WARNING")

@@ -17,7 +17,7 @@ sys.modules["gi.repository"] = MagicMock()
 sys.modules["gi.repository.Gtk"] = MagicMock()
 sys.modules["gi.repository.GLib"] = MagicMock()
 
-from vocalinux.common_types import RecognitionState
+from vocalinux.common_types import RecognitionState  # noqa: E402
 
 # Create mock for speech engine
 mock_speech_engine = Mock()

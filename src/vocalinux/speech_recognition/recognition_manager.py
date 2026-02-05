@@ -284,7 +284,7 @@ class SpeechRecognitionManager:
         self.should_record = False
         self.audio_buffer = []
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
-        
+
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
         self._reconnection_attempts = 0
@@ -1017,7 +1017,7 @@ class SpeechRecognitionManager:
             except (IOError, OSError) as e:
                 logger.error(f"Failed to open audio stream: {e}")
                 logger.error("This may indicate a problem with the audio device or permissions.")
-                
+
                 # Attempt reconnection
                 if self._attempt_audio_reconnection(audio):
                     stream = self._audio_stream
@@ -1040,7 +1040,9 @@ class SpeechRecognitionManager:
                     # Check buffer size and enforce limits (with lock for thread safety)
                     with self._buffer_lock:
                         if len(self.audio_buffer) >= self._max_buffer_size:
-                            logger.warning(f"Audio buffer limit reached ({len(self.audio_buffer)} chunks). Clearing oldest data.")
+                            logger.warning(
+                                f"Audio buffer limit reached ({len(self.audio_buffer)} chunks). Clearing oldest data."
+                            )
                             # Remove oldest 25% of data to prevent memory issues
                             remove_count = self._max_buffer_size // 4
                             self.audio_buffer = self.audio_buffer[remove_count:]
@@ -1108,11 +1110,13 @@ class SpeechRecognitionManager:
                 except (IOError, OSError) as e:
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
-                    
+
                     # Implement reconnection logic with exponential backoff
-                    if current_time - self._last_audio_error_time > 5.0:  # Prevent rapid reconnection attempts
+                    if (
+                        current_time - self._last_audio_error_time > 5.0
+                    ):  # Prevent rapid reconnection attempts
                         self._last_audio_error_time = current_time
-                        
+
                         if self._attempt_audio_reconnection(audio):
                             logger.info("Audio reconnection successful, continuing recording")
                             stream = self._audio_stream  # Update stream reference
@@ -1121,21 +1125,23 @@ class SpeechRecognitionManager:
                             logger.error("Audio reconnection failed, stopping recording")
                             break
                     else:
-                        logger.warning("Audio error occurred too soon after last error, stopping recording")
+                        logger.warning(
+                            "Audio error occurred too soon after last error, stopping recording"
+                        )
                         break
                 except Exception as e:
                     logger.error(f"Unexpected error reading audio data: {e}")
                     break
 
             # Clean up
-            if stream and hasattr(stream, 'is_active') and stream.is_active():
+            if stream and hasattr(stream, "is_active") and stream.is_active():
                 try:
                     stream.stop_stream()
                     stream.close()
                 except Exception as e:
                     logger.warning(f"Error closing audio stream: {e}")
-            
-            if audio and hasattr(audio, 'terminate'):
+
+            if audio and hasattr(audio, "terminate"):
                 try:
                     audio.terminate()
                 except Exception as e:
@@ -1287,28 +1293,30 @@ class SpeechRecognitionManager:
     def _attempt_audio_reconnection(self, audio_instance) -> bool:
         """
         Attempt to reconnect to the audio device.
-        
+
         Args:
             audio_instance: The PyAudio instance to use for reconnection
-            
+
         Returns:
             bool: True if reconnection was successful, False otherwise
         """
         self._reconnection_attempts += 1
-        
+
         if self._reconnection_attempts > self._max_reconnection_attempts:
             logger.error(f"Max reconnection attempts ({self._max_reconnection_attempts}) reached")
             return False
-        
+
         # Calculate delay with exponential backoff
         delay = self._reconnection_delay * (2 ** (self._reconnection_attempts - 1))
         delay = min(delay, 10.0)  # Cap at 10 seconds
-        
-        logger.info(f"Attempting audio reconnection (attempt {self._reconnection_attempts}/{self._max_reconnection_attempts}) after {delay:.1f}s delay...")
-        
+
+        logger.info(
+            f"Attempting audio reconnection (attempt {self._reconnection_attempts}/{self._max_reconnection_attempts}) after {delay:.1f}s delay..."
+        )
+
         # Wait before attempting reconnection
         time.sleep(delay)
-        
+
         try:
             # Close existing stream if it exists
             if self._audio_stream:
@@ -1317,13 +1325,13 @@ class SpeechRecognitionManager:
                     self._audio_stream.close()
                 except Exception as e:
                     logger.debug(f"Error closing old audio stream: {e}")
-                
+
             # Stream configuration
             CHUNK = 1024
             FORMAT = audio_instance.paInt16
             CHANNELS = 1
             RATE = 16000
-            
+
             stream_kwargs = {
                 "format": FORMAT,
                 "channels": CHANNELS,
@@ -1331,17 +1339,17 @@ class SpeechRecognitionManager:
                 "input": True,
                 "frames_per_buffer": CHUNK,
             }
-            
+
             # Use specified device if set
             if self.audio_device_index is not None:
                 stream_kwargs["input_device_index"] = self.audio_device_index
-            
+
             # Attempt to open new stream
             new_stream = audio_instance.open(**stream_kwargs)
-            
+
             # Test the stream by reading a small amount of data
             test_data = new_stream.read(CHUNK, exception_on_overflow=False)
-            
+
             if test_data:
                 self._audio_stream = new_stream
                 logger.info("Audio reconnection successful")
@@ -1351,10 +1359,10 @@ class SpeechRecognitionManager:
                 try:
                     new_stream.stop_stream()
                     new_stream.close()
-                except:
+                except Exception:
                     pass
                 return False
-                
+
         except (IOError, OSError) as e:
             logger.error(f"Audio reconnection failed: {e}")
             return False
@@ -1365,7 +1373,7 @@ class SpeechRecognitionManager:
     def set_buffer_limit(self, max_chunks: int):
         """
         Set the maximum number of audio chunks to buffer.
-        
+
         Args:
             max_chunks: Maximum number of chunks to buffer (default: 5000)
         """
@@ -1375,14 +1383,14 @@ class SpeechRecognitionManager:
         elif max_chunks > 20000:
             logger.warning("Buffer limit too large, setting to maximum 20000")
             max_chunks = 20000
-            
+
         self._max_buffer_size = max_chunks
         logger.info(f"Audio buffer limit set to {max_chunks} chunks")
 
     def get_buffer_stats(self) -> dict:
         """
         Get current buffer statistics.
-        
+
         Returns:
             dict: Buffer statistics including size, memory usage, etc.
         """
@@ -1394,5 +1402,7 @@ class SpeechRecognitionManager:
             "buffer_limit": self._max_buffer_size,
             "memory_usage_bytes": total_memory,
             "memory_usage_mb": total_memory / (1024 * 1024),
-            "buffer_full_percentage": (buffer_size / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
+            "buffer_full_percentage": (
+                (buffer_size / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
+            ),
         }

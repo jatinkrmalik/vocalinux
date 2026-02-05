@@ -8,9 +8,7 @@ recognition process and displaying its status.
 import logging
 import os
 import signal
-import sys
-import threading
-from typing import Callable, Dict, Optional
+from typing import Callable
 
 import gi
 
@@ -33,9 +31,9 @@ from gi.repository import GdkPixbuf, GLib, GObject, Gtk
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
 
 # Import necessary components
-from .config_manager import ConfigManager  # Added
-from .keyboard_shortcuts import KeyboardShortcutManager
-from .settings_dialog import SettingsDialog  # Added
+from .config_manager import ConfigManager  # noqa: E402
+from .keyboard_shortcuts import KeyboardShortcutManager  # noqa: E402
+from .settings_dialog import SettingsDialog  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +42,7 @@ APP_ID = "vocalinux"
 
 
 # Import the centralized resource manager
-from ..utils.resource_manager import ResourceManager
+from ..utils.resource_manager import ResourceManager  # noqa: E402
 
 # Initialize resource manager
 _resource_manager = ResourceManager()

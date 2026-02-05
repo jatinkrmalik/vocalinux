@@ -6,10 +6,10 @@ import json
 import os
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # Update import path to use the new package structure
-from vocalinux.ui.config_manager import CONFIG_DIR, CONFIG_FILE, DEFAULT_CONFIG, ConfigManager
+from vocalinux.ui.config_manager import DEFAULT_CONFIG, ConfigManager
 
 
 class TestConfigManager(unittest.TestCase):
@@ -61,7 +61,7 @@ class TestConfigManager(unittest.TestCase):
         self.assertFalse(os.path.exists(self.temp_config_dir))
 
         # Create config manager, which should create the directory
-        config_manager = ConfigManager()
+        ConfigManager()
         self.assertTrue(os.path.exists(self.temp_config_dir))
 
     def test_load_config(self):

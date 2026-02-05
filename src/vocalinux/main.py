@@ -22,7 +22,8 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Vocalinux")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    # default model, language and engine are loaded from default config due to priority of args over config
+    # default model, language and engine are loaded from default config
+    # due to priority of args over config
     parser.add_argument(
         "--model",
         type=str,
@@ -48,7 +49,10 @@ def parse_arguments():
             "ko",
             "ar",
         ],
-        help="Speech recognition language (auto for auto-detect, en-us, hi, es, fr, de, it, pt, ru, zh, etc.)",
+        help=(
+            "Speech recognition language (auto for auto-detect, en-us, "
+            "hi, es, fr, de, it, pt, ru, zh, etc.)"
+        ),
     )
     parser.add_argument(
         "--engine",
@@ -158,9 +162,13 @@ def main():
     # CLI arguments take precedence over saved config
     # We need to check if the user explicitly provided arguments
     # by examining sys.argv since argparse defaults don't tell us this
-    cli_engine_set = any(arg.startswith("--engine") for arg in sys.argv[1:])
+    cli_engine_set = any(
+        arg.startswith("--engine") for arg in sys.argv[1:]
+    )
     cli_model_set = any(arg.startswith("--model") for arg in sys.argv[1:])
-    cli_language_set = any(arg.startswith("--language") for arg in sys.argv[1:])
+    cli_language_set = any(
+        arg.startswith("--language") for arg in sys.argv[1:]
+    )
 
     # Use CLI args if explicitly set, otherwise fall back to saved config, then defaults
     if cli_engine_set:
