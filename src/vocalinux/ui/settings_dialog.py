@@ -7,11 +7,11 @@ and other relevant parameters.
 UX Design Notes:
 - Follows GNOME Human Interface Guidelines (HIG) for modern desktop look
 - Uses preference-page style layout with clearly grouped sections
-- Implements Apply/Cancel/Close button pattern per GNOME HIG
+- Implements instant-apply pattern: settings apply immediately when changed
+- Close button only (no Apply/Cancel) - consistent with GNOME Settings app
 - Provides real-time progress feedback for recognition state
 - Multi-modal feedback (text + icon + audio level) for accessibility
-- Auto-apply for safe settings, modal dialog for model downloads
-- See RESEARCH.md for full UX rationale and research citations
+- Modal dialog for model downloads (explicit confirmation for large downloads)
 """
 
 import logging
@@ -604,15 +604,8 @@ class SettingsDialog(Gtk.Dialog):
         # Setup CSS styling
         _setup_css()
 
-        # Dialog configuration
-        self.add_buttons(
-            "_Cancel",
-            Gtk.ResponseType.CANCEL,
-            "_Apply",
-            Gtk.ResponseType.APPLY,
-            "_Close",
-            Gtk.ResponseType.CLOSE,
-        )
+        # Dialog configuration - Close button only (instant-apply pattern)
+        self.add_button("_Close", Gtk.ResponseType.CLOSE)
         self.set_default_size(520, 680)
         self.get_style_context().add_class("settings-dialog")
 
@@ -1660,70 +1653,11 @@ For now, the engine has been reverted to VOSK."""
 
     def do_response(self, response_id):
         """Handle dialog button responses."""
-        if response_id == Gtk.ResponseType.APPLY:
-            logger.info("Apply button clicked - applying settings")
-            if self.apply_settings():
-                self._show_settings_applied_message()
-        elif response_id == Gtk.ResponseType.CANCEL:
-            logger.info("Cancel button clicked - reverting changes")
-            self._revert_settings()
-        elif response_id == Gtk.ResponseType.CLOSE:
+        if response_id == Gtk.ResponseType.CLOSE:
             logger.info("Close button clicked")
             self.destroy()
 
         return True
-
-    def _show_settings_applied_message(self):
-        """Show a brief message that settings were applied successfully."""
-        # Use an in-app notification style
-        notification = Gtk.Revealer()
-        notification.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-        notification.set_transition_duration(200)
-
-        notification_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        notification_box.get_style_context().add_class("info-box")
-        notification_box.set_margin_start(16)
-        notification_box.set_margin_end(16)
-        notification_box.set_margin_top(8)
-
-        icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic", Gtk.IconSize.BUTTON)
-        notification_box.pack_start(icon, False, False, 0)
-
-        label = Gtk.Label(label="Settings applied successfully")
-        notification_box.pack_start(label, False, False, 0)
-
-        notification.add(notification_box)
-
-        # Insert at the top of content box
-        self.content_box.pack_start(notification, False, False, 0)
-        self.content_box.reorder_child(notification, 0)
-        notification.show_all()
-
-        # Reveal with animation
-        GLib.idle_add(notification.set_reveal_child, True)
-
-        # Hide and remove after 2 seconds
-        def hide_notification():
-            notification.set_reveal_child(False)
-            GLib.timeout_add(200, lambda: (self.content_box.remove(notification), False)[1])
-            return False
-
-        GLib.timeout_add(2000, hide_notification)
-
-    def _revert_settings(self):
-        """Revert settings to last saved values."""
-        try:
-            settings = self._get_current_settings()
-
-            engine_text = settings["engine"].capitalize()
-            self.engine_combo.set_active_id(engine_text)
-
-            self.vad_spin.set_value(settings["vad_sensitivity"])
-            self.silence_spin.set_value(settings["silence_timeout"])
-
-            logger.info("Settings reverted to last saved values")
-        except Exception as e:
-            logger.error(f"Failed to revert settings: {e}")
 
     def update_recognition_progress(self, state: str, audio_level: float = 0.0, info: str = ""):
         """Update the recognition progress feedback UI."""
