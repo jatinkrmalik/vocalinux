@@ -77,10 +77,10 @@ class TestWhisperCppEngine:
     def test_vulkan_check_method(self):
         """Test Vulkan availability check method."""
         try:
-            from vocalinux.speech_recognition.whisper_cpp_engine import WhisperCppBackend
+            from vocalinux.speech_recognition.whisper_cpp_engine import WhisperCppEngine
 
             # The method should return a boolean
-            result = WhisperCppBackend.check_vulkan_available()
+            result = WhisperCppEngine.check_vulkan_available()
             assert isinstance(result, bool)
         except ImportError:
             pytest.skip("whisper.cpp not available")
