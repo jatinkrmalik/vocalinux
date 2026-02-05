@@ -15,16 +15,15 @@ from setuptools import find_packages, setup
 MIN_PYTHON_VERSION = (3, 8)
 if sys.version_info < MIN_PYTHON_VERSION:
     sys.exit(
-        f"Error: Vocalinux requires Python {MIN_PYTHON_VERSION[0]}.{MIN_PYTHON_VERSION[1]} or higher"
+        f"Error: Vocalinux requires Python "
+        f"{MIN_PYTHON_VERSION[0]}.{MIN_PYTHON_VERSION[1]} or higher"
     )
 
 
 def get_version():
     """Get version from version.py file."""
     version = "0.3.0-alpha"
-    version_file = os.path.join(
-        os.path.dirname(__file__), "src", "vocalinux", "version.py"
-    )
+    version_file = os.path.join(os.path.dirname(__file__), "src", "vocalinux", "version.py")
     if os.path.exists(version_file):
         with open(version_file, "r", encoding="utf-8") as f:
             for line in f:

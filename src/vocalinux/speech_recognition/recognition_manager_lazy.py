@@ -10,7 +10,6 @@ import ctypes
 import json
 import logging
 import os
-import sys
 import threading
 import time
 from typing import Callable, List, Optional
@@ -325,7 +324,8 @@ class SpeechRecognitionManager:
         os.makedirs(MODELS_DIR, exist_ok=True)
 
         logger.info(
-            f"Initializing speech recognition with {engine} engine, {language} language and {model_size} model"
+            f"Initializing speech recognition with {engine} engine, "
+            f"{language} language and {model_size} model"
         )
 
         # LAZY LOADING: Do NOT load models during initialization
@@ -346,7 +346,7 @@ class SpeechRecognitionManager:
             # For Whisper, validate model size but don't load
             self._validate_whisper_model_size()
 
-        logger.info(f"Speech recognition manager initialized (model loading deferred)")
+        logger.info("Speech recognition manager initialized (model loading deferred)")
 
     def _init_vosk_model_mapping(self):
         """Initialize VOSK model mapping without loading models."""
@@ -360,7 +360,6 @@ class SpeechRecognitionManager:
         }
 
         # Determine model path but don't check existence yet
-        model_name = self.vosk_model_map.get(self.model_size, self.vosk_model_map["small"])
         self.vosk_model_path = self._get_vosk_model_path()
 
     def _validate_whisper_model_size(self):
@@ -660,7 +659,11 @@ class SpeechRecognitionManager:
                                 )
                             else:
                                 eta_str = "--"
-                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} / "
+                                f"{total_size / (1024 * 1024):.1f} MB • "
+                                f"{speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                            )
                         else:
                             progress = 0
                             status = (
@@ -794,7 +797,11 @@ class SpeechRecognitionManager:
                                 )
                             else:
                                 eta_str = "--"
-                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} / "
+                                f"{total_size / (1024 * 1024):.1f} MB • "
+                                f"{speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                            )
                         else:
                             progress = 0
                             status = (
@@ -1059,7 +1066,8 @@ class SpeechRecognitionManager:
                 try:
                     default_device = audio.get_default_input_device_info()
                     logger.info(
-                        f"Using default audio device [{default_device.get('index')}]: {default_device.get('name')}"
+                        f"Using default audio device [{default_device.get('index')}]: "
+                        f"{default_device.get('name')}"
                     )
                 except (IOError, OSError):
                     logger.warning("Could not get default input device info")
@@ -1108,7 +1116,8 @@ class SpeechRecognitionManager:
                     log_level_interval += 1
                     if log_level_interval >= 50:  # Every ~3 seconds at 16kHz/1024 chunks
                         logger.debug(
-                            f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%"
+                            f"Audio level: current={normalized_level:.1f}%, "
+                            f"max_seen={max_level_seen:.1f}%"
                         )
                         log_level_interval = 0
 
@@ -1119,7 +1128,8 @@ class SpeechRecognitionManager:
                         threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
                     except ValueError:
                         logger.warning(
-                            f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
+                            f"Invalid VAD sensitivity value: {self.vad_sensitivity}. "
+                            f"Using default 3."
                         )
                         threshold = 500 / 3
 
@@ -1231,11 +1241,15 @@ class SpeechRecognitionManager:
             language: The new language code (e.g., "en-us", "hi", "auto").
             vad_sensitivity: New VAD sensitivity (for VOSK).
             silence_timeout: New silence timeout (for VOSK).
-            audio_device_index: Audio input device index (None for default, -1 to clear).
-            force_download: If True, download missing models (default: True for UI-triggered reconfigures).
+            audio_device_index: Audio input device index (None for default,
+                -1 to clear).
+            force_download: If True, download missing models (default: True
+                for UI-triggered reconfigures).
         """
         logger.info(
-            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, language={language}, vad={vad_sensitivity}, silence={silence_timeout}, audio_device={audio_device_index}"
+            f"Reconfiguring speech engine. New settings: engine={engine}, "
+            f"model_size={model_size}, language={language}, vad={vad_sensitivity}, "
+            f"silence={silence_timeout}, audio_device={audio_device_index}"
         )
 
         restart_needed = False
