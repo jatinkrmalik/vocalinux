@@ -273,3 +273,108 @@ class TestConfigManager(unittest.TestCase):
 
         # Verify the vosk setting wasn't changed
         self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
+
+    def test_save_settings(self):
+        """Test the save_settings method (alias for save_config)."""
+        config_manager = ConfigManager()
+
+        # Modify config
+        config_manager.config["speech_recognition"]["engine"] = "vosk"
+
+        # Save settings
+        result = config_manager.save_settings()
+        self.assertTrue(result)
+
+        # Verify file was saved
+        self.assertTrue(os.path.exists(self.temp_config_file))
+        with open(self.temp_config_file, "r") as f:
+            saved_config = json.load(f)
+        self.assertEqual(saved_config["speech_recognition"]["engine"], "vosk")
+
+    def test_get_settings(self):
+        """Test the get_settings method returns the entire config."""
+        config_manager = ConfigManager()
+
+        # Get settings
+        settings = config_manager.get_settings()
+
+        # Verify it returns the config
+        self.assertEqual(settings, config_manager.config)
+        self.assertIn("speech_recognition", settings)
+        self.assertIn("ui", settings)
+
+    def test_get_model_size_for_engine_with_engine_specific_key(self):
+        """Test getting model size when engine-specific key exists."""
+        # Create config with engine-specific model sizes
+        test_config = {
+            "speech_recognition": {
+                "engine": "whisper",
+                "vosk_model_size": "medium",
+                "whisper_model_size": "small",
+                "model_size": "large",  # Generic fallback
+            }
+        }
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+
+        # Should use engine-specific size, not generic
+        self.assertEqual(config_manager.get_model_size_for_engine("vosk"), "medium")
+        self.assertEqual(config_manager.get_model_size_for_engine("whisper"), "small")
+
+    def test_set_model_size_for_engine_new_section(self):
+        """Test setting model size when speech_recognition section doesn't exist."""
+        config_manager = ConfigManager()
+
+        # Remove the speech_recognition section
+        del config_manager.config["speech_recognition"]
+
+        # Set model size - should create the section
+        config_manager.set_model_size_for_engine("vosk", "large")
+
+        # Verify section was created and value was set
+        self.assertIn("speech_recognition", config_manager.config)
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
+
+    def test_get_model_size_for_engine_fallback_to_generic(self):
+        """Test fallback to generic model_size when no engine-specific key exists."""
+        # Create config with only generic model_size (no engine-specific)
+        test_config = {
+            "speech_recognition": {
+                "engine": "vosk",
+                "model_size": "large",
+                # No vosk_model_size or whisper_model_size
+            }
+        }
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+
+        # Should fall back to generic model_size
+        # Note: migration might add engine-specific keys, so we test this directly
+        del config_manager.config["speech_recognition"]["vosk_model_size"]
+        del config_manager.config["speech_recognition"]["whisper_model_size"]
+
+        self.assertEqual(config_manager.get_model_size_for_engine("vosk"), "large")
+        self.assertEqual(config_manager.get_model_size_for_engine("whisper"), "large")
+
+    def test_update_speech_recognition_settings_new_section(self):
+        """Test update_speech_recognition_settings when section doesn't exist."""
+        config_manager = ConfigManager()
+
+        # Remove the speech_recognition section
+        del config_manager.config["speech_recognition"]
+
+        # Update settings - should create the section
+        config_manager.update_speech_recognition_settings(
+            {"engine": "whisper", "vad_sensitivity": 5}
+        )
+
+        # Verify section was created
+        self.assertIn("speech_recognition", config_manager.config)
+        self.assertEqual(config_manager.config["speech_recognition"]["engine"], "whisper")
+        self.assertEqual(config_manager.config["speech_recognition"]["vad_sensitivity"], 5)

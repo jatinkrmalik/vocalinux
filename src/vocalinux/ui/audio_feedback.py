@@ -16,7 +16,13 @@ logger = logging.getLogger(__name__)
 # Set a flag for CI/test environments
 # This will be used to make sound functions work in CI testing environments
 # Only use mock player in CI when not explicitly testing the player detection
-CI_MODE = os.environ.get("GITHUB_ACTIONS") == "true"
+# Check for pytest to avoid interfering with unit tests (multiple detection methods)
+_RUNNING_PYTEST = (
+    "pytest" in sys.modules
+    or "PYTEST_CURRENT_TEST" in os.environ
+    or any("pytest" in arg for arg in sys.argv)
+)
+CI_MODE = os.environ.get("GITHUB_ACTIONS") == "true" and not _RUNNING_PYTEST
 
 
 # Import the centralized resource manager

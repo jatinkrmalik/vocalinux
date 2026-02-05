@@ -226,3 +226,119 @@ class TestCommandProcessor(unittest.TestCase):
 
         # Verify new command is in the pattern
         self.assertTrue(self.processor.text_cmd_regex.search("test command"))
+
+
+class TestCommandProcessorFallback(unittest.TestCase):
+    """Test the generic fallback processing logic in CommandProcessor."""
+
+    def setUp(self):
+        """Set up for tests."""
+        self.processor = CommandProcessor()
+
+    def test_generic_action_command_with_following_text(self):
+        """Test action command followed by text through generic path."""
+        # Use text that won't match hardcoded test cases
+        result, actions = self.processor.process_text("undo the error")
+        # Should trigger action and capture following text
+        self.assertIn("undo", actions)
+
+    def test_generic_action_command_alone(self):
+        """Test action command alone through generic path."""
+        # "redo" alone isn't hardcoded, so goes through generic
+        result, actions = self.processor.process_text("redo only")
+        self.assertIn("redo", actions)
+
+    def test_generic_text_command_punctuation(self):
+        """Test punctuation text commands through generic path."""
+        # "full stop" isn't in the hardcoded section
+        result, actions = self.processor.process_text("the end full stop")
+        self.assertIn(".", result)
+
+    def test_generic_text_command_non_punctuation(self):
+        """Test non-punctuation text commands through generic path."""
+        # Test "open brace" by itself (different from hardcoded combo)
+        result, actions = self.processor.process_text("code open brace here")
+        self.assertIn("{", result)
+
+    def test_generic_format_capitalize_next(self):
+        """Test capitalize format command through generic path."""
+        # Use a different pattern than hardcoded cases
+        result, actions = self.processor.process_text("capitalize john")
+        # Should capitalize john -> John
+        self.assertIn("John", result)
+
+    def test_generic_format_uppercase_next(self):
+        """Test uppercase format command through generic path."""
+        # "uppercase" followed by a word not in hardcoded cases
+        result, actions = self.processor.process_text("uppercase hello")
+        self.assertIn("HELLO", result)
+
+    def test_generic_format_lowercase_next(self):
+        """Test lowercase format command through generic path."""
+        # Different pattern than the hardcoded "lowercase TEXT"
+        result, actions = self.processor.process_text("lowercase WORLD")
+        self.assertIn("world", result)
+
+    def test_generic_format_no_target_word(self):
+        """Test format command with no following word through generic path."""
+        # "uppercase" alone - no word follows
+        result, actions = self.processor.process_text("uppercase")
+        # Should return empty when no target word
+        self.assertEqual(result, "")
+
+    def test_generic_multiple_punctuation(self):
+        """Test multiple punctuation commands through generic path."""
+        result, actions = self.processor.process_text("hello comma world period")
+        # Both comma and period should be replaced
+        self.assertIn(",", result)
+        self.assertIn(".", result)
+
+    def test_generic_semicolon(self):
+        """Test semicolon through generic path."""
+        result, actions = self.processor.process_text("statement semicolon")
+        self.assertIn(";", result)
+
+    def test_generic_colon(self):
+        """Test colon through generic path."""
+        result, actions = self.processor.process_text("note colon important")
+        self.assertIn(":", result)
+
+    def test_generic_question_mark(self):
+        """Test question mark through generic path."""
+        result, actions = self.processor.process_text("really question mark")
+        self.assertIn("?", result)
+
+    def test_generic_exclamation_point(self):
+        """Test exclamation point through generic path."""
+        result, actions = self.processor.process_text("wow exclamation point")
+        self.assertIn("!", result)
+
+    def test_generic_unknown_format_type(self):
+        """Test unknown format type falls back to word as-is."""
+        # Add an unknown format type for testing
+        self.processor.format_commands["testformat"] = "unknown_type"
+        self.processor._compile_patterns()
+
+        result, actions = self.processor.process_text("testformat word")
+        # Unknown format type should return word unchanged
+        self.assertIn("word", result.lower())
+
+    def test_generic_select_line_action(self):
+        """Test select line action through generic path."""
+        result, actions = self.processor.process_text("select line now")
+        self.assertIn("select_line", actions)
+
+    def test_generic_select_word_action(self):
+        """Test select word action through generic path."""
+        result, actions = self.processor.process_text("select word please")
+        self.assertIn("select_word", actions)
+
+    def test_generic_cut_action(self):
+        """Test cut action through generic path."""
+        result, actions = self.processor.process_text("cut selection")
+        self.assertIn("cut", actions)
+
+    def test_generic_paste_action(self):
+        """Test paste action through generic path."""
+        result, actions = self.processor.process_text("paste content")
+        self.assertIn("paste", actions)

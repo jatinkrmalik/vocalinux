@@ -13,30 +13,20 @@ import pytest
 # We need to use absolute paths for patching in module scope
 AUDIO_FEEDBACK_MODULE = "vocalinux.ui.audio_feedback"
 
-# Import the module under test
-from vocalinux.ui.audio_feedback import (
-    ERROR_SOUND,
-    START_SOUND,
-    STOP_SOUND,
-)
-
 
 @pytest.fixture(autouse=True)
-def reset_modules():
-    """Reset imported modules before each test to avoid state leakage."""
-    # Store original module
+def reset_audio_module():
+    """Reset the audio_feedback module before each test to allow proper testing."""
+    # Remove the mock that conftest installs
     if AUDIO_FEEDBACK_MODULE in sys.modules:
-        original_module = sys.modules[AUDIO_FEEDBACK_MODULE]
         del sys.modules[AUDIO_FEEDBACK_MODULE]
-    else:
-        original_module = None
 
-    # Let the test run
     yield
 
-    # Restore original module if it existed
-    if original_module:
-        sys.modules[AUDIO_FEEDBACK_MODULE] = original_module
+    # Restore the mock after test for other tests that need it
+    from conftest import mock_audio_feedback
+
+    sys.modules[AUDIO_FEEDBACK_MODULE] = mock_audio_feedback
 
 
 class TestAudioFeedback(unittest.TestCase):
@@ -44,6 +34,9 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_resource_paths(self):
         """Test that resource paths are correctly set up."""
+        # Import fresh module
+        import vocalinux.ui.audio_feedback as audio_feedback
+
         # Import the resource manager to test paths
         from vocalinux.utils.resource_manager import ResourceManager
 
@@ -58,9 +51,9 @@ class TestAudioFeedback(unittest.TestCase):
             resource_manager.sounds_dir.endswith("sounds"),
             f"Sounds directory path is not valid: {resource_manager.sounds_dir}",
         )
-        self.assertEqual(os.path.basename(START_SOUND), "start_recording.wav")
-        self.assertEqual(os.path.basename(STOP_SOUND), "stop_recording.wav")
-        self.assertEqual(os.path.basename(ERROR_SOUND), "error.wav")
+        self.assertEqual(os.path.basename(audio_feedback.START_SOUND), "start_recording.wav")
+        self.assertEqual(os.path.basename(audio_feedback.STOP_SOUND), "stop_recording.wav")
+        self.assertEqual(os.path.basename(audio_feedback.ERROR_SOUND), "error.wav")
 
     def test_get_audio_player_pulseaudio(self):
         """Test detecting PulseAudio player."""
@@ -332,3 +325,46 @@ class TestAudioFeedback(unittest.TestCase):
 
             # Verify _play_sound_file was called with correct path
             mock_play.assert_called_once_with(ERROR_SOUND)
+
+    def test_play_sound_file_ci_test_player(self):
+        """Test playing sound with ci_test_player (GitHub Actions fallback)."""
+        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
+            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player",
+            return_value=("ci_test_player", ["wav"]),
+        ), patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
+
+            # Re-import to get fresh functions with our patches applied
+            from vocalinux.ui.audio_feedback import _play_sound_file
+
+            # Call the function
+            result = _play_sound_file("test.wav")
+
+            # Verify the function returned True and called Popen correctly
+            self.assertTrue(result)
+            mock_popen.assert_called_once()
+            args, kwargs = mock_popen.call_args
+            self.assertEqual(args[0][0], "ci_test_player")
+            self.assertEqual(args[0][1], "test.wav")
+
+    def test_get_audio_player_github_actions_fallback(self):
+        """Test ci_test_player assignment in GitHub Actions without audio player."""
+        with patch(f"{AUDIO_FEEDBACK_MODULE}.shutil.which", return_value=None), patch(
+            f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True
+        ), patch.dict("os.environ", {"GITHUB_ACTIONS": "true"}):
+
+            # Re-import to get fresh functions with our patches applied
+            from vocalinux.ui.audio_feedback import _get_audio_player, _play_sound_file
+
+            # First verify _get_audio_player returns None
+            player, formats = _get_audio_player()
+            self.assertIsNone(player)
+
+            # Now test _play_sound_file which should assign ci_test_player
+            with patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
+                result = _play_sound_file("test.wav")
+
+                # Should have used ci_test_player
+                self.assertTrue(result)
+                mock_popen.assert_called_once()
+                args, _ = mock_popen.call_args
+                self.assertEqual(args[0][0], "ci_test_player")
