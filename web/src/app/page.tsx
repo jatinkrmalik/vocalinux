@@ -34,6 +34,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { VocalinuxLogo } from "@/components/optimized-image";
 import { CodeBlock } from "@/components/code-block";
 import { useInView } from "react-intersection-observer";
 
@@ -193,9 +194,7 @@ export default function HomePage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
-            <Image
-              src="/vocalinux.png"
-              alt="Vocalinux Logo"
+            <VocalinuxLogo
               width={32}
               height={32}
               className="h-7 w-7 sm:h-8 sm:w-8 transition-transform group-hover:scale-110"
@@ -355,7 +354,7 @@ export default function HomePage() {
                     <Terminal className="h-5 w-5 text-green-400" />
                   </div>
                   <div className="text-left">
-                    <h3 className="text-lg font-semibold text-white text-left">Quick Install</h3>
+                    <h2 className="text-lg font-semibold text-white text-left">Quick Install</h2>
                     <p className="text-xs text-zinc-400 text-left">Copy & paste in your terminal</p>
                   </div>
                 </div>
@@ -556,7 +555,7 @@ export default function HomePage() {
                   <div className="relative">
                     <div className="bg-white dark:bg-zinc-800 rounded-2xl p-8 shadow-xl">
                       <div className="flex items-center gap-4 mb-6">
-                        <Image src="/vocalinux.png" alt="Vocalinux" width={64} height={64} className="h-16 w-16" />
+                        <VocalinuxLogo width={64} height={64} className="h-16 w-16" />
                         <div>
                           <div className="text-2xl font-bold">Vocalinux</div>
                           <div className="text-sm text-muted-foreground">
@@ -1021,7 +1020,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             <div className="md:col-span-2">
               <Link href="/" className="flex items-center gap-2 mb-4">
-                <Image src="/vocalinux.png" alt="Vocalinux" width={32} height={32} className="h-8 w-8" />
+                <VocalinuxLogo width={32} height={32} className="h-8 w-8" />
                 <span className="text-xl font-bold">Vocalinux</span>
               </Link>
               <p className="text-zinc-400 mb-4 max-w-md">
