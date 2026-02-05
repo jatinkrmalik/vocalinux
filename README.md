@@ -48,13 +48,29 @@
 
 ## 🚀 Quick Install
 
-### One-liner Installation (Recommended)
+### Interactive Install (Recommended for New Users)
+
+Let the installer guide you through the setup with smart hardware detection:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha --interactive
+```
+
+The interactive installer will:
+- **Auto-detect your hardware** (GPU, RAM)
+- **Recommend the best configuration** for your system
+- **Guide you through each step** with clear explanations
+- **Show you how to launch and use** Vocalinux after installation
+
+### One-liner Installation (Quick Install)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
 ```
 
 > **Note**: Installs v0.4.1-alpha. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+>
+> **GPU Detection**: The installer now automatically detects NVIDIA GPUs and uses CPU-only PyTorch when no GPU is present, saving you ~2GB of download!
 
 This will:
 - Clone the repository to `~/.local/share/vocalinux-install`
