@@ -253,8 +253,14 @@ run_interactive_install() {
     clear_screen
     cat << "EOF"
 
-Vocalinux - Interactive Installation Guide
-==========================================
+  ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌     █  ▐▌ ▝▜▌▐▌ ▐▌  ▐▌
+   ▝▚▞▘ ▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▗▞▘▝▚▖
+
+                    Voice Dictation for Linux
+
+                 Interactive Installation Guide
 
 EOF
 
@@ -286,14 +292,14 @@ EOF
     echo "Vocalinux supports two speech recognition engines:"
     echo ""
     echo "  1. Whisper AI (recommended)"
-    echo "     - Highest accuracy available"
-    echo "     - 99+ languages supported"
-    echo "     - Created by OpenAI"
+    echo "     • Highest accuracy available"
+    echo "     • 99+ languages supported"
+    echo "     • Created by OpenAI"
     echo ""
     echo "  2. VOSK"
-    echo "     - Lightweight and fast"
-    echo "     - Works on older/low-RAM systems"
-    echo "     - 20+ languages supported"
+    echo "     • Lightweight and fast"
+    echo "     • Works on older/low-RAM systems"
+    echo "     • 20+ languages supported"
     echo ""
 
     read -p "Choose your speech engine [1-2] (default: 1): " ENGINE_CHOICE
@@ -1534,10 +1540,15 @@ print_welcome_message() {
 
     clear_screen
 
+    # ASCII art header
     cat << "EOF"
 
-Vocalinux - Installation Complete
-================================
+  ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌     █  ▐▌ ▝▜▌▐▌ ▐▌  ▐▌
+   ▝▚▞▘ ▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▗▞▘▝▚▖
+
+                     ✓ Installation Complete!
 
 EOF
 
@@ -1550,45 +1561,44 @@ EOF
     fi
 
     echo ""
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Getting Started"
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "1. Launch Vocalinux from your app menu"
     echo "   Look for 'Vocalinux' in your application launcher."
     echo ""
-    echo "   Or from terminal:"
-    echo "   vocalinux"
+    echo -e "   Or from terminal: \e[36mvocalinux\e[0m"
     echo ""
     echo "2. Find Vocalinux in your system tray (top bar)"
-    echo "   - Click the icon to access settings"
-    echo "   - Right-click for options (Quit, Settings, etc.)"
+    echo "   • Click the icon to access settings"
+    echo "   • Right-click for options (Quit, Settings, etc.)"
     echo ""
     echo "3. Start dictating!"
-    echo "   Double-tap Ctrl anywhere to start/stop dictation"
+    echo -e "   \e[1mDouble-tap Ctrl\e[0m anywhere to start/stop dictation"
     echo ""
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  First Run Tips"
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "- Speak clearly and at a natural pace"
-    echo "- Use voice commands: 'period', 'comma', 'new line', 'delete that'"
-    echo "- Both engines are 100% offline - your privacy is protected"
+    echo "• Speak clearly and at a natural pace"
+    echo "• Use voice commands: 'period', 'comma', 'new line', 'delete that'"
+    echo "• Both engines are 100% offline - your privacy is protected"
     echo ""
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Need Help?"
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "- Report issues: https://github.com/jatinkrmalik/vocalinux/issues"
-    echo "- Documentation: https://github.com/jatinkrmalik/vocalinux"
-    echo "- Star us on GitHub: https://github.com/jatinkrmalik/vocalinux"
+    echo "• Report issues: https://github.com/jatinkrmalik/vocalinux/issues"
+    echo "• Documentation: https://github.com/jatinkrmalik/vocalinux"
+    echo "• Star us on GitHub: ⭐ https://github.com/jatinkrmalik/vocalinux"
     echo ""
 
     # Installation details (optional, for debugging)
     if [[ "$VERBOSE" == "yes" ]]; then
-        echo "============================================================"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "  Installation Details"
-        echo "============================================================"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
         echo "Virtual environment: $VENV_DIR"
         echo "Desktop entry: $DESKTOP_DIR/vocalinux.desktop"
