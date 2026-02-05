@@ -57,18 +57,18 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_get_audio_player_pulseaudio(self):
         """Test detecting PulseAudio player."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.shutil.which") as mock_which:
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.shutil, "which") as mock_which:
             # Mock shutil.which to return True for paplay and False for others
             def which_side_effect(cmd):
                 return cmd == "paplay"
 
             mock_which.side_effect = which_side_effect
 
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _get_audio_player
-
             # Call the function
-            player, formats = _get_audio_player()
+            player, formats = audio_feedback._get_audio_player()
 
             # Verify the correct player was detected
             self.assertEqual(player, "paplay")
@@ -76,7 +76,10 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_get_audio_player_alsa(self):
         """Test detecting ALSA player."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.shutil.which") as mock_which:
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.shutil, "which") as mock_which:
             # Mock shutil.which to return False for paplay, True for aplay
             def which_side_effect(cmd):
                 return {
@@ -88,11 +91,8 @@ class TestAudioFeedback(unittest.TestCase):
 
             mock_which.side_effect = which_side_effect
 
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _get_audio_player
-
             # Call the function
-            player, formats = _get_audio_player()
+            player, formats = audio_feedback._get_audio_player()
 
             # Verify the correct player was detected
             self.assertEqual(player, "aplay")
@@ -100,7 +100,10 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_get_audio_player_sox(self):
         """Test detecting SoX player."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.shutil.which") as mock_which:
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.shutil, "which") as mock_which:
             # Mock shutil.which to return False for paplay/aplay, True for play
             def which_side_effect(cmd):
                 return {
@@ -112,11 +115,8 @@ class TestAudioFeedback(unittest.TestCase):
 
             mock_which.side_effect = which_side_effect
 
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _get_audio_player
-
             # Call the function
-            player, formats = _get_audio_player()
+            player, formats = audio_feedback._get_audio_player()
 
             # Verify the correct player was detected
             self.assertEqual(player, "play")
@@ -124,7 +124,10 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_get_audio_player_mplayer(self):
         """Test detecting MPlayer."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.shutil.which") as mock_which:
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.shutil, "which") as mock_which:
             # Mock shutil.which to return False for all except mplayer
             def which_side_effect(cmd):
                 return {
@@ -136,11 +139,8 @@ class TestAudioFeedback(unittest.TestCase):
 
             mock_which.side_effect = which_side_effect
 
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _get_audio_player
-
             # Call the function
-            player, formats = _get_audio_player()
+            player, formats = audio_feedback._get_audio_player()
 
             # Verify the correct player was detected
             self.assertEqual(player, "mplayer")
@@ -148,15 +148,12 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_get_audio_player_none(self):
         """Test behavior when no audio player is available."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.shutil.which") as mock_which:
-            # Mock shutil.which to return False for all players
-            mock_which.return_value = None
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
 
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _get_audio_player
-
+        with patch.object(audio_feedback.shutil, "which", return_value=None):
             # Call the function
-            player, formats = _get_audio_player()
+            player, formats = audio_feedback._get_audio_player()
 
             # Verify no player was detected
             self.assertIsNone(player)
@@ -164,43 +161,42 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_play_sound_file_missing(self):
         """Test playing a missing sound file."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=False):
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
 
+        with patch.object(audio_feedback.os.path, "exists", return_value=False):
             # Call the function
-            result = _play_sound_file("nonexistent.wav")
+            result = audio_feedback._play_sound_file("nonexistent.wav")
 
             # Verify the function returned False
             self.assertFalse(result)
 
     def test_play_sound_file_no_player(self):
         """Test playing sound with no available player."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
-            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player", return_value=(None, [])
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback, "_get_audio_player", return_value=(None, [])
         ):
-
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
-
             # Call the function
-            result = _play_sound_file("test.wav")
+            result = audio_feedback._play_sound_file("test.wav")
 
             # Verify the function returned False
             self.assertFalse(result)
 
     def test_play_sound_file_paplay(self):
         """Test playing sound with paplay."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
-            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player",
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback,
+            "_get_audio_player",
             return_value=("paplay", ["wav"]),
-        ), patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
-
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
-
+        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
             # Call the function
-            result = _play_sound_file("test.wav")
+            result = audio_feedback._play_sound_file("test.wav")
 
             # Verify the function returned True and called Popen correctly
             self.assertTrue(result)
@@ -211,16 +207,16 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_play_sound_file_aplay(self):
         """Test playing sound with aplay."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
-            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player",
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback,
+            "_get_audio_player",
             return_value=("aplay", ["wav"]),
-        ), patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
-
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
-
+        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
             # Call the function
-            result = _play_sound_file("test.wav")
+            result = audio_feedback._play_sound_file("test.wav")
 
             # Verify the function returned True and called Popen correctly
             self.assertTrue(result)
@@ -232,16 +228,16 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_play_sound_file_mplayer(self):
         """Test playing sound with mplayer."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
-            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player",
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback,
+            "_get_audio_player",
             return_value=("mplayer", ["wav"]),
-        ), patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
-
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
-
+        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
             # Call the function
-            result = _play_sound_file("test.wav")
+            result = audio_feedback._play_sound_file("test.wav")
 
             # Verify the function returned True and called Popen correctly
             self.assertTrue(result)
@@ -253,15 +249,14 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_play_sound_file_play(self):
         """Test playing sound with play (SoX)."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
-            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player", return_value=("play", ["wav"])
-        ), patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
 
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
-
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback, "_get_audio_player", return_value=("play", ["wav"])
+        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
             # Call the function
-            result = _play_sound_file("test.wav")
+            result = audio_feedback._play_sound_file("test.wav")
 
             # Verify the function returned True and called Popen correctly
             self.assertTrue(result)
@@ -273,71 +268,72 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_play_sound_file_exception(self):
         """Test handling exception when playing sound."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
-            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player",
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback,
+            "_get_audio_player",
             return_value=("paplay", ["wav"]),
-        ), patch(
-            f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen",
+        ), patch.object(
+            audio_feedback.subprocess,
+            "Popen",
             side_effect=Exception("Mock error"),
         ):
-
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
-
             # Call the function
-            result = _play_sound_file("test.wav")
+            result = audio_feedback._play_sound_file("test.wav")
 
             # Verify the function returned False
             self.assertFalse(result)
 
     def test_play_start_sound(self):
         """Test playing start sound."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}._play_sound_file") as mock_play:
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import START_SOUND, play_start_sound
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
 
+        with patch.object(audio_feedback, "_play_sound_file") as mock_play:
             # Call the function
-            play_start_sound()
+            audio_feedback.play_start_sound()
 
             # Verify _play_sound_file was called with correct path
-            mock_play.assert_called_once_with(START_SOUND)
+            mock_play.assert_called_once_with(audio_feedback.START_SOUND)
 
     def test_play_stop_sound(self):
         """Test playing stop sound."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}._play_sound_file") as mock_play:
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import STOP_SOUND, play_stop_sound
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
 
+        with patch.object(audio_feedback, "_play_sound_file") as mock_play:
             # Call the function
-            play_stop_sound()
+            audio_feedback.play_stop_sound()
 
             # Verify _play_sound_file was called with correct path
-            mock_play.assert_called_once_with(STOP_SOUND)
+            mock_play.assert_called_once_with(audio_feedback.STOP_SOUND)
 
     def test_play_error_sound(self):
         """Test playing error sound."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}._play_sound_file") as mock_play:
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import ERROR_SOUND, play_error_sound
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
 
+        with patch.object(audio_feedback, "_play_sound_file") as mock_play:
             # Call the function
-            play_error_sound()
+            audio_feedback.play_error_sound()
 
             # Verify _play_sound_file was called with correct path
-            mock_play.assert_called_once_with(ERROR_SOUND)
+            mock_play.assert_called_once_with(audio_feedback.ERROR_SOUND)
 
     def test_play_sound_file_ci_test_player(self):
         """Test playing sound with ci_test_player (GitHub Actions fallback)."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True), patch(
-            f"{AUDIO_FEEDBACK_MODULE}._get_audio_player",
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback,
+            "_get_audio_player",
             return_value=("ci_test_player", ["wav"]),
-        ), patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
-
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _play_sound_file
-
+        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
             # Call the function
-            result = _play_sound_file("test.wav")
+            result = audio_feedback._play_sound_file("test.wav")
 
             # Verify the function returned True and called Popen correctly
             self.assertTrue(result)
@@ -348,20 +344,19 @@ class TestAudioFeedback(unittest.TestCase):
 
     def test_get_audio_player_github_actions_fallback(self):
         """Test ci_test_player assignment in GitHub Actions without audio player."""
-        with patch(f"{AUDIO_FEEDBACK_MODULE}.shutil.which", return_value=None), patch(
-            f"{AUDIO_FEEDBACK_MODULE}.os.path.exists", return_value=True
+        # Import the module first
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.shutil, "which", return_value=None), patch.object(
+            audio_feedback.os.path, "exists", return_value=True
         ), patch.dict("os.environ", {"GITHUB_ACTIONS": "true"}):
-
-            # Re-import to get fresh functions with our patches applied
-            from vocalinux.ui.audio_feedback import _get_audio_player, _play_sound_file
-
             # First verify _get_audio_player returns None
-            player, formats = _get_audio_player()
+            player, formats = audio_feedback._get_audio_player()
             self.assertIsNone(player)
 
             # Now test _play_sound_file which should assign ci_test_player
-            with patch(f"{AUDIO_FEEDBACK_MODULE}.subprocess.Popen") as mock_popen:
-                result = _play_sound_file("test.wav")
+            with patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
+                result = audio_feedback._play_sound_file("test.wav")
 
                 # Should have used ci_test_player
                 self.assertTrue(result)
