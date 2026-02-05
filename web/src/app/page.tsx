@@ -40,6 +40,10 @@ import { useInView } from "react-intersection-observer";
 // The one-liner install command (split into three lines for display)
 // Downloads install.sh from main (which has --tag support) and passes the latest release tag
 const getInstallCommands = (latestRelease: string) => ({
+  interactiveInstallCommand: `curl \\
+  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
+  | bash -s -- --tag=${latestRelease} --interactive`,
+
   oneClickInstallCommand: `curl \\
   -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
   | bash -s -- --tag=${latestRelease}`,
@@ -185,7 +189,7 @@ export default function HomePage() {
 
   // Get install commands based on the latest release
   const installCommands = getInstallCommands(latestRelease);
-  const { oneClickInstallCommand, oneClickInstallWhisperCpu, oneClickInstallNoWhisper, uninstallCommand } = installCommands;
+  const { interactiveInstallCommand, oneClickInstallCommand, oneClickInstallWhisperCpu, oneClickInstallNoWhisper, uninstallCommand } = installCommands;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
@@ -598,16 +602,45 @@ export default function HomePage() {
           <FadeInSection delay={0.1}>
             <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 min-w-0">
               <div className="p-6 sm:p-8">
+                {/* Interactive Install - NEW PRIMARY OPTION */}
+                <div className="mb-8 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-xl p-6 -mx-6 -mt-8 sm:-mx-8 sm:-mt-8 border border-purple-500/20">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-purple-500/10 p-2 rounded-lg">
+                      <Sparkles className="h-5 w-5 text-purple-500" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold">Interactive Install (Recommended)</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Guided installation with smart hardware detection
+                      </p>
+                    </div>
+                    <CopyButton text={interactiveInstallCommand} />
+                  </div>
+                  <div className="overflow-x-auto">
+                    <CodeBlock
+                      language="bash"
+                      className="rounded-lg text-sm sm:text-base"
+                      customStyle={{ margin: 0, maxWidth: "100%", overflowX: "auto" }}
+                      wrapLongLines={false}
+                    >
+                      {interactiveInstallCommand}
+                    </CodeBlock>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Detects your GPU and recommends the best option. Prompts for your preferences.
+                  </p>
+                </div>
+
                 {/* Primary install option */}
                 <div className="mb-8">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-green-500/10 p-2 rounded-lg">
-                      <Sparkles className="h-5 w-5 text-green-500" />
+                    <div className="bg-blue-500/10 p-2 rounded-lg">
+                      <Zap className="h-5 w-5 text-blue-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold">Recommended: Full Install</h3>
+                      <h3 className="text-xl font-semibold">Quick Install (Auto-detect)</h3>
                       <p className="text-sm text-muted-foreground">
-                        Includes Whisper AI for best accuracy (~5-10 min)
+                        Fastest for power users - no prompts (~3-10 min)
                       </p>
                     </div>
                     <CopyButton text={oneClickInstallCommand} />
@@ -627,13 +660,13 @@ export default function HomePage() {
                 {/* Alternative install - CPU only */}
                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-blue-500/10 p-2 rounded-lg">
-                      <Cpu className="h-5 w-5 text-blue-500" />
+                    <div className="bg-cyan-500/10 p-2 rounded-lg">
+                      <Cpu className="h-5 w-5 text-cyan-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold">Whisper CPU-only</h3>
+                      <h3 className="text-lg font-semibold">CPU-only Install</h3>
                       <p className="text-sm text-muted-foreground">
-                        Smaller download (~200MB vs ~2.3GB) - no NVIDIA GPU needed (~3-4 min)
+                        Smaller download (~200MB vs ~2.3GB) - for systems without NVIDIA GPU (~3-4 min)
                       </p>
                     </div>
                     <CopyButton text={oneClickInstallWhisperCpu} />
@@ -653,11 +686,11 @@ export default function HomePage() {
                 {/* Alternative install - VOSK only */}
                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-green-500/10 p-2 rounded-lg">
-                      <Zap className="h-5 w-5 text-green-500" />
+                    <div className="bg-orange-500/10 p-2 rounded-lg">
+                      <Zap className="h-5 w-5 text-orange-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold">VOSK only (lightest)</h3>
+                      <h3 className="text-lg font-semibold">VOSK Only (Lightweight)</h3>
                       <p className="text-sm text-muted-foreground">
                         For low-RAM systems (8GB or less) - skips Whisper entirely (~2-3 min)
                       </p>
