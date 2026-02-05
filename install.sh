@@ -293,31 +293,31 @@ EOF
     fi
     echo ""
 
-    # Step 2: Choose speech engine
-    print_header "Step 2: Speech Recognition Engine"
-    echo "Vocalinux supports two speech recognition engines:"
+    # Step 2: Choose installation type
+    print_header "Step 2: Installation Type"
+    echo "Choose what to install:"
     echo ""
-    echo "  1. Whisper AI (recommended)"
-    echo "     • Highest accuracy available"
-    echo "     • 99+ languages supported"
-    echo "     • Created by OpenAI"
+    echo "  1. Full install (recommended)"
+    echo "     • Whisper AI - highest accuracy, 99+ languages"
+    echo "     • VOSK - fast fallback engine"
+    echo "     • Can switch between engines in Settings"
     echo ""
-    echo "  2. VOSK"
-    echo "     • Lightweight and fast"
+    echo "  2. Minimal install"
+    echo "     • VOSK only - lightweight and fast"
     echo "     • Works on older/low-RAM systems"
-    echo "     • 20+ languages supported"
+    echo "     • ~40MB vs ~2GB+ for full install"
     echo ""
 
-    read -p "Choose your speech engine [1-2] (default: 1): " ENGINE_CHOICE
+    read -p "Choose installation type [1-2] (default: 1): " ENGINE_CHOICE
     ENGINE_CHOICE=${ENGINE_CHOICE:-1}
 
     if [[ "$ENGINE_CHOICE" == "2" ]]; then
         WITH_WHISPER="no"
         NO_WHISPER_EXPLICIT="yes"
-        SELECTED_ENGINE="VOSK"
+        SELECTED_ENGINE="Minimal (VOSK only)"
     else
         WITH_WHISPER="yes"
-        SELECTED_ENGINE="Whisper AI"
+        SELECTED_ENGINE="Full (Whisper + VOSK)"
 
         # Step 3: Whisper variant (if Whisper selected)
         print_header "Step 3: Whisper Installation Type"
@@ -364,7 +364,10 @@ EOF
 
     # Summary
     print_header "Installation Summary"
-    echo "Speech engine: $SELECTED_ENGINE${SELECTED_VARIANT:+ ($SELECTED_VARIANT)}"
+    echo "Install type: $SELECTED_ENGINE"
+    if [[ "$WITH_WHISPER" == "yes" ]]; then
+        echo "Whisper variant: ${SELECTED_VARIANT:-GPU}"
+    fi
     echo "Models: $([[ "$SKIP_MODELS" == "yes" ]] && echo "Download on first use" || echo "Download now")"
     echo ""
     read -p "Press Enter to continue, or Ctrl+C to cancel..."
@@ -995,16 +998,15 @@ VOSK_CONFIG
         else
             # Interactive mode: Prompt user
             echo ""
-            print_info "Whisper AI provides better accuracy but requires more disk space."
-            print_info "Options:"
-            print_info "  1) Full install with GPU support (~2.3GB) - best if you have NVIDIA GPU"
-            print_info "  2) CPU-only install (~200MB) - works on any system, slightly slower"
-            print_info "  3) Skip Whisper - use VOSK only"
+            print_info "Choose installation type:"
+            print_info "  1) Full install - GPU (~2.3GB) - Whisper + VOSK, best accuracy"
+            print_info "  2) Full install - CPU (~200MB) - Whisper + VOSK, no GPU needed"
+            print_info "  3) Minimal install (~40MB) - VOSK only, lightweight"
             read -p "Choose option [1/2/3]: " -n 1 -r
             echo
             if [[ $REPLY == "1" ]]; then
                 WITH_WHISPER="yes"
-                print_info "Installing Whisper with GPU support (this might take a while)..."
+                print_info "Installing full (Whisper + VOSK) with GPU support..."
                 pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                     print_warning "Failed to install Whisper support."
                     print_warning "Voice recognition will fall back to VOSK."
@@ -1012,7 +1014,7 @@ VOSK_CONFIG
             elif [[ $REPLY == "2" ]]; then
                 WITH_WHISPER="yes"
                 WHISPER_CPU="yes"
-                print_info "Installing Whisper with CPU-only PyTorch..."
+                print_info "Installing full (Whisper + VOSK) with CPU-only PyTorch..."
                 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
                     print_warning "Failed to install CPU-only PyTorch."
                 }
@@ -1021,10 +1023,9 @@ VOSK_CONFIG
                     print_warning "Voice recognition will fall back to VOSK."
                 }
             elif [[ $REPLY == "3" ]]; then
-                # User selected VOSK only - create config with VOSK as default
+                # User selected minimal install (VOSK only)
                 NO_WHISPER_EXPLICIT="yes"
-                print_info "Skipping Whisper installation."
-                print_info "VOSK will be used as the default speech recognition engine."
+                print_info "Installing minimal (VOSK only)..."
 
                 # Create config file with VOSK as default engine
                 local CONFIG_FILE_PATH="$CONFIG_DIR/config.json"
