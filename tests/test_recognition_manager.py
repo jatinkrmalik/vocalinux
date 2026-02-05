@@ -2,10 +2,7 @@
 Tests for the speech recognition manager.
 """
 
-import json
-import os
 import sys
-import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -21,12 +18,12 @@ sys.modules["numpy"] = MagicMock()
 sys.modules["zipfile"] = MagicMock()
 
 # Import the shared mock from conftest
-from conftest import mock_audio_feedback
+from conftest import mock_audio_feedback  # noqa: E402
 
 # Update import paths to use the new package structure
-from vocalinux.common_types import RecognitionState
-from vocalinux.speech_recognition.command_processor import CommandProcessor
-from vocalinux.speech_recognition.recognition_manager import MODELS_DIR, SpeechRecognitionManager
+from vocalinux.common_types import RecognitionState  # noqa: E402
+from vocalinux.speech_recognition.command_processor import CommandProcessor  # noqa: E402
+from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager  # noqa: E402
 
 
 class TestSpeechRecognition(unittest.TestCase):
@@ -247,9 +244,7 @@ class TestSpeechRecognition(unittest.TestCase):
             # Replace _process_final_buffer with our own implementation for testing
             def mock_process():
                 # Skip file operations, just simulate the Whisper transcription directly
-                # Mock the Whisper result
-                result = {"text": "whisper test"}
-                # Process the Whisper result through the command processor
+                # Mock the Whisper result and process it
                 processed_text, actions = self.cmdProcessorMock("whisper test")
                 # Call the callbacks
                 for callback in manager.text_callbacks:

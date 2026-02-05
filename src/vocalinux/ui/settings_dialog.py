@@ -25,7 +25,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
-from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO
+from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:

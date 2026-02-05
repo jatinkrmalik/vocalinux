@@ -3,7 +3,6 @@ Tests for the command processor functionality.
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
 
 # Update import path to use the new package structure
 from vocalinux.speech_recognition.command_processor import CommandProcessor

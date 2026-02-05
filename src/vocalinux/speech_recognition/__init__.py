@@ -2,7 +2,7 @@
 Speech recognition module for Vocalinux
 """
 
-from . import command_processor, recognition_manager
+from . import command_processor, recognition_manager  # noqa: F401
 
 
 def get_audio_input_devices():

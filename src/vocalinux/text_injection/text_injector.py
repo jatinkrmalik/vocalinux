@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import time
 from enum import Enum
-from typing import Dict, Optional
+from typing import Optional  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,8 @@ class TextInjector:
                 error_output = result.stderr.lower()
                 if "compositor does not support" in error_output or result.returncode != 0:
                     logger.warning(
-                        f"Wayland compositor does not support virtual keyboard protocol: {error_output}"
+                        "Wayland compositor does not support virtual "
+                        f"keyboard protocol: {error_output}"
                     )
                     if shutil.which("xdotool"):
                         logger.info("Automatically switching to XWayland fallback with xdotool")
@@ -222,7 +223,7 @@ class TextInjector:
                         self._inject_with_xdotool(escaped_text)
                     else:
                         raise
-            logger.info(f"Text injection completed successfully")
+            logger.info("Text injection completed successfully")
             return True
         except Exception as e:
             logger.error(f"Failed to inject text: {e}", exc_info=True)
@@ -331,7 +332,7 @@ class TextInjector:
                         cmd = ["xdotool", "type", "--clearmodifiers", chunk]
                         logger.debug(f"Injecting chunk {chunk_num}/{total_chunks}: '{chunk}'")
 
-                        result = subprocess.run(
+                        subprocess.run(
                             cmd, env=env, check=True, stderr=subprocess.PIPE, text=True, timeout=5
                         )
 
@@ -346,7 +347,8 @@ class TextInjector:
                 except subprocess.CalledProcessError as chunk_error:
                     if retry < max_retries:
                         logger.warning(
-                            f"Retrying text injection (attempt {retry+1}/{max_retries}): {chunk_error.stderr}"
+                            f"Retrying text injection (attempt {retry+1}/{max_retries}): "
+                            f"{chunk_error.stderr}"
                         )
                         time.sleep(0.5)  # Wait before retry
                     else:
@@ -393,7 +395,7 @@ class TextInjector:
             cmd = ["ydotool", "type", text]
 
         try:
-            result = subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+            subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
             # Re-raise with stderr preserved for better diagnostics
             raise subprocess.CalledProcessError(
@@ -564,7 +566,7 @@ class TextInjector:
                 with open(f"/proc/{window_pid}/comm", "r") as f:
                     process_name = f.read().strip()
                 logger.info(f"Target process: {process_name} (PID: {window_pid})")
-            except:
+            except Exception:
                 pass
 
         except subprocess.TimeoutExpired:
