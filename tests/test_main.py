@@ -49,7 +49,7 @@ class TestMainModule(unittest.TestCase):
             self.assertTrue(args.wayland)
 
     @patch("vocalinux.main.check_dependencies")
-    @patch("vocalinux.main.ActionHandler")
+    @patch("vocalinux.ui.action_handler.ActionHandler")
     @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
     @patch("vocalinux.text_injection.text_injector.TextInjector")
     @patch("vocalinux.ui.tray_indicator.TrayIndicator")
@@ -137,7 +137,7 @@ class TestMainModule(unittest.TestCase):
         ), patch(
             "vocalinux.ui.tray_indicator.TrayIndicator"
         ), patch(
-            "vocalinux.main.ActionHandler"
+            "vocalinux.ui.action_handler.ActionHandler"
         ), patch(
             "vocalinux.main.check_dependencies"
         ) as mock_check_deps:
