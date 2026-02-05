@@ -16,15 +16,13 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Mock modules before importing any modules that might use them
+# NOTE: We only mock modules that are directly imported, not modules used internally
+# This prevents breaking other tests that rely on these modules
 sys.modules["vosk"] = MagicMock()
 sys.modules["whisper"] = MagicMock()
-sys.modules["requests"] = MagicMock()
 sys.modules["pyaudio"] = MagicMock()
 sys.modules["wave"] = MagicMock()
-sys.modules["tempfile"] = MagicMock()
-sys.modules["tqdm"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
-sys.modules["zipfile"] = MagicMock()
 
 # Import the shared mock from conftest
 from conftest import mock_audio_feedback
@@ -133,19 +131,20 @@ class TestLazyInitialization(unittest.TestCase):
         whisper_mock.load_model.return_value = model_mock
 
         with patch.dict("sys.modules", {"whisper": whisper_mock, "torch": torch_mock}):
-            # Create manager - model should NOT be loaded
-            manager = SpeechRecognitionManager(engine="whisper", model_size="medium")
+            with patch.object(SpeechRecognitionManager, "_download_whisper_model"):
+                # Create manager - model should NOT be loaded
+                manager = SpeechRecognitionManager(engine="whisper", model_size="medium")
 
-            self.assertEqual(manager.engine, "whisper")
-            self.assertFalse(manager.model_ready)
-            whisper_mock.load_model.assert_not_called()
+                self.assertEqual(manager.engine, "whisper")
+                self.assertFalse(manager.model_ready)
+                whisper_mock.load_model.assert_not_called()
 
-            # Trigger lazy loading
-            manager._ensure_model_loaded()
+                # Trigger lazy loading
+                manager._ensure_model_loaded()
 
-            # Now model should be loaded
-            self.assertTrue(manager.model_ready)
-            whisper_mock.load_model.assert_called_once()
+                # Now model should be loaded
+                self.assertTrue(manager.model_ready)
+                whisper_mock.load_model.assert_called_once()
 
 
 class TestThreadSafety(unittest.TestCase):

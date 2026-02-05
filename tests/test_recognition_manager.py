@@ -7,15 +7,13 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Mock modules before importing any modules that might use them
+# NOTE: We only mock modules that are directly imported, not modules used internally
+# This prevents breaking other tests that rely on these modules
 sys.modules["vosk"] = MagicMock()
 sys.modules["whisper"] = MagicMock()
-sys.modules["requests"] = MagicMock()
 sys.modules["pyaudio"] = MagicMock()
 sys.modules["wave"] = MagicMock()
-sys.modules["tempfile"] = MagicMock()
-sys.modules["tqdm"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
-sys.modules["zipfile"] = MagicMock()
 
 # Import the shared mock from conftest
 from conftest import mock_audio_feedback  # noqa: E402
@@ -123,13 +121,26 @@ class TestSpeechRecognition(unittest.TestCase):
         self.assertFalse(manager.should_record)
         self.assertEqual(manager.audio_buffer, [])
 
-        # Verify VOSK model was initialized
+        # With lazy loading, model is NOT loaded at initialization
+        self.modelMock.assert_not_called()
+        self.kaldiMock.assert_not_called()
+        self.assertFalse(manager.model_ready)
+
+        # Trigger model loading
+        manager._ensure_model_loaded()
+
+        # Now model should be loaded
         self.modelMock.assert_called_once()
         self.kaldiMock.assert_called_once()
+        self.assertTrue(manager.model_ready)
 
-        # Test invalid engine
+        # Test invalid engine - with lazy loading, error is raised when loading
+        manager_invalid = SpeechRecognitionManager(engine="invalid", model_size="small")
+        # Initialization succeeds with invalid engine
+        self.assertEqual(manager_invalid.engine, "invalid")
+        # But loading fails
         with self.assertRaises(ValueError):
-            SpeechRecognitionManager(engine="invalid")
+            manager_invalid._ensure_model_loaded()
 
     def test_register_callbacks(self):
         """Test callback registration."""
