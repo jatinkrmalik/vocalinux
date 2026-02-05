@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import Image from "next/image";
 import Link from "next/link";
 import { LiveDemo } from "@/components/live-demo";
 import {
