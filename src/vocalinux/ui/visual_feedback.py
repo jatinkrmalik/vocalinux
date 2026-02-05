@@ -206,12 +206,13 @@ class VisualFeedbackIndicator:
     def _update_position(self):
         """Update the indicator position to follow the cursor."""
         if not self.is_visible or self.overlay_window is None:
-            return
+            self.position_update_timeout_id = None
+            return False  # Stop the callback
 
         # Get current cursor position
         current_pos = self._get_cursor_position()
         if current_pos is None:
-            return
+            return True  # Continue polling even if we can't get position
 
         # Only update if position actually changed
         if (
@@ -228,8 +229,7 @@ class VisualFeedbackIndicator:
             self.overlay_window.move(window_x, window_y)
             self.last_cursor_position = current_pos
 
-        # Schedule next update
-        self.position_update_timeout_id = GLib.timeout_add(50, self._update_position)
+        return True  # Continue the timeout callback
 
     def _animate(self):
         """Animate the visual indicator."""
@@ -285,7 +285,7 @@ class VisualFeedbackIndicator:
         self.is_visible = True
         self.animation_timeout_id = GLib.timeout_add(16, self._animate)  # ~60 FPS
 
-        # Start position tracking
+        # Start position tracking (uses return True to continue)
         self.position_update_timeout_id = GLib.timeout_add(50, self._update_position)
 
         logger.info("Visual feedback indicator is now visible")
