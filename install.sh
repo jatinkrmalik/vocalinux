@@ -1396,7 +1396,7 @@ install_icons() {
     fi
 }
 
-# Function to update icon cache
+# Function to update icon cache and desktop database
 update_icon_cache() {
     print_info "Updating icon cache..."
 
@@ -1407,6 +1407,16 @@ update_icon_cache() {
         }
     else
         print_warning "gtk-update-icon-cache command not found, skipping icon cache update"
+    fi
+
+    # Update desktop database so the app appears in application menus immediately
+    print_info "Updating desktop database..."
+    if command_exists update-desktop-database; then
+        update-desktop-database "${XDG_DATA_HOME:-$HOME/.local/share}/applications" 2>/dev/null || {
+            print_warning "Failed to update desktop database"
+        }
+    else
+        print_warning "update-desktop-database command not found - app may not appear in menu until next login"
     fi
 }
 
