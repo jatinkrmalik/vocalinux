@@ -30,7 +30,6 @@ mock_audio_feedback = MagicMock()
 mock_audio_feedback.play_start_sound = MagicMock()
 mock_audio_feedback.play_stop_sound = MagicMock()
 mock_audio_feedback.play_error_sound = MagicMock()
-
 # Inject the mock into sys.modules so imports resolve correctly
 sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
 
