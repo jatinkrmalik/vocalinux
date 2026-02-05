@@ -76,17 +76,23 @@ def check_dependencies():
             "GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)"
         )
 
-    # Check for AppIndicator3
+    # Check for AppIndicator3 / Ayatana AppIndicator
     try:
         import gi
 
         gi.require_version("AppIndicator3", "0.1")
         from gi.repository import AppIndicator3  # noqa: F401
     except (ImportError, ValueError):
-        missing_system_deps.append(
-            "AppIndicator3 (install with: sudo apt install gir1.2-appindicator3-0.1) "
-            "Note: On Debian 13+ use gir1.2-ayatanaappindicator3-0.1 instead"
-        )
+        try:
+            import gi
+
+            gi.require_version("AyatanaAppIndicator3", "0.1")
+            from gi.repository import AyatanaAppIndicator3  # noqa: F401
+        except (ImportError, ValueError):
+            missing_system_deps.append(
+                "AppIndicator3 (install with: sudo apt install gir1.2-appindicator3-0.1) "
+                "Note: On Debian 11+ use gir1.2-ayatanaappindicator3-0.1 instead"
+            )
 
     # pynput is used for keyboard detection but we check at module startup
     # requests is used by various components

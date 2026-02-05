@@ -449,7 +449,10 @@ install_system_dependencies() {
     print_info "Installing system dependencies..."
 
     # Define package names for different distributions
-    local APT_PACKAGES="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
+    local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
+    local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv wget curl unzip"
     local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
@@ -460,6 +463,16 @@ install_system_dependencies() {
 
     case "$DISTRO_FAMILY" in
         ubuntu|debian)
+            local APT_PACKAGES="$APT_PACKAGES_UBUNTU"
+            if [[ "$DISTRO_FAMILY" == "debian" ]]; then
+                local DEBIAN_MAJOR="${DISTRO_VERSION%%.*}"
+                if [[ "$DEBIAN_MAJOR" =~ ^[0-9]+$ ]] && [ "$DEBIAN_MAJOR" -ge 13 ]; then
+                    APT_PACKAGES="$APT_PACKAGES_DEBIAN_13_PLUS"
+                else
+                    APT_PACKAGES="$APT_PACKAGES_DEBIAN_11_12"
+                fi
+            fi
+
             # Check for missing packages
             for pkg in $APT_PACKAGES; do
                 if ! apt_package_installed "$pkg"; then
@@ -471,13 +484,10 @@ install_system_dependencies() {
                 print_info "Installing missing packages:$MISSING_PACKAGES"
                 sudo apt update || { print_error "Failed to update package lists"; exit 1; }
 
-                # Handle appindicator package: old package was deprecated in Debian 13+
-                # Try the old package first, fall back to gir1.2-ayatanaappindicator3-0.1 if unavailable
+                # Handle appindicator package for Ubuntu (old package deprecated in newer releases)
                 if echo "$MISSING_PACKAGES" | grep -q "gir1.2-appindicator3-0.1"; then
-                    # Remove appindicator from the package list for special handling
                     FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/gir1.2-appindicator3-0.1//' | xargs)
 
-                    # Try to install the old package first (for older Debian/Ubuntu versions)
                     if ! sudo apt install -y gir1.2-appindicator3-0.1 2>/dev/null; then
                         print_info "gir1.2-appindicator3-0.1 not available, trying gir1.2-ayatanaappindicator3-0.1..."
                         if ! sudo apt install -y gir1.2-ayatanaappindicator3-0.1; then
@@ -487,7 +497,6 @@ install_system_dependencies() {
                         print_info "Successfully installed gir1.2-ayatanaappindicator3-0.1 (modern replacement)"
                     fi
 
-                    # Install remaining packages
                     if [ -n "$FILTERED_PACKAGES" ]; then
                         sudo apt install -y $FILTERED_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
                     fi
