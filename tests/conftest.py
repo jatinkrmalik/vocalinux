@@ -12,6 +12,30 @@ import pytest
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Mock gi modules BEFORE any imports
+mock_gi = MagicMock()
+mock_gi.repository = MagicMock()
+sys.modules["gi"] = mock_gi
+sys.modules["gi.repository"] = mock_gi.repository
+sys.modules["gi.repository.Gtk"] = MagicMock()
+sys.modules["gi.repository.GLib"] = MagicMock()
+sys.modules["gi.repository.Gdk"] = MagicMock()
+sys.modules["gi.repository.Gio"] = MagicMock()
+sys.modules["gi.repository.AppIndicator3"] = MagicMock()
+sys.modules["gi.repository.GObject"] = MagicMock()
+
+# Mock Xlib
+sys.modules["Xlib"] = MagicMock()
+sys.modules["Xlib.display"] = MagicMock()
+sys.modules["Xlib.X"] = MagicMock()
+sys.modules["Xlib.XK"] = MagicMock()
+sys.modules["Xlib.ext"] = MagicMock()
+sys.modules["Xlib.ext.xtest"] = MagicMock()
+
+# Mock pynput
+sys.modules["pynput"] = MagicMock()
+sys.modules["pynput.keyboard"] = MagicMock()
+
 # Mock only the audio_feedback module BEFORE any imports that use it
 # This ensures all test modules get the same mock instance
 mock_audio_feedback = MagicMock()

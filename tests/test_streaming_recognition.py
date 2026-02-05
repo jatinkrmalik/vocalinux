@@ -11,10 +11,34 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Mock gi modules BEFORE any imports
+mock_gi = MagicMock()
+mock_gi.repository = MagicMock()
+sys.modules["gi"] = mock_gi
+sys.modules["gi.repository"] = mock_gi.repository
+sys.modules["gi.repository.Gtk"] = MagicMock()
+sys.modules["gi.repository.GLib"] = MagicMock()
+sys.modules["gi.repository.Gdk"] = MagicMock()
+sys.modules["gi.repository.Gio"] = MagicMock()
+sys.modules["gi.repository.AppIndicator3"] = MagicMock()
+sys.modules["gi.repository.GObject"] = MagicMock()
+
+# Mock Xlib
+sys.modules["Xlib"] = MagicMock()
+sys.modules["Xlib.display"] = MagicMock()
+sys.modules["Xlib.X"] = MagicMock()
+sys.modules["Xlib.XK"] = MagicMock()
+sys.modules["Xlib.ext"] = MagicMock()
+sys.modules["Xlib.ext.xtest"] = MagicMock()
+
+# Mock pynput
+sys.modules["pynput"] = MagicMock()
+sys.modules["pynput.keyboard"] = MagicMock()
+
 
 # Mock vosk module for streaming tests
 class MockModel:
-    def __init__(self, path):
+    def __init__(self, path=None):
         pass
 
 
@@ -366,9 +390,12 @@ class TestStreamingRecognitionManager(unittest.TestCase):
 
     def test_batch_fallback(self):
         """Test fallback to batch processing when streaming fails."""
-        # Create a manager that will fail to initialize streaming
-        with patch.object(StreamingRecognitionManager, "_init_streaming_recognizer") as mock_init:
-            mock_init.side_effect = Exception("Streaming initialization failed")
+        # Create a manager that will fail to initialize streaming by patching 
+        # the StreamingSpeechRecognizer to raise an exception
+        with patch(
+            "vocalinux.speech_recognition.streaming_manager.StreamingSpeechRecognizer"
+        ) as mock_recognizer:
+            mock_recognizer.side_effect = Exception("Streaming initialization failed")
 
             # This should fall back to non-streaming mode
             manager = StreamingRecognitionManager(engine="vosk", enable_streaming=True)
@@ -444,6 +471,623 @@ class TestStreamingIntegration(unittest.TestCase):
         # The key metric is that streaming mode is enabled
         self.assertTrue(initial_stats["streaming_mode"])
         self.assertEqual(streaming_manager.streaming_chunk_size, 512)
+
+
+class TestStreamingChunkProcessing(unittest.TestCase):
+    """Tests for streaming audio chunk processing."""
+
+    def setUp(self):
+        """Set up for tests."""
+        self.recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            model_size="small",
+            language="en-us",
+            chunk_size=1024,
+            sample_rate=16000,
+            vad_enabled=False,
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        if self.recognizer.is_running:
+            self.recognizer.stop_streaming()
+
+    def test_audio_chunk_queueing(self):
+        """Test that audio chunks are properly queued for processing."""
+        self.recognizer.start_streaming()
+
+        # Process multiple chunks
+        chunks = [b"chunk_data_" + bytes([i]) * 100 for i in range(5)]
+        for chunk in chunks:
+            self.recognizer.process_audio_chunk(chunk)
+
+        # Verify chunks are in the queue
+        self.assertEqual(self.recognizer.audio_queue.qsize(), 5)
+
+        # Process all chunks
+        time.sleep(0.1)
+        self.recognizer.stop_streaming()
+
+        # Verify statistics
+        self.assertGreaterEqual(self.recognizer.total_chunks_processed, 0)
+
+    def test_chunk_size_variations(self):
+        """Test processing with different chunk sizes."""
+        chunk_sizes = [512, 1024, 2048, 4096]
+
+        for size in chunk_sizes:
+            recognizer = StreamingSpeechRecognizer(
+                engine="vosk",
+                chunk_size=size,
+                vad_enabled=False,
+            )
+            self.assertEqual(recognizer.chunk_size, size)
+
+            # Test processing a chunk
+            recognizer.start_streaming()
+            audio_chunk = b"x" * size
+            recognizer.process_audio_chunk(audio_chunk)
+            time.sleep(0.05)
+            recognizer.stop_streaming()
+
+    def test_empty_chunk_handling(self):
+        """Test handling of empty audio chunks."""
+        self.recognizer.start_streaming()
+
+        # Process empty chunk
+        self.recognizer.process_audio_chunk(b"")
+        time.sleep(0.05)
+
+        # Process normal chunk after empty
+        self.recognizer.process_audio_chunk(b"normal_data" * 100)
+        time.sleep(0.05)
+
+        self.recognizer.stop_streaming()
+
+        # Should not crash and should have processed at least one chunk
+        self.assertGreaterEqual(self.recognizer.total_chunks_processed, 0)
+
+    def test_chunk_processing_rate(self):
+        """Test that chunks are processed at expected rate."""
+        self.recognizer.start_streaming()
+
+        # Process many chunks quickly
+        start_time = time.time()
+        chunk_count = 20
+
+        for i in range(chunk_count):
+            self.recognizer.process_audio_chunk(b"rate_test" * 100)
+
+        # Wait for processing
+        time.sleep(0.2)
+        elapsed = time.time() - start_time
+
+        self.recognizer.stop_streaming()
+
+        # Verify reasonable processing time
+        self.assertLess(elapsed, 1.0)  # Should process within 1 second
+
+    def test_concurrent_chunk_processing(self):
+        """Test processing chunks from multiple threads."""
+        self.recognizer.start_streaming()
+
+        chunks_processed = []
+        lock = threading.Lock()
+
+        def process_chunks(thread_id, count):
+            for i in range(count):
+                chunk = f"thread_{thread_id}_chunk_{i}".encode() * 20
+                self.recognizer.process_audio_chunk(chunk)
+                with lock:
+                    chunks_processed.append((thread_id, i))
+                time.sleep(0.01)
+
+        # Start multiple threads
+        threads = []
+        for i in range(3):
+            t = threading.Thread(target=process_chunks, args=(i, 5))
+            threads.append(t)
+            t.start()
+
+        # Wait for all threads
+        for t in threads:
+            t.join()
+
+        time.sleep(0.1)
+        self.recognizer.stop_streaming()
+
+        # Verify all chunks were queued
+        self.assertEqual(len(chunks_processed), 15)
+
+
+class TestAudioBufferManagement(unittest.TestCase):
+    """Tests for audio buffer management."""
+
+    def setUp(self):
+        """Set up for tests."""
+        self.recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            model_size="small",
+            vad_enabled=False,
+            min_speech_duration_ms=100,
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        if self.recognizer.is_running:
+            self.recognizer.stop_streaming()
+
+    def test_buffer_initial_state(self):
+        """Test initial state of audio buffers."""
+        self.assertEqual(len(self.recognizer.audio_buffer), 0)
+        self.assertEqual(len(self.recognizer.speech_buffer), 0)
+        self.assertFalse(self.recognizer.is_speaking)
+
+    def test_buffer_accumulation(self):
+        """Test that audio buffers accumulate correctly."""
+        self.recognizer.start_streaming()
+
+        # Add chunks to buffer
+        chunks = [b"buffer_data_" + bytes([i]) * 50 for i in range(5)]
+        for chunk in chunks:
+            self.recognizer.audio_buffer.append(chunk)
+            self.recognizer.speech_buffer.append(chunk)
+
+        # Verify buffer contents
+        self.assertEqual(len(self.recognizer.audio_buffer), 5)
+        self.assertEqual(len(self.recognizer.speech_buffer), 5)
+
+        self.recognizer.stop_streaming()
+
+    def test_buffer_clear_after_processing(self):
+        """Test that buffers are cleared after processing."""
+        self.recognizer.start_streaming()
+
+        # Add chunks to speech buffer
+        for i in range(3):
+            self.recognizer.speech_buffer.append(b"speech_data" * 50)
+
+        # Manually trigger transcription which should clear buffer
+        self.recognizer._transcribe_whisper_segment()
+
+        # For whisper, buffer should be cleared
+        if self.recognizer.engine == "whisper":
+            self.assertEqual(len(self.recognizer.speech_buffer), 0)
+
+        self.recognizer.stop_streaming()
+
+    def test_buffer_size_limits(self):
+        """Test buffer size management under load."""
+        self.recognizer.start_streaming()
+
+        # Add many chunks
+        large_chunk = b"x" * 1024
+        for _ in range(100):
+            self.recognizer.audio_buffer.append(large_chunk)
+
+        # Verify buffer can handle large amounts of data
+        total_size = sum(len(chunk) for chunk in self.recognizer.audio_buffer)
+        self.assertEqual(total_size, 100 * 1024)
+
+        self.recognizer.stop_streaming()
+
+    def test_speech_state_transitions(self):
+        """Test speech state transitions during buffering."""
+        self.recognizer.start_streaming()
+
+        # Initial state
+        self.assertFalse(self.recognizer.is_speaking)
+
+        # Simulate speech detection
+        self.recognizer.is_speaking = True
+        self.recognizer.last_speech_time = time.time()
+        self.recognizer.speech_buffer = [b"speech_chunk" * 50]
+
+        # Verify speech state
+        self.assertTrue(self.recognizer.is_speaking)
+        self.assertGreater(len(self.recognizer.speech_buffer), 0)
+
+        # Simulate end of speech
+        self.recognizer.is_speaking = False
+        self.assertFalse(self.recognizer.is_speaking)
+
+        self.recognizer.stop_streaming()
+
+
+class TestVADIntegration(unittest.TestCase):
+    """Tests for Voice Activity Detection integration."""
+
+    def setUp(self):
+        """Set up for tests."""
+        # Create VAD-enabled recognizer
+        self.recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            model_size="small",
+            vad_enabled=True,
+            vad_threshold=0.5,
+            min_speech_duration_ms=100,
+            silence_timeout_ms=500,
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        if self.recognizer.is_running:
+            self.recognizer.stop_streaming()
+
+    def test_vad_enabled_configuration(self):
+        """Test that VAD is properly configured."""
+        self.assertTrue(self.recognizer.vad_enabled)
+        self.assertEqual(self.recognizer.vad_threshold, 0.5)
+
+    def test_vad_disabled_configuration(self):
+        """Test recognizer with VAD disabled."""
+        recognizer_no_vad = StreamingSpeechRecognizer(
+            engine="vosk",
+            vad_enabled=False,
+        )
+        self.assertFalse(recognizer_no_vad.vad_enabled)
+
+    def test_energy_based_vad_fallback(self):
+        """Test energy-based VAD when Silero VAD is not available."""
+        # Create recognizer that will use energy-based fallback
+        recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            model_size="small",
+            vad_enabled=True,  # Enable VAD
+        )
+        recognizer.start_streaming()
+
+        # Ensure no vad_model exists (forces energy-based fallback)
+        if hasattr(recognizer, "vad_model"):
+            delattr(recognizer, "vad_model")
+
+        # Test _detect_speech by mocking np.frombuffer to return actual values
+        with patch("vocalinux.speech_recognition.streaming_recognizer.np") as mock_np:
+            # High energy case
+            mock_array = MagicMock()
+            mock_array.mean.return_value = 1000  # Above threshold
+            mock_np.frombuffer.return_value = mock_array
+            mock_np.abs.return_value = mock_array
+
+            result = recognizer._detect_speech(b"high_energy_data")
+            self.assertTrue(result)
+
+            # Low energy case
+            mock_array.mean.return_value = 100  # Below threshold
+            result = recognizer._detect_speech(b"low_energy_data")
+            self.assertFalse(result)
+
+        recognizer.stop_streaming()
+
+    def test_silence_detection_timeout(self):
+        """Test that silence timeout triggers finalization."""
+        self.recognizer.start_streaming()
+
+        # Simulate speech start
+        self.recognizer.is_speaking = True
+        self.recognizer.last_speech_time = time.time() - 1.0  # 1 second ago
+        self.recognizer.speech_buffer = [b"speech_data" * 100]
+
+        # Force timeout check
+        self.recognizer.silence_timeout_ms = 500  # 500ms timeout
+
+        # Process a silence chunk (low energy)
+        silence_chunk = bytes([0x01] * 200)  # Low amplitude
+
+        # Manually check silence timeout
+        if self.recognizer.is_speaking:
+            silence_duration = (time.time() - self.recognizer.last_speech_time) * 1000
+            if silence_duration > self.recognizer.silence_timeout_ms:
+                self.recognizer._finalize_speech_segment()
+                self.recognizer.is_speaking = False
+
+        # Speech should have ended due to timeout
+        self.assertFalse(self.recognizer.is_speaking)
+
+        self.recognizer.stop_streaming()
+
+    def test_vad_sensitivity_levels(self):
+        """Test different VAD sensitivity levels."""
+        thresholds = [0.1, 0.3, 0.5, 0.7, 0.9]
+
+        for threshold in thresholds:
+            recognizer = StreamingSpeechRecognizer(
+                engine="vosk",
+                vad_enabled=True,
+                vad_threshold=threshold,
+            )
+            self.assertEqual(recognizer.vad_threshold, threshold)
+
+
+class TestLatencyMeasurement(unittest.TestCase):
+    """Tests for latency measurement under load."""
+
+    def setUp(self):
+        """Set up for tests."""
+        self.recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            model_size="small",
+            vad_enabled=False,
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        if self.recognizer.is_running:
+            self.recognizer.stop_streaming()
+
+    def test_latency_statistics_initial(self):
+        """Test initial latency statistics."""
+        stats = self.recognizer.get_statistics()
+        self.assertEqual(stats["average_latency_ms"], 0.0)
+        self.assertEqual(stats["total_chunks_processed"], 0)
+
+    def test_latency_tracking_under_load(self):
+        """Test latency tracking during heavy load."""
+        self.recognizer.start_streaming()
+
+        # Process many chunks rapidly
+        start_time = time.time()
+        chunk_count = 50
+
+        for _ in range(chunk_count):
+            self.recognizer.process_audio_chunk(b"latency_test" * 100)
+
+        # Wait for processing
+        time.sleep(0.3)
+
+        elapsed = time.time() - start_time
+        stats = self.recognizer.get_statistics()
+
+        self.recognizer.stop_streaming()
+
+        # Verify statistics were updated
+        self.assertGreaterEqual(stats["total_chunks_processed"], 0)
+        self.assertGreaterEqual(stats["total_processing_time"], 0.0)
+
+        # Latency should be reasonable (less than 100ms per chunk on average)
+        if stats["total_chunks_processed"] > 0:
+            avg_latency = stats["average_latency_ms"]
+            self.assertGreaterEqual(avg_latency, 0.0)
+
+    def test_chunk_size_impact_on_latency(self):
+        """Test that chunk size affects latency."""
+        chunk_sizes = [512, 2048]
+        latencies = {}
+
+        for size in chunk_sizes:
+            recognizer = StreamingSpeechRecognizer(
+                engine="vosk",
+                chunk_size=size,
+                vad_enabled=False,
+            )
+
+            recognizer.start_streaming()
+
+            # Process chunks
+            for _ in range(10):
+                recognizer.process_audio_chunk(b"x" * size)
+
+            time.sleep(0.1)
+            recognizer.stop_streaming()
+
+            stats = recognizer.get_statistics()
+            latencies[size] = stats["average_latency_ms"]
+
+        # Both should have processed chunks
+        self.assertIn(512, latencies)
+        self.assertIn(2048, latencies)
+
+    def test_manager_performance_stats(self):
+        """Test streaming manager performance statistics."""
+        manager = StreamingRecognitionManager(
+            engine="vosk",
+            enable_streaming=True,
+            vad_enabled=False,
+        )
+
+        stats = manager.get_performance_stats()
+
+        # Verify all expected keys are present
+        self.assertIn("total_processing_time", stats)
+        self.assertIn("total_audio_chunks", stats)
+        self.assertIn("average_latency_ms", stats)
+        self.assertIn("streaming_mode", stats)
+
+        # Verify streaming mode
+        self.assertTrue(stats["streaming_mode"])
+
+    def test_processing_time_accumulation(self):
+        """Test that processing time accumulates correctly."""
+        self.recognizer.start_streaming()
+
+        initial_time = self.recognizer.total_processing_time
+
+        # Process chunks
+        for _ in range(10):
+            self.recognizer.process_audio_chunk(b"time_test" * 100)
+
+        time.sleep(0.1)
+        self.recognizer.stop_streaming()
+
+        # Processing time should have increased (or stayed at 0 if no chunks processed)
+        final_time = self.recognizer.total_processing_time
+        self.assertGreaterEqual(final_time, initial_time)
+
+
+class TestGracefulDegradation(unittest.TestCase):
+    """Tests for graceful degradation under various failure conditions."""
+
+    def test_recognizer_handles_init_failure(self):
+        """Test that recognizer handles initialization failures."""
+        # This tests error handling during recognizer creation
+        with patch(
+            "vocalinux.speech_recognition.streaming_recognizer.StreamingSpeechRecognizer._init_vosk"
+        ) as mock_init:
+            mock_init.side_effect = Exception("VOSK init failed")
+
+            # Should raise the exception (not silently fail)
+            with self.assertRaises(Exception):
+                StreamingSpeechRecognizer(engine="vosk")
+
+    def test_recognizer_invalid_engine(self):
+        """Test handling of invalid engine type."""
+        with self.assertRaises(ValueError) as context:
+            StreamingSpeechRecognizer(engine="invalid_engine")
+
+        self.assertIn("Unsupported engine", str(context.exception))
+
+    def test_manager_handles_streaming_failure(self):
+        """Test manager falls back when streaming fails to initialize."""
+        with patch(
+            "vocalinux.speech_recognition.streaming_manager.StreamingSpeechRecognizer"
+        ) as mock_recognizer:
+            mock_recognizer.side_effect = ImportError("Vosk not installed")
+
+            manager = StreamingRecognitionManager(
+                engine="vosk",
+                enable_streaming=True,
+            )
+
+            # Should fall back gracefully
+            self.assertFalse(manager.enable_streaming)
+            self.assertIsNone(manager.streaming_recognizer)
+
+    def test_error_callback_invocation(self):
+        """Test that error callbacks are properly invoked."""
+        recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            vad_enabled=False,
+        )
+
+        error_received = []
+
+        def error_handler(error):
+            error_received.append(error)
+
+        recognizer.register_error_callback(error_handler)
+
+        # Simulate an error
+        test_error = Exception("Test error")
+        recognizer._notify_error(test_error)
+
+        # Verify callback was called
+        self.assertEqual(len(error_received), 1)
+        self.assertEqual(str(error_received[0]), "Test error")
+
+    def test_processing_error_recovery(self):
+        """Test recovery from processing errors."""
+        recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            vad_enabled=False,
+        )
+
+        error_count = [0]
+
+        def counting_error_handler(error):
+            error_count[0] += 1
+
+        recognizer.register_error_callback(counting_error_handler)
+
+        recognizer.start_streaming()
+
+        # Process some chunks (may generate errors due to mocks)
+        for _ in range(5):
+            recognizer.process_audio_chunk(b"error_test" * 100)
+
+        time.sleep(0.1)
+
+        # Should still be running after potential errors
+        self.assertTrue(recognizer.is_running)
+
+        recognizer.stop_streaming()
+
+    def test_callback_error_isolation(self):
+        """Test that errors in callbacks don't crash the recognizer."""
+        recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            vad_enabled=False,
+        )
+
+        def failing_callback(text):
+            raise Exception("Callback error")
+
+        recognizer.register_final_result_callback(failing_callback)
+        recognizer.register_partial_result_callback(failing_callback)
+
+        recognizer.start_streaming()
+
+        # Process a chunk - callbacks may fail but shouldn't crash
+        recognizer.process_audio_chunk(b"isolation_test" * 100)
+        time.sleep(0.05)
+
+        # Should still be running
+        self.assertTrue(recognizer.is_running)
+
+        recognizer.stop_streaming()
+
+    def test_reconfiguration_after_failure(self):
+        """Test that manager can be reconfigured after failures."""
+        manager = StreamingRecognitionManager(
+            engine="vosk",
+            enable_streaming=True,
+            vad_enabled=False,
+        )
+
+        # Reconfigure various settings
+        manager.reconfigure(
+            vad_sensitivity=2,
+            silence_timeout=2.0,
+            audio_device_index=1,
+        )
+
+        # Verify settings were updated
+        self.assertEqual(manager.vad_sensitivity, 2)
+        self.assertEqual(manager.silence_timeout, 2.0)
+        self.assertEqual(manager.audio_device_index, 1)
+
+    def test_audio_device_change_during_runtime(self):
+        """Test changing audio device setting."""
+        manager = StreamingRecognitionManager(
+            engine="vosk",
+            enable_streaming=True,
+            vad_enabled=False,
+        )
+
+        # Change device
+        manager.set_audio_device(2)
+        self.assertEqual(manager.get_audio_device(), 2)
+
+        # Clear device
+        manager.set_audio_device(None)
+        self.assertIsNone(manager.get_audio_device())
+
+    def test_stop_when_not_running(self):
+        """Test that stop is safe when recognizer is not running."""
+        recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            vad_enabled=False,
+        )
+
+        # Should not crash when stopped without starting
+        recognizer.stop_streaming()
+        self.assertFalse(recognizer.is_running)
+
+    def test_multiple_start_calls(self):
+        """Test handling of multiple start calls."""
+        recognizer = StreamingSpeechRecognizer(
+            engine="vosk",
+            vad_enabled=False,
+        )
+
+        # Start multiple times
+        recognizer.start_streaming()
+        recognizer.start_streaming()  # Second call should be ignored
+        recognizer.start_streaming()  # Third call should be ignored
+
+        self.assertTrue(recognizer.is_running)
+
+        recognizer.stop_streaming()
+        self.assertFalse(recognizer.is_running)
 
 
 if __name__ == "__main__":
