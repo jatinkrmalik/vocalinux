@@ -14,10 +14,17 @@ from typing import Callable, Dict, Optional
 
 import gi
 
-# Import GTK
-gi.require_version("Gtk", "3.0")
-gi.require_version("AppIndicator3", "0.1")
-from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
+# Try to import GTK, but handle gracefully if not available
+GTK_AVAILABLE = False
+try:
+    # Import GTK
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("AppIndicator3", "0.1")
+    from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
+
+    GTK_AVAILABLE = True
+except (ImportError, ValueError) as e:
+    logging.warning(f"GTK not available for tray indicator: {e}")
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import (
@@ -30,6 +37,7 @@ from ..common_types import (
 from .config_manager import ConfigManager  # Added
 from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog  # Added
+from .visual_feedback import VisualFeedbackIndicator
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +86,9 @@ class TrayIndicator:
         self.shortcut_manager = (
             KeyboardShortcutManager()
         )  # Pass config_manager - Removed config_manager argument
+
+        # Initialize visual feedback indicator
+        self.visual_feedback = VisualFeedbackIndicator(config_manager=self.config_manager)
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
@@ -215,6 +226,9 @@ class TrayIndicator:
         """
         # Update the UI in the GTK main thread
         GLib.idle_add(self._update_ui, state)
+
+        # Update visual feedback indicator
+        GLib.idle_add(self.visual_feedback.update_state, state)
 
     def _update_ui(self, state: RecognitionState):
         """
@@ -359,6 +373,9 @@ class TrayIndicator:
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
+
+        # Clean up visual feedback indicator
+        self.visual_feedback.cleanup()
 
         Gtk.main_quit()
 

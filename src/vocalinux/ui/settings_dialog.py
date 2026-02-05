@@ -13,9 +13,27 @@ from typing import TYPE_CHECKING
 
 import gi
 
-gi.require_version("Gtk", "3.0")
-# Need GLib for idle_add
-from gi.repository import GLib, Gtk  # noqa: E402
+# Try to import GTK, but handle gracefully if not available
+GTK_AVAILABLE = False
+try:
+    gi.require_version("Gtk", "3.0")
+    # Need GLib for idle_add
+    from gi.repository import GLib, Gtk  # noqa: E402
+
+    GTK_AVAILABLE = True
+except (ImportError, ValueError) as e:
+    logging.warning(f"GTK not available for settings dialog: {e}")
+
+    # Create dummy classes for when GTK is not available
+    class Gtk:
+        class Window:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class Dialog:
+            def __init__(self, *args, **kwargs):
+                pass
+
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO
@@ -519,6 +537,26 @@ class SettingsDialog(Gtk.Dialog):
         self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
         row += 1
 
+        # ==================== UI PREFERENCES SECTION ====================
+        ui_label = Gtk.Label(label="<b>UI Preferences</b>", use_markup=True, halign=Gtk.Align.START)
+        self.grid.attach(ui_label, 0, row, 2, 1)
+        row += 1
+
+        # Visual feedback toggle
+        self.visual_feedback_check = Gtk.CheckButton(
+            label="Enable visual feedback indicator at cursor"
+        )
+        self.visual_feedback_check.set_tooltip_text(
+            "Show a pulsing circle at the cursor position during voice typing."
+        )
+        self.visual_feedback_check.connect("toggled", self._on_visual_feedback_changed)
+        self.grid.attach(self.visual_feedback_check, 0, row, 2, 1)
+        row += 1
+
+        # ==================== SEPARATOR ====================
+        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
+        row += 1
+
         # ==================== TEST RECOGNITION SECTION ====================
         test_label = Gtk.Label(
             label="<b>Test Recognition</b>", use_markup=True, halign=Gtk.Align.START
@@ -590,6 +628,10 @@ class SettingsDialog(Gtk.Dialog):
         # Set non-dependent widgets directly
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
+
+        # Set visual feedback checkbox
+        visual_feedback_enabled = self.config_manager.get("ui", "enable_visual_feedback", True)
+        self.visual_feedback_check.set_active(visual_feedback_enabled)
 
         # Show everything first
         self.show_all()
@@ -789,6 +831,10 @@ class SettingsDialog(Gtk.Dialog):
         """Handle changes in silence timeout."""
         self._auto_apply_settings()
 
+    def _on_visual_feedback_changed(self, widget):
+        """Handle changes in visual feedback setting."""
+        self._auto_apply_settings()
+
     def _populate_language_options(self):
         """Populate language dropdown with supported languages."""
         self.language_combo.remove_all()
@@ -945,6 +991,11 @@ class SettingsDialog(Gtk.Dialog):
 
             # Update config manager
             self.config_manager.update_speech_recognition_settings(settings)
+
+            # Save visual feedback setting
+            visual_feedback_enabled = self.visual_feedback_check.get_active()
+            self.config_manager.set("ui", "enable_visual_feedback", visual_feedback_enabled)
+
             self.config_manager.save_settings()
 
             # Reconfigure speech engine (don't stop/start if idle)

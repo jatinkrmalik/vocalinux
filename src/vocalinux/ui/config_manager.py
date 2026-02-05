@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
     "ui": {
         "start_minimized": False,
         "show_notifications": True,
+        "enable_visual_feedback": True,  # Enable visual feedback indicator at cursor
     },
     "advanced": {
         "debug_logging": False,
