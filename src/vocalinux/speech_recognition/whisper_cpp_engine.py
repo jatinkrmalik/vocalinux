@@ -9,7 +9,7 @@ import logging
 import os
 import ctypes
 import ctypes.util
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class WhisperCppBackend(Enum):
     """Available whisper.cpp backend options."""
+
     CPU = "cpu"
     VULKAN = "vulkan"
     CUDA = "cuda"
@@ -25,16 +26,19 @@ class WhisperCppBackend(Enum):
 
 class WhisperCppError(Exception):
     """Base exception for whisper.cpp errors."""
+
     pass
 
 
 class VulkanNotAvailableError(WhisperCppError):
     """Raised when Vulkan is not available or initialization fails."""
+
     pass
 
 
 class ModelNotFoundError(WhisperCppError):
     """Raised when the whisper.cpp model file is not found."""
+
     pass
 
 
@@ -47,8 +51,19 @@ class WhisperCppEngine:
     """
 
     # GGML model sizes available
-    MODEL_SIZES = ["tiny", "tiny.en", "base", "base.en", "small", "small.en",
-                   "medium", "medium.en", "large-v1", "large-v2", "large-v3"]
+    MODEL_SIZES = [
+        "tiny",
+        "tiny.en",
+        "base",
+        "base.en",
+        "small",
+        "small.en",
+        "medium",
+        "medium.en",
+        "large-v1",
+        "large-v2",
+        "large-v3",
+    ]
 
     # Default model directory
     DEFAULT_MODEL_DIR = os.path.expanduser("~/.local/share/vocalinux/models/whisper_cpp")
@@ -202,30 +217,21 @@ class WhisperCppEngine:
 
             # Set backend if the function is available
             if hasattr(self._library, "ggml_backend_reg_type"):
-                # Map backend to GGML backend type
-                backend_map = {
-                    WhisperCppBackend.CPU: 0,  # GGML_BACKEND_CPU
-                    WhisperCppBackend.VULKAN: 4,  # GGML_BACKEND_VULKAN
-                    WhisperCppBackend.CUDA: 2,  # GGML_BACKEND_CUDA
-                    WhisperCppBackend.ROCM: 3,  # GGML_BACKEND_ROCM
-                }
-                backend_type = backend_map.get(self.backend, 0)
                 # Note: Setting backend requires accessing struct fields which is complex
-                # For now, we'll rely on whisper.cpp's auto-detection based on build flags
+                # Backend mapping is defined but currently relies on whisper.cpp's
+                # auto-detection based on build flags
 
                 if self.verbose:
                     logger.info(f"Attempting to use backend: {self.backend.value}")
 
             # Initialize context with params
-            self._ctx = whisper_init_from_file_with_params(
-                self.model_path.encode('utf-8'), params
-            )
+            self._ctx = whisper_init_from_file_with_params(self.model_path.encode("utf-8"), params)
 
         except AttributeError:
             # Fall back to basic initialization
             if self.verbose:
                 logger.info("Using basic initialization (backend not explicitly set)")
-            self._ctx = whisper_init_from_file(self.model_path.encode('utf-8'))
+            self._ctx = whisper_init_from_file(self.model_path.encode("utf-8"))
 
         if not self._ctx:
             # Check if Vulkan was requested and might have failed
@@ -263,9 +269,7 @@ class WhisperCppEngine:
             raise WhisperCppError("Whisper.cpp context is not initialized")
 
         if sample_rate != 16000:
-            logger.warning(
-                f"Sample rate {sample_rate} != 16000. Audio may need resampling."
-            )
+            logger.warning(f"Sample rate {sample_rate} != 16000. Audio may need resampling.")
 
         # Define function signatures
         whisper_full = self._library.whisper_full
@@ -298,12 +302,7 @@ class WhisperCppEngine:
 
         # Run transcription
         audio_ptr = audio_array.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        result = whisper_full(
-            self._ctx,
-            params,
-            audio_ptr,
-            len(audio_array)
-        )
+        result = whisper_full(self._ctx, params, audio_ptr, len(audio_array))
 
         if result < 0:
             raise WhisperCppError(f"Transcription failed with error code: {result}")
@@ -315,9 +314,9 @@ class WhisperCppEngine:
         for i in range(n_segments):
             segment_text = whisper_full_get_segment_text(self._ctx, i)
             if segment_text:
-                text_parts.append(segment_text.decode('utf-8'))
+                text_parts.append(segment_text.decode("utf-8"))
 
-        full_text = ''.join(text_parts).strip()
+        full_text = "".join(text_parts).strip()
 
         if self.verbose:
             logger.debug(f"Transcribed {n_segments} segments, {len(full_text)} characters")
@@ -348,16 +347,14 @@ class WhisperCppEngine:
         try:
             # Try to run vulkaninfo command
             import subprocess
-            result = subprocess.run(
-                ["vulkaninfo", "--summary"],
-                capture_output=True,
-                timeout=5
-            )
+
+            result = subprocess.run(["vulkaninfo", "--summary"], capture_output=True, timeout=5)
             return result.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
             # Try to import vulkan module
             try:
-                import vulkan
+                import vulkan  # noqa: F401
+
                 return True
             except ImportError:
                 pass
@@ -381,13 +378,14 @@ class WhisperCppEngine:
         elif backend == WhisperCppBackend.CUDA:
             try:
                 import torch
+
                 return torch.cuda.is_available()
             except ImportError:
                 return False
         elif backend == WhisperCppBackend.ROCM:
             # ROCm detection is more complex, approximate check
             try:
-                with open('/proc/driver/amdgpu/version', 'r') as f:
+                with open("/proc/driver/amdgpu/version", "r"):
                     return True
             except (FileNotFoundError, IOError):
                 return False

@@ -25,6 +25,7 @@ try:
         WhisperCppError,
         get_whisper_cpp_integration,
     )
+
     WHISPER_CPP_AVAILABLE = True
 except ImportError:
     WHISPER_CPP_AVAILABLE = False

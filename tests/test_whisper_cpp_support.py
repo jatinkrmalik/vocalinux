@@ -3,7 +3,6 @@ Tests for whisper.cpp speech recognition support with Vulkan acceleration.
 """
 
 import sys
-import os
 from unittest.mock import MagicMock, patch, Mock
 import pytest
 
@@ -28,6 +27,7 @@ class TestWhisperCppEngine:
                 WhisperCppBackend,
                 WhisperCppError,
             )
+
             assert WhisperCppEngine is not None
             assert WhisperCppBackend is not None
             assert WhisperCppError is not None
@@ -64,7 +64,9 @@ class TestWhisperCppEngine:
     def test_invalid_model_size_raises_error(self):
         """Test that invalid model size raises ValueError."""
         try:
-            from vocalinux.speech_recognition.whisper_cpp_engine import WhisperCppEngine, ModelNotFoundError
+            from vocalinux.speech_recognition.whisper_cpp_engine import (
+                WhisperCppEngine,
+            )
 
             # Mock os.path.exists to return False
             with patch("os.path.exists", return_value=False):
@@ -104,10 +106,7 @@ class TestWhisperCppEngineInitialization:
             ):
                 # Test various valid model sizes
                 for size in ["tiny", "base", "small", "medium", "large-v3"]:
-                    engine = WhisperCppEngine(
-                        model_size=size,
-                        backend=WhisperCppBackend.CPU
-                    )
+                    engine = WhisperCppEngine(model_size=size, backend=WhisperCppBackend.CPU)
                     assert engine.model_size == size
                     assert engine.backend == WhisperCppBackend.CPU
         except ImportError:
@@ -177,8 +176,10 @@ class TestWhisperCppEngineInitialization:
                 "vocalinux.speech_recognition.whisper_cpp_engine.WhisperCppEngine._init_library"
             ), patch(
                 "vocalinux.speech_recognition.whisper_cpp_engine.WhisperCppEngine._init_context"
-            ), patch("os.makedirs") as mock_makedirs:
-                
+            ), patch(
+                "os.makedirs"
+            ) as mock_makedirs:
+
                 WhisperCppEngine(model_size="base")
                 mock_makedirs.assert_called_once()
         except ImportError:
@@ -321,7 +322,7 @@ class TestWhisperCppBackendSelection:
                 MockEngine.return_value = mock_instance
                 mock_instance.get_backend_info.return_value = {"backend": "vulkan"}
 
-                integration = WhisperCppIntegration(
+                WhisperCppIntegration(
                     model_size="base",
                     language="en",
                     prefer_gpu=True,
@@ -338,7 +339,6 @@ class TestWhisperCppBackendSelection:
         try:
             from vocalinux.speech_recognition.whisper_cpp_integration import (
                 WhisperCppIntegration,
-                WhisperCppBackend,
             )
 
             # Mock both the check and the engine to simulate GPU unavailable
@@ -379,7 +379,7 @@ class TestWhisperCppBackendSelection:
                 MockEngine.return_value = mock_instance
                 mock_instance.get_backend_info.return_value = {"backend": "cpu"}
 
-                integration = WhisperCppIntegration(
+                WhisperCppIntegration(
                     model_size="base",
                     language="en",
                     prefer_gpu=False,
@@ -549,7 +549,7 @@ class TestWhisperCppContextInitialization:
             ), patch("ctypes.CDLL", return_value=mock_lib), patch.object(
                 WhisperCppEngine, "_init_context"
             ) as mock_init_ctx:
-                engine = WhisperCppEngine(
+                WhisperCppEngine(
                     model_size="base",
                     backend=WhisperCppBackend.CPU,
                 )
@@ -658,6 +658,7 @@ class TestWhisperCppIntegration:
                 WhisperCppError,
                 get_whisper_cpp_integration,
             )
+
             assert WhisperCppIntegration is not None
             assert WhisperCppError is not None
             assert get_whisper_cpp_integration is not None
@@ -721,10 +722,7 @@ class TestWhisperCppInRecognitionManager:
         # Should be a boolean
         assert isinstance(WHISPER_CPP_AVAILABLE, bool)
 
-    @pytest.mark.skipif(
-        sys.version_info < (3, 8),
-        reason="Requires Python 3.8+"
-    )
+    @pytest.mark.skipif(sys.version_info < (3, 8), reason="Requires Python 3.8+")
     def test_recognition_manager_accepts_whisper_cpp(self):
         """Test that SpeechRecognitionManager accepts whisper.cpp as engine."""
         try:
@@ -792,7 +790,6 @@ class TestWhisperCppErrorHandling:
         try:
             from vocalinux.speech_recognition.whisper_cpp_integration import (
                 WhisperCppIntegration,
-                WhisperCppBackend,
             )
 
             # Mock the engine initialization to fail with Vulkan first
@@ -811,7 +808,7 @@ class TestWhisperCppErrorHandling:
                 # Create integration with prefer_gpu=True
                 # Should fall back to CPU after Vulkan fails
                 try:
-                    integration = WhisperCppIntegration(
+                    WhisperCppIntegration(
                         model_size="base",
                         language="en",
                         prefer_gpu=True,
@@ -831,7 +828,10 @@ class TestWhisperCppBackendInfo:
     def test_get_backend_info(self):
         """Test get_backend_info method."""
         try:
-            from vocalinux.speech_recognition.whisper_cpp_engine import WhisperCppEngine, WhisperCppBackend
+            from vocalinux.speech_recognition.whisper_cpp_engine import (
+                WhisperCppEngine,
+                WhisperCppBackend,
+            )
 
             # Mock the engine initialization
             with patch("os.path.exists", return_value=True), patch(

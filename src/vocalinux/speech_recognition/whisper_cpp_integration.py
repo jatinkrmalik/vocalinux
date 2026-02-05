@@ -6,8 +6,7 @@ with the existing Vocalinux speech recognition architecture.
 """
 
 import logging
-import os
-from typing import Optional, List, Callable
+from typing import Optional, List
 
 from .whisper_cpp_engine import (
     WhisperCppEngine,
@@ -267,17 +266,13 @@ class WhisperCppIntegration:
         Returns:
             True if Vulkan or CUDA is available, False otherwise
         """
-        return (
-            WhisperCppEngine.check_backend_available(WhisperCppBackend.VULKAN) or
-            WhisperCppEngine.check_backend_available(WhisperCppBackend.CUDA)
-        )
+        return WhisperCppEngine.check_backend_available(
+            WhisperCppBackend.VULKAN
+        ) or WhisperCppEngine.check_backend_available(WhisperCppBackend.CUDA)
 
 
 def get_whisper_cpp_integration(
-    model_size: str = "base",
-    language: str = "en",
-    prefer_gpu: bool = True,
-    **kwargs
+    model_size: str = "base", language: str = "en", prefer_gpu: bool = True, **kwargs
 ) -> WhisperCppIntegration:
     """
     Factory function to create a WhisperCppIntegration instance.
@@ -298,10 +293,7 @@ def get_whisper_cpp_integration(
     """
     try:
         integration = WhisperCppIntegration(
-            model_size=model_size,
-            language=language,
-            prefer_gpu=prefer_gpu,
-            **kwargs
+            model_size=model_size, language=language, prefer_gpu=prefer_gpu, **kwargs
         )
         return integration
     except Exception as e:
