@@ -138,8 +138,8 @@ def main():
     from .text_injection import text_injector
     from .ui import tray_indicator
     from .ui.action_handler import ActionHandler
-    from .ui.logging_manager import initialize_logging
     from .ui.config_manager import ConfigManager
+    from .ui.logging_manager import initialize_logging
 
     # Initialize logging manager early
     initialize_logging()
