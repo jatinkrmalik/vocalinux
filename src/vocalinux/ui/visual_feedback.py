@@ -3,15 +3,20 @@ Visual feedback module for Vocalinux.
 
 This module provides a visual feedback indicator at the cursor position
 during voice typing to give users clear feedback when the system is listening.
+
+Note: This feature only works on X11. On Wayland, cursor position tracking
+and arbitrary window positioning are not available due to security restrictions.
 """
 
 import logging
 import math
+import os
 import time
 from typing import Optional, Tuple
 
 # Try to import GTK, but handle gracefully if not available
 GTK_AVAILABLE = False
+WAYLAND_SESSION = False
 try:
     import gi
 
@@ -20,6 +25,15 @@ try:
     from gi.repository import Gdk, GLib, Gtk
 
     GTK_AVAILABLE = True
+    
+    # Check if running on Wayland
+    display = Gdk.Display.get_default()
+    if display and "Wayland" in type(display).__name__:
+        WAYLAND_SESSION = True
+    # Also check environment variable as fallback
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+        WAYLAND_SESSION = True
+        
 except (ImportError, ValueError) as e:
     logging.warning(f"GTK not available for visual feedback: {e}")
 
@@ -49,10 +63,20 @@ class VisualFeedbackIndicator:
 
     def __init__(self):
         """Initialize the visual feedback indicator."""
+        self._enabled = False
+        
         if not GTK_AVAILABLE:
             logger.warning("GTK not available - visual feedback disabled")
             return
+            
+        if WAYLAND_SESSION:
+            logger.info(
+                "Visual feedback indicator disabled on Wayland. "
+                "Wayland does not support cursor position tracking or arbitrary window positioning."
+            )
+            return
 
+        self._enabled = True
         self.overlay_window: Optional[Gtk.Window] = None
         self.current_cursor_pos: Optional[CursorPosition] = None
         self.is_visible = False
@@ -68,12 +92,11 @@ class VisualFeedbackIndicator:
         self.pulse_max_scale = 1.2
         self.pulse_speed = 0.1
 
-        logger.info("Visual feedback indicator initialized")
+        logger.info("Visual feedback indicator initialized (X11 session)")
 
     def _create_overlay_window(self):
         """Create the overlay window for the visual indicator."""
-        if not GTK_AVAILABLE:
-            logger.warning("GTK not available - cannot create overlay window")
+        if not self._enabled:
             return
 
         if self.overlay_window is not None:
@@ -248,8 +271,7 @@ class VisualFeedbackIndicator:
 
     def show(self):
         """Show the visual feedback indicator."""
-        if not GTK_AVAILABLE:
-            logger.debug("GTK not available - cannot show visual feedback")
+        if not self._enabled:
             return
 
         if self.is_visible:
@@ -292,7 +314,7 @@ class VisualFeedbackIndicator:
 
     def hide(self):
         """Hide the visual feedback indicator."""
-        if not GTK_AVAILABLE:
+        if not self._enabled:
             return
 
         if not self.is_visible:
@@ -326,7 +348,7 @@ class VisualFeedbackIndicator:
         Args:
             state: The current recognition state
         """
-        if not GTK_AVAILABLE:
+        if not self._enabled:
             return
 
         if state == RecognitionState.LISTENING:
@@ -344,6 +366,6 @@ class VisualFeedbackIndicator:
 
     def cleanup(self):
         """Clean up resources."""
-        if GTK_AVAILABLE:
+        if self._enabled:
             self.hide()
         logger.info("Visual feedback indicator cleaned up")
