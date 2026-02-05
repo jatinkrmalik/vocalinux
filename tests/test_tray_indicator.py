@@ -236,11 +236,18 @@ class TestTrayIndicator(unittest.TestCase):
 
     def test_settings_callback(self):
         """Test settings callback."""
-        self.mock_settings_dialog_class.reset_mock()
-        self.mock_settings_dialog.reset_mock()
-        self.tray_indicator._on_settings_clicked(None)
-        self.mock_settings_dialog_class.assert_called_once()
-        self.mock_settings_dialog.show.assert_called_once()
+        # Import the tray_indicator module to patch SettingsDialog on it directly
+        import vocalinux.ui.tray_indicator as tray_module
+
+        mock_dialog_instance = MagicMock()
+        mock_dialog_class = MagicMock(return_value=mock_dialog_instance)
+
+        # Use patch.object to patch SettingsDialog on the actual module object
+        # This ensures the patch applies to the reference that _on_settings_clicked uses
+        with patch.object(tray_module, "SettingsDialog", mock_dialog_class):
+            self.tray_indicator._on_settings_clicked(None)
+            mock_dialog_class.assert_called_once()
+            mock_dialog_instance.show.assert_called_once()
 
     def test_about_dialog(self):
         """Test about dialog creation."""
