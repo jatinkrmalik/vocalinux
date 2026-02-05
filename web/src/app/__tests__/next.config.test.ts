@@ -45,8 +45,8 @@ describe('Next.js Config - PageSpeed Optimizations', () => {
       expect(configContent).toContain("distDir: 'out'");
     });
 
-    it('enables production browser source maps', () => {
-      expect(configContent).toContain('productionBrowserSourceMaps: true');
+    it('disables production browser source maps', () => {
+      expect(configContent).toContain('productionBrowserSourceMaps: false');
     });
 
     it('configures static export', () => {
