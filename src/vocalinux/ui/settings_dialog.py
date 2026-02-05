@@ -29,6 +29,7 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
+from .keyboard_backends import SHORTCUT_DISPLAY_NAMES, SUPPORTED_SHORTCUTS  # noqa: E402
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -628,6 +629,7 @@ class SettingsDialog(Gtk.Dialog):
         self._build_audio_section()
         self._build_engine_section()
         self._build_recognition_section()
+        self._build_shortcuts_section()
         self._build_test_section()
 
         # Load settings and populate UI
@@ -819,6 +821,81 @@ class SettingsDialog(Gtk.Dialog):
         # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
+
+    def _build_shortcuts_section(self):
+        """Build the Keyboard Shortcuts section."""
+        group = PreferencesGroup(
+            title="Keyboard Shortcuts",
+            description="Configure the shortcut to toggle voice recognition",
+        )
+
+        # Shortcut selection combo
+        self.shortcut_combo = Gtk.ComboBoxText()
+        self.shortcut_combo.set_size_request(200, -1)
+        self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut to toggle voice typing")
+
+        # Populate shortcut options
+        for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items():
+            self.shortcut_combo.append(shortcut_id, display_name)
+
+        # Load current shortcut from config
+        current_shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        if not self.shortcut_combo.set_active_id(current_shortcut):
+            self.shortcut_combo.set_active_id("ctrl+ctrl")
+
+        shortcut_row = PreferenceRow(
+            title="Toggle Recognition",
+            subtitle="Press this shortcut twice quickly to start/stop",
+            widget=self.shortcut_combo,
+        )
+        group.add_row(shortcut_row)
+
+        self.content_box.pack_start(group, False, False, 0)
+
+        # Info box about the shortcut
+        info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        info_box.get_style_context().add_class("info-box")
+        info_box.set_margin_start(4)
+        info_box.set_margin_end(4)
+        info_box.set_margin_top(4)
+
+        info_icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic", Gtk.IconSize.MENU)
+        info_box.pack_start(info_icon, False, False, 0)
+
+        self.shortcut_info_label = Gtk.Label(
+            label="Changes take effect immediately. Press the key twice quickly to trigger.",
+            xalign=0,
+            wrap=True,
+        )
+        self.shortcut_info_label.get_style_context().add_class("tip-label")
+        info_box.pack_start(self.shortcut_info_label, True, True, 0)
+
+        self.content_box.pack_start(info_box, False, False, 0)
+
+        # Connect signal
+        self.shortcut_combo.connect("changed", self._on_shortcut_changed)
+
+    def _on_shortcut_changed(self, widget):
+        """Handle shortcut selection change."""
+        if self._initializing:
+            return
+
+        shortcut_id = self.shortcut_combo.get_active_id()
+        if not shortcut_id:
+            return
+
+        # Save to config
+        self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
+        self.config_manager.save_settings()
+
+        display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut_id, shortcut_id)
+        logger.info(f"Keyboard shortcut changed to: {display_name}")
+
+        # Update info label
+        self.shortcut_info_label.set_markup(
+            f"<i>Shortcut updated to <b>{display_name}</b>. "
+            f"Restart the app for the change to take full effect.</i>"
+        )
 
     def _build_test_section(self):
         """Build the Test Recognition section."""

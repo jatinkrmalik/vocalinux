@@ -78,10 +78,11 @@ class TrayIndicator:
         self.text_injector = text_injector
         self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
 
-        # Initialize keyboard shortcut manager
-        self.shortcut_manager = (
-            KeyboardShortcutManager()
-        )  # Pass config_manager - Removed config_manager argument
+        # Get configured shortcut from config
+        shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+
+        # Initialize keyboard shortcut manager with configured shortcut
+        self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut)
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)

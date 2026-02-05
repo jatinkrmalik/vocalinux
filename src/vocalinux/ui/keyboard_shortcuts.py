@@ -2,7 +2,7 @@
 Keyboard shortcut manager for Vocalinux.
 
 This module provides global keyboard shortcut functionality to
-start/stop speech recognition with a double-tap of the Ctrl key.
+start/stop speech recognition with configurable double-tap shortcuts.
 
 Supports multiple backends:
 - pynput: Works on X11/XWayland
@@ -13,7 +13,15 @@ import logging
 from typing import Callable, Optional
 
 # Import the backend system
-from .keyboard_backends import EVDEV_AVAILABLE, PYNPUT_AVAILABLE, DesktopEnvironment, create_backend
+from .keyboard_backends import (
+    DEFAULT_SHORTCUT,
+    EVDEV_AVAILABLE,
+    PYNPUT_AVAILABLE,
+    SHORTCUT_DISPLAY_NAMES,
+    SUPPORTED_SHORTCUTS,
+    DesktopEnvironment,
+    create_backend,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,26 +49,28 @@ class KeyboardShortcutManager:
     """
     Manages global keyboard shortcuts for the application.
 
-    This class allows registering the double-tap Ctrl shortcut to
+    This class allows registering configurable double-tap shortcuts to
     toggle voice typing on and off across the desktop environment.
 
     Automatically selects the appropriate backend based on the
     desktop environment (X11, Wayland) and available dependencies.
     """
 
-    def __init__(self, backend: Optional[str] = None):
+    def __init__(self, backend: Optional[str] = None, shortcut: str = DEFAULT_SHORTCUT):
         """
         Initialize the keyboard shortcut manager.
 
         Args:
             backend: Optional backend name to force ('pynput' or 'evdev')
                     If not specified, auto-detects based on environment.
+            shortcut: The shortcut to listen for (e.g., "ctrl+ctrl", "alt+alt")
         """
         self.backend_instance = None
         self.active = False
+        self._shortcut = shortcut
 
         # Create the appropriate backend
-        self.backend_instance = create_backend(preferred_backend=backend)
+        self.backend_instance = create_backend(preferred_backend=backend, shortcut=shortcut)
 
         if self.backend_instance is None:
             logger.error("No keyboard backend available. Shortcuts will not work.")
@@ -85,6 +95,40 @@ class KeyboardShortcutManager:
             logger.warning("Keyboard shortcuts require pynput or evdev:")
             logger.warning("  pip install pynput evdev")
 
+    @property
+    def shortcut(self) -> str:
+        """Get the current shortcut string."""
+        return self._shortcut
+
+    @property
+    def shortcut_display_name(self) -> str:
+        """Get the human-readable name for the current shortcut."""
+        return SHORTCUT_DISPLAY_NAMES.get(self._shortcut, self._shortcut)
+
+    def set_shortcut(self, shortcut: str) -> bool:
+        """
+        Update the shortcut to listen for.
+
+        Note: This requires restarting the listener to take effect.
+
+        Args:
+            shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+
+        Returns:
+            True if successful, False if the shortcut is invalid
+        """
+        if shortcut not in SUPPORTED_SHORTCUTS:
+            logger.error(f"Invalid shortcut: {shortcut}")
+            return False
+
+        self._shortcut = shortcut
+
+        if self.backend_instance:
+            self.backend_instance.set_shortcut(shortcut)
+            logger.info(f"Shortcut updated to: {SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}")
+
+        return True
+
     def start(self) -> bool:
         """
         Start listening for keyboard shortcuts.
@@ -98,7 +142,7 @@ class KeyboardShortcutManager:
         if self.active:
             return True
 
-        logger.info("Starting keyboard shortcut listener")
+        logger.info(f"Starting keyboard shortcut listener for: {self.shortcut_display_name}")
         self.active = self.backend_instance.start()
 
         if not self.active:
@@ -119,17 +163,17 @@ class KeyboardShortcutManager:
 
     def register_toggle_callback(self, callback: Callable):
         """
-        Register a callback for the double-tap Ctrl shortcut.
+        Register a callback for the double-tap shortcut.
 
         Args:
-            callback: Function to call when the double-tap Ctrl is pressed
+            callback: Function to call when the double-tap shortcut is pressed
         """
         if self.backend_instance is None:
             logger.warning("Cannot register callback: no backend available")
             return
 
         self.backend_instance.register_toggle_callback(callback)
-        logger.info("Registered shortcut: Double-tap Ctrl")
+        logger.info(f"Registered shortcut: {self.shortcut_display_name}")
 
     @property
     def listener(self):
@@ -173,4 +217,7 @@ __all__ = [
     "DesktopEnvironment",
     "EVDEV_AVAILABLE",
     "PYNPUT_AVAILABLE",
+    "SUPPORTED_SHORTCUTS",
+    "SHORTCUT_DISPLAY_NAMES",
+    "DEFAULT_SHORTCUT",
 ]
