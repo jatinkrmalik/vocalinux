@@ -63,16 +63,26 @@ This will:
 
 2. **Install system dependencies:**
    ```bash
-   # Ubuntu/Debian
+   # Ubuntu
    sudo apt update
    sudo apt install -y python3-pip python3-gi python3-gi-cairo \
        gir1.2-gtk-3.0 libgirepository1.0-dev \
        python3-dev portaudio19-dev python3-venv xdotool
 
+   # Debian 11/12
+   sudo apt install -y python3-pip python3-gi python3-gi-cairo \
+       gir1.2-gtk-3.0 libgirepository1.0-dev libcairo2-dev \
+       python3-dev portaudio19-dev python3-venv xdotool
+
+   # Debian 13+
+   sudo apt install -y python3-pip python3-gi python3-gi-cairo \
+       gir1.2-gtk-3.0 libgirepository-2.0-dev libcairo2-dev \
+       python3-dev portaudio19-dev python3-venv xdotool
+
    # For appindicator (system tray icon):
-   # On older Ubuntu/Debian:
+   # On older Ubuntu:
    sudo apt install -y gir1.2-appindicator3-0.1
-   # On Debian 13+ (trixie) or newer:
+   # On Debian 11+ or newer Ubuntu:
    sudo apt install -y gir1.2-ayatanaappindicator3-0.1
    ```
 
