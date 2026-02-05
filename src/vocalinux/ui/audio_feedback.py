@@ -16,13 +16,21 @@ logger = logging.getLogger(__name__)
 # Set a flag for CI/test environments
 # This will be used to make sound functions work in CI testing environments
 # Only use mock player in CI when not explicitly testing the player detection
-# Check for pytest to avoid interfering with unit tests (multiple detection methods)
-_RUNNING_PYTEST = (
-    "pytest" in sys.modules
-    or "PYTEST_CURRENT_TEST" in os.environ
-    or any("pytest" in arg for arg in sys.argv)
-)
-CI_MODE = os.environ.get("GITHUB_ACTIONS") == "true" and not _RUNNING_PYTEST
+
+
+def _is_ci_mode():
+    """Check if we're in CI mode and should use mock audio player.
+
+    Returns False when running under pytest to allow proper unit testing.
+    """
+    # Check for pytest in multiple ways to be comprehensive
+    running_pytest = (
+        "pytest" in sys.modules
+        or "_pytest" in sys.modules
+        or "PYTEST_CURRENT_TEST" in os.environ
+        or any("pytest" in arg for arg in sys.argv)
+    )
+    return os.environ.get("GITHUB_ACTIONS") == "true" and not running_pytest
 
 
 # Import the centralized resource manager
@@ -46,7 +54,7 @@ def _get_audio_player():
     """
     # In CI mode, return a mock player to make tests pass,
     # but only when not running pytest (to avoid interfering with unit tests)
-    if CI_MODE:
+    if _is_ci_mode():
         logger.info("CI mode: Using mock audio player")
         return "mock_player", ["wav"]
 
@@ -99,7 +107,7 @@ def _play_sound_file(sound_path):
 
     # In CI mode, just pretend we played the sound and return success
     # but only when not running pytest (to avoid interfering with unit tests)
-    if CI_MODE and player == "mock_player":
+    if _is_ci_mode() and player == "mock_player":
         logger.info(f"CI mode: Simulating playing sound {sound_path}")
         return True
 
