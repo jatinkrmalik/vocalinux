@@ -23,7 +23,8 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Vocalinux")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    # default model, language and engine are loaded from default config due to priority of args over config
+    # default model, language and engine are loaded from default config due to
+    # priority of args over config
     parser.add_argument(
         "--model",
         type=str,
@@ -49,7 +50,10 @@ def parse_arguments():
             "ko",
             "ar",
         ],
-        help="Speech recognition language (auto for auto-detect, en-us, hi, es, fr, de, it, pt, ru, zh, etc.)",
+        help=(
+            "Speech recognition language (auto for auto-detect, "
+            "en-us, hi, es, fr, de, it, pt, ru, zh, etc.)"
+        ),
     )
     parser.add_argument(
         "--engine",
@@ -170,15 +174,60 @@ def main():
     logger.info("Initializing Vocalinux...")
 
     try:
+        # Check if streaming is enabled in configuration
+        streaming_enabled = saved_settings.get("enable_streaming", True)
+        streaming_settings = {
+            "streaming_chunk_size": saved_settings.get("streaming_chunk_size", 1024),
+            "vad_enabled": saved_settings.get("streaming_vad_enabled", True),
+            "vad_sensitivity": saved_settings.get("vad_sensitivity", 3),
+            "silence_timeout": saved_settings.get("streaming_silence_timeout_ms", 1000) / 1000.0,
+            "min_speech_duration_ms": saved_settings.get("streaming_min_speech_duration_ms", 250),
+        }
+
         # Initialize speech recognition engine with saved/configured settings
-        speech_engine = recognition_manager.SpeechRecognitionManager(
-            engine=engine,
-            model_size=model_size,
-            language=language,
-            vad_sensitivity=vad_sensitivity,
-            silence_timeout=silence_timeout,
-            audio_device_index=audio_device_index,
-        )
+        if streaming_enabled:
+            try:
+                # Try to use streaming manager for lower latency
+                from .speech_recognition.streaming_manager import StreamingRecognitionManager
+
+                speech_engine = StreamingRecognitionManager(
+                    engine=engine,
+                    model_size=model_size,
+                    language=language,
+                    enable_streaming=True,
+                    streaming_chunk_size=streaming_settings["streaming_chunk_size"],
+                    vad_enabled=streaming_settings["vad_enabled"],
+                    vad_sensitivity=streaming_settings["vad_sensitivity"],
+                    silence_timeout=streaming_settings["silence_timeout"],
+                    min_speech_duration_ms=streaming_settings["min_speech_duration_ms"],
+                    audio_device_index=audio_device_index,
+                )
+                logger.info("✓ Initialized with streaming recognition for lower latency")
+            except Exception as e:
+                logger.warning(
+                    f"Streaming initialization failed ({e}), falling back to batch processing"
+                )
+                # Fall back to traditional batch processing
+                speech_engine = recognition_manager.SpeechRecognitionManager(
+                    engine=engine,
+                    model_size=model_size,
+                    language=language,
+                    vad_sensitivity=vad_sensitivity,
+                    silence_timeout=silence_timeout,
+                    audio_device_index=audio_device_index,
+                )
+                logger.info("✓ Initialized with batch recognition (streaming unavailable)")
+        else:
+            # Use traditional batch processing
+            speech_engine = recognition_manager.SpeechRecognitionManager(
+                engine=engine,
+                model_size=model_size,
+                language=language,
+                vad_sensitivity=vad_sensitivity,
+                silence_timeout=silence_timeout,
+                audio_device_index=audio_device_index,
+            )
+            logger.info("✓ Initialized with batch recognition (streaming disabled)")
 
         # Initialize text injection system
         text_system = text_injector.TextInjector(wayland_mode=args.wayland)

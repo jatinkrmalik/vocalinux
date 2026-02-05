@@ -2,7 +2,6 @@
 Tests for system tray indicator functionality.
 """
 
-import os
 import unittest
 from unittest.mock import MagicMock, patch
 

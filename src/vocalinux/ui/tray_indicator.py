@@ -8,16 +8,14 @@ recognition process and displaying its status.
 import logging
 import os
 import signal
-import sys
-import threading
-from typing import Callable, Dict, Optional
+from typing import Callable
 
 import gi
 
 # Import GTK
 gi.require_version("Gtk", "3.0")
 gi.require_version("AppIndicator3", "0.1")
-from gi.repository import AppIndicator3, GdkPixbuf, GLib, GObject, Gtk
+from gi.repository import AppIndicator3, GdkPixbuf, GLib, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import (
