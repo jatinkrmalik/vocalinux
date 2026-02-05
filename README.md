@@ -53,7 +53,7 @@
 Let the installer guide you through the setup with smart hardware detection:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.0-alpha --interactive
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha --interactive
 ```
 
 The interactive installer will:

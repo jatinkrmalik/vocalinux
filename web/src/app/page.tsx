@@ -617,15 +617,14 @@ export default function HomePage() {
                     <CopyButton text={interactiveInstallCommand} />
                   </div>
                   <div className="overflow-x-auto">
-                    <SyntaxHighlighter
+                    <CodeBlock
                       language="bash"
-                      style={atomOneDark}
                       className="rounded-lg text-sm sm:text-base"
-                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
+                      customStyle={{ margin: 0, maxWidth: "100%", overflowX: "auto" }}
                       wrapLongLines={false}
                     >
                       {interactiveInstallCommand}
-                    </SyntaxHighlighter>
+                    </CodeBlock>
                   </div>
                   <p className="text-xs text-muted-foreground mt-3">
                     Detects your GPU and recommends the best option. Prompts for your preferences.
