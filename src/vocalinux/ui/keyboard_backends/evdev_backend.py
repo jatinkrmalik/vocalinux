@@ -76,6 +76,36 @@ def find_keyboard_devices() -> List[str]:
     return keyboard_devices
 
 
+def device_has_ctrl_key(device_path: str) -> bool:
+    """
+    Check if a device has Ctrl key capability.
+
+    Args:
+        device_path: Path to the input device
+
+    Returns:
+        True if the device can send Ctrl key events
+    """
+    if not EVDEV_AVAILABLE:
+        return False
+
+    try:
+        device = InputDevice(device_path)
+        capabilities = device.capabilities()
+        device.close()
+
+        # Check if device has EV_KEY capability and supports Ctrl keys
+        if ecodes.EV_KEY in capabilities:
+            key_caps = capabilities[ecodes.EV_KEY]
+            # Check for left or right Ctrl key
+            if KEY_LEFTCTRL in key_caps or KEY_RIGHTCTRL in key_caps:
+                return True
+    except (OSError, IOError):
+        pass
+
+    return False
+
+
 class EvdevKeyboardBackend(KeyboardBackend):
     """
     Keyboard backend using python-evdev.
@@ -102,14 +132,23 @@ class EvdevKeyboardBackend(KeyboardBackend):
             logger.error("python-evdev not available")
 
     def is_available(self) -> bool:
-        """Check if evdev is available."""
+        """Check if evdev is available and we can access a keyboard device with Ctrl key."""
         if not EVDEV_AVAILABLE:
             return False
 
-        # Check if we can access at least one keyboard device
+        # Check if we can access at least one keyboard device with Ctrl key capability
         try:
             devices = find_keyboard_devices()
-            return len(devices) > 0
+            if not devices:
+                return False
+
+            # Try to find at least one device with Ctrl key that we can open
+            for device_path in devices:
+                if device_has_ctrl_key(device_path):
+                    return True
+
+            # Could not find any accessible device with Ctrl key
+            return False
         except Exception:
             return False
 
@@ -292,4 +331,9 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
 
 # Export availability
-__all__ = ["EvdevKeyboardBackend", "EVDEV_AVAILABLE", "find_keyboard_devices"]
+__all__ = [
+    "EvdevKeyboardBackend",
+    "EVDEV_AVAILABLE",
+    "find_keyboard_devices",
+    "device_has_ctrl_key",
+]
