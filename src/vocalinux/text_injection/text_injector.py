@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import time
 from enum import Enum
+from typing import Optional  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

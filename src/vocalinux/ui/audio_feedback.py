@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def _is_ci_mode():
 
 
 # Import the centralized resource manager
-from ..utils.resource_manager import ResourceManager
+from ..utils.resource_manager import ResourceManager  # noqa: E402
 
 # Initialize resource manager
 _resource_manager = ResourceManager()

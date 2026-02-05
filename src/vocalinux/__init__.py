@@ -10,7 +10,7 @@ but system typelibs (AppIndicator3, etc.) may not be accessible.
 __version__ = "0.1.0"
 
 # Import common types first to avoid circular imports
-from .common_types import RecognitionState
+from .common_types import RecognitionState  # noqa: F401
 
 # Import non-GTK modules that are safe to import at package level
 from .utils import ResourceManager

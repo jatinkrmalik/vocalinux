@@ -6,9 +6,7 @@ allowing users to view, filter, and export application logs for debugging.
 """
 
 import logging
-import os
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -178,7 +176,7 @@ class LoggingManager:
             records = self.get_logs(level_filter, module_filter)
 
             with open(filepath, "w", encoding="utf-8") as f:
-                f.write(f"VocaLinux Log Export\n")
+                f.write("VocaLinux Log Export\n")
                 f.write(f"Generated: {datetime.now().isoformat()}\n")
                 f.write(f"Total Records: {len(records)}\n")
                 if level_filter:
