@@ -116,6 +116,18 @@ if [[ "$DEV_MODE" == "yes" ]]; then
     RUN_TESTS="yes"
 fi
 
+# Display ASCII art banner
+cat << "EOF"
+
+  ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌     █  ▐▌ ▝▜▌▐▌ ▐▌  ▐▌
+   ▝▚▞▘ ▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▗▞▘▝▚▖
+
+                    Voice Dictation for Linux
+
+EOF
+
 print_info "Vocalinux Installer"
 print_info "=============================="
 echo ""
@@ -253,8 +265,8 @@ run_interactive_install() {
     clear_screen
     cat << "EOF"
 
-Vocalinux - Interactive Installation Guide
-==========================================
+                 Interactive Installation Guide
+                 ===============================
 
 EOF
 
@@ -281,31 +293,31 @@ EOF
     fi
     echo ""
 
-    # Step 2: Choose speech engine
-    print_header "Step 2: Speech Recognition Engine"
-    echo "Vocalinux supports two speech recognition engines:"
+    # Step 2: Choose installation type
+    print_header "Step 2: Installation Type"
+    echo "Choose what to install:"
     echo ""
-    echo "  1. Whisper AI (recommended)"
-    echo "     - Highest accuracy available"
-    echo "     - 99+ languages supported"
-    echo "     - Created by OpenAI"
+    echo "  1. Full install (recommended)"
+    echo "     • Whisper AI - highest accuracy, 99+ languages"
+    echo "     • VOSK - fast fallback engine"
+    echo "     • Can switch between engines in Settings"
     echo ""
-    echo "  2. VOSK"
-    echo "     - Lightweight and fast"
-    echo "     - Works on older/low-RAM systems"
-    echo "     - 20+ languages supported"
+    echo "  2. Minimal install"
+    echo "     • VOSK only - lightweight and fast"
+    echo "     • Works on older/low-RAM systems"
+    echo "     • ~40MB vs ~2GB+ for full install"
     echo ""
 
-    read -p "Choose your speech engine [1-2] (default: 1): " ENGINE_CHOICE
+    read -p "Choose installation type [1-2] (default: 1): " ENGINE_CHOICE
     ENGINE_CHOICE=${ENGINE_CHOICE:-1}
 
     if [[ "$ENGINE_CHOICE" == "2" ]]; then
         WITH_WHISPER="no"
         NO_WHISPER_EXPLICIT="yes"
-        SELECTED_ENGINE="VOSK"
+        SELECTED_ENGINE="Minimal (VOSK only)"
     else
         WITH_WHISPER="yes"
-        SELECTED_ENGINE="Whisper AI"
+        SELECTED_ENGINE="Full (Whisper + VOSK)"
 
         # Step 3: Whisper variant (if Whisper selected)
         print_header "Step 3: Whisper Installation Type"
@@ -352,7 +364,10 @@ EOF
 
     # Summary
     print_header "Installation Summary"
-    echo "Speech engine: $SELECTED_ENGINE${SELECTED_VARIANT:+ ($SELECTED_VARIANT)}"
+    echo "Install type: $SELECTED_ENGINE"
+    if [[ "$WITH_WHISPER" == "yes" ]]; then
+        echo "Whisper variant: ${SELECTED_VARIANT:-GPU}"
+    fi
     echo "Models: $([[ "$SKIP_MODELS" == "yes" ]] && echo "Download on first use" || echo "Download now")"
     echo ""
     read -p "Press Enter to continue, or Ctrl+C to cancel..."
@@ -971,8 +986,8 @@ VOSK_CONFIG
                 print_warning "Failed to install Whisper."
                 print_warning "Voice recognition will fall back to VOSK."
             }
-        elif [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
-            # Default: Install Whisper with GPU support (either explicitly requested or non-interactive default)
+        elif [ "$WITH_WHISPER" = "yes" ]; then
+            # Install Whisper with GPU support (set by --with-whisper flag or auto-detected in non-interactive mode)
             print_info "Installing Whisper AI support with GPU/CUDA (~2.3GB download, ~5-10 min)..."
             print_info "This enables high-accuracy speech recognition with GPU acceleration."
             print_info "Tip: Use --whisper-cpu for a smaller download if you don't have an NVIDIA GPU."
@@ -983,21 +998,23 @@ VOSK_CONFIG
         else
             # Interactive mode: Prompt user
             echo ""
-            print_info "Whisper AI provides better accuracy but requires more disk space."
-            print_info "Options:"
-            print_info "  1) Full install with GPU support (~2.3GB) - best if you have NVIDIA GPU"
-            print_info "  2) CPU-only install (~200MB) - works on any system, slightly slower"
-            print_info "  3) Skip Whisper - use VOSK only"
+            print_info "Choose installation type:"
+            print_info "  1) Full install - GPU (~2.3GB) - Whisper + VOSK, best accuracy"
+            print_info "  2) Full install - CPU (~200MB) - Whisper + VOSK, no GPU needed"
+            print_info "  3) Minimal install (~40MB) - VOSK only, lightweight"
             read -p "Choose option [1/2/3]: " -n 1 -r
             echo
             if [[ $REPLY == "1" ]]; then
-                print_info "Installing Whisper with GPU support (this might take a while)..."
+                WITH_WHISPER="yes"
+                print_info "Installing full (Whisper + VOSK) with GPU support..."
                 pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                     print_warning "Failed to install Whisper support."
                     print_warning "Voice recognition will fall back to VOSK."
                 }
             elif [[ $REPLY == "2" ]]; then
-                print_info "Installing Whisper with CPU-only PyTorch..."
+                WITH_WHISPER="yes"
+                WHISPER_CPU="yes"
+                print_info "Installing full (Whisper + VOSK) with CPU-only PyTorch..."
                 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
                     print_warning "Failed to install CPU-only PyTorch."
                 }
@@ -1005,6 +1022,43 @@ VOSK_CONFIG
                     print_warning "Failed to install Whisper."
                     print_warning "Voice recognition will fall back to VOSK."
                 }
+            elif [[ $REPLY == "3" ]]; then
+                # User selected minimal install (VOSK only)
+                NO_WHISPER_EXPLICIT="yes"
+                print_info "Installing minimal (VOSK only)..."
+
+                # Create config file with VOSK as default engine
+                local CONFIG_FILE_PATH="$CONFIG_DIR/config.json"
+                if [ ! -f "$CONFIG_FILE_PATH" ]; then
+                    print_info "Creating config with VOSK as default engine..."
+                    cat > "$CONFIG_FILE_PATH" << 'VOSK_INTERACTIVE_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "vosk",
+        "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+VOSK_INTERACTIVE_CONFIG
+                fi
             fi
         fi
     fi
@@ -1342,7 +1396,7 @@ install_icons() {
     fi
 }
 
-# Function to update icon cache
+# Function to update icon cache and desktop database
 update_icon_cache() {
     print_info "Updating icon cache..."
 
@@ -1354,6 +1408,16 @@ update_icon_cache() {
     else
         print_warning "gtk-update-icon-cache command not found, skipping icon cache update"
     fi
+
+    # Update desktop database so the app appears in application menus immediately
+    print_info "Updating desktop database..."
+    if command_exists update-desktop-database; then
+        update-desktop-database "${XDG_DATA_HOME:-$HOME/.local/share}/applications" 2>/dev/null || {
+            print_warning "Failed to update desktop database"
+        }
+    else
+        print_warning "update-desktop-database command not found - app may not appear in menu until next login"
+    fi
 }
 
 # Install desktop entry
@@ -1362,21 +1426,27 @@ install_desktop_entry || print_warning "Desktop entry installation failed"
 # Install icons
 install_icons || print_warning "Icon installation failed"
 
-# Install Whisper tiny model (if Whisper was installed)
-if [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
-    # Check if Whisper is actually installed before downloading model
-    if python -c "import whisper" 2>/dev/null; then
-        if [ "$SKIP_MODELS" = "no" ]; then
-            install_whisper_model || print_warning "Whisper model download failed - model will be downloaded on first run"
-        else
-            print_info "Skipping Whisper model download (--skip-models specified)"
-        fi
+# Install Whisper tiny model if Whisper is available
+# This is important because Whisper is the default engine in config_manager.py
+# We check if Whisper was actually installed (importable) rather than relying on flags
+if [ "$SKIP_MODELS" = "no" ]; then
+    if "$VENV_DIR/bin/python" -c "import whisper" 2>/dev/null; then
+        print_info "Whisper is installed - downloading tiny model (default engine)..."
+        install_whisper_model || print_warning "Whisper model download failed - model will be downloaded on first run"
+    elif [ "$NO_WHISPER_EXPLICIT" != "yes" ]; then
+        # Whisper is not installed but wasn't explicitly disabled
+        # This shouldn't happen in normal flow, but warn the user
+        print_warning "Whisper not available but is the default engine."
+        print_warning "The app will try to download the model on first run."
     else
-        print_info "Whisper not available, skipping model download"
+        print_info "Whisper not installed (VOSK-only mode), skipping Whisper model download"
     fi
+else
+    print_info "Skipping Whisper model download (--skip-models specified)"
+    print_info "Model will be downloaded automatically on first application run"
 fi
 
-# Install VOSK models (as fallback)
+# Install VOSK models (always useful as fallback, and required for VOSK-only mode)
 if [ "$SKIP_MODELS" = "no" ]; then
     install_vosk_models || print_warning "VOSK model installation failed - models will be downloaded on first run"
 else
@@ -1391,8 +1461,8 @@ update_icon_cache
 run_tests() {
     print_info "Running tests..."
 
-    # Check if pytest is installed
-    if ! python -c "import pytest" &>/dev/null; then
+    # Check if pytest is installed in the virtual environment
+    if ! "$VENV_DIR/bin/python" -c "import pytest" &>/dev/null; then
         print_info "Installing pytest and related packages..."
         pip install pytest pytest-mock pytest-cov || {
             print_error "Failed to install pytest. Cannot run tests."
@@ -1471,8 +1541,8 @@ verify_installation() {
         ((ISSUES++))
     fi
 
-    # Check if Python package is importable
-    if ! python -c "import vocalinux" &>/dev/null; then
+    # Check if Python package is importable using venv python
+    if ! "$VENV_DIR/bin/python" -c "import vocalinux" &>/dev/null; then
         print_error "Vocalinux Python package cannot be imported."
         ((ISSUES++))
     fi
@@ -1487,10 +1557,15 @@ print_welcome_message() {
 
     clear_screen
 
+    # ASCII art header
     cat << "EOF"
 
-Vocalinux - Installation Complete
-================================
+  ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌     █  ▐▌ ▝▜▌▐▌ ▐▌  ▐▌
+   ▝▚▞▘ ▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▗▞▘▝▚▖
+
+                     ✓ Installation Complete!
 
 EOF
 
@@ -1503,45 +1578,44 @@ EOF
     fi
 
     echo ""
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Getting Started"
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "1. Launch Vocalinux from your app menu"
     echo "   Look for 'Vocalinux' in your application launcher."
     echo ""
-    echo "   Or from terminal:"
-    echo "   vocalinux"
+    echo -e "   Or from terminal: \e[36mvocalinux\e[0m"
     echo ""
     echo "2. Find Vocalinux in your system tray (top bar)"
-    echo "   - Click the icon to access settings"
-    echo "   - Right-click for options (Quit, Settings, etc.)"
+    echo "   • Click the icon to access settings"
+    echo "   • Right-click for options (Quit, Settings, etc.)"
     echo ""
     echo "3. Start dictating!"
-    echo "   Double-tap Ctrl anywhere to start/stop dictation"
+    echo -e "   \e[1mDouble-tap Ctrl\e[0m anywhere to start/stop dictation"
     echo ""
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  First Run Tips"
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "- Speak clearly and at a natural pace"
-    echo "- Use voice commands: 'period', 'comma', 'new line', 'delete that'"
-    echo "- Both engines are 100% offline - your privacy is protected"
+    echo "• Speak clearly and at a natural pace"
+    echo "• Use voice commands: 'period', 'comma', 'new line', 'delete that'"
+    echo "• Both engines are 100% offline - your privacy is protected"
     echo ""
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Need Help?"
-    echo "============================================================"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "- Report issues: https://github.com/jatinkrmalik/vocalinux/issues"
-    echo "- Documentation: https://github.com/jatinkrmalik/vocalinux"
-    echo "- Star us on GitHub: https://github.com/jatinkrmalik/vocalinux"
+    echo "• Report issues: https://github.com/jatinkrmalik/vocalinux/issues"
+    echo "• Documentation: https://github.com/jatinkrmalik/vocalinux"
+    echo "• Star us on GitHub: ⭐ https://github.com/jatinkrmalik/vocalinux"
     echo ""
 
     # Installation details (optional, for debugging)
     if [[ "$VERBOSE" == "yes" ]]; then
-        echo "============================================================"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "  Installation Details"
-        echo "============================================================"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
         echo "Virtual environment: $VENV_DIR"
         echo "Desktop entry: $DESKTOP_DIR/vocalinux.desktop"
