@@ -339,13 +339,44 @@ class TestCheckDependencies(unittest.TestCase):
                 result = check_dependencies()
                 self.assertFalse(result)
 
-    def test_check_dependencies_missing_appindicator(self):
-        """Test when AppIndicator3 is missing."""
+    def test_check_dependencies_missing_appindicator_with_ayatana_fallback(self):
+        """Test when AppIndicator3 is missing but AyatanaAppIndicator3 is available."""
 
-        # Make gi.require_version raise ValueError for AppIndicator3
+        # Make gi.require_version raise ValueError for AppIndicator3 only
+        # AyatanaAppIndicator3 should work as fallback
         def require_version_side_effect(name, version):
             if name == "AppIndicator3":
                 raise ValueError("AppIndicator3 not found")
+            # AyatanaAppIndicator3 works fine
+
+        mock_gi = MagicMock()
+        mock_gi.require_version = MagicMock(side_effect=require_version_side_effect)
+        mock_gtk = MagicMock()
+        mock_ayatana = MagicMock()
+        mock_pynput = MagicMock()
+        mock_requests = MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "gi": mock_gi,
+                "gi.repository": MagicMock(Gtk=mock_gtk, AyatanaAppIndicator3=mock_ayatana),
+                "pynput": mock_pynput,
+                "requests": mock_requests,
+            },
+        ):
+            with patch("vocalinux.main.logger"):
+                result = check_dependencies()
+                # Should return True because AyatanaAppIndicator3 fallback works
+                self.assertTrue(result)
+
+    def test_check_dependencies_missing_both_appindicators(self):
+        """Test when both AppIndicator3 and AyatanaAppIndicator3 are missing."""
+
+        # Make gi.require_version raise ValueError for both AppIndicator variants
+        def require_version_side_effect(name, version):
+            if name in ("AppIndicator3", "AyatanaAppIndicator3"):
+                raise ValueError(f"{name} not found")
 
         mock_gi = MagicMock()
         mock_gi.require_version = MagicMock(side_effect=require_version_side_effect)
@@ -364,6 +395,7 @@ class TestCheckDependencies(unittest.TestCase):
         ):
             with patch("vocalinux.main.logger"):
                 result = check_dependencies()
+                # Should return False because both indicators are missing
                 self.assertFalse(result)
 
 
