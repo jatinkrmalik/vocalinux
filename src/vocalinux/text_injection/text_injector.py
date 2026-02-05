@@ -125,7 +125,9 @@ class TextInjector:
 
             if ydotool_available:
                 self.wayland_tool = "ydotool"
-                logger.info(f"Using {self.wayland_tool} for Wayland text injection (universal compatibility)")
+                logger.info(
+                    f"Using {self.wayland_tool} for Wayland text injection (universal compatibility)"
+                )
             elif wtype_available:
                 self.wayland_tool = "wtype"
                 logger.info(f"Using {self.wayland_tool} for Wayland text injection")
