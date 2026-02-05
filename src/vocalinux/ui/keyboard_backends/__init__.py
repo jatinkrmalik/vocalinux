@@ -77,35 +77,63 @@ def create_backend(preferred_backend: Optional[str] = None) -> Optional[Keyboard
 
     # If a specific backend is requested, try to use it
     if preferred_backend:
-        if preferred_backend == "evdev" and EVDEV_AVAILABLE:
-            logger.info("Using evdev backend (preferred)")
-            return EvdevKeyboardBackend()  # type: ignore
-        elif preferred_backend == "pynput" and PYNPUT_AVAILABLE:
-            logger.info("Using pynput backend (preferred)")
-            return PynputKeyboardBackend()  # type: ignore
+        if preferred_backend == "evdev":
+            if EVDEV_AVAILABLE:
+                logger.info("Using evdev backend (preferred)")
+                backend = EvdevKeyboardBackend()  # type: ignore
+                if backend.is_available():
+                    return backend
+                hint = backend.get_permission_hint()
+                if hint:
+                    logger.warning(f"Evdev backend not usable: {hint}")
+                logger.warning("Evdev backend preferred but not available, falling back")
+            else:
+                logger.warning("Evdev backend not available (python-evdev not installed)")
+        elif preferred_backend == "pynput":
+            if PYNPUT_AVAILABLE:
+                logger.info("Using pynput backend (preferred)")
+                return PynputKeyboardBackend()  # type: ignore
+            logger.warning("Pynput backend not available")
         else:
-            logger.warning(f"Preferred backend '{preferred_backend}' not available")
+            logger.warning(f"Unknown preferred backend: '{preferred_backend}'")
 
     # Auto-select based on environment
     if env == DesktopEnvironment.WAYLAND:
         # On Wayland, prefer evdev (if available) as pynput doesn't work
         if EVDEV_AVAILABLE:
             logger.info("Using evdev backend for Wayland")
-            return EvdevKeyboardBackend()  # type: ignore
-        else:
-            logger.warning(
-                "evdev backend not available on Wayland. "
-                "Keyboard shortcuts will not work. Install python-evdev and "
-                "add your user to the 'input' group."
-            )
+            backend = EvdevKeyboardBackend()  # type: ignore
+            if backend.is_available():
+                return backend
+            hint = backend.get_permission_hint()
+            if hint:
+                logger.warning(f"Evdev backend not usable on Wayland: {hint}")
+            logger.warning("Keyboard shortcuts will not work on Wayland without evdev access")
             return None
+        logger.warning(
+            "evdev backend not available on Wayland. "
+            "Keyboard shortcuts will not work. Install python-evdev and "
+            "add your user to the 'input' group."
+        )
+        return None
 
     # Default to pynput for X11 or unknown
     if PYNPUT_AVAILABLE:
         logger.info("Using pynput backend")
         return PynputKeyboardBackend()  # type: ignore
 
+    if EVDEV_AVAILABLE:
+        logger.warning("Pynput not available, falling back to evdev backend")
+        backend = EvdevKeyboardBackend()  # type: ignore
+        if backend.is_available():
+            return backend
+        hint = backend.get_permission_hint()
+        if hint:
+            logger.warning(f"Evdev backend not usable: {hint}")
+        return None
+
     logger.error("No keyboard backend available")
+    logger.info("To enable keyboard shortcuts, install either python-evdev or pynput")
     return None
 
 
