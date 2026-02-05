@@ -85,7 +85,7 @@ Issues = "https://github.com/jatinkrmalik/vocalinux/issues"
 Changelog = "https://github.com/jatinkrmalik/vocalinux/releases"
 
 [tool.setuptools]
-packages = ["vocalinux", "vocalinux.speech_recognition", "vocalinux.text_injection", "vocalinux.ui", "vocalinux.utils"]
+packages = ["vocalinux", "vocalinux.speech_recognition", "vocalinux.text_injection", "vocalinux.ui", "vocalinux.ui.keyboard_backends", "vocalinux.utils"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.dynamic]
