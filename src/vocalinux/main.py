@@ -14,9 +14,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import from the vocalinux package
-from .ui import tray_indicator  # noqa: E402
-from .ui.action_handler import ActionHandler  # noqa: E402
+# Note: GTK-dependent modules (tray_indicator) are imported lazily after
+# dependency checking to provide better error messages for pip/pipx users
 
 
 def parse_arguments():
@@ -63,7 +62,31 @@ def parse_arguments():
 
 def check_dependencies():
     """Check for required dependencies and provide helpful error messages."""
-    missing_deps = []
+    missing_system_deps = []
+    missing_python_deps = []
+
+    # Check for GTK3
+    try:
+        import gi
+
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk  # noqa: F401
+    except (ImportError, ValueError):
+        missing_system_deps.append(
+            "GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)"
+        )
+
+    # Check for AppIndicator3
+    try:
+        import gi
+
+        gi.require_version("AppIndicator3", "0.1")
+        from gi.repository import AppIndicator3  # noqa: F401
+    except (ImportError, ValueError):
+        missing_system_deps.append(
+            "AppIndicator3 (install with: sudo apt install gir1.2-appindicator3-0.1) "
+            "Note: On Debian 13+ use gir1.2-ayatanaappindicator3-0.1 instead"
+        )
 
     # pynput is used for keyboard detection but we check at module startup
     # requests is used by various components
@@ -71,30 +94,26 @@ def check_dependencies():
     try:
         import pynput  # noqa: F401
     except ImportError:
-        missing_deps.append("pynput (install with: pip install pynput)")
+        missing_python_deps.append("pynput (install with: pip install pynput)")
 
     try:
         import requests  # noqa: F401
     except ImportError:
-        missing_deps.append("requests (install with: pip install requests)")
+        missing_python_deps.append("requests (install with: pip install requests)")
 
-    try:
-        import gi
-
-        gi.require_version("Gtk", "3.0")
-        gi.require_version("AppIndicator3", "0.1")
-    except (ImportError, ValueError):
-        missing_deps.append(
-            "GTK3 and AppIndicator3 (install with: sudo apt install "
-            "python3-gi gir1.2-appindicator3-0.1) "
-            "Note: On Debian 13+ use gir1.2-ayatanaappindicator3-0.1 instead"
-        )
-
-    if missing_deps:
+    if missing_system_deps or missing_python_deps:
         logger.error("Missing required dependencies:")
-        for dep in missing_deps:
+        for dep in missing_system_deps + missing_python_deps:
             logger.error(f"  - {dep}")
-        logger.error("Please install the missing dependencies and try again.")
+        if missing_system_deps:
+            logger.error("")
+            logger.error("If you installed via pip/pipx, you also need system GTK packages:")
+            logger.error("  sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-appindicator3-0.1")
+            logger.error("")
+            logger.error("For the best experience, install using the recommended method:")
+            logger.error(
+                "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
+            )
         return False
 
     return True
@@ -109,21 +128,22 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug logging enabled")
 
-    # Initialize logging manager early
-    from .ui.logging_manager import initialize_logging
-
-    initialize_logging()
-    logger.info("Logging system initialized")
-
-    # Check dependencies first
+    # Check dependencies first (before importing GTK-dependent modules)
     if not check_dependencies():
         logger.error("Cannot start Vocalinux due to missing dependencies")
         sys.exit(1)
 
-    # Load saved configuration to get engine/model settings
+    # Now it's safe to import GTK-dependent modules
     from .speech_recognition import recognition_manager
     from .text_injection import text_injector
+    from .ui import tray_indicator
+    from .ui.action_handler import ActionHandler
     from .ui.config_manager import ConfigManager
+    from .ui.logging_manager import initialize_logging
+
+    # Initialize logging manager early
+    initialize_logging()
+    logger.info("Logging system initialized")
 
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
