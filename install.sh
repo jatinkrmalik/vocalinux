@@ -463,6 +463,43 @@ install_text_input_tools() {
                     print_warning "Please install 'wtype' manually for Wayland text input support."
                     ;;
             esac
+
+            # Try to install ydotool as additional fallback for Wayland
+            # ydotool works better with some compositors (like GNOME) where wtype may fail
+            print_info "Attempting to install ydotool for better Wayland compatibility..."
+            case "$DISTRO_FAMILY" in
+                ubuntu|debian)
+                    if ! apt_package_installed "ydotool"; then
+                        sudo apt install -y ydotool 2>/dev/null || print_info "ydotool not available in repos (optional)"
+                    fi
+                    ;;
+                fedora)
+                    if command_exists dnf; then
+                        sudo dnf install -y ydotool 2>/dev/null || print_info "ydotool not available in repos (optional)"
+                    fi
+                    ;;
+                arch)
+                    if ! pacman_package_installed "ydotool"; then
+                        sudo pacman -S --noconfirm ydotool 2>/dev/null || print_info "ydotool not available in repos (optional)"
+                    fi
+                    ;;
+            esac
+
+            # Add user to input group for ydotool/dotool support
+            if ! groups | grep -q '\binput\b'; then
+                print_info "Adding $USER to 'input' group for text injection..."
+                sudo usermod -aG input "$USER" || print_warning "Failed to add user to input group"
+                print_warning "You will need to LOG OUT and back in for text injection to work with ydotool/dotool"
+            fi
+
+            # Install udev rule for ydotool/dotool
+            if [ ! -f /etc/udev/rules.d/80-dotool.rules ]; then
+                print_info "Installing udev rule for input device access..."
+                echo 'KERNEL=="uinput", GROUP="input", MODE="0620", OPTIONS+="static_node=uinput"' \
+                    | sudo tee /etc/udev/rules.d/80-dotool.rules >/dev/null 2>&1 || print_warning "Failed to install udev rule"
+                sudo udevadm control --reload 2>/dev/null || true
+                sudo udevadm trigger 2>/dev/null || true
+            fi
             ;;
 
         x11|"")
