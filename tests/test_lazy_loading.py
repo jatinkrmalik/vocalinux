@@ -80,11 +80,11 @@ class TestLazyInitialization(unittest.TestCase):
         self.assertEqual(manager.state, RecognitionState.IDLE)
         self.assertEqual(manager.engine, "vosk")
         self.assertEqual(manager.model_size, "small")
-        
+
         # CRITICAL: Model should NOT be loaded at initialization
         self.modelMock.assert_not_called()
         self.kaldiMock.assert_not_called()
-        
+
         # model_ready should be False
         self.assertFalse(manager.model_ready)
         self.assertFalse(manager._model_initialized)
@@ -173,7 +173,7 @@ class TestThreadSafety(unittest.TestCase):
         def slow_model_init(*args, **kwargs):
             time.sleep(0.01)  # 10ms delay
             return MagicMock()
-        
+
         self.modelMock.side_effect = slow_model_init
 
     def tearDown(self):
@@ -187,7 +187,7 @@ class TestThreadSafety(unittest.TestCase):
     def test_concurrent_model_loading(self):
         """Test that concurrent access safely loads model only once."""
         manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-        
+
         results = []
         errors = []
 
@@ -200,11 +200,11 @@ class TestThreadSafety(unittest.TestCase):
 
         # Create multiple threads that all try to load the model
         threads = [threading.Thread(target=try_load) for _ in range(10)]
-        
+
         # Start all threads simultaneously
         for t in threads:
             t.start()
-        
+
         # Wait for all to complete
         for t in threads:
             t.join()
@@ -213,7 +213,7 @@ class TestThreadSafety(unittest.TestCase):
         self.assertEqual(len(results), 10)
         self.assertTrue(all(results))
         self.assertEqual(len(errors), 0)
-        
+
         # Model should only be loaded once
         self.modelMock.assert_called_once()
         self.assertTrue(manager.model_ready)
@@ -255,17 +255,17 @@ class TestErrorHandling(unittest.TestCase):
         self.modelMock.side_effect = RuntimeError("Failed to load model")
 
         manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-        
+
         # Attempt to load should raise exception
         with self.assertRaises(RuntimeError) as context:
             manager._ensure_model_loaded()
-        
+
         self.assertIn("Failed to load model", str(context.exception))
-        
+
         # Manager should be in error state
         self.assertEqual(manager.state, RecognitionState.ERROR)
         self.assertFalse(manager.model_ready)
-        
+
         # Error should be logged
         self.loggerMock.error.assert_called()
 
@@ -274,22 +274,22 @@ class TestErrorHandling(unittest.TestCase):
         self.modelMock.side_effect = RuntimeError("First attempt failed")
 
         manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-        
+
         # First attempt fails
         with self.assertRaises(RuntimeError):
             manager._ensure_model_loaded()
-        
+
         self.assertFalse(manager.model_ready)
-        
+
         # Fix the model loading
         self.modelMock.side_effect = None
         self.modelMock.return_value = MagicMock()
-        
+
         # Reset state manually (this would normally be done by user retry)
         manager.state = RecognitionState.IDLE
         manager._model_initialized = False
         manager.model = None
-        
+
         # Second attempt should succeed
         result = manager._ensure_model_loaded()
         self.assertTrue(result)
@@ -300,7 +300,7 @@ class TestErrorHandling(unittest.TestCase):
         # Simulate vosk not being available
         with patch.dict("sys.modules", {"vosk": None}):
             manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-            
+
             # Import should fail when trying to load model
             with self.assertRaises((ImportError, TypeError)):
                 manager._ensure_model_loaded()
@@ -325,7 +325,7 @@ class TestStartupTime(unittest.TestCase):
         def slow_model_init(*args, **kwargs):
             time.sleep(0.5)
             return MagicMock()
-        
+
         self.modelMock.side_effect = slow_model_init
         self.pathMock.return_value = "/mock/path/vosk-model"
 
@@ -339,35 +339,34 @@ class TestStartupTime(unittest.TestCase):
     def test_fast_startup_time(self):
         """Test that initialization is fast (model not loaded immediately)."""
         start_time = time.time()
-        
+
         manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-        
+
         init_time = time.time() - start_time
-        
+
         # Initialization should be fast (< 100ms) since model is not loaded
-        self.assertLess(init_time, 0.1, 
-            f"Initialization took {init_time:.3f}s, expected < 0.1s")
-        
+        self.assertLess(init_time, 0.1, f"Initialization took {init_time:.3f}s, expected < 0.1s")
+
         # Model should not be ready yet
         self.assertFalse(manager.model_ready)
 
     def test_model_loading_takes_time(self):
         """Test that actual model loading takes expected time."""
         manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-        
+
         start_time = time.time()
         manager._ensure_model_loaded()
         load_time = time.time() - start_time
-        
+
         # Model loading should take the expected time (> 400ms due to our mock)
-        self.assertGreater(load_time, 0.4,
-            f"Model loading took {load_time:.3f}s, expected > 0.4s")
-        
+        self.assertGreater(load_time, 0.4, f"Model loading took {load_time:.3f}s, expected > 0.4s")
+
         # Model should now be ready
         self.assertTrue(manager.model_ready)
 
     def test_lazy_vs_eager_startup_comparison(self):
         """Compare lazy vs eager loading startup times."""
+
         # Simulate eager loading (model loaded at init)
         def eager_loading():
             start = time.time()
@@ -380,10 +379,11 @@ class TestStartupTime(unittest.TestCase):
         lazy_start = time.time()
         lazy_manager = SpeechRecognitionManager(engine="vosk", model_size="small")
         lazy_init_time = time.time() - lazy_start
-        
+
         # Lazy initialization should be much faster than model loading
-        self.assertLess(lazy_init_time, 0.1,
-            f"Lazy init took {lazy_init_time:.3f}s, expected < 0.1s")
+        self.assertLess(
+            lazy_init_time, 0.1, f"Lazy init took {lazy_init_time:.3f}s, expected < 0.1s"
+        )
 
 
 class TestLazyLoadingIntegration(unittest.TestCase):
@@ -409,7 +409,7 @@ class TestLazyLoadingIntegration(unittest.TestCase):
         self.kaldiMock.return_value = self.recognizerMock
         self.pathMock.return_value = "/mock/path/vosk-model"
         self.recognizerMock.FinalResult.return_value = '{"text": "hello world"}'
-        
+
         self.threadInstance = MagicMock()
         self.threadMock.return_value = self.threadInstance
 
@@ -425,14 +425,14 @@ class TestLazyLoadingIntegration(unittest.TestCase):
     def test_model_loaded_when_recognition_starts(self):
         """Test that model is loaded when start_recognition is called."""
         manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-        
+
         # Model not loaded yet
         self.assertFalse(manager.model_ready)
         self.modelMock.assert_not_called()
-        
+
         # Start recognition
         manager.start_recognition()
-        
+
         # Model should now be loaded (or at least attempted)
         self.modelMock.assert_called_once()
         self.assertTrue(manager.model_ready)
@@ -441,20 +441,20 @@ class TestLazyLoadingIntegration(unittest.TestCase):
     def test_reconfigure_resets_lazy_loading(self):
         """Test that reconfigure resets lazy loading state."""
         manager = SpeechRecognitionManager(engine="vosk", model_size="small")
-        
+
         # Load the model
         manager._ensure_model_loaded()
         self.assertTrue(manager.model_ready)
         self.modelMock.assert_called_once()
-        
+
         # Reconfigure with different model
         manager.reconfigure(model_size="medium")
-        
+
         # Model should be unloaded
         self.assertFalse(manager.model_ready)
         self.assertIsNone(manager.model)
         self.assertIsNone(manager.recognizer)
-        
+
         # Loading again should use new configuration
         # (in real scenario, it would load the medium model)
 

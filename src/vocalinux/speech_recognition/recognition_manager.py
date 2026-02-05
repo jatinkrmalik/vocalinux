@@ -272,7 +272,7 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
         self._defer_download = defer_download
         self._model_initialized = False
-        
+
         # Thread safety lock for lazy model loading
         self._model_lock = threading.Lock()
 
