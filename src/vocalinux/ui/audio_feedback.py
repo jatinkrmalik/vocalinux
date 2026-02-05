@@ -23,14 +23,21 @@ def _is_ci_mode():
 
     Returns False when running under pytest to allow proper unit testing.
     """
+    # If not in GitHub Actions, definitely not CI mode
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return False
+
     # Check for pytest in multiple ways to be comprehensive
+    # When running pytest, we want to return False so tests can properly
+    # mock and test the audio player detection logic
     running_pytest = (
         "pytest" in sys.modules
         or "_pytest" in sys.modules
         or "PYTEST_CURRENT_TEST" in os.environ
-        or any("pytest" in arg for arg in sys.argv)
+        or any("pytest" in arg or arg.endswith("pytest") for arg in sys.argv)
+        or os.environ.get("PYTEST_RUNNING") == "1"
     )
-    return os.environ.get("GITHUB_ACTIONS") == "true" and not running_pytest
+    return not running_pytest
 
 
 # Import the centralized resource manager
