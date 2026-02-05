@@ -251,12 +251,13 @@ class TestTrayIndicator(unittest.TestCase):
 
     def test_about_dialog(self):
         """Test about dialog creation."""
-        with patch("vocalinux.ui.tray_indicator.Gtk") as patched_gtk:
+        with patch("vocalinux.ui.about_dialog.Gtk") as patched_gtk:
             mock_about_dialog = MagicMock()
             patched_gtk.AboutDialog.return_value = mock_about_dialog
             mock_about_dialog.run.side_effect = lambda: None
+            patched_gtk.License.GPL_3_0 = 1
 
-            with patch("vocalinux.ui.tray_indicator.GdkPixbuf") as patched_pixbuf:
+            with patch("vocalinux.ui.about_dialog.GdkPixbuf") as patched_pixbuf:
                 mock_pixbuf = MagicMock()
                 patched_pixbuf.Pixbuf.new_from_file.return_value = mock_pixbuf
 
@@ -429,13 +430,13 @@ class TestTrayIndicator(unittest.TestCase):
 
     def test_about_dialog_logo_scaling_error(self):
         """Test about dialog handles logo scaling errors gracefully."""
-        with patch("vocalinux.ui.tray_indicator.Gtk") as patched_gtk:
+        with patch("vocalinux.ui.about_dialog.Gtk") as patched_gtk:
             mock_about_dialog = MagicMock()
             patched_gtk.AboutDialog.return_value = mock_about_dialog
             mock_about_dialog.run.return_value = None
             patched_gtk.License.GPL_3_0 = 1
 
-            with patch("vocalinux.ui.tray_indicator.GdkPixbuf") as patched_pixbuf:
+            with patch("vocalinux.ui.about_dialog.GdkPixbuf") as patched_pixbuf:
                 # Simulate error loading pixbuf
                 patched_pixbuf.Pixbuf.new_from_file.side_effect = Exception("Load error")
 
