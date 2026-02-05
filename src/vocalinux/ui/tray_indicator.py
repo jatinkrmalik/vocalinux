@@ -248,7 +248,7 @@ class TrayIndicator:
         """
         if state == RecognitionState.IDLE:
             self._stop_icon_animation()
-            self.indicator.set_icon_full(self.icon_paths["default"], "Microphone off")
+            self.indicator.set_icon_full(DEFAULT_ICON, "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
@@ -257,12 +257,12 @@ class TrayIndicator:
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
             self._stop_icon_animation()
-            self.indicator.set_icon_full(self.icon_paths["processing"], "Processing speech")
+            self.indicator.set_icon_full(PROCESSING_ICON, "Processing speech")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
             self._stop_icon_animation()
-            self.indicator.set_icon_full(self.icon_paths["default"], "Error")
+            self.indicator.set_icon_full(DEFAULT_ICON, "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
@@ -290,21 +290,19 @@ class TrayIndicator:
 
     def _update_animation_frame(self):
         """Update the icon to the next animation frame."""
-        if not self.animation_frame_paths:
+        if not ACTIVE_ICON_FRAMES:
             # Fallback to static icon if no animation frames available
-            self.indicator.set_icon_full(self.icon_paths["active"], "Listening")
+            self.indicator.set_icon_full(ACTIVE_ICON, "Listening")
             return False
 
-        # Get current frame path
-        frame_path = self.animation_frame_paths[self._animation_frame_index]
+        # Get current frame icon name
+        frame_name = ACTIVE_ICON_FRAMES[self._animation_frame_index]
 
-        # Update icon
-        self.indicator.set_icon_full(frame_path, "Listening...")
+        # Update icon (use icon name, not full path - AppIndicator uses icon_theme_path)
+        self.indicator.set_icon_full(frame_name, "Listening...")
 
         # Advance to next frame (cycle back to start)
-        self._animation_frame_index = (self._animation_frame_index + 1) % len(
-            self.animation_frame_paths
-        )
+        self._animation_frame_index = (self._animation_frame_index + 1) % len(ACTIVE_ICON_FRAMES)
 
         return True  # Continue animation
 

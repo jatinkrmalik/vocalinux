@@ -681,13 +681,19 @@ class TestTrayIndicatorAnimation(unittest.TestCase):
                 self.tray_indicator._quit()
                 mock_stop.assert_called_once()
 
-    def test_update_animation_frame_no_frames_fallback(self):
-        """Test animation frame update falls back to static icon if no frames."""
-        self.tray_indicator.animation_frame_paths = []
+    def test_update_animation_frame_cycles_correctly(self):
+        """Test animation frame cycles through all frames correctly."""
+        from vocalinux.ui.tray_indicator import ACTIVE_ICON_FRAMES
 
-        result = self.tray_indicator._update_animation_frame()
+        # Start at frame 0
+        self.tray_indicator._animation_frame_index = 0
 
-        self.assertFalse(result)  # Should stop animation
-        self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
-            self.tray_indicator.icon_paths["active"], "Listening"
-        )
+        # Call update for each frame
+        for i, frame_name in enumerate(ACTIVE_ICON_FRAMES):
+            self.tray_indicator._update_animation_frame()
+            self.tray_indicator.indicator.set_icon_full.assert_called_with(
+                frame_name, "Listening..."
+            )
+
+        # After cycling through all frames, should be back to 0
+        self.assertEqual(self.tray_indicator._animation_frame_index, 0)
