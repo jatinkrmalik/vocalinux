@@ -53,6 +53,16 @@ DEFAULT_ICON = "vocalinux-microphone-off"
 ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
 
+# Animated icon frames for listening state (sound waves emanating)
+ACTIVE_ICON_FRAMES = [
+    "vocalinux-microphone-active-1",
+    "vocalinux-microphone-active-2",
+    "vocalinux-microphone-active-3",
+]
+
+# Animation settings
+ANIMATION_INTERVAL_MS = 300  # Time between frame changes (milliseconds)
+
 
 class TrayIndicator:
     """
@@ -83,6 +93,10 @@ class TrayIndicator:
             KeyboardShortcutManager()
         )  # Pass config_manager - Removed config_manager argument
 
+        # Animation state
+        self._animation_timeout_id = None
+        self._animation_frame_index = 0
+
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
 
@@ -92,6 +106,11 @@ class TrayIndicator:
             "active": _resource_manager.get_icon_path(ACTIVE_ICON),
             "processing": _resource_manager.get_icon_path(PROCESSING_ICON),
         }
+
+        # Set up animated icon frame paths
+        self.animation_frame_paths = [
+            _resource_manager.get_icon_path(frame) for frame in ACTIVE_ICON_FRAMES
+        ]
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -228,23 +247,66 @@ class TrayIndicator:
             state: The current recognition state
         """
         if state == RecognitionState.IDLE:
+            self._stop_icon_animation()
             self.indicator.set_icon_full(self.icon_paths["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon_full(self.icon_paths["active"], "Microphone on")
+            self._start_icon_animation()
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
+            self._stop_icon_animation()
             self.indicator.set_icon_full(self.icon_paths["processing"], "Processing speech")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
+            self._stop_icon_animation()
             self.indicator.set_icon_full(self.icon_paths["default"], "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
         return False  # Remove idle callback
+
+    def _start_icon_animation(self):
+        """Start the animated icon cycling for listening state."""
+        if self._animation_timeout_id is not None:
+            return  # Already animating
+
+        logger.debug("Starting tray icon animation")
+        self._animation_frame_index = 0
+        self._update_animation_frame()
+        self._animation_timeout_id = GLib.timeout_add(
+            ANIMATION_INTERVAL_MS, self._update_animation_frame
+        )
+
+    def _stop_icon_animation(self):
+        """Stop the animated icon cycling."""
+        if self._animation_timeout_id is not None:
+            logger.debug("Stopping tray icon animation")
+            GLib.source_remove(self._animation_timeout_id)
+            self._animation_timeout_id = None
+            self._animation_frame_index = 0
+
+    def _update_animation_frame(self):
+        """Update the icon to the next animation frame."""
+        if not self.animation_frame_paths:
+            # Fallback to static icon if no animation frames available
+            self.indicator.set_icon_full(self.icon_paths["active"], "Listening")
+            return False
+
+        # Get current frame path
+        frame_path = self.animation_frame_paths[self._animation_frame_index]
+
+        # Update icon
+        self.indicator.set_icon_full(frame_path, "Listening...")
+
+        # Advance to next frame (cycle back to start)
+        self._animation_frame_index = (self._animation_frame_index + 1) % len(
+            self.animation_frame_paths
+        )
+
+        return True  # Continue animation
 
     def _set_menu_item_enabled(self, label: str, enabled: bool):
         """
@@ -360,6 +422,9 @@ class TrayIndicator:
     def _quit(self):
         """Quit the application."""
         logger.info("Quitting application")
+
+        # Stop the icon animation
+        self._stop_icon_animation()
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()

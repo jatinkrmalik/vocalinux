@@ -142,6 +142,10 @@ class ResourceManager:
             "vocalinux-microphone",
             "vocalinux-microphone-off",
             "vocalinux-microphone-process",
+            # Animated icon frames for listening state
+            "vocalinux-microphone-active-1",
+            "vocalinux-microphone-active-2",
+            "vocalinux-microphone-active-3",
         ]
 
         for icon in expected_icons:

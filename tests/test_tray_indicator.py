@@ -446,3 +446,248 @@ class TestTrayIndicator(unittest.TestCase):
                 mock_about_dialog.destroy.assert_called_once()
                 # set_logo should NOT be called due to the error
                 mock_about_dialog.set_logo.assert_not_called()
+
+
+class TestTrayIndicatorAnimation(unittest.TestCase):
+    """Test cases for the tray indicator animation functionality."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class fixtures."""
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = mock_gi_repository
+
+    def setUp(self):
+        """Set up test environment before each test."""
+        # Reset all GTK mocks
+        mock_gtk.reset_mock()
+        mock_glib.reset_mock()
+        mock_appindicator.reset_mock()
+
+        # Configure idle_add to execute the function directly
+        mock_glib.idle_add.side_effect = lambda func, *args: func(*args) or False
+
+        # Clear cached imports
+        modules_to_remove = [k for k in list(sys.modules.keys()) if "tray_indicator" in k]
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        # Patch threading module
+        self.thread_patcher = patch("threading.Thread")
+        self.mock_thread_class = self.thread_patcher.start()
+        self.mock_thread_class.return_value.start = MagicMock()
+
+        # Patch keyboard module
+        self.keyboard_patcher = patch("vocalinux.ui.keyboard_shortcuts.keyboard", create=True)
+        self.mock_keyboard = self.keyboard_patcher.start()
+
+        self.keyboard_available_patcher = patch(
+            "vocalinux.ui.keyboard_shortcuts.KEYBOARD_AVAILABLE", True
+        )
+        self.mock_keyboard_available = self.keyboard_available_patcher.start()
+
+        # Import RecognitionState
+        from vocalinux.common_types import RecognitionState
+
+        self.RecognitionState = RecognitionState
+
+        # Setup mock keyboard listener
+        self.mock_listener = MagicMock()
+        self.mock_listener.is_alive.return_value = True
+        self.mock_keyboard.Listener.return_value = self.mock_listener
+        self.mock_keyboard.Key = MagicMock()
+
+        # Patch keyboard shortcuts manager
+        self.ksm_patcher = patch("vocalinux.ui.keyboard_shortcuts.KeyboardShortcutManager")
+        self.mock_ksm_class = self.ksm_patcher.start()
+        self.mock_ksm = MagicMock()
+        self.mock_ksm_class.return_value = self.mock_ksm
+
+        # Patch the settings dialog
+        self.patcher_settings_dialog = patch("vocalinux.ui.tray_indicator.SettingsDialog")
+        self.mock_settings_dialog_class = self.patcher_settings_dialog.start()
+
+        # Create mocks for dependencies
+        self.mock_speech_engine = MagicMock()
+        self.mock_speech_engine.state = RecognitionState.IDLE
+        self.mock_text_injector = MagicMock()
+        self.mock_config_manager = MagicMock()
+
+        # Patch os path functions
+        self.patcher_path_exists = patch("os.path.exists", return_value=True)
+        self.mock_path_exists = self.patcher_path_exists.start()
+
+        self.patcher_listdir = patch(
+            "os.listdir",
+            return_value=[
+                "vocalinux.svg",
+                "vocalinux-microphone-off.svg",
+                "vocalinux-microphone.svg",
+                "vocalinux-microphone-process.svg",
+                "vocalinux-microphone-active-1.svg",
+                "vocalinux-microphone-active-2.svg",
+                "vocalinux-microphone-active-3.svg",
+            ],
+        )
+        self.mock_listdir = self.patcher_listdir.start()
+
+        self.patcher_makedirs = patch("os.makedirs")
+        self.mock_makedirs = self.patcher_makedirs.start()
+
+        # Patch ConfigManager constructor
+        self.patcher_config_manager = patch("vocalinux.ui.tray_indicator.ConfigManager")
+        self.mock_config_manager_class = self.patcher_config_manager.start()
+        self.mock_config_manager_class.return_value = self.mock_config_manager
+
+        # Import and create TrayIndicator
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        self.tray_indicator = TrayIndicator(
+            speech_engine=self.mock_speech_engine,
+            text_injector=self.mock_text_injector,
+        )
+        self.tray_indicator.shortcut_manager = self.mock_ksm
+        self.tray_indicator.indicator = MagicMock()
+        self.tray_indicator.menu = MagicMock()
+        self.tray_indicator.menu.get_children.return_value = []
+
+    def tearDown(self):
+        """Clean up test environment after each test."""
+        self.patcher_path_exists.stop()
+        self.patcher_listdir.stop()
+        self.patcher_makedirs.stop()
+        self.patcher_config_manager.stop()
+        self.patcher_settings_dialog.stop()
+        self.thread_patcher.stop()
+        self.ksm_patcher.stop()
+        self.keyboard_available_patcher.stop()
+        self.keyboard_patcher.stop()
+
+    def test_animation_state_initialized(self):
+        """Test that animation state is properly initialized."""
+        self.assertIsNone(self.tray_indicator._animation_timeout_id)
+        self.assertEqual(self.tray_indicator._animation_frame_index, 0)
+
+    def test_animation_frame_paths_initialized(self):
+        """Test that animation frame paths are properly initialized."""
+        self.assertEqual(len(self.tray_indicator.animation_frame_paths), 3)
+        for path in self.tray_indicator.animation_frame_paths:
+            self.assertIn("vocalinux-microphone-active", path)
+
+    def test_start_icon_animation(self):
+        """Test starting icon animation."""
+        with patch("vocalinux.ui.tray_indicator.GLib") as patched_glib:
+            patched_glib.timeout_add.return_value = 123
+
+            self.tray_indicator._start_icon_animation()
+
+            self.assertEqual(self.tray_indicator._animation_timeout_id, 123)
+            # Frame index is 1 because _update_animation_frame is called immediately
+            # which shows frame 0 and then increments to 1
+            self.assertEqual(self.tray_indicator._animation_frame_index, 1)
+            patched_glib.timeout_add.assert_called_once()
+
+    def test_start_icon_animation_already_animating(self):
+        """Test that starting animation when already animating does nothing."""
+        self.tray_indicator._animation_timeout_id = 123
+
+        with patch("vocalinux.ui.tray_indicator.GLib") as patched_glib:
+            self.tray_indicator._start_icon_animation()
+
+            # Should not create new timeout
+            patched_glib.timeout_add.assert_not_called()
+
+    def test_stop_icon_animation(self):
+        """Test stopping icon animation."""
+        self.tray_indicator._animation_timeout_id = 123
+        self.tray_indicator._animation_frame_index = 2
+
+        with patch("vocalinux.ui.tray_indicator.GLib") as patched_glib:
+            self.tray_indicator._stop_icon_animation()
+
+            patched_glib.source_remove.assert_called_once_with(123)
+            self.assertIsNone(self.tray_indicator._animation_timeout_id)
+            self.assertEqual(self.tray_indicator._animation_frame_index, 0)
+
+    def test_stop_icon_animation_not_animating(self):
+        """Test stopping animation when not animating does nothing."""
+        self.tray_indicator._animation_timeout_id = None
+
+        with patch("vocalinux.ui.tray_indicator.GLib") as patched_glib:
+            self.tray_indicator._stop_icon_animation()
+
+            patched_glib.source_remove.assert_not_called()
+
+    def test_update_animation_frame(self):
+        """Test animation frame update cycles through frames."""
+        self.tray_indicator._animation_frame_index = 0
+
+        # First frame
+        result = self.tray_indicator._update_animation_frame()
+        self.assertTrue(result)  # Should continue
+        self.assertEqual(self.tray_indicator._animation_frame_index, 1)
+        self.tray_indicator.indicator.set_icon_full.assert_called()
+
+        # Second frame
+        result = self.tray_indicator._update_animation_frame()
+        self.assertTrue(result)
+        self.assertEqual(self.tray_indicator._animation_frame_index, 2)
+
+        # Third frame
+        result = self.tray_indicator._update_animation_frame()
+        self.assertTrue(result)
+        self.assertEqual(self.tray_indicator._animation_frame_index, 0)  # Wraps around
+
+    def test_update_ui_listening_starts_animation(self):
+        """Test that LISTENING state starts animation."""
+        with patch.object(self.tray_indicator, "_start_icon_animation") as mock_start:
+            with patch.object(self.tray_indicator, "_stop_icon_animation") as mock_stop:
+                self.tray_indicator._update_ui(self.RecognitionState.LISTENING)
+
+                mock_start.assert_called_once()
+                mock_stop.assert_not_called()
+
+    def test_update_ui_idle_stops_animation(self):
+        """Test that IDLE state stops animation."""
+        with patch.object(self.tray_indicator, "_start_icon_animation") as mock_start:
+            with patch.object(self.tray_indicator, "_stop_icon_animation") as mock_stop:
+                self.tray_indicator._update_ui(self.RecognitionState.IDLE)
+
+                mock_stop.assert_called_once()
+                mock_start.assert_not_called()
+
+    def test_update_ui_processing_stops_animation(self):
+        """Test that PROCESSING state stops animation."""
+        with patch.object(self.tray_indicator, "_start_icon_animation") as mock_start:
+            with patch.object(self.tray_indicator, "_stop_icon_animation") as mock_stop:
+                self.tray_indicator._update_ui(self.RecognitionState.PROCESSING)
+
+                mock_stop.assert_called_once()
+                mock_start.assert_not_called()
+
+    def test_update_ui_error_stops_animation(self):
+        """Test that ERROR state stops animation."""
+        with patch.object(self.tray_indicator, "_start_icon_animation") as mock_start:
+            with patch.object(self.tray_indicator, "_stop_icon_animation") as mock_stop:
+                self.tray_indicator._update_ui(self.RecognitionState.ERROR)
+
+                mock_stop.assert_called_once()
+                mock_start.assert_not_called()
+
+    def test_quit_stops_animation(self):
+        """Test that quit stops animation."""
+        with patch.object(self.tray_indicator, "_stop_icon_animation") as mock_stop:
+            with patch("vocalinux.ui.tray_indicator.Gtk"):
+                self.tray_indicator._quit()
+                mock_stop.assert_called_once()
+
+    def test_update_animation_frame_no_frames_fallback(self):
+        """Test animation frame update falls back to static icon if no frames."""
+        self.tray_indicator.animation_frame_paths = []
+
+        result = self.tray_indicator._update_animation_frame()
+
+        self.assertFalse(result)  # Should stop animation
+        self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
+            self.tray_indicator.icon_paths["active"], "Listening"
+        )
