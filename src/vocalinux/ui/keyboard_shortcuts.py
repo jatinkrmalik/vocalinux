@@ -3,28 +3,38 @@ Keyboard shortcut manager for Vocalinux.
 
 This module provides global keyboard shortcut functionality to
 start/stop speech recognition with a double-tap of the Ctrl key.
+
+Supports multiple backends:
+- pynput: Works on X11/XWayland
+- evdev: Works on both X11 and Wayland (with proper permissions)
 """
 
 import logging
-import threading
-import time
-from typing import Callable
+from typing import Callable, Optional
 
-# Make keyboard a module-level attribute first, even if it's None
-# This will ensure the attribute exists for patching in tests
-keyboard = None
-KEYBOARD_AVAILABLE = False
-
-# Try to import X11 keyboard libraries
-try:
-    from pynput import keyboard
-
-    KEYBOARD_AVAILABLE = True
-except ImportError:
-    # Keep keyboard as None, which we set above
-    pass
+# Import the backend system
+from .keyboard_backends import EVDEV_AVAILABLE, PYNPUT_AVAILABLE, DesktopEnvironment, create_backend
 
 logger = logging.getLogger(__name__)
+
+
+# Keep legacy module-level attributes for backward compatibility
+KEYBOARD_AVAILABLE = PYNPUT_AVAILABLE or EVDEV_AVAILABLE
+keyboard = None  # Will be set if pynput is available (for tests)
+
+
+def _init_legacy_keyboard():
+    """Initialize legacy keyboard attribute for backward compatibility."""
+    global keyboard
+    try:
+        from pynput import keyboard as pynput_keyboard
+
+        keyboard = pynput_keyboard
+    except ImportError:
+        pass
+
+
+_init_legacy_keyboard()
 
 
 class KeyboardShortcutManager:
@@ -33,69 +43,79 @@ class KeyboardShortcutManager:
 
     This class allows registering the double-tap Ctrl shortcut to
     toggle voice typing on and off across the desktop environment.
+
+    Automatically selects the appropriate backend based on the
+    desktop environment (X11, Wayland) and available dependencies.
     """
 
-    def __init__(self):
-        """Initialize the keyboard shortcut manager."""
-        self.listener = None
+    def __init__(self, backend: Optional[str] = None):
+        """
+        Initialize the keyboard shortcut manager.
+
+        Args:
+            backend: Optional backend name to force ('pynput' or 'evdev')
+                    If not specified, auto-detects based on environment.
+        """
+        self.backend_instance = None
         self.active = False
-        self.last_trigger_time = 0  # Track last trigger time to prevent double triggers
 
-        # Double-tap tracking variables
-        self.last_ctrl_press_time = 0
-        self.double_tap_callback = None
-        self.double_tap_threshold = 0.3  # seconds between taps to count as double-tap
+        # Create the appropriate backend
+        self.backend_instance = create_backend(preferred_backend=backend)
 
-        if not KEYBOARD_AVAILABLE:
-            logger.error("Keyboard shortcut libraries not available. Shortcuts will not work.")
-            return
+        if self.backend_instance is None:
+            logger.error("No keyboard backend available. Shortcuts will not work.")
+            self._log_unavailable_hints()
 
-    def start(self):
-        """Start listening for keyboard shortcuts."""
-        if not KEYBOARD_AVAILABLE:
-            return
+    def _log_unavailable_hints(self):
+        """Log helpful hints when no backend is available."""
+        env = DesktopEnvironment.detect()
+
+        if env == DesktopEnvironment.WAYLAND:
+            logger.warning("=" * 60)
+            logger.warning("Keyboard shortcuts not available on Wayland")
+            logger.warning("=" * 60)
+            logger.warning("To enable keyboard shortcuts on Wayland:")
+            logger.warning("1. Install python-evdev:")
+            logger.warning("   pip install evdev")
+            logger.warning("2. Add your user to the 'input' group:")
+            logger.warning("   sudo usermod -a -G input $USER")
+            logger.warning("3. Log out and log back in")
+            logger.warning("=" * 60)
+        else:
+            logger.warning("Keyboard shortcuts require pynput or evdev:")
+            logger.warning("  pip install pynput evdev")
+
+    def start(self) -> bool:
+        """
+        Start listening for keyboard shortcuts.
+
+        Returns:
+            True if the listener started successfully, False otherwise
+        """
+        if self.backend_instance is None:
+            return False
 
         if self.active:
-            return
+            return True
 
         logger.info("Starting keyboard shortcut listener")
-        self.active = True
+        self.active = self.backend_instance.start()
 
-        # Track currently pressed modifier keys
-        self.current_keys = set()
+        if not self.active:
+            hint = self.backend_instance.get_permission_hint()
+            if hint:
+                logger.warning(f"Permission issue: {hint}")
 
-        try:
-            # Start keyboard listener in a separate thread
-            self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
-            self.listener.daemon = True
-            self.listener.start()
-
-            # Verify the listener started successfully
-            if not self.listener.is_alive():
-                logger.error("Failed to start keyboard listener")
-                self.active = False
-            else:
-                logger.info("Keyboard shortcut listener started successfully")
-        except Exception as e:
-            logger.error(f"Error starting keyboard listener: {e}")
-            self.active = False
+        return self.active
 
     def stop(self):
         """Stop listening for keyboard shortcuts."""
-        if not self.active or not self.listener:
+        if self.backend_instance is None:
             return
 
         logger.info("Stopping keyboard shortcut listener")
+        self.backend_instance.stop()
         self.active = False
-
-        if self.listener:
-            try:
-                self.listener.stop()
-                self.listener.join(timeout=1.0)
-            except Exception as e:
-                logger.error(f"Error stopping keyboard listener: {e}")
-            finally:
-                self.listener = None
 
     def register_toggle_callback(self, callback: Callable):
         """
@@ -104,70 +124,53 @@ class KeyboardShortcutManager:
         Args:
             callback: Function to call when the double-tap Ctrl is pressed
         """
-        self.double_tap_callback = callback
+        if self.backend_instance is None:
+            logger.warning("Cannot register callback: no backend available")
+            return
+
+        self.backend_instance.register_toggle_callback(callback)
         logger.info("Registered shortcut: Double-tap Ctrl")
 
-    def _on_press(self, key):
+    @property
+    def listener(self):
         """
-        Handle key press events.
+        Legacy property for backward compatibility.
 
-        Args:
-            key: The pressed key
+        Returns the underlying backend object if using pynput backend.
         """
-        try:
-            # Check for double-tap Ctrl
-            normalized_key = self._normalize_modifier_key(key)
-            if normalized_key == keyboard.Key.ctrl:
-                current_time = time.time()
-                if current_time - self.last_ctrl_press_time < self.double_tap_threshold:
-                    # This is a double-tap Ctrl
-                    if self.double_tap_callback and current_time - self.last_trigger_time > 0.5:
-                        logger.debug("Double-tap Ctrl detected")
-                        self.last_trigger_time = current_time
-                        # Run callback in a separate thread to avoid blocking
-                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
-                self.last_ctrl_press_time = current_time
+        if self.backend_instance and hasattr(self.backend_instance, "listener"):
+            return self.backend_instance.listener
+        return None
 
-            # Add to currently pressed modifier keys (only for tracking Ctrl)
-            if key in {
-                keyboard.Key.ctrl,
-                keyboard.Key.ctrl_l,
-                keyboard.Key.ctrl_r,
-            }:
-                # Normalize left/right variants
-                normalized_key = self._normalize_modifier_key(key)
-                self.current_keys.add(normalized_key)
 
-        except Exception as e:
-            logger.error(f"Error in keyboard shortcut handling: {e}")
+# For backward compatibility with tests
+def _normalize_modifier_key(key):
+    """
+    Legacy function for backward compatibility.
 
-    def _on_release(self, key):
-        """
-        Handle key release events.
+    Normalize left/right variants of modifier keys to their base form.
+    """
+    if keyboard is None:
+        return key
 
-        Args:
-            key: The released key
-        """
-        try:
-            # Normalize the key for left/right variants
-            normalized_key = self._normalize_modifier_key(key)
-            # Remove from currently pressed keys
-            self.current_keys.discard(normalized_key)
-        except Exception as e:
-            logger.error(f"Error in keyboard release handling: {e}")
+    key_mapping = {
+        keyboard.Key.alt_l: keyboard.Key.alt,
+        keyboard.Key.alt_r: keyboard.Key.alt,
+        keyboard.Key.shift_l: keyboard.Key.shift,
+        keyboard.Key.shift_r: keyboard.Key.shift,
+        keyboard.Key.ctrl_l: keyboard.Key.ctrl,
+        keyboard.Key.ctrl_r: keyboard.Key.ctrl,
+        keyboard.Key.cmd_l: keyboard.Key.cmd,
+        keyboard.Key.cmd_r: keyboard.Key.cmd,
+    }
 
-    def _normalize_modifier_key(self, key):
-        """Normalize left/right variants of modifier keys to their base form."""
-        # Map left/right variants to their base key
-        key_mapping = {
-            keyboard.Key.alt_l: keyboard.Key.alt,
-            keyboard.Key.alt_r: keyboard.Key.alt,
-            keyboard.Key.shift_l: keyboard.Key.shift,
-            keyboard.Key.shift_r: keyboard.Key.shift,
-            keyboard.Key.ctrl_l: keyboard.Key.ctrl,
-            keyboard.Key.ctrl_r: keyboard.Key.ctrl,
-            keyboard.Key.cmd_l: keyboard.Key.cmd,
-            keyboard.Key.cmd_r: keyboard.Key.cmd,
-        }
+    return key_mapping.get(key, key)
 
-        return key_mapping.get(key, key)
+
+__all__ = [
+    "KeyboardShortcutManager",
+    "KEYBOARD_AVAILABLE",
+    "DesktopEnvironment",
+    "EVDEV_AVAILABLE",
+    "PYNPUT_AVAILABLE",
+]
