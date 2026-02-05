@@ -9,16 +9,21 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Set PYTEST_RUNNING early so audio_feedback module can detect it
+os.environ["PYTEST_RUNNING"] = "1"
+
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Mock only the audio_feedback module BEFORE any imports that use it
-# This ensures all test modules get the same mock instance
+# Create and export the mock_audio_feedback module for tests that need it
+# This mock is used by test_recognition_manager.py and test_speech_recognition.py
 mock_audio_feedback = MagicMock()
-sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
+mock_audio_feedback.play_start_sound = MagicMock()
+mock_audio_feedback.play_stop_sound = MagicMock()
+mock_audio_feedback.play_error_sound = MagicMock()
 
-# This will help pytest discover all test files correctly
-pytest_plugins = []
+# Inject the mock into sys.modules so imports resolve correctly
+sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
 
 
 def pytest_addoption(parser):
@@ -37,37 +42,38 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_collection_modifyitems(config, items):
-    """Modify collected test items to skip tray_indicator and audio_feedback tests when running the full suite."""
-    # Check if we should run tray tests (environment variable or command line option)
-    run_tray_tests = os.getenv("RUN_TRAY_TESTS", "false").lower() == "true" or config.getoption(
-        "--run-tray-tests", default=False
-    )
+def pytest_configure(config):
+    """Configure pytest markers."""
+    config.addinivalue_line("markers", "tray: marks tests as tray indicator tests")
+    config.addinivalue_line("markers", "audio: marks tests as audio feedback tests")
 
-    # Check if we should run audio tests (environment variable or command line option)
-    run_audio_tests = os.getenv("RUN_AUDIO_TESTS", "false").lower() == "true" or config.getoption(
-        "--run-audio-tests", default=False
-    )
 
-    # Get the list of file names being tested
-    test_files = set()
-    for item in items:
-        test_files.add(item.fspath.basename)
+@pytest.fixture
+def mock_gi():
+    """Fixture to mock GTK/GI modules for tests that need it."""
+    mock_gtk = MagicMock()
+    mock_glib = MagicMock()
+    mock_gobject = MagicMock()
+    mock_gdkpixbuf = MagicMock()
+    mock_appindicator = MagicMock()
 
-    # If we're running more than just the tray_indicator tests and not explicitly enabling them, skip them
-    if len(test_files) > 1 and "test_tray_indicator.py" in test_files and not run_tray_tests:
-        skip_tray = pytest.mark.skip(
-            reason="Skipping tray_indicator tests in full suite to prevent hanging (use --run-tray-tests or RUN_TRAY_TESTS=true to enable)"
-        )
-        for item in items:
-            if item.fspath.basename == "test_tray_indicator.py":
-                item.add_marker(skip_tray)
+    # Make idle_add execute the function directly
+    mock_glib.idle_add.side_effect = lambda func, *args: func(*args) or False
 
-    # If we're running more than just the audio_feedback tests and not explicitly enabling them, skip them
-    if len(test_files) > 1 and "test_audio_feedback.py" in test_files and not run_audio_tests:
-        skip_audio = pytest.mark.skip(
-            reason="Skipping audio_feedback tests in full suite to prevent CI failures (use --run-audio-tests or RUN_AUDIO_TESTS=true to enable)"
-        )
-        for item in items:
-            if item.fspath.basename == "test_audio_feedback.py":
-                item.add_marker(skip_audio)
+    return {
+        "Gtk": mock_gtk,
+        "GLib": mock_glib,
+        "GObject": mock_gobject,
+        "GdkPixbuf": mock_gdkpixbuf,
+        "AppIndicator3": mock_appindicator,
+    }
+
+
+@pytest.fixture
+def mock_audio_player():
+    """Fixture to mock audio player detection."""
+    return MagicMock()
+
+
+# This will help pytest discover all test files correctly
+pytest_plugins = []

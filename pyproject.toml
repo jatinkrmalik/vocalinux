@@ -134,7 +134,13 @@ markers = [
 [tool.coverage.run]
 source = ["src"]
 branch = true
-omit = ["*/tests/*", "*/__pycache__/*"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    # GTK dialog files are untestable without a real GTK environment
+    "*/settings_dialog.py",
+    "*/logging_dialog.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [
