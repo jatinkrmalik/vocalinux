@@ -162,13 +162,9 @@ def main():
     # CLI arguments take precedence over saved config
     # We need to check if the user explicitly provided arguments
     # by examining sys.argv since argparse defaults don't tell us this
-    cli_engine_set = any(
-        arg.startswith("--engine") for arg in sys.argv[1:]
-    )
+    cli_engine_set = any(arg.startswith("--engine") for arg in sys.argv[1:])
     cli_model_set = any(arg.startswith("--model") for arg in sys.argv[1:])
-    cli_language_set = any(
-        arg.startswith("--language") for arg in sys.argv[1:]
-    )
+    cli_language_set = any(arg.startswith("--language") for arg in sys.argv[1:])
 
     # Use CLI args if explicitly set, otherwise fall back to saved config, then defaults
     if cli_engine_set:

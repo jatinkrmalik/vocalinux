@@ -229,9 +229,7 @@ class TestSpeechRecognition(unittest.TestCase):
         # Make os.path.exists return False to trigger download
         with patch("os.path.exists", return_value=False):
             # Instantiate manager with defer_download=False to trigger download
-            _ = SpeechRecognitionManager(
-                engine="vosk", model_size="small", defer_download=False
-            )
+            _ = SpeechRecognitionManager(engine="vosk", model_size="small", defer_download=False)
 
             # Verify download was attempted
             self.mock_download.assert_called_once()
@@ -350,9 +348,7 @@ class TestSpeechRecognition(unittest.TestCase):
             # Setup side effect function that will be called when _process_final_buffer is called
             def process_side_effect():
                 # Simulate processing the result through command processor
-                processed_text, actions = self.mock_cmd.process_text(
-                    "whisper transcription"
-                )
+                processed_text, actions = self.mock_cmd.process_text("whisper transcription")
                 # Call callbacks as the real method would
                 for callback in manager.text_callbacks:
                     callback(processed_text)

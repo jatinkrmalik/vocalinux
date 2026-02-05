@@ -26,9 +26,7 @@ class TestWhisperSupport:
         torch_mock.cuda.is_available.return_value = False
 
         with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}):
-            from vocalinux.speech_recognition.recognition_manager import (
-                SpeechRecognitionManager,
-            )
+            from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
             # Test that the method exists without actually calling it
             assert hasattr(SpeechRecognitionManager, "_transcribe_with_whisper")
@@ -63,9 +61,7 @@ class TestWhisperSupport:
         torch_mock.cuda.is_available.return_value = False
 
         with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}):
-            from vocalinux.speech_recognition.recognition_manager import (
-                SpeechRecognitionManager,
-            )
+            from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
             manager_class = SpeechRecognitionManager
 
@@ -92,15 +88,11 @@ class TestWhisperSupport:
         whisper_mock.load_model.return_value = model_mock
 
         # Patch modules and mock the download method to avoid network/file operations
-        with patch.dict(
-            sys.modules, {"whisper": whisper_mock, "torch": torch_mock}
-        ), patch(
+        with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}), patch(
             "vocalinux.speech_recognition.recognition_manager."
             "SpeechRecognitionManager._download_whisper_model"
         ) as _mock_download, patch("os.path.exists", return_value=True):
-            from vocalinux.speech_recognition.recognition_manager import (
-                SpeechRecognitionManager,
-            )
+            from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
             # Create manager with Whisper engine and defer_download=False to trigger model loading
             manager = SpeechRecognitionManager(
