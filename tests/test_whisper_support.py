@@ -5,8 +5,6 @@ Tests for Whisper speech recognition support.
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # Mock GTK and other dependencies before importing vocalinux
 sys.modules["gi"] = MagicMock()
 sys.modules["gi.repository"] = MagicMock()
@@ -95,8 +93,9 @@ class TestWhisperSupport:
 
         # Patch modules and mock the download method to avoid network/file operations
         with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}), patch(
-            "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._download_whisper_model"
-        ) as mock_download, patch("os.path.exists", return_value=True):
+            "vocalinux.speech_recognition.recognition_manager."
+            "SpeechRecognitionManager._download_whisper_model"
+        ), patch("os.path.exists", return_value=True):
             from vocalinux.speech_recognition.recognition_manager import (
                 SpeechRecognitionManager,
             )

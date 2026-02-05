@@ -2,14 +2,10 @@
 Tests for streaming speech recognition functionality.
 """
 
-import json
 import sys
-import threading
 import time
 import unittest
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 # Mock vosk module for streaming tests
@@ -316,7 +312,7 @@ class TestStreamingRecognitionManager(unittest.TestCase):
     def test_start_stop_recognition(self):
         """Test starting and stopping recognition."""
         # Mock the audio thread to avoid actual audio recording
-        with patch.object(self.manager, "_record_audio_streaming") as mock_record:
+        with patch.object(self.manager, "_record_audio_streaming"):
             # Start recognition
             self.manager.start_recognition()
             self.assertEqual(self.manager.state, RecognitionState.LISTENING)
@@ -408,7 +404,7 @@ class TestStreamingIntegration(unittest.TestCase):
         manager.register_text_callback(capture_text)
 
         # Mock the recording to avoid actual audio I/O
-        with patch.object(manager, "_record_audio_streaming") as mock_record:
+        with patch.object(manager, "_record_audio_streaming"):
             # Start recognition
             manager.start_recognition()
 

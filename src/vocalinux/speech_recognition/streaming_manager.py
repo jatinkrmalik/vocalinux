@@ -5,16 +5,13 @@ This module extends the original recognition manager to include real-time
 streaming capabilities with lower latency for both VOSK and Whisper engines.
 """
 
-import json
 import logging
 import os
 import threading
-import time
-from typing import Callable, List, Optional, Dict, Any
+from typing import Any, Callable, Dict, List, Optional
 
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
-from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from .command_processor import CommandProcessor
 from .streaming_recognizer import StreamingSpeechRecognizer
 
@@ -227,7 +224,6 @@ class StreamingRecognitionManager:
         """Record audio for streaming processing."""
         try:
             import pyaudio
-            import numpy as np
         except ImportError as e:
             logger.error(f"Missing audio dependencies: {e}")
             self._update_state(RecognitionState.ERROR)
@@ -398,7 +394,7 @@ class StreamingRecognitionManager:
             silence_timeout: Silence timeout
             audio_device_index: Audio device index
         """
-        logger.info(f"Reconfiguring recognition manager")
+        logger.info("Reconfiguring recognition manager")
 
         # Update configuration
         if engine is not None and engine != self.engine:

@@ -10,11 +10,8 @@ import logging
 import threading
 import time
 import queue
-from typing import Callable, List, Optional, Dict, Any
+from typing import Any, Callable, Dict, List
 import numpy as np
-
-from ..common_types import RecognitionState
-from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 
 logger = logging.getLogger(__name__)
 

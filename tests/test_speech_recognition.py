@@ -2,12 +2,9 @@
 Tests for speech recognition functionality.
 """
 
-import concurrent.futures
 import sys  # Add the missing import
 import unittest
-from unittest.mock import MagicMock, PropertyMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 # Create proper mock responses that can be safely JSON serialized
 MOCK_VOSK_RESULT = '{"text": "test transcription"}'
@@ -208,21 +205,21 @@ class TestSpeechRecognition(unittest.TestCase):
         with patch.object(SpeechRecognitionManager, "_get_vosk_model_path") as mock_get_path:
             # Test small model size
             mock_get_path.return_value = "/path/to/vosk-model-small-en-us-0.15"
-            manager_small = SpeechRecognitionManager(engine="vosk", model_size="small")
+            _ = SpeechRecognitionManager(engine="vosk", model_size="small")
 
             # Verify the small model path is constructed correctly
             mock_get_path.assert_called_with()
 
             # Test medium model size
             mock_get_path.return_value = "/path/to/vosk-model-en-us-0.22"
-            manager_medium = SpeechRecognitionManager(engine="vosk", model_size="medium")
+            _ = SpeechRecognitionManager(engine="vosk", model_size="medium")
 
             # Verify the medium model path is constructed correctly
             mock_get_path.assert_called_with()
 
             # Test large model size
             mock_get_path.return_value = "/path/to/vosk-model-en-us-0.42"
-            manager_large = SpeechRecognitionManager(engine="vosk", model_size="large")
+            _ = SpeechRecognitionManager(engine="vosk", model_size="large")
 
             # Verify the large model path is constructed correctly
             mock_get_path.assert_called_with()
@@ -232,9 +229,7 @@ class TestSpeechRecognition(unittest.TestCase):
         # Make os.path.exists return False to trigger download
         with patch("os.path.exists", return_value=False):
             # Instantiate manager with defer_download=False to trigger download
-            manager = SpeechRecognitionManager(
-                engine="vosk", model_size="small", defer_download=False
-            )
+            _ = SpeechRecognitionManager(engine="vosk", model_size="small", defer_download=False)
 
             # Verify download was attempted
             self.mock_download.assert_called_once()
@@ -353,7 +348,6 @@ class TestSpeechRecognition(unittest.TestCase):
             # Setup side effect function that will be called when _process_final_buffer is called
             def process_side_effect():
                 # Access transcription result directly from the model
-                result = {"text": "whisper transcription"}
                 # Simulate processing the result through command processor
                 processed_text, actions = self.mock_cmd.process_text("whisper transcription")
                 # Call callbacks as the real method would

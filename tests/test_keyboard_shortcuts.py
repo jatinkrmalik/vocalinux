@@ -260,7 +260,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
             on_release(bad_key)
             # If we get here, exceptions were caught properly
             self.assertTrue(True)
-        except:
+        except Exception:
             self.fail("Exceptions were not caught in event handlers")
 
     def test_no_keyboard_library(self):

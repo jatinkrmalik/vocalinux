@@ -2,8 +2,6 @@
 Tests for the SettingsDialog.
 """
 
-import os
-
 # Mock GTK before importing anything that might use it
 import sys
 import unittest
@@ -17,7 +15,7 @@ sys.modules["gi.repository.GLib"] = MagicMock()
 from vocalinux.common_types import RecognitionState
 
 # Now import the class under test with GTK already mocked
-from vocalinux.ui.settings_dialog import ENGINE_MODELS, SettingsDialog
+from vocalinux.ui.settings_dialog import SettingsDialog
 
 # Create mock for speech engine
 mock_speech_engine = Mock()
@@ -142,17 +140,17 @@ class TestSettingsDialog(unittest.TestCase):
         mock_speech_engine.reconfigure.side_effect = None
 
         # Mock the Gtk module for this test
-        with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
+        with patch("vocalinux.ui.settings_dialog.Gtk"), patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
+        ), patch("vocalinux.ui.settings_dialog.threading"), patch(
             "vocalinux.ui.settings_dialog.time"
-        ) as mock_time, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
-        ) as mock_vosk_check, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
-        ) as mock_whisper_check:
+        ):
             # Call the method under test
             result = self.dialog.apply_settings()
 
@@ -173,17 +171,17 @@ class TestSettingsDialog(unittest.TestCase):
         mock_speech_engine.reconfigure.side_effect = None
 
         # Mock the Gtk module for this test
-        with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
+        with patch("vocalinux.ui.settings_dialog.Gtk"), patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
+        ), patch("vocalinux.ui.settings_dialog.threading"), patch(
             "vocalinux.ui.settings_dialog.time"
-        ) as mock_time, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
-        ) as mock_vosk_check, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
-        ) as mock_whisper_check:
+        ):
             # Call the method under test
             result = self.dialog.apply_settings()
 
@@ -202,15 +200,15 @@ class TestSettingsDialog(unittest.TestCase):
         # Mock the Gtk module for this test
         with patch("vocalinux.ui.settings_dialog.Gtk") as mock_gtk, patch(
             "vocalinux.ui.settings_dialog.GLib"
-        ) as mock_glib, patch("vocalinux.ui.settings_dialog.threading") as mock_threading, patch(
+        ), patch("vocalinux.ui.settings_dialog.threading"), patch(
             "vocalinux.ui.settings_dialog.time"
-        ) as mock_time, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog.logging"
-        ) as mock_logging, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog._is_vosk_model_downloaded", return_value=True
-        ) as mock_vosk_check, patch(
+        ), patch(
             "vocalinux.ui.settings_dialog._is_whisper_model_downloaded", return_value=True
-        ) as mock_whisper_check:
+        ):
             # Mock the message dialog
             mock_dialog = MagicMock()
             mock_gtk.MessageDialog.return_value = mock_dialog

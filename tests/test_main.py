@@ -2,7 +2,6 @@
 Tests for the main module functionality.
 """
 
-import argparse
 import unittest
 from unittest.mock import MagicMock, patch
 

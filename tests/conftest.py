@@ -38,7 +38,8 @@ def pytest_addoption(parser):
 
 
 def pytest_collection_modifyitems(config, items):
-    """Modify collected test items to skip tray_indicator and audio_feedback tests when running the full suite."""
+    """Modify collected test items to skip tray_indicator and audio_feedback
+    tests when running the full suite."""
     # Check if we should run tray tests (environment variable or command line option)
     run_tray_tests = os.getenv("RUN_TRAY_TESTS", "false").lower() == "true" or config.getoption(
         "--run-tray-tests", default=False
@@ -54,19 +55,27 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         test_files.add(item.fspath.basename)
 
-    # If we're running more than just the tray_indicator tests and not explicitly enabling them, skip them
+    # If we're running more than just the tray_indicator tests and not
+    # explicitly enabling them, skip them
     if len(test_files) > 1 and "test_tray_indicator.py" in test_files and not run_tray_tests:
         skip_tray = pytest.mark.skip(
-            reason="Skipping tray_indicator tests in full suite to prevent hanging (use --run-tray-tests or RUN_TRAY_TESTS=true to enable)"
+            reason=(
+                "Skipping tray_indicator tests in full suite to prevent "
+                "hanging (use --run-tray-tests or RUN_TRAY_TESTS=true to enable)"
+            )
         )
         for item in items:
             if item.fspath.basename == "test_tray_indicator.py":
                 item.add_marker(skip_tray)
 
-    # If we're running more than just the audio_feedback tests and not explicitly enabling them, skip them
+    # If we're running more than just the audio_feedback tests and not
+    # explicitly enabling them, skip them
     if len(test_files) > 1 and "test_audio_feedback.py" in test_files and not run_audio_tests:
         skip_audio = pytest.mark.skip(
-            reason="Skipping audio_feedback tests in full suite to prevent CI failures (use --run-audio-tests or RUN_AUDIO_TESTS=true to enable)"
+            reason=(
+                "Skipping audio_feedback tests in full suite to prevent CI "
+                "failures (use --run-audio-tests or RUN_AUDIO_TESTS=true to enable)"
+            )
         )
         for item in items:
             if item.fspath.basename == "test_audio_feedback.py":
