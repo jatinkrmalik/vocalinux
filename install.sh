@@ -971,8 +971,8 @@ VOSK_CONFIG
                 print_warning "Failed to install Whisper."
                 print_warning "Voice recognition will fall back to VOSK."
             }
-        elif [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
-            # Default: Install Whisper with GPU support (either explicitly requested or non-interactive default)
+        elif [ "$WITH_WHISPER" = "yes" ]; then
+            # Install Whisper with GPU support (set by --with-whisper flag or auto-detected in non-interactive mode)
             print_info "Installing Whisper AI support with GPU/CUDA (~2.3GB download, ~5-10 min)..."
             print_info "This enables high-accuracy speech recognition with GPU acceleration."
             print_info "Tip: Use --whisper-cpu for a smaller download if you don't have an NVIDIA GPU."
@@ -1438,8 +1438,8 @@ update_icon_cache
 run_tests() {
     print_info "Running tests..."
 
-    # Check if pytest is installed
-    if ! python -c "import pytest" &>/dev/null; then
+    # Check if pytest is installed in the virtual environment
+    if ! "$VENV_DIR/bin/python" -c "import pytest" &>/dev/null; then
         print_info "Installing pytest and related packages..."
         pip install pytest pytest-mock pytest-cov || {
             print_error "Failed to install pytest. Cannot run tests."
@@ -1518,8 +1518,8 @@ verify_installation() {
         ((ISSUES++))
     fi
 
-    # Check if Python package is importable
-    if ! python -c "import vocalinux" &>/dev/null; then
+    # Check if Python package is importable using venv python
+    if ! "$VENV_DIR/bin/python" -c "import vocalinux" &>/dev/null; then
         print_error "Vocalinux Python package cannot be imported."
         ((ISSUES++))
     fi
