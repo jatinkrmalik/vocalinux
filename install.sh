@@ -991,12 +991,15 @@ VOSK_CONFIG
             read -p "Choose option [1/2/3]: " -n 1 -r
             echo
             if [[ $REPLY == "1" ]]; then
+                WITH_WHISPER="yes"
                 print_info "Installing Whisper with GPU support (this might take a while)..."
                 pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
                     print_warning "Failed to install Whisper support."
                     print_warning "Voice recognition will fall back to VOSK."
                 }
             elif [[ $REPLY == "2" ]]; then
+                WITH_WHISPER="yes"
+                WHISPER_CPU="yes"
                 print_info "Installing Whisper with CPU-only PyTorch..."
                 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
                     print_warning "Failed to install CPU-only PyTorch."
@@ -1005,6 +1008,44 @@ VOSK_CONFIG
                     print_warning "Failed to install Whisper."
                     print_warning "Voice recognition will fall back to VOSK."
                 }
+            elif [[ $REPLY == "3" ]]; then
+                # User selected VOSK only - create config with VOSK as default
+                NO_WHISPER_EXPLICIT="yes"
+                print_info "Skipping Whisper installation."
+                print_info "VOSK will be used as the default speech recognition engine."
+
+                # Create config file with VOSK as default engine
+                local CONFIG_FILE_PATH="$CONFIG_DIR/config.json"
+                if [ ! -f "$CONFIG_FILE_PATH" ]; then
+                    print_info "Creating config with VOSK as default engine..."
+                    cat > "$CONFIG_FILE_PATH" << 'VOSK_INTERACTIVE_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "vosk",
+        "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+VOSK_INTERACTIVE_CONFIG
+                fi
             fi
         fi
     fi
@@ -1362,21 +1403,27 @@ install_desktop_entry || print_warning "Desktop entry installation failed"
 # Install icons
 install_icons || print_warning "Icon installation failed"
 
-# Install Whisper tiny model (if Whisper was installed)
-if [ "$WITH_WHISPER" = "yes" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
-    # Check if Whisper is actually installed before downloading model
-    if python -c "import whisper" 2>/dev/null; then
-        if [ "$SKIP_MODELS" = "no" ]; then
-            install_whisper_model || print_warning "Whisper model download failed - model will be downloaded on first run"
-        else
-            print_info "Skipping Whisper model download (--skip-models specified)"
-        fi
+# Install Whisper tiny model if Whisper is available
+# This is important because Whisper is the default engine in config_manager.py
+# We check if Whisper was actually installed (importable) rather than relying on flags
+if [ "$SKIP_MODELS" = "no" ]; then
+    if "$VENV_DIR/bin/python" -c "import whisper" 2>/dev/null; then
+        print_info "Whisper is installed - downloading tiny model (default engine)..."
+        install_whisper_model || print_warning "Whisper model download failed - model will be downloaded on first run"
+    elif [ "$NO_WHISPER_EXPLICIT" != "yes" ]; then
+        # Whisper is not installed but wasn't explicitly disabled
+        # This shouldn't happen in normal flow, but warn the user
+        print_warning "Whisper not available but is the default engine."
+        print_warning "The app will try to download the model on first run."
     else
-        print_info "Whisper not available, skipping model download"
+        print_info "Whisper not installed (VOSK-only mode), skipping Whisper model download"
     fi
+else
+    print_info "Skipping Whisper model download (--skip-models specified)"
+    print_info "Model will be downloaded automatically on first application run"
 fi
 
-# Install VOSK models (as fallback)
+# Install VOSK models (always useful as fallback, and required for VOSK-only mode)
 if [ "$SKIP_MODELS" = "no" ]; then
     install_vosk_models || print_warning "VOSK model installation failed - models will be downloaded on first run"
 else
