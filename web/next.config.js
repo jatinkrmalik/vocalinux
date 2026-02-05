@@ -58,8 +58,6 @@ const config = {
 		if (!dev) {
 			config.devtool = false;
 		}
-		// Use verbose stats for build analysis
-		config.stats = "verbose";
 		// Enhanced node polyfills for postgres and other modules
 		if (!isServer) {
 			config.resolve.fallback = {
