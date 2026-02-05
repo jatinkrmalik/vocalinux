@@ -272,6 +272,9 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
         self._defer_download = defer_download
         self._model_initialized = False
+        
+        # Thread safety lock for lazy model loading
+        self._model_lock = threading.Lock()
 
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
@@ -344,28 +347,36 @@ class SpeechRecognitionManager:
         """
         Ensure the speech recognition model is loaded.
         This is the core lazy loading method.
+        Thread-safe implementation using double-checked locking.
         """
+        # Fast path - check without lock
         if self._model_initialized and self.model is not None:
             return True  # Model already loaded
 
-        logger.info("Loading model on demand (lazy loading)")
+        # Slow path - acquire lock and load
+        with self._model_lock:
+            # Double-check after acquiring lock
+            if self._model_initialized and self.model is not None:
+                return True  # Another thread loaded it
 
-        try:
-            if self.engine == "vosk":
-                self._load_vosk_model()
-            elif self.engine == "whisper":
-                self._load_whisper_model()
-            else:
-                raise ValueError(f"Unsupported speech recognition engine: {self.engine}")
+            logger.info("Loading model on demand (lazy loading)")
 
-            self._model_initialized = True
-            logger.info(f"{self.engine} model loaded successfully")
-            return True
+            try:
+                if self.engine == "vosk":
+                    self._load_vosk_model()
+                elif self.engine == "whisper":
+                    self._load_whisper_model()
+                else:
+                    raise ValueError(f"Unsupported speech recognition engine: {self.engine}")
 
-        except Exception as e:
-            logger.error(f"Failed to load {self.engine} model: {e}")
-            self.state = RecognitionState.ERROR
-            raise
+                self._model_initialized = True
+                logger.info(f"{self.engine} model loaded successfully")
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to load {self.engine} model: {e}")
+                self.state = RecognitionState.ERROR
+                raise
 
     def _load_vosk_model(self):
         """Load VOSK model (called by lazy loader)."""
