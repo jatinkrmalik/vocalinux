@@ -1019,11 +1019,21 @@ VOSK_CONFIG
         mkdir -p "$HOME/.local/bin"
 
         # Create vocalinux wrapper script
+        # Uses 'sg input' to run with input group for keyboard shortcuts on Wayland
+        # This allows shortcuts to work without logging out after installation
         cat > "$HOME/.local/bin/vocalinux" << WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux that sets required environment variables
+# and applies the 'input' group for keyboard shortcuts on Wayland
 export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
-exec "$VENV_DIR/bin/vocalinux" "\$@"
+
+# Check if user is in input group but current session doesn't have it
+if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
+    # Use sg to run with input group without requiring logout
+    exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
+else
+    exec "$VENV_DIR/bin/vocalinux" "\$@"
+fi
 WRAPPER_EOF
         chmod +x "$HOME/.local/bin/vocalinux"
         print_info "Created wrapper: ~/.local/bin/vocalinux"
@@ -1032,8 +1042,16 @@ WRAPPER_EOF
         cat > "$HOME/.local/bin/vocalinux-gui" << WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux GUI that sets required environment variables
+# and applies the 'input' group for keyboard shortcuts on Wayland
 export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
-exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
+
+# Check if user is in input group but current session doesn't have it
+if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
+    # Use sg to run with input group without requiring logout
+    exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
+else
+    exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
+fi
 WRAPPER_EOF
         chmod +x "$HOME/.local/bin/vocalinux-gui"
         print_info "Created wrapper: ~/.local/bin/vocalinux-gui"
