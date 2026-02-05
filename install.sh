@@ -116,6 +116,18 @@ if [[ "$DEV_MODE" == "yes" ]]; then
     RUN_TESTS="yes"
 fi
 
+# Display ASCII art banner
+cat << "EOF"
+
+  ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
+  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌     █  ▐▌ ▝▜▌▐▌ ▐▌  ▐▌
+   ▝▚▞▘ ▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▗▞▘▝▚▖
+
+                    Voice Dictation for Linux
+
+EOF
+
 print_info "Vocalinux Installer"
 print_info "=============================="
 echo ""
