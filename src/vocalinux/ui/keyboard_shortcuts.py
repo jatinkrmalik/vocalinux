@@ -13,12 +13,7 @@ import logging
 from typing import Callable, Optional
 
 # Import the backend system
-from .keyboard_backends import (
-    EVDEV_AVAILABLE,
-    PYNPUT_AVAILABLE,
-    DesktopEnvironment,
-    create_backend,
-)
+from .keyboard_backends import EVDEV_AVAILABLE, PYNPUT_AVAILABLE, DesktopEnvironment, create_backend
 
 logger = logging.getLogger(__name__)
 
