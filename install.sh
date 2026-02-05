@@ -31,10 +31,6 @@ WITH_WHISPER="no"
 WHISPER_CPU="no"
 NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
-INTERACTIVE_MODE="no"
-HAS_NVIDIA_GPU="unknown"
-GPU_NAME=""
-GPU_MEMORY=""
 
 # Detect if running non-interactively (e.g., via curl | bash)
 if [ ! -t 0 ]; then
@@ -74,10 +70,6 @@ while [[ $# -gt 0 ]]; do
             NON_INTERACTIVE="yes"  # Skip the prompt
             shift
             ;;
-        --interactive|-i)
-            INTERACTIVE_MODE="yes"
-            shift
-            ;;
         --tag=*)
             INSTALL_TAG="${1#*=}"
             shift
@@ -90,15 +82,14 @@ while [[ $# -gt 0 ]]; do
             echo "Vocalinux Installer"
             echo "Usage: $0 [options]"
             echo "Options:"
-            echo "  --interactive, -i  Guided interactive installation with recommendations"
             echo "  --dev            Install in development mode with all dev dependencies"
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)"
-            echo "  --skip-models    Skip downloading speech models during installation"
-            echo "  --with-whisper   Install Whisper AI with GPU/CUDA (included by default)"
+            echo "  --skip-models    Skip downloading VOSK models during installation"
+            echo "  --with-whisper   Install Whisper AI support with GPU/CUDA (included by default)"
             echo "  --whisper-cpu    Install Whisper with CPU-only PyTorch (smaller download, works on low-RAM)"
             echo "  --no-whisper     VOSK-only install (skips Whisper entirely, uses VOSK as default)"
-            echo "  --tag=TAG        Install specific release tag (default: v0.4.0-alpha)"
+            echo "  --tag=TAG        Install specific release tag (default: v0.3.0-alpha)"
             echo "  -y, --yes        Non-interactive mode (accept defaults)"
             echo "  --help           Show this help message"
             exit 0
@@ -218,150 +209,6 @@ check_ubuntu_version() {
     return 0
 }
 
-# Detect NVIDIA GPU presence
-detect_nvidia_gpu() {
-    # Check if nvidia-smi command exists and can successfully query GPU
-    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
-        # Extract GPU information for user feedback
-        GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1)
-        GPU_MEMORY=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader 2>/dev/null | head -n1)
-        HAS_NVIDIA_GPU="yes"
-        return 0
-    else
-        HAS_NVIDIA_GPU="no"
-        return 1
-    fi
-}
-
-# Print section header for interactive mode
-print_header() {
-    local title="$1"
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  $title"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-}
-
-# Function to run interactive guided installation
-run_interactive_install() {
-    clear
-    cat << "EOF"
-
-  ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
-  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
-  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌     █  ▐▌ ▝▜▌▐▌ ▐▌  ▐▌
-   ▝▚▞▘ ▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▗▞▘▝▚▖
-
-                       Voice Dictation for Linux
-
-                    Interactive Installation Guide
-
-EOF
-
-    echo "Welcome! This guided installation will help you set up Vocalinux"
-    echo "with the best options for your system."
-    echo ""
-    echo "Both speech engines are 100% offline, local, and private."
-    echo "Your voice data never leaves your computer."
-    echo ""
-
-    # Step 1: Detect and display system info
-    print_header "Step 1: Your System"
-    echo "Detected: $DISTRO_NAME $DISTRO_VERSION"
-
-    detect_nvidia_gpu
-    if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-        echo "GPU: $GPU_NAME ($GPU_MEMORY)"
-        RECOMMENDED_ENGINE="whisper-gpu"
-        RECOMMENDED_LABEL="Whisper AI with GPU acceleration"
-    else
-        echo "GPU: None detected (or no NVIDIA drivers)"
-        RECOMMENDED_ENGINE="whisper-cpu"
-        RECOMMENDED_LABEL="Whisper AI (CPU-only)"
-    fi
-    echo ""
-
-    # Step 2: Choose speech engine
-    print_header "Step 2: Speech Recognition Engine"
-    echo "Vocalinux supports two speech recognition engines:"
-    echo ""
-    echo "  1. Whisper AI (recommended)"
-    echo "     • Highest accuracy available"
-    echo "     • 99+ languages supported"
-    echo "     • Created by OpenAI"
-    echo ""
-    echo "  2. VOSK"
-    echo "     • Lightweight and fast"
-    echo "     • Works on older/low-RAM systems"
-    echo "     • 20+ languages supported"
-    echo ""
-
-    read -p "Choose your speech engine [1-2] (default: 1): " ENGINE_CHOICE
-    ENGINE_CHOICE=${ENGINE_CHOICE:-1}
-
-    if [[ "$ENGINE_CHOICE" == "2" ]]; then
-        WITH_WHISPER="no"
-        NO_WHISPER_EXPLICIT="yes"
-        SELECTED_ENGINE="VOSK"
-    else
-        WITH_WHISPER="yes"
-        SELECTED_ENGINE="Whisper AI"
-
-        # Step 3: Whisper variant (if Whisper selected)
-        print_header "Step 3: Whisper Installation Type"
-        echo "How would you like to install Whisper?"
-        echo ""
-        echo "  1. GPU version (~2.3GB) - For NVIDIA GPUs"
-        echo "  2. CPU-only (~200MB) - For any system"
-        echo ""
-
-        if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-            DEFAULT_WHISPER="1"
-            echo "  → Recommended: Option 1 (GPU detected)"
-        else
-            DEFAULT_WHISPER="2"
-            echo "  → Recommended: Option 2 (no GPU detected)"
-        fi
-        echo ""
-
-        read -p "Choose installation type [1-2] (default: $DEFAULT_WHISPER): " WHISPER_CHOICE
-        WHISPER_CHOICE=${WHISPER_CHOICE:-$DEFAULT_WHISPER}
-
-        if [[ "$WHISPER_CHOICE" == "2" ]]; then
-            WHISPER_CPU="yes"
-            SELECTED_VARIANT="Whisper AI (CPU-only)"
-        else
-            SELECTED_VARIANT="Whisper AI (GPU)"
-        fi
-    fi
-
-    # Step 4: Download models now or later?
-    print_header "Step 4: Model Download"
-    echo "Speech recognition models need to be downloaded."
-    echo ""
-    echo "  1. Download now (recommended) - Faster first run"
-    echo "  2. Download later - Smaller install, models download on first use"
-    echo ""
-
-    read -p "Download models now? [1-2] (default: 1): " MODELS_CHOICE
-    MODELS_CHOICE=${MODELS_CHOICE:-1}
-
-    if [[ "$MODELS_CHOICE" == "2" ]]; then
-        SKIP_MODELS="yes"
-    fi
-
-    # Summary
-    print_header "Installation Summary"
-    echo "Speech engine: $SELECTED_ENGINE${SELECTED_VARIANT:+ ($SELECTED_VARIANT)}"
-    echo "Models: $([[ "$SKIP_MODELS" == "yes" ]] && echo "Download on first use" || echo "Download now")"
-    echo ""
-    read -p "Press Enter to continue, or Ctrl+C to cancel..."
-    echo ""
-
-    # Set non-interactive to skip the old prompt
-    NON_INTERACTIVE="yes"
-}
-
 # Detect distribution
 detect_distro
 
@@ -391,37 +238,6 @@ else
             fi
         fi
     fi
-fi
-
-# Check if interactive mode is requested
-if [[ "$INTERACTIVE_MODE" == "yes" ]]; then
-    # Check if we have a TTY (required for interactive mode)
-    if [ ! -t 0 ]; then
-        print_error "Interactive mode requires a terminal (TTY)."
-        print_error "Please run from a terminal, or use quick install mode:"
-        print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
-        exit 1
-    fi
-
-    # Run interactive installation
-    run_interactive_install
-fi
-
-# Auto-detect GPU for non-interactive mode when no explicit Whisper choice
-# This helps users who run curl | bash without any flags
-if [[ "$NON_INTERACTIVE" == "yes" ]] && [[ "$WITH_WHISPER" == "no" ]] && [[ "$NO_WHISPER_EXPLICIT" == "no" ]] && [[ "$INTERACTIVE_MODE" == "no" ]]; then
-    detect_nvidia_gpu
-    if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-        WITH_WHISPER="yes"
-        print_info "NVIDIA GPU detected: $GPU_NAME"
-        print_info "Installing Whisper with GPU support..."
-    else
-        WITH_WHISPER="yes"
-        WHISPER_CPU="yes"
-        print_info "No NVIDIA GPU detected"
-        print_info "Installing Whisper with CPU-only PyTorch (~200MB)..."
-    fi
-    echo ""
 fi
 
 # Function to check if a command exists
@@ -716,49 +532,8 @@ install_text_input_tools() {
     esac
 }
 
-# Setup keyboard shortcuts for Wayland
-setup_wayland_keyboard_shortcuts() {
-    # Detect session type
-    local SESSION_TYPE="unknown"
-    if [ -n "$XDG_SESSION_TYPE" ]; then
-        SESSION_TYPE="$XDG_SESSION_TYPE"
-    elif [ -n "$WAYLAND_DISPLAY" ]; then
-        SESSION_TYPE="wayland"
-    elif [ -n "$DISPLAY" ]; then
-        SESSION_TYPE="x11"
-    fi
-
-    # Only setup for Wayland sessions
-    if [[ "$SESSION_TYPE" != "wayland" ]]; then
-        return
-    fi
-
-    print_info "Detected Wayland session - setting up keyboard shortcuts..."
-
-    # Check if user is already in input group
-    if groups | grep -q '\binput\b'; then
-        print_info "User is already in 'input' group - keyboard shortcuts will work!"
-        return
-    fi
-
-    # Add user to input group
-    print_warning "Keyboard shortcuts on Wayland require 'input' group membership."
-    if sudo usermod -a -G input "$USER" 2>/dev/null; then
-        print_info "Added your user to the 'input' group."
-        print_warning "============================================================"
-        print_warning "IMPORTANT: Log out and log back in for changes to take effect"
-        print_warning "============================================================"
-    else
-        print_warning "Failed to add user to 'input' group. Keyboard shortcuts may not work."
-        print_info "Run manually: sudo usermod -a -G input \$USER"
-    fi
-}
-
 # Install text input tools based on session type
 install_text_input_tools
-
-# Setup keyboard shortcuts for Wayland
-setup_wayland_keyboard_shortcuts
 
 # Create necessary directories
 print_info "Creating application directories..."
@@ -1458,72 +1233,74 @@ verify_installation() {
     return $ISSUES
 }
 
-# Function to print beautiful welcome message
-print_welcome_message() {
+# Function to print installation summary
+print_installation_summary() {
     local ISSUES=$1
 
-    # Clear screen for dramatic effect
-    clear
+    echo
+    echo "=============================="
+    echo "   INSTALLATION SUMMARY"
+    echo "=============================="
+    echo
 
-    # ASCII art header
-    cat << "EOF"
-
-  ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
-  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
-  ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▛▀▜▌▐▌     █  ▐▌ ▝▜▌▐▌ ▐▌  ▐▌
-   ▝▚▞▘ ▝▚▄▞▘▝▚▄▄▖▐▌ ▐▌▐▙▄▄▖▗▄█▄▖▐▌  ▐▌▝▚▄▞▘▗▞▘▝▚▖
-
-                     ✓ Installation Complete!
-
-EOF
-
-    # Success or warning message
     if [ "$ISSUES" -eq 0 ]; then
-        print_success "Vocalinux has been installed successfully!"
+        print_success "Installation completed successfully with no issues!"
     else
-        print_warning "Installation complete with $ISSUES minor issue(s)"
-        print_warning "The application should still work normally."
+        print_warning "Installation completed with $ISSUES potential issue(s)."
+        print_warning "The application may still work, but some features might be limited."
     fi
 
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Getting Started"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "1. Launch Vocalinux from your app menu"
-    echo "   Look for 'Vocalinux' in your application launcher."
-    echo ""
-    echo "   Or from terminal:"
-    echo "   \e[36mvocalinux\e[0m"
-    echo ""
-    echo "2. Find Vocalinux in your system tray (top bar)"
-    echo "   • Click the icon to access settings"
-    echo "   • Right-click for options (Quit, Settings, etc.)"
-    echo ""
-    echo "3. Start dictating!"
-    echo "   \e[1mDouble-tap Ctrl\e[0m anywhere to start/stop dictation"
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  First Run Tips"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "• Speak clearly and at a natural pace"
-    echo "• Use voice commands: 'period', 'comma', 'new line', 'delete that'"
-    echo "• Both engines are 100% offline - your privacy is protected"
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Need Help?"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "• Report issues: https://github.com/jatinkrmalik/vocalinux/issues"
-    echo "• Documentation: https://github.com/jatinkrmalik/vocalinux"
-    echo "• Star us on GitHub: ⭐ https://github.com/jatinkrmalik/vocalinux"
-    echo ""
+    echo
+    print_info "Installation details:"
+    print_info "- Virtual environment: $VENV_DIR"
+    print_info "- Desktop entry: $DESKTOP_DIR/vocalinux.desktop"
+    print_info "- Icons: $ICON_DIR"
+    print_info "- Configuration: $CONFIG_DIR"
+    print_info "- Data directory: $DATA_DIR"
+
+    # Check if Whisper model was installed
+    if [ -f "$DATA_DIR/models/whisper/tiny.pt" ]; then
+        print_info "- Whisper tiny model: $DATA_DIR/models/whisper/tiny.pt (default engine)"
+    elif python -c "import whisper" 2>/dev/null; then
+        print_info "- Whisper tiny model: Will be downloaded on first run"
+    fi
+
+    # Check if VOSK model was installed
+    if [ "$SKIP_MODELS" = "no" ] && [ -d "$DATA_DIR/models/vosk-model-small-en-us-0.15" ]; then
+        print_info "- VOSK small model: $DATA_DIR/models/vosk-model-small-en-us-0.15 (fallback)"
+    elif [ "$SKIP_MODELS" = "yes" ]; then
+        print_info "- VOSK models: Will be downloaded on first run (--skip-models used)"
+    else
+        print_info "- VOSK models: Will be downloaded on first run (installation failed)"
+    fi
+
+    echo
+    print_info "To activate the virtual environment in the future, run:"
+    print_info "  source $ACTIVATION_SCRIPT"
+    print_info "You can then launch Vocalinux by running 'vocalinux'"
+
+    # If venv is in a standard location, mention direct launch option
+    if [[ "$VENV_DIR" == "$HOME/.local/share/vocalinux/venv" ]]; then
+        echo
+        print_info "Or run directly with:"
+        print_info "  $VENV_DIR/bin/vocalinux"
+    fi
+
+    echo
+    print_info "For more information, see: https://github.com/jatinkrmalik/vocalinux"
+
+    if [ "$ISSUES" -gt 0 ]; then
+        echo
+        print_warning "If you encounter any problems, please report them at:"
+        print_warning "https://github.com/jatinkrmalik/vocalinux/issues"
+    fi
 }
 
 # Verify the installation
 verify_installation
 INSTALL_ISSUES=$?
 
-# Print welcome message
-print_welcome_message $INSTALL_ISSUES
+# Print installation summary
+print_installation_summary $INSTALL_ISSUES
+
+print_success "Installation process completed!"

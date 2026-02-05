@@ -48,23 +48,7 @@
 
 ## 🚀 Quick Install
 
-### Interactive Install (Recommended for New Users)
-
-Let the installer guide you through the setup with smart hardware detection:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --interactive
-```
-
-The interactive installer will:
-- Auto-detect your hardware (GPU, RAM)
-- Recommend the best configuration for your system
-- Guide you through each step with clear explanations
-- Show you how to launch and use Vocalinux after installation
-
-### Quick Install Options
-
-**One-liner Installation (Auto-detect):**
+### One-liner Installation (Recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
@@ -72,7 +56,17 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install
 
 > **Note**: Installs v0.4.1-alpha. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
-The installer now auto-detects NVIDIA GPUs and uses CPU-only Whisper if no GPU is found!
+This will:
+- Clone the repository to `~/.local/share/vocalinux-install`
+- Install all system dependencies
+- Set up a virtual environment in `~/.local/share/vocalinux/venv`
+- Install **both VOSK and Whisper AI** speech engines:
+  - **VOSK**: installs the `vosk` Python package from PyPI
+  - **Whisper**: installs the `openai-whisper` package from PyPI, which also pulls in PyTorch (the ML framework Whisper requires)
+- Create a symlink at `~/.local/bin/vocalinux`
+- Download the default **Whisper tiny** speech model (~75MB)
+
+> ⏱️ **Note**: Installation takes ~5-10 minutes due to Whisper AI dependencies (PyTorch with CUDA support, ~2.3GB).
 
 **Whisper with CPU-only PyTorch (no NVIDIA GPU needed):**
 ```bash
@@ -93,10 +87,10 @@ This skips Whisper installation entirely and configures VOSK as the default engi
 git clone https://github.com/jatinkrmalik/vocalinux.git
 cd vocalinux
 
-# Run the interactive installer
-./install.sh --interactive
+# Run the installer (will prompt for Whisper)
+./install.sh
 
-# Or run with specific options
+# Or with Whisper support
 ./install.sh --with-whisper
 ```
 
