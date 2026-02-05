@@ -589,7 +589,9 @@ class SettingsDialog(Gtk.Dialog):
         # Industry Standard: Both Dragon NaturallySpeaking and Google Docs use similar feedback
         # Reference: RESEARCH.md Section 3.2 (Industry Patterns comparison)
         audio_progress_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        audio_progress_box.pack_start(Gtk.Label(label="Audio Level:", halign=Gtk.Align.START), False, False, 0)
+        audio_progress_box.pack_start(
+            Gtk.Label(label="Audio Level:", halign=Gtk.Align.START), False, False, 0
+        )
 
         self.recognition_audio_level = Gtk.LevelBar()
         self.recognition_audio_level.set_min_value(0)
@@ -597,7 +599,7 @@ class SettingsDialog(Gtk.Dialog):
         self.recognition_audio_level.set_value(0)
         self.recognition_audio_level.set_size_request(150, -1)
         audio_progress_box.pack_start(self.recognition_audio_level, True, True, 0)
-        
+
         self.grid.attach(audio_progress_box, 0, row, 2, 1)
         row += 1
 
@@ -665,7 +667,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Initialize recognition progress UI
         self.update_recognition_progress("Idle")
-        
+
         # Connect to recognition manager for progress updates
         self.connect_to_recognition_manager()
 
@@ -1209,7 +1211,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Connect to recognition manager for progress feedback
         self.connect_to_recognition_manager()
-        
+
         # Update progress UI to show we're starting
         self.update_recognition_progress("Listening", info="Starting recognition test...")
 
@@ -1570,7 +1572,7 @@ For now, the engine has been reverted to VOSK."""
             # Close button clicked
             logger.info("Close button clicked")
             self.destroy()
-        
+
         return True  # We handled the response
 
     def _show_settings_applied_message(self):
@@ -1580,11 +1582,11 @@ For now, the engine has been reverted to VOSK."""
         success_label.set_halign(Gtk.Align.CENTER)
         success_label.set_margin_top(10)
         success_label.get_style_context().add_class("success-label")
-        
+
         # Add it to the grid temporarily
-        self.grid.attach(success_label, 0, self.grid.get_property('n-rows'), 2, 1)
+        self.grid.attach(success_label, 0, self.grid.get_property("n-rows"), 2, 1)
         success_label.show()
-        
+
         # Remove it after 2 seconds
         GLib.timeout_add(2000, lambda: (self.grid.remove(success_label), False)[1])
 
@@ -1593,28 +1595,28 @@ For now, the engine has been reverted to VOSK."""
         try:
             # Reload settings from config
             settings = self._get_current_settings()
-            
+
             # Update UI to reflect saved settings
             engine_text = settings["engine"].capitalize()
             self.engine_combo.set_active_id(engine_text)
-            
+
             # This will trigger the engine change handler which updates models and languages
             self.vad_spin.set_value(settings["vad_sensitivity"])
             self.silence_spin.set_value(settings["silence_timeout"])
-            
+
             logger.info("Settings reverted to last saved values")
         except Exception as e:
             logger.error(f"Failed to revert settings: {e}")
-            
+
             # Show error message
             error_label = Gtk.Label(label="✗ Failed to revert settings")
             error_label.set_halign(Gtk.Align.CENTER)
             error_label.set_margin_top(10)
             error_label.get_style_context().add_class("error-label")
-            
-            self.grid.attach(error_label, 0, self.grid.get_property('n-rows'), 2, 1)
+
+            self.grid.attach(error_label, 0, self.grid.get_property("n-rows"), 2, 1)
             error_label.show()
-            
+
             GLib.timeout_add(3000, lambda: (self.grid.remove(error_label), False)[1])
 
     def update_recognition_progress(self, state: str, audio_level: float = 0.0, info: str = ""):
@@ -1642,7 +1644,9 @@ For now, the engine has been reverted to VOSK."""
             self.progress_info_label.set_markup("<span color='green'>● Listening...</span>")
         elif state == "Processing":
             self.recognition_indicator.set_sensitive(True)
-            self.progress_info_label.set_markup("<span color='orange'>● Processing speech...</span>")
+            self.progress_info_label.set_markup(
+                "<span color='orange'>● Processing speech...</span>"
+            )
         elif state == "Idle":
             self.recognition_indicator.set_sensitive(False)  # Make it grayed out
             self.progress_info_label.set_text("")
@@ -1666,23 +1670,34 @@ For now, the engine has been reverted to VOSK."""
 
     def connect_to_recognition_manager(self):
         """Connect to speech recognition manager for progress updates."""
-        if hasattr(self, 'speech_engine') and self.speech_engine:
-            # Add state change callback
-            if not hasattr(self, '_state_callback_added'):
+        if hasattr(self, "speech_engine") and self.speech_engine:
+            # Add state change callback using proper API methods
+            if not hasattr(self, "_callbacks_registered"):
                 self.speech_engine.state_callbacks.append(self._on_recognition_state_changed)
-                self.speech_engine._audio_level_callbacks.append(self._on_audio_level_changed)
-                self._state_callback_added = True
+                self.speech_engine.register_audio_level_callback(self._on_audio_level_changed)
+                self._callbacks_registered = True
+                # Connect to dialog destroy signal for cleanup
+                self.connect("destroy", self._on_dialog_destroy)
+
+    def _on_dialog_destroy(self, widget):
+        """Clean up callbacks when dialog is destroyed."""
+        if hasattr(self, "speech_engine") and self.speech_engine:
+            # Remove state callback
+            if self._on_recognition_state_changed in self.speech_engine.state_callbacks:
+                self.speech_engine.state_callbacks.remove(self._on_recognition_state_changed)
+            # Remove audio level callback using proper API
+            self.speech_engine.unregister_audio_level_callback(self._on_audio_level_changed)
 
     def _on_recognition_state_changed(self, state):
         """Handle recognition state changes."""
         # Convert state to readable string
         state_map = {
             RecognitionState.IDLE: "Idle",
-            RecognitionState.LISTENING: "Listening", 
+            RecognitionState.LISTENING: "Listening",
             RecognitionState.PROCESSING: "Processing",
-            RecognitionState.ERROR: "Error"
+            RecognitionState.ERROR: "Error",
         }
-        
+
         state_str = state_map.get(state, "Unknown")
         GLib.idle_add(self.update_recognition_progress, state_str)
 
