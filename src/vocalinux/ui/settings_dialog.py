@@ -5,11 +5,13 @@ Allows users to configure speech recognition engine, model size,
 and other relevant parameters.
 
 UX Design Notes:
-- Implements Apply/Cancel/Close button pattern per GNOME HIG
+- Follows GNOME Human Interface Guidelines (HIG) for modern desktop look
+- Uses preference-page style layout with clearly grouped sections
+- Implements instant-apply pattern: settings apply immediately when changed
+- Close button only (no Apply/Cancel) - consistent with GNOME Settings app
 - Provides real-time progress feedback for recognition state
 - Multi-modal feedback (text + icon + audio level) for accessibility
-- Auto-apply for safe settings, modal dialog for model downloads
-- See RESEARCH.md for full UX rationale and research citations
+- Modal dialog for model downloads (explicit confirmation for large downloads)
 """
 
 import logging
@@ -21,8 +23,9 @@ from typing import TYPE_CHECKING
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 # Need GLib for idle_add
-from gi.repository import GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
@@ -65,6 +68,207 @@ SYSTEM_MODELS_DIRS = [
     "/usr/local/share/vocalinux/models",
     "/usr/share/vocalinux/models",
 ]
+
+# CSS for modern styling
+SETTINGS_CSS = """
+/* Modern GNOME-style settings dialog */
+.settings-dialog {
+    background-color: @theme_bg_color;
+}
+
+/* Preference group styling - card-like appearance */
+.preferences-group {
+    background-color: @theme_base_color;
+    border-radius: 12px;
+    padding: 0;
+    margin: 6px 0;
+    border: 1px solid alpha(@borders, 0.5);
+}
+
+.preferences-group-title {
+    font-weight: bold;
+    font-size: 0.9em;
+    color: @theme_unfocused_fg_color;
+    padding: 12px 16px 6px 16px;
+    margin: 0;
+}
+
+/* Row styling */
+.preference-row {
+    padding: 12px 16px;
+    min-height: 32px;
+    border-bottom: 1px solid alpha(@borders, 0.3);
+}
+
+.preference-row:last-child {
+    border-bottom: none;
+}
+
+.preference-row:hover {
+    background-color: alpha(@theme_selected_bg_color, 0.1);
+}
+
+.preference-row-title {
+    font-weight: 500;
+}
+
+.preference-row-subtitle {
+    font-size: 0.85em;
+    color: @theme_unfocused_fg_color;
+}
+
+/* Status indicators */
+.status-success {
+    color: #26a269;
+}
+
+.status-warning {
+    color: #e5a50a;
+}
+
+.status-error {
+    color: #c01c28;
+}
+
+.status-info {
+    color: @theme_unfocused_fg_color;
+}
+
+/* Test area styling */
+.test-area {
+    background-color: @theme_base_color;
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid alpha(@borders, 0.5);
+}
+
+.test-textview {
+    font-family: monospace;
+    font-size: 0.95em;
+    padding: 8px;
+    background-color: alpha(@theme_bg_color, 0.5);
+    border-radius: 6px;
+}
+
+/* Level bars */
+levelbar block.filled {
+    background-color: @theme_selected_bg_color;
+    border-radius: 3px;
+}
+
+levelbar block.empty {
+    background-color: alpha(@theme_fg_color, 0.1);
+    border-radius: 3px;
+}
+
+/* Combo boxes and spin buttons */
+combobox button,
+spinbutton {
+    min-height: 32px;
+    border-radius: 6px;
+}
+
+/* Section headers */
+.section-header {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-top: 12px;
+    margin-bottom: 6px;
+}
+
+/* Info box styling */
+.info-box {
+    background-color: alpha(@theme_selected_bg_color, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    border-left: 4px solid @theme_selected_bg_color;
+}
+
+.info-box-warning {
+    background-color: alpha(#e5a50a, 0.1);
+    border-left-color: #e5a50a;
+}
+
+/* Recognition status */
+.recognition-idle {
+    color: @theme_unfocused_fg_color;
+}
+
+.recognition-listening {
+    color: #26a269;
+}
+
+.recognition-processing {
+    color: #e5a50a;
+}
+
+.recognition-error {
+    color: #c01c28;
+}
+
+/* Buttons */
+.suggested-action {
+    background-color: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
+}
+
+.flat-button {
+    background: transparent;
+    border: none;
+    padding: 8px;
+    border-radius: 6px;
+}
+
+.flat-button:hover {
+    background-color: alpha(@theme_fg_color, 0.1);
+}
+
+/* Scrolled content */
+.scrolled-content {
+    background-color: transparent;
+}
+
+/* Model info card */
+.model-info-card {
+    background-color: alpha(@theme_base_color, 0.8);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 8px 0;
+}
+
+.model-info-title {
+    font-weight: bold;
+    font-size: 1.0em;
+}
+
+.model-info-subtitle {
+    font-size: 0.9em;
+    color: @theme_unfocused_fg_color;
+}
+
+/* Tip styling */
+.tip-label {
+    font-size: 0.85em;
+    color: @theme_unfocused_fg_color;
+    font-style: italic;
+}
+
+.tip-highlight {
+    font-weight: bold;
+    color: @theme_selected_bg_color;
+}
+"""
+
+
+def _setup_css():
+    """Set up CSS styling for the settings dialog."""
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_data(SETTINGS_CSS.encode())
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(),
+        css_provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+    )
 
 
 def _get_whisper_cache_dir() -> str:
@@ -168,6 +372,89 @@ def _get_recommended_vosk_model() -> tuple:
         return "small", "Default recommendation"
 
 
+class PreferencesGroup(Gtk.Box):
+    """A card-style group of preferences, similar to libadwaita's AdwPreferencesGroup."""
+
+    def __init__(self, title: str = "", description: str = ""):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.get_style_context().add_class("preferences-group")
+
+        # Header with title
+        if title:
+            header_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            header_box.set_margin_top(12)
+            header_box.set_margin_bottom(4)
+            header_box.set_margin_start(16)
+            header_box.set_margin_end(16)
+
+            title_label = Gtk.Label(label=title, xalign=0)
+            title_label.get_style_context().add_class("preferences-group-title")
+            header_box.pack_start(title_label, False, False, 0)
+
+            if description:
+                desc_label = Gtk.Label(label=description, xalign=0, wrap=True)
+                desc_label.get_style_context().add_class("preference-row-subtitle")
+                header_box.pack_start(desc_label, False, False, 0)
+
+            self.pack_start(header_box, False, False, 0)
+
+        # Content area with listbox for rows
+        self.listbox = Gtk.ListBox()
+        self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.listbox.set_activate_on_single_click(False)
+        self.pack_start(self.listbox, False, False, 0)
+
+    def add_row(self, widget):
+        """Add a widget as a row in the preferences group."""
+        self.listbox.add(widget)
+
+
+class PreferenceRow(Gtk.ListBoxRow):
+    """A single preference row with title, subtitle, and a control widget."""
+
+    def __init__(
+        self,
+        title: str,
+        subtitle: str = "",
+        widget: Gtk.Widget = None,
+        activatable: bool = False,
+    ):
+        super().__init__()
+        self.set_activatable(activatable)
+        self.get_style_context().add_class("preference-row")
+
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        hbox.set_margin_top(12)
+        hbox.set_margin_bottom(12)
+        hbox.set_margin_start(16)
+        hbox.set_margin_end(16)
+
+        # Text container (title + subtitle)
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        text_box.set_valign(Gtk.Align.CENTER)
+
+        title_label = Gtk.Label(label=title, xalign=0)
+        title_label.get_style_context().add_class("preference-row-title")
+        text_box.pack_start(title_label, False, False, 0)
+
+        if subtitle:
+            subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
+            subtitle_label.get_style_context().add_class("preference-row-subtitle")
+            subtitle_label.set_max_width_chars(40)
+            subtitle_label.set_line_wrap(True)
+            subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            text_box.pack_start(subtitle_label, False, False, 0)
+
+        hbox.pack_start(text_box, True, True, 0)
+
+        # Control widget on the right
+        if widget:
+            widget.set_valign(Gtk.Align.CENTER)
+            hbox.pack_end(widget, False, False, 0)
+
+        self.add(hbox)
+
+
 class ModelDownloadDialog(Gtk.Dialog):
     """Dialog showing model download progress with cancel support."""
 
@@ -184,7 +471,7 @@ class ModelDownloadDialog(Gtk.Dialog):
             transient_for=parent,
             flags=Gtk.DialogFlags.MODAL,
         )
-        self.set_default_size(450, 180)
+        self.set_default_size(450, 200)
         self.set_deletable(False)  # Prevent closing during download
 
         self.cancelled = False
@@ -194,11 +481,11 @@ class ModelDownloadDialog(Gtk.Dialog):
         engine_display = engine.upper() if engine == "vosk" else engine.capitalize()
 
         box = self.get_content_area()
-        box.set_spacing(12)
-        box.set_margin_start(20)
-        box.set_margin_end(20)
-        box.set_margin_top(20)
-        box.set_margin_bottom(15)
+        box.set_spacing(16)
+        box.set_margin_start(24)
+        box.set_margin_end(24)
+        box.set_margin_top(24)
+        box.set_margin_bottom(20)
 
         # Info label
         self.info_label = Gtk.Label(
@@ -212,18 +499,19 @@ class ModelDownloadDialog(Gtk.Dialog):
         self.progress_bar = Gtk.ProgressBar()
         self.progress_bar.set_show_text(True)
         self.progress_bar.set_text("Connecting...")
-        box.pack_start(self.progress_bar, False, False, 5)
+        box.pack_start(self.progress_bar, False, False, 8)
 
         # Status label (shows speed and ETA)
         self.status_label = Gtk.Label(label="")
         self.status_label.set_markup("<i>Please wait...</i>")
+        self.status_label.get_style_context().add_class("status-info")
         box.pack_start(self.status_label, False, False, 0)
 
         # Cancel button
         self.cancel_button = Gtk.Button(label="Cancel")
         self.cancel_button.connect("clicked", self._on_cancel_clicked)
         self.cancel_button.set_halign(Gtk.Align.CENTER)
-        self.cancel_button.set_margin_top(10)
+        self.cancel_button.set_margin_top(12)
         box.pack_start(self.cancel_button, False, False, 0)
 
         self.show_all()
@@ -274,14 +562,18 @@ class ModelDownloadDialog(Gtk.Dialog):
         if success:
             self.progress_bar.set_fraction(1.0)
             self.progress_bar.set_text("Complete!")
-            self.status_label.set_markup("<b>✓ Model ready to use</b>")
+            self.status_label.set_markup(
+                "<span foreground='#26a269'><b>✓ Model ready to use</b></span>"
+            )
         else:
             self.progress_bar.set_fraction(0)
             self.progress_bar.set_text("Failed")
             if "cancelled" in message.lower():
-                self.status_label.set_markup("<span color='orange'>✗ Download cancelled</span>")
+                self.status_label.set_markup(
+                    "<span foreground='#e5a50a'>✗ Download cancelled</span>"
+                )
             else:
-                self.status_label.set_markup(f"<span color='red'>✗ {message}</span>")
+                self.status_label.set_markup(f"<span foreground='#c01c28'>✗ {message}</span>")
 
         # Allow closing now
         self.set_deletable(True)
@@ -289,7 +581,7 @@ class ModelDownloadDialog(Gtk.Dialog):
 
 
 class SettingsDialog(Gtk.Dialog):
-    """GTK Dialog for configuring Vocalinux settings."""
+    """Modern GTK Dialog for configuring Vocalinux settings."""
 
     def __init__(
         self,
@@ -309,308 +601,309 @@ class SettingsDialog(Gtk.Dialog):
         )
         self._applying_settings = False  # Flag to prevent recursive settings application
 
-        # UX: Button placement follows GNOME Human Interface Guidelines (HIG)
-        # Order: Cancel (left, esc-bound) -> Apply (center, return-bound) -> Close (right)
-        # Rationale: Separates "apply and continue" from "apply and close" actions
-        # Reference: https://developer.gnome.org/hig/patterns/feedback/dialogs.html
-        # See RESEARCH.md Section 2.1 for full GNOME HIG compliance details
-        self.add_buttons(
-            Gtk.STOCK_CANCEL,
-            Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_APPLY,
-            Gtk.ResponseType.APPLY,
-            Gtk.STOCK_CLOSE,
-            Gtk.ResponseType.CLOSE,
-        )
-        self.set_default_size(450, 400)
-        self.set_border_width(10)
+        # Setup CSS styling
+        _setup_css()
 
-        # --- UI Elements ---
-        self.grid = Gtk.Grid(column_spacing=10, row_spacing=8)
-        self.get_content_area().add(self.grid)
+        # Dialog configuration - Close button only (instant-apply pattern)
+        self.add_button("_Close", Gtk.ResponseType.CLOSE)
+        self.set_default_size(520, 680)
+        self.get_style_context().add_class("settings-dialog")
 
-        row = 0
+        # Main scrolled window for content
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.get_style_context().add_class("scrolled-content")
 
-        # ==================== AUDIO INPUT SECTION (TOP) ====================
-        audio_label = Gtk.Label(label="<b>Audio Input</b>", use_markup=True, halign=Gtk.Align.START)
-        self.grid.attach(audio_label, 0, row, 2, 1)
-        row += 1
+        # Main content box
+        self.content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.content_box.set_margin_top(16)
+        self.content_box.set_margin_bottom(16)
+        self.content_box.set_margin_start(16)
+        self.content_box.set_margin_end(16)
 
-        # Audio device selection
-        audio_device_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        audio_device_box.pack_start(
-            Gtk.Label(label="Input Device:", halign=Gtk.Align.START), False, False, 0
-        )
+        scrolled.add(self.content_box)
+        self.get_content_area().pack_start(scrolled, True, True, 0)
 
+        # Build UI sections
+        self._build_audio_section()
+        self._build_engine_section()
+        self._build_recognition_section()
+        self._build_test_section()
+
+        # Load settings and populate UI
+        self._load_and_apply_settings()
+
+        # Show everything first
+        self.show_all()
+
+        # Then update visibility of engine-specific elements
+        self._update_engine_specific_ui()
+
+        # Initialize recognition progress UI
+        self.update_recognition_progress("Idle")
+
+        # Connect to recognition manager for progress updates
+        self.connect_to_recognition_manager()
+
+        # Initialization complete - enable auto-apply
+        self._initializing = False
+
+    def _build_audio_section(self):
+        """Build the Audio Input section."""
+        group = PreferencesGroup(title="Audio Input")
+
+        # Device selection row
+        device_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.audio_device_combo = Gtk.ComboBoxText()
         self.audio_device_combo.set_tooltip_text(
-            "Select the microphone to use for voice recognition.\n"
-            "If you're having issues with audio detection, try different devices."
+            "Select the microphone to use for voice recognition"
         )
-        self._populate_audio_devices()
-        self.audio_device_combo.connect("changed", self._on_audio_device_changed)
-        audio_device_box.pack_start(self.audio_device_combo, True, True, 0)
+        self.audio_device_combo.set_size_request(250, -1)
+        device_box.pack_start(self.audio_device_combo, True, True, 0)
 
-        # Refresh button
-        refresh_btn = Gtk.Button()
-        refresh_btn.set_image(Gtk.Image.new_from_icon_name("view-refresh", Gtk.IconSize.BUTTON))
-        refresh_btn.set_tooltip_text("Refresh audio device list")
+        refresh_btn = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
+        refresh_btn.set_tooltip_text("Refresh device list")
+        refresh_btn.get_style_context().add_class("flat-button")
         refresh_btn.connect("clicked", self._on_refresh_audio_devices)
-        audio_device_box.pack_start(refresh_btn, False, False, 0)
+        device_box.pack_start(refresh_btn, False, False, 0)
 
-        self.grid.attach(audio_device_box, 0, row, 2, 1)
-        row += 1
+        device_row = PreferenceRow(
+            title="Input Device",
+            subtitle="Select the microphone for voice recognition",
+            widget=device_box,
+        )
+        group.add_row(device_row)
 
-        # Audio level indicator and test button
-        audio_test_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-
-        level_label = Gtk.Label(label="Level:", halign=Gtk.Align.START)
-        audio_test_box.pack_start(level_label, False, False, 0)
-
+        # Audio level test row
+        level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         self.audio_level_bar = Gtk.LevelBar()
         self.audio_level_bar.set_min_value(0)
         self.audio_level_bar.set_max_value(100)
         self.audio_level_bar.set_value(0)
         self.audio_level_bar.set_size_request(150, -1)
-        audio_test_box.pack_start(self.audio_level_bar, True, True, 0)
+        level_box.pack_start(self.audio_level_bar, True, True, 0)
 
-        self.test_audio_btn = Gtk.Button(label="Test Mic")
-        self.test_audio_btn.set_tooltip_text(
-            "Test the selected microphone for 2 seconds.\n"
-            "Speak into your microphone to verify it's working."
-        )
+        self.test_audio_btn = Gtk.Button(label="Test")
+        self.test_audio_btn.set_tooltip_text("Test the microphone for 2 seconds")
         self.test_audio_btn.connect("clicked", self._on_test_audio_clicked)
-        audio_test_box.pack_start(self.test_audio_btn, False, False, 0)
+        level_box.pack_start(self.test_audio_btn, False, False, 0)
 
-        self.grid.attach(audio_test_box, 0, row, 2, 1)
-        row += 1
-
-        # Audio test status label
-        self.audio_test_status = Gtk.Label(label="", use_markup=True, halign=Gtk.Align.START)
-        self.grid.attach(self.audio_test_status, 0, row, 2, 1)
-        row += 1
-
-        # ==================== SEPARATOR ====================
-        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
-        row += 1
-
-        # ==================== SPEECH ENGINE SECTION ====================
-        engine_label = Gtk.Label(
-            label="<b>Speech Engine</b>", use_markup=True, halign=Gtk.Align.START
+        level_row = PreferenceRow(
+            title="Audio Level",
+            subtitle="Test your microphone",
+            widget=level_box,
         )
-        self.grid.attach(engine_label, 0, row, 2, 1)
-        row += 1
+        group.add_row(level_row)
 
-        # Engine Selection
-        self.grid.attach(Gtk.Label(label="Engine:", halign=Gtk.Align.START), 0, row, 1, 1)
+        # Status label for audio testing (added below the group)
+        self.audio_test_status = Gtk.Label(label="", use_markup=True, xalign=0)
+        self.audio_test_status.set_margin_start(16)
+        self.audio_test_status.set_margin_top(4)
+        self.audio_test_status.get_style_context().add_class("status-info")
+
+        self.content_box.pack_start(group, False, False, 0)
+        self.content_box.pack_start(self.audio_test_status, False, False, 0)
+
+        # Populate devices
+        self._populate_audio_devices()
+        self.audio_device_combo.connect("changed", self._on_audio_device_changed)
+
+    def _build_engine_section(self):
+        """Build the Speech Engine section."""
+        group = PreferencesGroup(title="Speech Engine")
+
+        # Engine selection
         self.engine_combo = Gtk.ComboBoxText()
-        self.grid.attach(self.engine_combo, 1, row, 1, 1)
-        row += 1
+        self.engine_combo.set_size_request(180, -1)
+        engine_row = PreferenceRow(
+            title="Engine",
+            subtitle="Speech recognition backend",
+            widget=self.engine_combo,
+        )
+        group.add_row(engine_row)
 
-        # Model Size Selection
-        self.grid.attach(Gtk.Label(label="Model Size:", halign=Gtk.Align.START), 0, row, 1, 1)
+        # Model size selection
         self.model_combo = Gtk.ComboBoxText()
-        self.grid.attach(self.model_combo, 1, row, 1, 1)
-        row += 1
+        self.model_combo.set_size_request(180, -1)
+        model_row = PreferenceRow(
+            title="Model Size",
+            subtitle="Larger models are more accurate but slower",
+            widget=self.model_combo,
+        )
+        group.add_row(model_row)
 
-        # Language Selection
-        self.grid.attach(Gtk.Label(label="Language:", halign=Gtk.Align.START), 0, row, 1, 1)
+        # Language selection
         self.language_combo = Gtk.ComboBoxText()
-        self.language_combo.set_tooltip_text("Select primary language for speech recognition")
-        self.grid.attach(self.language_combo, 1, row, 1, 1)
-        row += 1
-
-        # Language warning label (shown for auto/unsupported)
-        self.language_warning = Gtk.Label(label="", use_markup=True, halign=Gtk.Align.START)
-        self.language_warning.set_margin_bottom(5)
-        self.grid.attach(self.language_warning, 0, row, 2, 1)
-        row += 1
-
-        # Model legend (applies to both engines)
-        model_legend = Gtk.Label(
-            label="<small>✓ = Downloaded  ↓ = Will download  ★ = Recommended</small>",
-            use_markup=True,
-            halign=Gtk.Align.END,
+        self.language_combo.set_size_request(180, -1)
+        self.language_combo.set_tooltip_text("Primary language for speech recognition")
+        language_row = PreferenceRow(
+            title="Language",
+            subtitle="Primary language for recognition",
+            widget=self.language_combo,
         )
-        self.grid.attach(model_legend, 0, row, 2, 1)
-        row += 1
+        group.add_row(language_row)
 
-        # Whisper Info Box (initially hidden)
-        self.whisper_info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        self.whisper_info_box.pack_start(
-            Gtk.Label(
-                label="<b>Whisper Model Info</b>",
-                use_markup=True,
-                halign=Gtk.Align.START,
-            ),
-            False,
-            False,
-            5,
-        )
+        self.content_box.pack_start(group, False, False, 0)
 
-        # Model info label (will be updated based on selection)
-        self.whisper_model_info_label = Gtk.Label(
-            label="",
-            use_markup=True,
-            halign=Gtk.Align.START,
-            wrap=True,
-        )
-        self.whisper_info_box.pack_start(self.whisper_model_info_label, False, False, 0)
+        # Model info card (shown below the group)
+        self.model_info_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.model_info_card.get_style_context().add_class("model-info-card")
+        self.model_info_card.set_margin_start(4)
+        self.model_info_card.set_margin_end(4)
 
-        # Recommendation label
-        self.whisper_recommendation_label = Gtk.Label(
-            label="",
-            use_markup=True,
-            halign=Gtk.Align.START,
-            wrap=True,
-        )
-        self.whisper_info_box.pack_start(self.whisper_recommendation_label, False, False, 5)
+        self.model_info_title = Gtk.Label(xalign=0)
+        self.model_info_title.get_style_context().add_class("model-info-title")
+        self.model_info_card.pack_start(self.model_info_title, False, False, 0)
 
-        self.grid.attach(self.whisper_info_box, 0, row, 2, 1)
-        row += 1
+        self.model_info_subtitle = Gtk.Label(xalign=0, wrap=True)
+        self.model_info_subtitle.get_style_context().add_class("model-info-subtitle")
+        self.model_info_card.pack_start(self.model_info_subtitle, False, False, 0)
 
-        # Add model change handler
+        self.model_recommendation = Gtk.Label(xalign=0, wrap=True)
+        self.model_recommendation.get_style_context().add_class("tip-label")
+        self.model_info_card.pack_start(self.model_recommendation, False, False, 0)
+
+        self.content_box.pack_start(self.model_info_card, False, False, 0)
+
+        # Language warning (for auto-detect)
+        self.language_warning = Gtk.Label(label="", use_markup=True, xalign=0)
+        self.language_warning.set_margin_start(16)
+        self.language_warning.get_style_context().add_class("status-warning")
+        self.content_box.pack_start(self.language_warning, False, False, 0)
+
+        # Legend
+        legend_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        legend_box.set_halign(Gtk.Align.CENTER)
+        legend_box.set_margin_top(4)
+        legend_box.set_margin_bottom(4)
+
+        for symbol, text in [("✓", "Downloaded"), ("↓", "Will download"), ("★", "Recommended")]:
+            item = Gtk.Label(label=f"{symbol} {text}")
+            item.get_style_context().add_class("status-info")
+            legend_box.pack_start(item, False, False, 0)
+
+        self.content_box.pack_start(legend_box, False, False, 0)
+
+        # Connect signals
+        self.engine_combo.connect("changed", self._on_engine_changed)
         self.model_combo.connect("changed", self._on_model_changed)
-
-        # Add language change handler
         self.language_combo.connect("changed", self._on_language_changed)
 
-        # ==================== SEPARATOR ====================
-        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
-        row += 1
+    def _build_recognition_section(self):
+        """Build the Recognition Settings section."""
+        group = PreferencesGroup(title="Recognition Settings")
 
-        # ==================== RECOGNITION SETTINGS SECTION ====================
-        recognition_label = Gtk.Label(
-            label="<b>Recognition Settings</b>", use_markup=True, halign=Gtk.Align.START
-        )
-        self.grid.attach(recognition_label, 0, row, 2, 1)
-        row += 1
-
-        # VAD Sensitivity (controls how sensitive the mic is to speech vs silence)
-        self.grid.attach(
-            Gtk.Label(label="VAD Sensitivity (1-5):", halign=Gtk.Align.START), 0, row, 1, 1
-        )
+        # VAD Sensitivity
         self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
         self.vad_spin.set_tooltip_text("Higher = more sensitive to quiet speech")
-        self.vad_spin.connect("value-changed", self._on_vad_changed)
-        self.grid.attach(self.vad_spin, 1, row, 1, 1)
-        row += 1
-
-        # Silence Timeout (how long to wait before processing)
-        self.grid.attach(
-            Gtk.Label(label="Silence Timeout (sec):", halign=Gtk.Align.START), 0, row, 1, 1
+        vad_row = PreferenceRow(
+            title="VAD Sensitivity",
+            subtitle="Voice Activity Detection sensitivity (1-5)",
+            widget=self.vad_spin,
         )
+        group.add_row(vad_row)
+
+        # Silence Timeout
         self.silence_spin = Gtk.SpinButton.new_with_range(0.5, 5.0, 0.1)
         self.silence_spin.set_digits(1)
         self.silence_spin.set_tooltip_text("Wait time after silence before processing speech")
+        silence_row = PreferenceRow(
+            title="Silence Timeout",
+            subtitle="Seconds of silence before processing",
+            widget=self.silence_spin,
+        )
+        group.add_row(silence_row)
+
+        self.content_box.pack_start(group, False, False, 0)
+
+        # Connect signals
+        self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
-        self.grid.attach(self.silence_spin, 1, row, 1, 1)
-        row += 1
 
-        # VOSK Model info label (shown only for VOSK)
-        self.vosk_model_info_label = Gtk.Label(
-            label="",
-            use_markup=True,
-            halign=Gtk.Align.START,
-            wrap=True,
-        )
-        self.grid.attach(self.vosk_model_info_label, 0, row, 2, 1)
-        row += 1
+    def _build_test_section(self):
+        """Build the Test Recognition section."""
+        group = PreferencesGroup(title="Test Recognition")
 
-        # VOSK Recommendation label (shown only for VOSK)
-        self.vosk_recommendation_label = Gtk.Label(
-            label="",
-            use_markup=True,
-            halign=Gtk.Align.START,
-            wrap=True,
-        )
-        self.grid.attach(self.vosk_recommendation_label, 0, row, 2, 1)
-        row += 1
+        # Test area inside the group's listbox as a custom row
+        test_container = Gtk.ListBoxRow()
+        test_container.set_activatable(False)
+        test_container.get_style_context().add_class("preference-row")
 
-        # Legacy recognition settings box (for compatibility)
-        self.recognition_settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.recognition_grid = Gtk.Grid(column_spacing=10, row_spacing=10)
+        test_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        test_box.set_margin_top(12)
+        test_box.set_margin_bottom(12)
+        test_box.set_margin_start(16)
+        test_box.set_margin_end(16)
 
-        # ==================== SEPARATOR ====================
-        self.grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, row, 2, 1)
-        row += 1
-
-        # ==================== TEST RECOGNITION SECTION ====================
-        test_label = Gtk.Label(
-            label="<b>Test Recognition</b>", use_markup=True, halign=Gtk.Align.START
-        )
-        self.grid.attach(test_label, 0, row, 2, 1)
-        row += 1
-
-        scrolled_window = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        # Text view for test results
+        scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_min_content_height(80)
-        self.test_textview = Gtk.TextView(
-            editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD
-        )
+        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.get_style_context().add_class("test-area")
+
+        self.test_textview = Gtk.TextView()
+        self.test_textview.set_editable(False)
+        self.test_textview.set_cursor_visible(False)
+        self.test_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.test_textview.get_style_context().add_class("test-textview")
         self.test_buffer = self.test_textview.get_buffer()
         scrolled_window.add(self.test_textview)
-        self.grid.attach(scrolled_window, 0, row, 2, 1)
-        row += 1
+        test_box.pack_start(scrolled_window, True, True, 0)
 
+        # Test button
         self.test_button = Gtk.Button(label="Start Test (3 seconds)")
+        self.test_button.get_style_context().add_class("suggested-action")
         self.test_button.connect("clicked", self._on_test_clicked)
-        self.grid.attach(self.test_button, 0, row, 2, 1)
-        row += 1
+        test_box.pack_start(self.test_button, False, False, 0)
 
-        # UX: Multi-modal progress feedback for speech recognition (per HCI research)
-        # Provides: (1) Text status, (2) Icon indicator, (3) Audio level bar
-        # Rationale: Addresses user anxiety during processing delays (typical 300-800ms)
-        # WCAG Compliance: Multiple perception channels for accessibility
-        # Reference: RESEARCH.md Section 4 (Progress Feedback in Speech Recognition)
-        progress_label = Gtk.Label(
-            label="<b>Recognition Progress</b>", use_markup=True, halign=Gtk.Align.START
+        test_container.add(test_box)
+        group.listbox.add(test_container)
+
+        self.content_box.pack_start(group, False, False, 0)
+
+        # Recognition Progress section
+        progress_group = PreferencesGroup(title="Recognition Status")
+
+        # Status row
+        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.recognition_status_label = Gtk.Label(label="Idle", xalign=0)
+        status_box.pack_start(self.recognition_status_label, True, True, 0)
+
+        self.recognition_indicator = Gtk.Image.new_from_icon_name(
+            "media-record-symbolic", Gtk.IconSize.MENU
         )
-        self.grid.attach(progress_label, 0, row, 2, 1)
-        row += 1
+        self.recognition_indicator.set_opacity(0.3)
+        status_box.pack_end(self.recognition_indicator, False, False, 0)
 
-        # Recognition status - Text label for screen reader accessibility
-        self.recognition_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        self.recognition_status_label = Gtk.Label(label="Status: Idle", halign=Gtk.Align.START)
-        self.recognition_status_box.pack_start(self.recognition_status_label, False, False, 0)
-
-        # UX: LED-like icon using Gtk.Image sensitivity state (color/gray)
-        # Provides visual cue without flashing (WCAG 2.3.1 - Three Flashes requirement)
-        # Green=Listening, Orange=Processing, Red=Error, Gray=Idle
-        self.recognition_indicator = Gtk.Image()
-        self.recognition_indicator.set_from_icon_name("media-record", Gtk.IconSize.MENU)
-        self.recognition_indicator.set_sensitive(False)  # Makes it grayed out (Idle state)
-        self.recognition_status_box.pack_start(self.recognition_indicator, False, False, 0)
-
-        self.grid.attach(self.recognition_status_box, 0, row, 2, 1)
-        row += 1
-
-        # UX: Audio level bar for real-time feedback
-        # Rationale: Confirms system is detecting user's voice, aids troubleshooting
-        # Industry Standard: Both Dragon NaturallySpeaking and Google Docs use similar feedback
-        # Reference: RESEARCH.md Section 3.2 (Industry Patterns comparison)
-        audio_progress_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        audio_progress_box.pack_start(
-            Gtk.Label(label="Audio Level:", halign=Gtk.Align.START), False, False, 0
+        status_row = PreferenceRow(
+            title="Status",
+            widget=status_box,
         )
+        progress_group.add_row(status_row)
 
+        # Audio level row
         self.recognition_audio_level = Gtk.LevelBar()
         self.recognition_audio_level.set_min_value(0)
         self.recognition_audio_level.set_max_value(100)
         self.recognition_audio_level.set_value(0)
         self.recognition_audio_level.set_size_request(150, -1)
-        audio_progress_box.pack_start(self.recognition_audio_level, True, True, 0)
 
-        self.grid.attach(audio_progress_box, 0, row, 2, 1)
-        row += 1
+        level_row = PreferenceRow(
+            title="Audio Level",
+            widget=self.recognition_audio_level,
+        )
+        progress_group.add_row(level_row)
 
-        # Progress info
-        self.progress_info_label = Gtk.Label(label="", use_markup=True, halign=Gtk.Align.START)
-        self.progress_info_label.set_margin_bottom(10)
-        self.grid.attach(self.progress_info_label, 0, row, 2, 1)
-        row += 1
+        self.content_box.pack_start(progress_group, False, False, 0)
 
-        # ---- CRITICAL CHANGE ----
-        # Load settings FIRST before creating UI connections
+        # Progress info label
+        self.progress_info_label = Gtk.Label(label="", use_markup=True, xalign=0)
+        self.progress_info_label.set_margin_start(16)
+        self.progress_info_label.set_margin_bottom(8)
+        self.content_box.pack_start(self.progress_info_label, False, False, 0)
+
+    def _load_and_apply_settings(self):
+        """Load current settings and populate the UI."""
         settings = self._get_current_settings()
         self.current_engine = settings["engine"]
         self.language = settings["language"]
@@ -627,16 +920,11 @@ class SettingsDialog(Gtk.Dialog):
             capitalized_engine = engine.capitalize()
             self.engine_combo.append(capitalized_engine, capitalized_engine)
 
-        # Add engine change handler AFTER populating, but before setting active
-        self.engine_combo.connect("changed", self._on_engine_changed)
-        self.grid.attach(self.engine_combo, 1, 0, 1, 1)
-
         # Set engine active
         engine_text = self.current_engine.capitalize()
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
             logger.warning("Could not set engine by ID, trying by index")
-            # Fallback to setting by index
             if self.current_engine == "vosk":
                 self.engine_combo.set_active(0)
             elif self.current_engine == "whisper":
@@ -647,44 +935,24 @@ class SettingsDialog(Gtk.Dialog):
 
         # Populate language options
         self._populate_language_options()
-        # Set the current language from settings
         if self.language:
             if not self.language_combo.set_active_id(self.language):
-                # Fallback to auto if language not found
                 logger.warning(f"Language '{self.language}' not found in options, using auto")
                 self.language_combo.set_active_id("auto")
                 self.language = "auto"
 
-        # Set non-dependent widgets directly
+        # Set spin button values
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
 
-        # Show everything first
-        self.show_all()
-
-        # Then show/hide engine-specific sections (must be after show_all)
-        self._update_engine_specific_ui()
-
-        # Initialize recognition progress UI
-        self.update_recognition_progress("Idle")
-
-        # Connect to recognition manager for progress updates
-        self.connect_to_recognition_manager()
-
-        # Initialization complete - enable auto-apply
-        self._initializing = False
-
     def _get_current_settings(self):
         """Get current settings from config manager."""
-        # Always reload config from disk to reflect latest saved settings
         self.config_manager.load_config()
         settings = self.config_manager.get_settings()
 
-        # Use .get with defaults for robustness
         sr_settings = settings.get("speech_recognition", {})
         engine = sr_settings.get("engine", "vosk")
         language = sr_settings.get("language", "en-us")
-        # Get model size for the specific engine
         model_size = self.config_manager.get_model_size_for_engine(engine)
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
@@ -704,13 +972,10 @@ class SettingsDialog(Gtk.Dialog):
 
     def _populate_model_options(self):
         """Populate model options based on the current engine selection."""
-        # Set flag to prevent model change handler from firing during population
         self._populating_models = True
         try:
-            # Clear existing items
             self.model_combo.remove_all()
 
-            # Get the current engine text and convert to lowercase for lookup
             engine_text = self.engine_combo.get_active_text()
             if not engine_text:
                 logger.warning("No engine selected during model options population")
@@ -719,95 +984,66 @@ class SettingsDialog(Gtk.Dialog):
             engine = engine_text.lower()
             logger.info(f"Populating model options for engine: {engine}")
 
-            # Get the saved model size for THIS specific engine (not the generic one)
             saved_model_for_engine = self.config_manager.get_model_size_for_engine(engine)
             logger.info(f"Saved model for {engine}: {saved_model_for_engine}")
 
-            # Track which models are downloaded and find smallest downloaded
             downloaded_models = []
             smallest_model = None
+            recommended_model, _ = (
+                _get_recommended_whisper_model()
+                if engine == "whisper"
+                else _get_recommended_vosk_model()
+            )
 
-            # Add model sizes for this engine
             if engine in ENGINE_MODELS:
-                # Add all options for this engine
                 for size in ENGINE_MODELS[engine]:
                     if engine == "whisper" and size in WHISPER_MODEL_INFO:
                         info = WHISPER_MODEL_INFO[size]
                         is_downloaded = _is_whisper_model_downloaded(size)
-                        status = "✓" if is_downloaded else "↓"
-                        display_text = (
-                            f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
-                        )
-                        if is_downloaded:
-                            downloaded_models.append(size)
-                        if smallest_model is None:
-                            smallest_model = size
                     elif engine == "vosk" and size in VOSK_MODEL_INFO:
                         info = VOSK_MODEL_INFO[size]
                         is_downloaded = _is_vosk_model_downloaded(size, self.language)
-                        status = "✓" if is_downloaded else "↓"
-                        display_text = (
-                            f"{size.capitalize()} ({_format_size(info['size_mb'])}) {status}"
-                        )
-                        if is_downloaded:
-                            downloaded_models.append(size)
-                        if smallest_model is None:
-                            smallest_model = size
                     else:
-                        display_text = size.capitalize()
-                    # Use lowercase as ID, display text with info
+                        is_downloaded = False
+                        info = {"size_mb": 0}
+
+                    status = "✓" if is_downloaded else "↓"
+                    star = " ★" if size == recommended_model else ""
+                    display_text = f"{size.capitalize()} ({_format_size(info.get('size_mb', 0))}) {status}{star}"
+
+                    if is_downloaded:
+                        downloaded_models.append(size)
+                    if smallest_model is None:
+                        smallest_model = size
+
                     self.model_combo.append(size.capitalize(), display_text)
 
-            # Determine which model to select:
-            # 1. If saved model for this engine is downloaded, use it
-            # 2. Else if saved model for this engine exists (even if not downloaded), use it
-            #    (user will be prompted to download when applying)
-            # 3. Else if any model is downloaded, use the smallest downloaded
-            # 4. Else use the smallest model for this engine
+            # Determine which model to select
             saved_model = saved_model_for_engine.lower()
-
-            # Check if the saved model is valid for this engine
             valid_models = [m.lower() for m in ENGINE_MODELS.get(engine, [])]
 
             if saved_model in valid_models:
-                # Use the saved model for this engine (whether downloaded or not)
                 model_to_set = saved_model.capitalize()
             elif downloaded_models:
-                # Saved model isn't valid for this engine, use smallest downloaded
                 model_to_set = downloaded_models[0].capitalize()
             else:
-                # No downloaded models, use the smallest model for this engine
                 model_to_set = smallest_model.capitalize() if smallest_model else "Small"
 
-            logger.info(
-                f"Setting active model to: {model_to_set} (saved_for_engine={saved_model}, "
-                f"valid={saved_model in valid_models}, downloaded={downloaded_models})"
-            )
+            logger.info(f"Setting active model to: {model_to_set}")
 
-            # Try to set by ID
             if not self.model_combo.set_active_id(model_to_set):
-                logger.warning(f"Could not set model by ID '{model_to_set}', trying by text")
-                # Find by text as fallback
+                logger.warning(f"Could not set model by ID '{model_to_set}'")
                 model = self.model_combo.get_model()
-                model_found = False
                 for i, row in enumerate(model):
                     if row[0].lower() == model_to_set.lower():
                         self.model_combo.set_active(i)
-                        model_found = True
-                        logger.info(f"Set model by index {i}")
                         break
+                else:
+                    if len(ENGINE_MODELS.get(engine, [])) > 0:
+                        self.model_combo.set_active(0)
 
-                # If still not found, default to first
-                if not model_found and len(ENGINE_MODELS[engine]) > 0:
-                    logger.warning(
-                        f"Model '{model_to_set}' not found in options, defaulting to first"
-                    )
-                    self.model_combo.set_active(0)
-
-            # Log final selection
             logger.info(f"Final selected model: {self.model_combo.get_active_text()}")
         finally:
-            # Clear flag to re-enable model change handler
             self._populating_models = False
 
     def _on_engine_changed(self, widget):
@@ -818,41 +1054,27 @@ class SettingsDialog(Gtk.Dialog):
 
         engine = engine_text.lower()
 
-        # Check if current language is supported by the new engine
         current_lang = self.language_combo.get_active_id()
         if current_lang:
             if engine == "vosk" and (
                 current_lang == "auto" or not SUPPORTED_LANGUAGES.get(current_lang, {}).get("vosk")
             ):
-                # Switching to VOSK with unsupported language, fall back to en-us
                 self.language = "en-us"
             elif engine == "whisper" and not current_lang:
-                # No language selected, default to auto for Whisper
                 self.language = "auto"
 
         self._populate_model_options()
         self._populate_language_options()
-
-        # Set the active language in the combo after repopulating
-        # This will trigger _on_language_changed which will apply settings
         self.language_combo.set_active_id(self.language)
-
         self._update_engine_specific_ui()
-        self._update_whisper_info()
+        self._update_model_info()
 
     def _on_model_changed(self, widget):
         """Handle changes in the selected model."""
-        # Don't process if we're populating models (prevents recursive calls)
         if self._populating_models:
             return
 
-        engine_text = self.engine_combo.get_active_text()
-        if engine_text:
-            engine = engine_text.lower()
-            if engine == "whisper":
-                self._update_whisper_info()
-            elif engine == "vosk":
-                self._update_vosk_info()
+        self._update_model_info()
         self._auto_apply_settings()
 
     def _on_vad_changed(self, widget):
@@ -875,26 +1097,22 @@ class SettingsDialog(Gtk.Dialog):
         for lang_code, lang_info in SUPPORTED_LANGUAGES.items():
             display_text = lang_info["name"]
 
-            # Filter languages based on engine support
             if engine == "vosk":
-                # VOSK: only show languages with available models (skip "auto" since VOSK doesn't support it)
                 has_model = lang_info["vosk"] is not None
                 if not has_model or lang_code == "auto":
-                    continue  # Skip languages not supported by VOSK
+                    continue
                 is_downloaded = _is_vosk_model_downloaded("small", lang_code)
                 display_text += " ✓" if is_downloaded else " ↓"
             elif engine == "whisper":
-                # Whisper: show all languages, add warning for auto-detect
                 if lang_code == "auto":
                     display_text += " ⚠"
             else:
-                continue  # Unknown engine
+                continue
 
             self.language_combo.append(lang_code, display_text)
 
     def _on_language_changed(self, widget):
         """Handle language selection change."""
-        # Guard against recursive calls
         if self._processing_language_change:
             return
 
@@ -911,38 +1129,95 @@ class SettingsDialog(Gtk.Dialog):
             engine = engine.lower()
             lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
 
-            # Update warning label for auto-detect only
             if lang_info.get("warning"):
                 self.language_warning.set_markup(
-                    f"<span foreground='orange'>⚠ {lang_info['warning']}</span>"
+                    f"<span foreground='#e5a50a'>⚠ {lang_info['warning']}</span>"
                 )
+                self.language_warning.show()
             else:
                 self.language_warning.set_markup("")
+                self.language_warning.hide()
 
-            # Update self.language for VOSK model download checks
             self.language = lang_code
-
-            # Refresh model options to update download status indicators
             self._populate_model_options()
-
             self._auto_apply_settings()
         finally:
             self._processing_language_change = False
 
+    def _update_engine_specific_ui(self):
+        """Show/hide UI elements specific to the selected engine."""
+        self._update_model_info()
+
+    def _update_model_info(self):
+        """Update the model info card display."""
+        engine_text = self.engine_combo.get_active_text()
+        if not engine_text:
+            self.model_info_card.hide()
+            return
+
+        engine = engine_text.lower()
+        model_id = self.model_combo.get_active_id()
+        if not model_id:
+            self.model_info_card.hide()
+            return
+
+        model_name = model_id.lower()
+
+        if engine == "whisper":
+            if model_name not in WHISPER_MODEL_INFO:
+                self.model_info_card.hide()
+                return
+            info = WHISPER_MODEL_INFO[model_name]
+            is_downloaded = _is_whisper_model_downloaded(model_name)
+            recommended, reason = _get_recommended_whisper_model()
+            extra_info = f"Parameters: {info['params']}"
+        elif engine == "vosk":
+            if model_name not in VOSK_MODEL_INFO:
+                self.model_info_card.hide()
+                return
+            info = VOSK_MODEL_INFO[model_name]
+            is_downloaded = _is_vosk_model_downloaded(model_name, self.language)
+            recommended, reason = _get_recommended_vosk_model()
+            extra_info = f"Size: {_format_size(info['size_mb'])}"
+        else:
+            self.model_info_card.hide()
+            return
+
+        # Update title
+        self.model_info_title.set_markup(f"<b>{model_name.capitalize()}</b>: {info['desc']}")
+
+        # Update subtitle with status
+        if is_downloaded:
+            status = "<span foreground='#26a269'>✓ Downloaded and ready</span>"
+        else:
+            status = f"<span foreground='#e5a50a'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
+        self.model_info_subtitle.set_markup(f"{extra_info} • {status}")
+
+        # Update recommendation
+        if model_name == recommended:
+            self.model_recommendation.set_markup(
+                f"<span foreground='#26a269'>★ Recommended for your system ({reason})</span>"
+            )
+        else:
+            self.model_recommendation.set_markup(
+                f"Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})"
+            )
+
+        self.model_info_card.show_all()
+
     def _auto_apply_settings(self):
         """Automatically apply settings when changed."""
-        # Guard against recursive calls
         if self._applying_settings:
             return
 
         if self._initializing:
-            return  # Don't auto-apply during initialization
+            return
 
         if self._test_active:
-            return  # Don't apply during testing
+            return
 
         if self._populating_models:
-            return  # Don't apply during model population
+            return
 
         self._applying_settings = True
         try:
@@ -952,6 +1227,7 @@ class SettingsDialog(Gtk.Dialog):
 
             # Check if model needs to be downloaded
             needs_download = False
+            model_info = {"size_mb": 100}  # Default
             if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
                 needs_download = True
                 model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
@@ -960,7 +1236,6 @@ class SettingsDialog(Gtk.Dialog):
                 model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
 
             if needs_download:
-                # Show download dialog for models that need downloading
                 logger.info(f"Model {model_name} needs download, showing progress dialog")
                 download_dialog = ModelDownloadDialog(
                     self,
@@ -971,27 +1246,22 @@ class SettingsDialog(Gtk.Dialog):
                 )
 
                 def progress_callback(fraction, speed, status):
-                    """Update UI with download progress."""
                     GLib.idle_add(download_dialog.update_progress, fraction, speed, status)
 
                 def download_and_apply():
                     try:
-                        # Set up progress callback for downloads (both VOSK and Whisper)
                         self.speech_engine.set_download_progress_callback(progress_callback)
 
-                        # Check for cancellation periodically
                         def check_cancelled():
                             if download_dialog.cancelled:
                                 self.speech_engine.cancel_download()
                             return not download_dialog.cancelled
 
-                        # Start cancellation checker
                         cancel_check_id = GLib.timeout_add(100, check_cancelled)
 
                         try:
                             self._apply_settings_internal(settings)
                             GLib.idle_add(download_dialog.set_complete, True, "")
-                            # Refresh model list after download to update icons
                             GLib.idle_add(self._populate_model_options)
                         finally:
                             GLib.source_remove(cancel_check_id)
@@ -1014,14 +1284,10 @@ class SettingsDialog(Gtk.Dialog):
                 download_dialog.destroy()
                 return
 
-            # Model already downloaded, just apply settings directly
             logger.info(f"Auto-applying settings: {settings}")
 
-            # Update config manager
             self.config_manager.update_speech_recognition_settings(settings)
             self.config_manager.save_settings()
-
-            # Reconfigure speech engine (don't stop/start if idle)
             self.speech_engine.reconfigure(**settings)
             logger.info("Settings auto-applied successfully")
         except Exception as e:
@@ -1029,138 +1295,20 @@ class SettingsDialog(Gtk.Dialog):
         finally:
             self._applying_settings = False
 
-    def _update_engine_specific_ui(self):
-        """Show/hide UI elements specific to the selected engine."""
-        selected_engine_text = self.engine_combo.get_active_text()
-        if not selected_engine_text:
-            self.recognition_settings_box.hide()
-            self.whisper_info_box.hide()
-            return
-
-        selected_engine = selected_engine_text.lower()
-
-        # Recognition settings (VAD, silence timeout) apply to both engines
-        self.recognition_settings_box.show()
-
-        if selected_engine == "vosk":
-            # Show VOSK-specific info labels
-            self.vosk_model_info_label.show()
-            self.vosk_recommendation_label.show()
-            self.whisper_info_box.hide()
-            self._update_vosk_info()
-        elif selected_engine == "whisper":
-            # Hide VOSK-specific info labels, show Whisper info
-            self.vosk_model_info_label.hide()
-            self.vosk_recommendation_label.hide()
-            self.whisper_info_box.show()
-            self._update_whisper_info()
-        else:
-            self.recognition_settings_box.hide()
-            self.whisper_info_box.hide()
-
-    def _update_whisper_info(self):
-        """Update the Whisper model info display."""
-        engine_text = self.engine_combo.get_active_text()
-        if not engine_text or engine_text.lower() != "whisper":
-            return
-
-        model_id = self.model_combo.get_active_id()
-        if not model_id:
-            return
-
-        model_name = model_id.lower()
-        if model_name not in WHISPER_MODEL_INFO:
-            return
-
-        info = WHISPER_MODEL_INFO[model_name]
-        is_downloaded = _is_whisper_model_downloaded(model_name)
-
-        # Build info text
-        if is_downloaded:
-            status_text = "<span foreground='green'>✓ Downloaded and ready</span>"
-        else:
-            status_text = (
-                f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
-            )
-
-        info_text = (
-            f"<b>{model_name.capitalize()}</b>: {info['desc']}\n"
-            f"Parameters: {info['params']}  •  {status_text}"
-        )
-        self.whisper_model_info_label.set_markup(info_text)
-
-        # Update recommendation
-        recommended, reason = _get_recommended_whisper_model()
-        if model_name == recommended:
-            self.whisper_recommendation_label.set_markup(
-                f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
-            )
-        else:
-            self.whisper_recommendation_label.set_markup(
-                f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
-            )
-
-    def _update_vosk_info(self):
-        """Update the VOSK model info display."""
-        engine_text = self.engine_combo.get_active_text()
-        if not engine_text or engine_text.lower() != "vosk":
-            return
-
-        model_id = self.model_combo.get_active_id()
-        if not model_id:
-            return
-
-        model_name = model_id.lower()
-        if model_name not in VOSK_MODEL_INFO:
-            return
-
-        info = VOSK_MODEL_INFO[model_name]
-        is_downloaded = _is_vosk_model_downloaded(model_name, self.language)
-
-        # Build info text
-        if is_downloaded:
-            status_text = "<span foreground='green'>✓ Downloaded and ready</span>"
-        else:
-            status_text = (
-                f"<span foreground='orange'>↓ Will download ~{_format_size(info['size_mb'])}</span>"
-            )
-
-        info_text = (
-            f"<b>{model_name.capitalize()}</b>: {info['desc']}\n"
-            f"Size: {_format_size(info['size_mb'])}  •  {status_text}"
-        )
-        self.vosk_model_info_label.set_markup(info_text)
-
-        # Update recommendation
-        recommended, reason = _get_recommended_vosk_model()
-        if model_name == recommended:
-            self.vosk_recommendation_label.set_markup(
-                f"<span foreground='green'>★ Recommended for your system: {reason}</span>"
-            )
-        else:
-            self.vosk_recommendation_label.set_markup(
-                f"<small>Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})</small>"
-            )
-
     def get_selected_settings(self) -> dict:
         """Return the currently selected settings from the UI."""
         engine_text = self.engine_combo.get_active_text()
-        # Get model by ID (which is the capitalized name) not the display text
         model_id = self.model_combo.get_active_id()
-        # Get language by ID
         language_id = self.language_combo.get_active_id()
 
-        # Handle cases where combo boxes might be empty (shouldn't happen with defaults)
         engine = engine_text.lower() if engine_text else "vosk"
-        # Extract model name from ID (which is the capitalized name like "Small")
         model_size = model_id.lower() if model_id else "small"
-        # Get language code (use "auto" as default)
         language = language_id if language_id else "auto"
 
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
 
-        settings = {
+        return {
             "engine": engine,
             "model_size": model_size,
             "language": language,
@@ -1168,21 +1316,15 @@ class SettingsDialog(Gtk.Dialog):
             "silence_timeout": silence,
         }
 
-        return settings
-
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""
         if self._test_active:
             logger.warning("Test already in progress.")
             return
 
-        # Ensure settings are applied before testing
-        # TODO @violog: add language selection into GUI and here
         current_config = self.config_manager.get_settings().get("speech_recognition", {})
         selected_settings = self.get_selected_settings()
 
-        # Check if settings in dialog differ from saved config
-        # This is a basic check; a more robust diff might be needed
         settings_differ = False
         if current_config.get("engine") != selected_settings.get("engine") or current_config.get(
             "model_size"
@@ -1193,10 +1335,8 @@ class SettingsDialog(Gtk.Dialog):
                 "vad_sensitivity"
             ) or current_config.get("silence_timeout") != selected_settings.get("silence_timeout"):
                 settings_differ = True
-        # Add checks for other engines if they get specific settings
 
         if settings_differ:
-            # Auto-apply settings before testing
             self.test_buffer.set_text("Applying settings...")
             if not self.apply_settings():
                 self.test_buffer.set_text("Failed to apply settings. Please try again.")
@@ -1206,58 +1346,44 @@ class SettingsDialog(Gtk.Dialog):
         self._test_active = True
         self.test_button.set_sensitive(False)
         self.test_button.set_label("Testing... Speak Now!")
-        self.test_buffer.set_text("")  # Clear previous results
+        self.test_buffer.set_text("")
         self._test_result = ""
 
-        # Connect to recognition manager for progress feedback
         self.connect_to_recognition_manager()
-
-        # Update progress UI to show we're starting
         self.update_recognition_progress("Listening", info="Starting recognition test...")
 
-        # Save existing text callbacks and replace with test-only callback
-        # This prevents the text injector from typing into the dialog during testing
         self._saved_text_callbacks = self.speech_engine.get_text_callbacks()
         self.speech_engine.set_text_callbacks([self._test_text_callback])
 
-        # Start recognition
         self.speech_engine.start_recognition()
-
-        # Stop recognition after a delay (e.g., 3 seconds) in a separate thread
         threading.Thread(target=self._stop_test_after_delay, args=(3,)).start()
 
     def _test_text_callback(self, text: str):
         """Callback specifically for the test recognition."""
-        # Append text in the GTK main thread
         GLib.idle_add(self._append_test_result, text)
 
     def _append_test_result(self, text: str):
         current_text = self.test_buffer.get_text(
             self.test_buffer.get_start_iter(), self.test_buffer.get_end_iter(), False
         )
-        # Add a space if there's existing text
-        separator = " " if current_text.strip() else ""  # Check strip() to avoid leading space
+        separator = " " if current_text.strip() else ""
         self.test_buffer.insert(self.test_buffer.get_end_iter(), separator + text)
-        # Ensure the text view scrolls to the end
         mark = self.test_buffer.get_insert()
         self.test_textview.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
-        return False  # Remove idle callback
+        return False
 
     def _stop_test_after_delay(self, delay: int):
         """Stops the recognition test after a specified delay."""
         time.sleep(delay)
-        # Stop recognition in the main GTK thread if possible, or directly
-        # Using GLib.idle_add ensures it runs in the correct thread
         GLib.idle_add(self._finalize_test)
 
     def _finalize_test(self):
         """Finalize the test state and UI updates."""
         if not self._test_active:
-            return False  # Already finalized
+            return False
 
         self.speech_engine.stop_recognition()
 
-        # Restore the original text callbacks (including text injector)
         if hasattr(self, "_saved_text_callbacks"):
             self.speech_engine.set_text_callbacks(self._saved_text_callbacks)
             del self._saved_text_callbacks
@@ -1266,14 +1392,10 @@ class SettingsDialog(Gtk.Dialog):
         self.test_button.set_sensitive(True)
         self.test_button.set_label("Start Test (3 seconds)")
 
-        # Reset progress UI
         self.update_recognition_progress("Idle")
-
-        # Schedule the "no speech" check after a short delay to allow
-        # any pending callbacks to complete first
         GLib.timeout_add(200, self._check_test_result)
 
-        return False  # Remove idle callback
+        return False
 
     def _check_test_result(self):
         """Check if any text was captured after all callbacks have run."""
@@ -1282,7 +1404,7 @@ class SettingsDialog(Gtk.Dialog):
         )
         if not final_text.strip():
             self.test_buffer.set_text("(No speech detected during test)")
-        return False  # Don't repeat
+        return False
 
     def _show_whisper_install_dialog(self):
         """Show a dialog with instructions for installing Whisper."""
@@ -1316,7 +1438,6 @@ For now, the engine has been reverted to VOSK."""
         dialog.run()
         dialog.destroy()
 
-        # Revert the engine selection back to VOSK
         self.engine_combo.set_active_id("Vosk")
         self._populate_model_options()
         self._update_engine_specific_ui()
@@ -1329,8 +1450,8 @@ For now, the engine has been reverted to VOSK."""
         engine = settings.get("engine", "vosk")
         model_name = settings.get("model_size", "small")
 
-        # Check if we need to download a model
         needs_download = False
+        model_info = {"size_mb": 100}  # Default
         if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
             needs_download = True
             model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
@@ -1339,7 +1460,6 @@ For now, the engine has been reverted to VOSK."""
             model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
 
         if needs_download:
-            # Show download dialog
             download_dialog = ModelDownloadDialog(
                 self,
                 model_name,
@@ -1349,15 +1469,12 @@ For now, the engine has been reverted to VOSK."""
             )
 
             def progress_callback(fraction, speed, status):
-                """Update UI with download progress."""
                 GLib.idle_add(download_dialog.update_progress, fraction, speed, status)
 
             def download_and_apply():
                 try:
-                    # Set up progress callback for downloads (both VOSK and Whisper)
                     self.speech_engine.set_download_progress_callback(progress_callback)
 
-                    # Check for cancellation periodically
                     def check_cancelled():
                         if download_dialog.cancelled:
                             self.speech_engine.cancel_download()
@@ -1386,7 +1503,6 @@ For now, the engine has been reverted to VOSK."""
             download_dialog.run()
             download_dialog.destroy()
 
-            # Refresh the model list to show updated download status
             self._populate_model_options()
             return True
 
@@ -1395,35 +1511,24 @@ For now, the engine has been reverted to VOSK."""
     def _apply_settings_internal(self, settings: dict) -> bool:
         """Internal method to apply settings."""
         try:
-            # 1. Update Config Manager
             self.config_manager.update_speech_recognition_settings(settings)
             self.config_manager.save_settings()
 
-            # 2. Reconfigure Speech Engine
-            # Stop engine before reconfiguring if it's running
             was_running = self.speech_engine.state != RecognitionState.IDLE
             if was_running:
                 self.speech_engine.stop_recognition()
-                # Give it a moment to fully stop
                 time.sleep(0.5)
 
             self.speech_engine.reconfigure(**settings)
 
-            # Restart if it was running before
-            # if was_running:
-            #    self.speech_engine.start_recognition() # Maybe don't auto-restart?
-
             logger.info("Settings applied successfully.")
-            # Optionally show a confirmation message
             return True
         except Exception as e:
             logger.error(f"Failed to apply settings: {e}", exc_info=True)
 
-            # Check if this is a Whisper import error
             if "whisper" in str(e).lower() and "no module named" in str(e).lower():
                 self._show_whisper_install_dialog()
             else:
-                # Show generic error dialog
                 error_dialog = Gtk.MessageDialog(
                     transient_for=self,
                     flags=0,
@@ -1438,15 +1543,12 @@ For now, the engine has been reverted to VOSK."""
 
     def _populate_audio_devices(self):
         """Populate the audio device dropdown with available input devices."""
-        # Lazy import to avoid circular dependency
         from ..speech_recognition.recognition_manager import get_audio_input_devices
 
         self.audio_device_combo.remove_all()
 
-        # Add "System Default" option first
         self.audio_device_combo.append("-1", "System Default")
 
-        # Get available devices
         devices = get_audio_input_devices()
 
         for device_index, device_name, is_default in devices:
@@ -1455,14 +1557,12 @@ For now, the engine has been reverted to VOSK."""
                 label += " (default)"
             self.audio_device_combo.append(str(device_index), label)
 
-        # Get saved device from config
         saved_device = self.config_manager.get("audio", "device_index", None)
 
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")
         else:
             if not self.audio_device_combo.set_active_id(str(saved_device)):
-                # Saved device no longer available, fall back to default
                 logger.warning(f"Saved audio device {saved_device} no longer available")
                 self.audio_device_combo.set_active_id("-1")
 
@@ -1485,7 +1585,6 @@ For now, the engine has been reverted to VOSK."""
         device_index = int(device_id)
         device_name = self.audio_device_combo.get_active_text()
 
-        # Save to config
         if device_index == -1:
             self.config_manager.set("audio", "device_index", None)
             self.config_manager.set("audio", "device_name", None)
@@ -1495,7 +1594,6 @@ For now, the engine has been reverted to VOSK."""
 
         self.config_manager.save_settings()
 
-        # Update speech engine
         if device_index == -1:
             self.speech_engine.set_audio_device(None)
         else:
@@ -1511,12 +1609,10 @@ For now, the engine has been reverted to VOSK."""
         self.audio_test_status.set_markup("<i>Recording... speak into your microphone</i>")
         self.audio_level_bar.set_value(0)
 
-        # Get selected device
         device_id = self.audio_device_combo.get_active_id()
         device_index = None if device_id == "-1" else int(device_id)
 
         def run_test():
-            # Lazy import to avoid circular dependency
             from ..speech_recognition.recognition_manager import test_audio_input
 
             result = test_audio_input(device_index=device_index, duration=2.0)
@@ -1527,142 +1623,81 @@ For now, the engine has been reverted to VOSK."""
     def _handle_audio_test_result(self, result: dict):
         """Handle the result of an audio test."""
         self.test_audio_btn.set_sensitive(True)
-        self.test_audio_btn.set_label("Test Mic")
+        self.test_audio_btn.set_label("Test")
 
         if result.get("success"):
             max_level = result.get("max_amplitude", 0)
             has_signal = result.get("has_signal", False)
 
-            # Update level bar with max level (normalized to 0-100)
             level_percent = min(100, (max_level / 327.68))
             self.audio_level_bar.set_value(level_percent)
 
             if has_signal:
                 self.audio_test_status.set_markup(
-                    f"<span color='green'>✓ Audio detected!</span> "
+                    f"<span foreground='#26a269'>✓ Audio detected!</span> "
                     f"Peak level: {level_percent:.0f}%"
                 )
             else:
                 self.audio_test_status.set_markup(
-                    f"<span color='orange'>⚠ Very low audio level</span> "
+                    f"<span foreground='#e5a50a'>⚠ Very low audio level</span> "
                     f"(peak: {level_percent:.1f}%)\n"
                     "<small>Check if microphone is muted or try a different device</small>"
                 )
         else:
             error_msg = result.get("error", "Unknown error")
             self.audio_test_status.set_markup(
-                f"<span color='red'>✗ Test failed:</span> {error_msg}"
+                f"<span foreground='#c01c28'>✗ Test failed:</span> {error_msg}"
             )
 
-        return False  # Don't repeat
+        return False
 
     def do_response(self, response_id):
         """Handle dialog button responses."""
-        if response_id == Gtk.ResponseType.APPLY:
-            # Apply button clicked
-            logger.info("Apply button clicked - applying settings")
-            if self.apply_settings():
-                # Show success feedback
-                self._show_settings_applied_message()
-        elif response_id == Gtk.ResponseType.CANCEL:
-            # Cancel button clicked - revert changes
-            logger.info("Cancel button clicked - reverting changes")
-            self._revert_settings()
-        elif response_id == Gtk.ResponseType.CLOSE:
-            # Close button clicked
+        if response_id == Gtk.ResponseType.CLOSE:
             logger.info("Close button clicked")
             self.destroy()
 
-        return True  # We handled the response
-
-    def _show_settings_applied_message(self):
-        """Show a brief message that settings were applied successfully."""
-        # Create a temporary label to show success message
-        success_label = Gtk.Label(label="✓ Settings applied successfully")
-        success_label.set_halign(Gtk.Align.CENTER)
-        success_label.set_margin_top(10)
-        success_label.get_style_context().add_class("success-label")
-
-        # Add it to the grid temporarily
-        self.grid.attach(success_label, 0, self.grid.get_property("n-rows"), 2, 1)
-        success_label.show()
-
-        # Remove it after 2 seconds
-        GLib.timeout_add(2000, lambda: (self.grid.remove(success_label), False)[1])
-
-    def _revert_settings(self):
-        """Revert settings to last saved values."""
-        try:
-            # Reload settings from config
-            settings = self._get_current_settings()
-
-            # Update UI to reflect saved settings
-            engine_text = settings["engine"].capitalize()
-            self.engine_combo.set_active_id(engine_text)
-
-            # This will trigger the engine change handler which updates models and languages
-            self.vad_spin.set_value(settings["vad_sensitivity"])
-            self.silence_spin.set_value(settings["silence_timeout"])
-
-            logger.info("Settings reverted to last saved values")
-        except Exception as e:
-            logger.error(f"Failed to revert settings: {e}")
-
-            # Show error message
-            error_label = Gtk.Label(label="✗ Failed to revert settings")
-            error_label.set_halign(Gtk.Align.CENTER)
-            error_label.set_margin_top(10)
-            error_label.get_style_context().add_class("error-label")
-
-            self.grid.attach(error_label, 0, self.grid.get_property("n-rows"), 2, 1)
-            error_label.show()
-
-            GLib.timeout_add(3000, lambda: (self.grid.remove(error_label), False)[1])
+        return True
 
     def update_recognition_progress(self, state: str, audio_level: float = 0.0, info: str = ""):
-        """
-        Update the recognition progress feedback UI.
+        """Update the recognition progress feedback UI."""
+        self.recognition_status_label.set_text(state)
 
-        UX Design: Implements multi-modal feedback (text + icon + color + level bar)
-        State Machine: IDLE → LISTENING → PROCESSING → IDLE (with ERROR branch)
+        # Remove existing state classes
+        for css_class in [
+            "recognition-idle",
+            "recognition-listening",
+            "recognition-processing",
+            "recognition-error",
+        ]:
+            self.recognition_status_label.get_style_context().remove_class(css_class)
 
-        Accessibility:
-        - Text label: Screen reader friendly (WCAG 2.4.3 Focus Order)
-        - Icon sensitivity: Visual cue without flashing (WCAG 2.3.1 Three Flashes)
-        - Color coding: Paired with text for colorblind users (WCAG 1.4.1 Use of Color)
-
-        Reference: RESEARCH.md Section 4 (Progress Feedback in Speech Recognition)
-        """
-        # Update status - Primary text feedback for screen readers
-        self.recognition_status_label.set_text(f"Status: {state}")
-
-        # Update indicator - Visual cue using icon sensitivity (color vs gray)
-        # UX: Color-coded states provide quick recognition for sighted users
-        # Green=Listening (good), Orange=Processing (wait), Red=Error (problem), Gray=Idle
         if state == "Listening":
-            self.recognition_indicator.set_sensitive(True)  # Make it bright/colored
-            self.progress_info_label.set_markup("<span color='green'>● Listening...</span>")
+            self.recognition_indicator.set_opacity(1.0)
+            self.recognition_status_label.get_style_context().add_class("recognition-listening")
+            self.progress_info_label.set_markup("<span foreground='#26a269'>● Listening...</span>")
         elif state == "Processing":
-            self.recognition_indicator.set_sensitive(True)
+            self.recognition_indicator.set_opacity(1.0)
+            self.recognition_status_label.get_style_context().add_class("recognition-processing")
             self.progress_info_label.set_markup(
-                "<span color='orange'>● Processing speech...</span>"
+                "<span foreground='#e5a50a'>● Processing speech...</span>"
             )
         elif state == "Idle":
-            self.recognition_indicator.set_sensitive(False)  # Make it grayed out
+            self.recognition_indicator.set_opacity(0.3)
+            self.recognition_status_label.get_style_context().add_class("recognition-idle")
             self.progress_info_label.set_text("")
         elif state == "Error":
-            self.recognition_indicator.set_sensitive(False)
-            self.progress_info_label.set_markup(f"<span color='red'>✗ Error: {info}</span>")
+            self.recognition_indicator.set_opacity(0.3)
+            self.recognition_status_label.get_style_context().add_class("recognition-error")
+            self.progress_info_label.set_markup(
+                f"<span foreground='#c01c28'>✗ Error: {info}</span>"
+            )
         else:
-            self.recognition_indicator.set_sensitive(False)
+            self.recognition_indicator.set_opacity(0.3)
             if info:
                 self.progress_info_label.set_text(info)
 
-        # Update audio level - Real-time feedback for user confidence
-        # Rationale: Shows system is detecting voice, aids microphone troubleshooting
-        # Industry Standard: Matches Dragon NaturallySpeaking and Google Docs Voice Typing
         if audio_level > 0:
-            # Normalize audio level to 0-100 range for LevelBar widget
             normalized_level = min(100, max(0, audio_level))
             self.recognition_audio_level.set_value(normalized_level)
         elif state == "Idle":
@@ -1671,26 +1706,21 @@ For now, the engine has been reverted to VOSK."""
     def connect_to_recognition_manager(self):
         """Connect to speech recognition manager for progress updates."""
         if hasattr(self, "speech_engine") and self.speech_engine:
-            # Add state change callback using proper API methods
             if not hasattr(self, "_callbacks_registered"):
                 self.speech_engine.state_callbacks.append(self._on_recognition_state_changed)
                 self.speech_engine.register_audio_level_callback(self._on_audio_level_changed)
                 self._callbacks_registered = True
-                # Connect to dialog destroy signal for cleanup
                 self.connect("destroy", self._on_dialog_destroy)
 
     def _on_dialog_destroy(self, widget):
         """Clean up callbacks when dialog is destroyed."""
         if hasattr(self, "speech_engine") and self.speech_engine:
-            # Remove state callback
             if self._on_recognition_state_changed in self.speech_engine.state_callbacks:
                 self.speech_engine.state_callbacks.remove(self._on_recognition_state_changed)
-            # Remove audio level callback using proper API
             self.speech_engine.unregister_audio_level_callback(self._on_audio_level_changed)
 
     def _on_recognition_state_changed(self, state):
         """Handle recognition state changes."""
-        # Convert state to readable string
         state_map = {
             RecognitionState.IDLE: "Idle",
             RecognitionState.LISTENING: "Listening",
