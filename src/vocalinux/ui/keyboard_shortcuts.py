@@ -109,7 +109,8 @@ class KeyboardShortcutManager:
         """
         Update the shortcut to listen for.
 
-        Note: This requires restarting the listener to take effect.
+        Note: This only updates the internal state. Use restart_with_shortcut()
+        to apply changes to an active listener.
 
         Args:
             shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
@@ -127,6 +128,67 @@ class KeyboardShortcutManager:
             self.backend_instance.set_shortcut(shortcut)
             logger.info(f"Shortcut updated to: {SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}")
 
+        return True
+
+    def restart_with_shortcut(self, shortcut: str) -> bool:
+        """
+        Restart the keyboard listener with a new shortcut.
+
+        This stops the current listener, updates the shortcut configuration,
+        and starts a new listener with the new shortcut. This enables live
+        shortcut switching without requiring an application restart.
+
+        Args:
+            shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+
+        Returns:
+            True if the listener was successfully restarted with the new shortcut,
+            False if the shortcut is invalid or restart failed
+        """
+        if shortcut not in SUPPORTED_SHORTCUTS:
+            logger.error(f"Invalid shortcut: {shortcut}")
+            return False
+
+        if shortcut == self._shortcut:
+            logger.debug(f"Shortcut already set to {shortcut}, no restart needed")
+            return True
+
+        was_active = self.active
+        callback = None
+
+        # Save the current callback before stopping
+        if self.backend_instance:
+            callback = self.backend_instance.double_tap_callback
+
+        # Stop the current listener
+        if was_active:
+            logger.info(f"Stopping listener for shortcut change: {self._shortcut} -> {shortcut}")
+            self.stop()
+
+        # Update the shortcut
+        self._shortcut = shortcut
+
+        # Update backend shortcut
+        if self.backend_instance:
+            self.backend_instance.set_shortcut(shortcut)
+
+        # Restart if it was active
+        if was_active:
+            # Re-register the callback
+            if callback:
+                self.register_toggle_callback(callback)
+
+            success = self.start()
+            if success:
+                logger.info(
+                    f"Listener restarted with new shortcut: "
+                    f"{SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}"
+                )
+            else:
+                logger.error(f"Failed to restart listener with shortcut: {shortcut}")
+            return success
+
+        logger.info(f"Shortcut updated to: {SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}")
         return True
 
     def start(self) -> bool:

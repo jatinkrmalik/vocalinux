@@ -93,6 +93,85 @@ class TestKeyboardShortcuts(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(self.ksm.shortcut, "ctrl+ctrl")  # Should remain unchanged
 
+    def test_restart_with_shortcut_valid(self):
+        """Test restarting with a valid shortcut."""
+        # Start the listener first
+        self.ksm.start()
+        callback = MagicMock()
+        self.mock_backend.double_tap_callback = callback
+
+        # Restart with new shortcut
+        result = self.ksm.restart_with_shortcut("alt+alt")
+
+        self.assertTrue(result)
+        self.assertEqual(self.ksm.shortcut, "alt+alt")
+        # Should have stopped and started
+        self.mock_backend.stop.assert_called()
+        self.mock_backend.start.assert_called()
+        self.mock_backend.set_shortcut.assert_called_with("alt+alt")
+
+    def test_restart_with_shortcut_invalid(self):
+        """Test restarting with an invalid shortcut."""
+        result = self.ksm.restart_with_shortcut("invalid+shortcut")
+
+        self.assertFalse(result)
+        self.assertEqual(self.ksm.shortcut, "ctrl+ctrl")  # Should remain unchanged
+
+    def test_restart_with_shortcut_same_shortcut(self):
+        """Test restarting with the same shortcut (no-op)."""
+        self.ksm.start()
+
+        # Clear the mock to see if stop/start are called
+        self.mock_backend.stop.reset_mock()
+        self.mock_backend.start.reset_mock()
+
+        result = self.ksm.restart_with_shortcut("ctrl+ctrl")
+
+        self.assertTrue(result)
+        # Should not have stopped or started since shortcut is the same
+        self.mock_backend.stop.assert_not_called()
+
+    def test_restart_with_shortcut_when_not_active(self):
+        """Test restarting when listener was not active."""
+        # Don't start the listener
+        self.ksm.active = False
+
+        result = self.ksm.restart_with_shortcut("alt+alt")
+
+        self.assertTrue(result)
+        self.assertEqual(self.ksm.shortcut, "alt+alt")
+        # Should not have started since it wasn't active before
+        self.mock_backend.start.assert_not_called()
+
+    def test_restart_with_shortcut_preserves_callback(self):
+        """Test that restart preserves the registered callback."""
+        callback = MagicMock()
+        self.mock_backend.double_tap_callback = callback
+
+        # Start the listener
+        self.ksm.start()
+
+        # Restart with new shortcut
+        self.ksm.restart_with_shortcut("shift+shift")
+
+        # Callback should have been re-registered
+        self.mock_backend.register_toggle_callback.assert_called_with(callback)
+
+    def test_restart_with_shortcut_handles_start_failure(self):
+        """Test handling when restart fails to start."""
+        # Start first
+        self.ksm.start()
+        self.ksm.active = True
+
+        # Make start return False on next call
+        self.mock_backend.start.return_value = False
+
+        result = self.ksm.restart_with_shortcut("alt+alt")
+
+        self.assertFalse(result)
+        # Shortcut should still be updated
+        self.assertEqual(self.ksm.shortcut, "alt+alt")
+
     def test_start_listener(self):
         """Test starting the keyboard listener."""
         # Start the listener

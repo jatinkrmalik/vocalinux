@@ -589,10 +589,12 @@ class SettingsDialog(Gtk.Dialog):
         parent: Gtk.Window,
         config_manager: "ConfigManager",
         speech_engine: "SpeechRecognitionManager",
+        shortcut_update_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.config_manager = config_manager
         self.speech_engine = speech_engine
+        self.shortcut_update_callback = shortcut_update_callback
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -863,7 +865,7 @@ class SettingsDialog(Gtk.Dialog):
         info_box.pack_start(info_icon, False, False, 0)
 
         self.shortcut_info_label = Gtk.Label(
-            label="Changes take effect immediately. Press the key twice quickly to trigger.",
+            label="Changes take effect immediately. Double-tap the key to toggle voice typing.",
             xalign=0,
             wrap=True,
         )
@@ -891,11 +893,25 @@ class SettingsDialog(Gtk.Dialog):
         display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut_id, shortcut_id)
         logger.info(f"Keyboard shortcut changed to: {display_name}")
 
-        # Update info label
-        self.shortcut_info_label.set_markup(
-            f"<i>Shortcut updated to <b>{display_name}</b>. "
-            f"Restart the app for the change to take full effect.</i>"
-        )
+        # Try to apply the shortcut change live
+        if self.shortcut_update_callback:
+            success = self.shortcut_update_callback(shortcut_id)
+            if success:
+                self.shortcut_info_label.set_markup(
+                    f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
+                    f"Active now!</span>"
+                )
+            else:
+                self.shortcut_info_label.set_markup(
+                    f"<i>Shortcut updated to <b>{display_name}</b>. "
+                    f"Restart the app for the change to take full effect.</i>"
+                )
+        else:
+            # No callback provided, fall back to restart message
+            self.shortcut_info_label.set_markup(
+                f"<i>Shortcut updated to <b>{display_name}</b>. "
+                f"Restart the app for the change to take full effect.</i>"
+            )
 
     def _build_test_section(self):
         """Build the Test Recognition section."""
