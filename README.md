@@ -98,45 +98,28 @@ This skips Whisper installation entirely and configures VOSK as the default engi
 
 ### Alternative: Install from Source
 
-```bash
-# Clone the repository
-git clone https://github.com/jatinkrmalik/vocalinux.git
-cd vocalinux
+## 📚 What's New in v0.5.0-beta
 
-# Run the installer (will prompt for Whisper)
-./install.sh
+We're excited to announce our first **Beta release**! Vocalinux has evolved significantly since the last alpha, with numerous bug fixes and feature improvements.
 
-# Or with Whisper support
-./install.sh --with-whisper
-```
+### 🐛 Critical Bug Fixes
+- Fixed text escaping issues (apostrophes and quotes no longer have backslash escapes)
+- Fixed stop sound being transcribed as "thank you"
+- Fixed missing spaces after punctuation when transcribing again
 
-The installer handles everything: system dependencies, Python environment, speech models, and desktop integration.
+### ✨ Key New Features
+- **Customizable keyboard shortcuts** - Configure your own activation shortcuts via GUI
+- **Modern GNOME HIG settings dialog** - Complete UI overhaul following GNOME design guidelines
+- **Pleasant audio feedback** - Gliding tones replace harsh beeps
+- **Interactive installer with GPU detection** - Smart hardware auto-detection
+- **Better Wayland support** - Native keyboard shortcuts without XWayland
 
-### After Installation
+### 🔧 Quality Improvements
+- **80%+ test coverage** - Comprehensive test suite across all modules
+- **Microphone reconnection** - Automatic recovery when microphone disconnects
+- **Audio buffer management** - Prevents memory issues during long recordings
 
-```bash
-# If ~/.local/bin is in your PATH (recommended):
-vocalinux
-
-# Or activate the virtual environment first:
-source ~/.local/bin/activate-vocalinux.sh
-vocalinux
-
-# Or run directly:
-~/.local/share/vocalinux/venv/bin/vocalinux
-```
-
-Or launch it from your application menu!
-
-### Uninstall
-
-```bash
-# If installed via curl:
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh | bash
-
-# If installed from source:
-./uninstall.sh
-```
+For a complete list of changes, see the release notes.
 
 ## 📋 Requirements
 
