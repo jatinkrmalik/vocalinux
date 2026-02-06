@@ -48,10 +48,13 @@ jobs:
         run: |
           # Deploy if web files changed OR python files changed (for version updates)
           COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
+
+          # Escape the commit message properly for shell comparison
+          # Use case-insensitive matching with grep instead of glob patterns
           if [[ "${{ steps.filter.outputs.web }}" == "true" ]] || \
              [[ "${{ steps.filter.outputs.python }}" == "true" ]] || \
              [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
-             [[ "$COMMIT_MESSAGE" == *"[web]"* ]]; then
+             echo "$COMMIT_MESSAGE" | grep -iE "(feat\(website\)|docs\(website\)|chore\(website\)|fix\(website\)|refactor\(website\))"; then
             echo "deploy=true" >> $GITHUB_OUTPUT
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
