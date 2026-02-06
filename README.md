@@ -332,7 +332,7 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [ ] In-app update mechanism
 - [ ] Application-specific commands
 - [ ] Debian/Ubuntu package (.deb)
-- [ ] Improved Wayland support
+- [x] ~~Improved Wayland support~~ ✅
 - [ ] Voice command customization
 
 ## 🤝 Contributing
