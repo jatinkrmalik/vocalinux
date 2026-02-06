@@ -229,21 +229,33 @@ class TestTextInjector(unittest.TestCase):
             # Inject text
             injector.inject_text(special_text)
 
-            # Verify xdotool was called with proper escaping
-            # Find calls that contain xdotool and check they contain escaped text
+            # Verify xdotool was called with the original text (no escaping needed)
+            # Find calls that contain xdotool and check they contain the original text
+            found_unescaped = False
             found_escaped = False
             for args, _ in calls:
                 if len(args) > 0 and isinstance(args[0], list):
                     cmd = args[0]
                     if "xdotool" in cmd and "type" in cmd:
-                        # Join the command to check for escaped characters
+                        # Join the command to check for characters
                         cmd_str = " ".join(cmd)
-                        # Look for escaped quotes and dollar signs
-                        if "'" in cmd_str or '\\"' in cmd_str or "\\$" in cmd_str:
+                        # Check for unescaped special characters
+                        if "'" in cmd_str:
+                            found_unescaped = True
+                        if "\\'" in cmd_str or '\\"' in cmd_str or "\\$" in cmd_str:
+                            # Found escaped characters - this is bad!
                             found_escaped = True
                             break
 
-            self.assertTrue(found_escaped, "Special characters were not properly escaped")
+            # Should find unescaped characters and NOT find escaped ones
+            self.assertTrue(
+                found_unescaped,
+                "Text was not passed correctly to xdotool",
+            )
+            self.assertFalse(
+                found_escaped,
+                "Text should not be shell-escaped when passed to xdotool",
+            )
 
     def test_empty_text_injection(self):
         """Test injecting empty text (should do nothing)."""
@@ -290,26 +302,6 @@ class TestTextInjector(unittest.TestCase):
 
         # Check that error sound was triggered
         audio_feedback.play_error_sound.assert_called_once()
-
-    def test_escape_text(self):
-        """Test the _escape_text method."""
-        injector = TextInjector()
-
-        # Test various special characters
-        result = injector._escape_text("'single'")
-        self.assertIn("\\'", result)
-
-        result = injector._escape_text('"double"')
-        self.assertIn('\\"', result)
-
-        result = injector._escape_text("$var")
-        self.assertIn("\\$", result)
-
-        result = injector._escape_text("`backtick`")
-        self.assertIn("\\`", result)
-
-        result = injector._escape_text("back\\slash")
-        self.assertIn("\\\\", result)
 
     def test_detect_environment_unknown(self):
         """Test environment detection when no indicators are present."""
