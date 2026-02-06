@@ -109,7 +109,7 @@ Here are some screenshots showcasing Vocalinux in action:
 Let the installer guide you through the setup with smart hardware detection:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta --interactive
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --interactive
 ```
 
 The interactive installer will:
@@ -121,7 +121,7 @@ The interactive installer will:
 ### One-liner Installation (Quick Install)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta
 ```
 
 > **Note**: Installs v0.5.0-beta. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
@@ -142,13 +142,13 @@ This will:
 
 **Whisper with CPU-only PyTorch (no NVIDIA GPU needed):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta --whisper-cpu
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --whisper-cpu
 ```
 This installs Whisper with CPU-only PyTorch (~200MB instead of ~2.3GB). Works great for systems without NVIDIA GPU.
 
 **For low-RAM systems (8GB or less) - VOSK only:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta --no-whisper
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --no-whisper
 ```
 This skips Whisper installation entirely and configures VOSK as the default engine.
 
