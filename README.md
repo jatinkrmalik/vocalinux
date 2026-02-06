@@ -80,12 +80,6 @@ Here are some screenshots showcasing Vocalinux in action:
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/01-settings-dialog.png" alt="Settings Dialog" width="400">
-  <br>
-  <em>Modern GNOME HIG settings dialog with intuitive controls</em>
-</p>
-
-<p align="center">
   <img src="docs/screenshots/02-system-tray.png" alt="System Tray" width="400">
   <br>
   <em>System tray with listening indicator and quick access to settings</em>
@@ -94,7 +88,7 @@ Here are some screenshots showcasing Vocalinux in action:
 <p align="center">
   <img src="docs/screenshots/04-features-overview.png" alt="Features Overview" width="400">
   <br>
-  <em>Overview of key features and configuration options</em>
+  <em>Overview of key features and configuration options with annotations</em>
 </p>
 
 ## 🚀 Quick Install
