@@ -362,7 +362,7 @@ export default function HomePage() {
                     <CopyButton text={interactiveInstallCommand} />
                   </div>
                   <div className="p-4 sm:p-5">
-                    <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre">
+                    <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap">
                       <span className="text-zinc-500 select-none">$ </span>{interactiveInstallCommand}
                     </pre>
                   </div>
