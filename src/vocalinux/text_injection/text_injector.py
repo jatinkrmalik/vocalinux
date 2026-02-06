@@ -197,19 +197,19 @@ class TextInjector:
         # Get information about the current window/application
         self._log_current_window_info()
 
-        # Escape special characters for shell
-        escaped_text = self._escape_text(text)
-        logger.debug(f"Escaped text: '{escaped_text}'")
+        # Note: No shell escaping needed - subprocess is called with list arguments,
+        # which passes text directly without shell interpretation
+        logger.debug(f"Text to inject: '{text}'")
 
         try:
             if (
                 self.environment == DesktopEnvironment.X11
                 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
             ):
-                self._inject_with_xdotool(escaped_text)
+                self._inject_with_xdotool(text)
             else:
                 try:
-                    self._inject_with_wayland_tool(escaped_text)
+                    self._inject_with_wayland_tool(text)
                 except subprocess.CalledProcessError as e:
                     stderr_msg = e.stderr.strip() if e.stderr else "No stderr output"
                     logger.warning(
@@ -220,7 +220,7 @@ class TextInjector:
                     ).lower() + " " + stderr_msg.lower() and shutil.which("xdotool"):
                         logger.info("Automatically switching to XWayland fallback permanently")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
-                        self._inject_with_xdotool(escaped_text)
+                        self._inject_with_xdotool(text)
                     else:
                         raise
             logger.info("Text injection completed successfully")
@@ -235,37 +235,12 @@ class TextInjector:
                 logger.warning("Could not import audio feedback module")
             return False
 
-    def _escape_text(self, text: str) -> str:
-        """
-        Escape special characters in the text for shell commands.
-
-        Args:
-            text: The original text
-
-        Returns:
-            The escaped text
-        """
-        # Replace common special characters
-        replacements = {
-            "'": r"\'",
-            '"': r"\"",
-            "`": r"\`",
-            "\\": r"\\",
-            "$": r"\$",
-        }
-
-        result = text
-        for char, replacement in replacements.items():
-            result = result.replace(char, replacement)
-
-        return result
-
     def _inject_with_xdotool(self, text: str):
         """
         Inject text using xdotool for X11 environments.
 
         Args:
-            text: The text to inject (already escaped)
+            text: The text to inject
         """
         # Create environment with explicit X11 settings for Wayland compatibility
         env = os.environ.copy()
@@ -384,7 +359,7 @@ class TextInjector:
         Inject text using a Wayland-compatible tool (wtype or ydotool).
 
         Args:
-            text: The text to inject (already escaped)
+            text: The text to inject
 
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
