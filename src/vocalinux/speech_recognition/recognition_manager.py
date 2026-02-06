@@ -921,11 +921,30 @@ class SpeechRecognitionManager:
 
         logger.info("Stopping speech recognition")
 
-        # Play the stop sound
-        play_stop_sound()
-
-        # Clear recording flag
+        # Stop recording FIRST to prevent capturing the stop sound
         self.should_record = False
+
+        # Wait briefly for audio thread to stop recording
+        if self.audio_thread and self.audio_thread.is_alive():
+            self.audio_thread.join(timeout=0.1)
+
+        # Discard the last ~1 second of audio to avoid transcribing the stop sound
+        # Audio is recorded in 1024-sample chunks at 16000 Hz = ~64ms per chunk
+        # We discard the last 15 chunks (~1 second) which should contain the feedback sound
+        with self._buffer_lock:
+            if len(self.audio_buffer) > 15:
+                discarded_chunks = self.audio_buffer[-15:]
+                self.audio_buffer = self.audio_buffer[:-15]
+                logger.debug(
+                    f"Discarded {len(discarded_chunks)} audio chunks to avoid transcribing feedback sound"
+                )
+            elif self.audio_buffer:
+                # If buffer is small, just clear it entirely to be safe
+                logger.debug(f"Clearing small audio buffer ({len(self.audio_buffer)} chunks)")
+                self.audio_buffer = []
+
+        # Now play the stop sound (after recording has stopped)
+        play_stop_sound()
 
         # Wait for threads to finish
         if self.audio_thread and self.audio_thread.is_alive():
