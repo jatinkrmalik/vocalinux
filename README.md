@@ -43,7 +43,7 @@
 - 🔒 **Offline operation** for privacy and reliability (with VOSK)
 - 🤖 **Optional Whisper AI** support for enhanced accuracy
 - 🎨 **System tray integration** with visual status indicators
-- 🔊 **Audio feedback** for recording status
+- 🔊 **Pleasant audio feedback** - smooth gliding tones, headphone-friendly
 - ⚙️ **Graphical settings** dialog for easy configuration
 
 ## 🚀 Quick Install
@@ -220,6 +220,8 @@ vocalinux/
 │   ├── ui/                  # GTK UI components
 │   └── utils/               # Utility functions
 ├── tests/                   # Test suite
+├── scripts/                 # Development utilities
+│   └── generate_sounds.py   # Sound generation script
 ├── resources/               # Icons and sounds
 ├── docs/                    # Documentation
 └── web/                     # Website source
@@ -231,6 +233,26 @@ vocalinux/
 - [Update Guide](docs/UPDATE.md) - How to update Vocalinux
 - [User Guide](docs/USER_GUIDE.md) - Complete user documentation
 - [Contributing](CONTRIBUTING.md) - Development setup and contribution guidelines
+
+## 🔊 Sound Customization
+
+Vocalinux uses smooth, pleasant gliding tones for audio feedback:
+
+- **Start**: Ascending F4→A4 (0.6s) - positive, uplifting
+- **Stop**: Descending A4→F4 (0.6s) - resolves completion
+- **Error**: Lower descending E4→C4 (0.7s) - gentle but noticeable
+
+All sounds use pure sine waves with smoothstep interpolation for buttery smooth pitch transitions - perfect for headphone use!
+
+### Regenerate Sounds
+
+To modify or regenerate the notification sounds:
+
+```bash
+python scripts/generate_sounds.py
+```
+
+This script generates all three sounds using the same smooth glide algorithm. You can edit the frequencies, durations, and amplitudes in the script to customize the sounds to your preference.
 
 ## 🗺️ Roadmap
 
