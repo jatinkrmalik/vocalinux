@@ -272,6 +272,32 @@ def _setup_css():
     )
 
 
+def _prevent_scroll_on_hover(widget: Gtk.Widget):
+    """
+    Prevent scroll events from modifying widget values when hovering.
+
+    This fixes a common GTK UX issue where scrolling through a settings dialog
+    accidentally changes ComboBox or SpinButton values when the mouse happens
+    to be over them. The widget will only respond to scroll events after being
+    explicitly clicked/focused.
+
+    Args:
+        widget: The widget to prevent scroll events on (ComboBox, SpinButton, etc.)
+    """
+
+    def on_scroll(widget, event):
+        # Only process scroll if widget has explicit focus
+        if not widget.has_focus():
+            # Stop propagation to prevent value changes
+            return True
+        return False
+
+    widget.connect("scroll-event", on_scroll)
+
+    # Also prevent focus-on-hover behavior
+    widget.set_can_focus(True)
+
+
 def _get_whisper_cache_dir() -> str:
     """Get the Whisper model cache directory."""
     return os.path.expanduser("~/.local/share/vocalinux/models/whisper")
@@ -663,6 +689,7 @@ class SettingsDialog(Gtk.Dialog):
             "Select the microphone to use for voice recognition"
         )
         self.audio_device_combo.set_size_request(250, -1)
+        _prevent_scroll_on_hover(self.audio_device_combo)
         device_box.pack_start(self.audio_device_combo, True, True, 0)
 
         refresh_btn = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
@@ -719,6 +746,7 @@ class SettingsDialog(Gtk.Dialog):
         # Engine selection
         self.engine_combo = Gtk.ComboBoxText()
         self.engine_combo.set_size_request(180, -1)
+        _prevent_scroll_on_hover(self.engine_combo)
         engine_row = PreferenceRow(
             title="Engine",
             subtitle="Speech recognition backend",
@@ -729,6 +757,7 @@ class SettingsDialog(Gtk.Dialog):
         # Model size selection
         self.model_combo = Gtk.ComboBoxText()
         self.model_combo.set_size_request(180, -1)
+        _prevent_scroll_on_hover(self.model_combo)
         model_row = PreferenceRow(
             title="Model Size",
             subtitle="Larger models are more accurate but slower",
@@ -740,6 +769,7 @@ class SettingsDialog(Gtk.Dialog):
         self.language_combo = Gtk.ComboBoxText()
         self.language_combo.set_size_request(180, -1)
         self.language_combo.set_tooltip_text("Primary language for speech recognition")
+        _prevent_scroll_on_hover(self.language_combo)
         language_row = PreferenceRow(
             title="Language",
             subtitle="Primary language for recognition",
@@ -800,6 +830,7 @@ class SettingsDialog(Gtk.Dialog):
         # VAD Sensitivity
         self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
         self.vad_spin.set_tooltip_text("Higher = more sensitive to quiet speech")
+        _prevent_scroll_on_hover(self.vad_spin)
         vad_row = PreferenceRow(
             title="VAD Sensitivity",
             subtitle="Voice Activity Detection sensitivity (1-5)",
@@ -811,6 +842,7 @@ class SettingsDialog(Gtk.Dialog):
         self.silence_spin = Gtk.SpinButton.new_with_range(0.5, 5.0, 0.1)
         self.silence_spin.set_digits(1)
         self.silence_spin.set_tooltip_text("Wait time after silence before processing speech")
+        _prevent_scroll_on_hover(self.silence_spin)
         silence_row = PreferenceRow(
             title="Silence Timeout",
             subtitle="Seconds of silence before processing",
@@ -835,6 +867,7 @@ class SettingsDialog(Gtk.Dialog):
         self.shortcut_combo = Gtk.ComboBoxText()
         self.shortcut_combo.set_size_request(200, -1)
         self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut to toggle voice typing")
+        _prevent_scroll_on_hover(self.shortcut_combo)
 
         # Populate shortcut options
         for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items():
