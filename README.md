@@ -26,12 +26,35 @@
 
 ![Vocalinux Users](https://github.com/user-attachments/assets/e3d8dd16-3d4f-408c-b899-93d85e98b107)
 
-**A seamless free open-source private voice dictation system for Linux**, comparable to the built-in solutions on macOS and Windows.
+**A seamless free open-source private voice dictation system for Linux**, comparable to built-in solutions on macOS and Windows.
+
+## 📚 What's New in v0.5.0-beta
+
+We're excited to announce our first **Beta release**! Vocalinux has evolved significantly since the last alpha, with numerous bug fixes and feature improvements.
+
+### 🐛 Critical Bug Fixes
+- Fixed text escaping issues (apostrophes and quotes no longer have backslash escapes)
+- Fixed stop sound being transcribed as "thank you"
+- Fixed missing spaces after punctuation when transcribing again
+
+### ✨ Key New Features
+- **Customizable keyboard shortcuts** - Configure your own activation shortcuts via GUI
+- **Modern GNOME HIG settings dialog** - Complete UI overhaul following GNOME design guidelines
+- **Pleasant audio feedback** - Gliding tones replace harsh beeps
+- **Interactive installer with GPU detection** - Smart hardware auto-detection
+- **Better Wayland support** - Native keyboard shortcuts without XWayland
+
+### 🔧 Quality Improvements
+- **80%+ test coverage** - Comprehensive test suite across all modules
+- **Microphone reconnection** - Automatic recovery when microphone disconnects
+- **Audio buffer management** - Prevents memory issues during long recordings
+
+---
 
 > 🎉 **Beta Release!**
 >
-> We're excited to share Vocalinux Beta with the community.
-> This release is feature-complete and ready for broader testing.
+> We're excited to share Vocalinux Beta with the community!
+> See "What's New" above for details on this release.
 
 ---
 
@@ -97,6 +120,36 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install
 This skips Whisper installation entirely and configures VOSK as the default engine.
 
 ### Alternative: Install from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/jatinkrmalik/vocalinux.git
+cd vocalinux
+
+# Run the installer (will prompt for Whisper)
+./install.sh
+
+# Or with Whisper support
+./install.sh --with-whisper
+```
+
+The installer handles everything: system dependencies, Python environment, speech models, and desktop integration.
+
+### After Installation
+
+```bash
+# If ~/.local/bin is in your PATH (recommended):
+vocalinux
+
+# Or activate the virtual environment first:
+source ~/.local/bin/activate-vocalinux.sh
+vocalinux
+
+# Or run directly:
+~/.local/share/vocalinux/venv/bin/vocalinux
+```
+
+Or launch it from your application menu!
 
 ## 📚 What's New in v0.5.0-beta
 
