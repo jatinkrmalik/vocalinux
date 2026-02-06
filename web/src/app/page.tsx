@@ -183,7 +183,6 @@ export default function HomePage() {
     { href: "#demo", label: "Demo" },
     { href: "#features", label: "Features" },
     { href: "#install", label: "Install" },
-    { href: "#voice-commands", label: "Commands" },
     { href: "#faq", label: "FAQ" },
   ];
 
@@ -762,80 +761,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Voice Commands Section */}
-      <section id="voice-commands" className="py-16 sm:py-24 px-4 sm:px-6">
-        <div className="max-w-5xl mx-auto">
-          <FadeInSection>
-            <div className="text-center mb-12">
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-                Built-in Voice Commands
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Go beyond basic dictation with natural voice commands for punctuation, formatting, and editing.
-              </p>
-            </div>
-          </FadeInSection>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            <FadeInSection delay={0.1}>
-              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full">
-                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                  <Edit className="h-5 w-5 text-primary" />
-                  Punctuation &amp; Formatting
-                </h3>
-                <div className="space-y-3">
-                  {[
-                    { command: '"new line"', result: "Inserts a line break" },
-                    { command: '"period" / "full stop"', result: "Types a period (.)" },
-                    { command: '"comma"', result: "Types a comma (,)" },
-                    { command: '"question mark"', result: "Types a question mark (?)" },
-                    { command: '"exclamation mark"', result: "Types an exclamation mark (!)" },
-                    { command: '"colon"', result: "Types a colon (:)" },
-                    { command: '"semicolon"', result: "Types a semicolon (;)" },
-                    { command: '"new paragraph"', result: "Inserts two line breaks" },
-                  ].map((item, i) => (
-                    <div key={i} className="flex justify-between items-center py-2 border-b border-zinc-100 dark:border-zinc-700 last:border-0">
-                      <code className="text-sm bg-zinc-100 dark:bg-zinc-900 px-2 py-1 rounded">
-                        {item.command}
-                      </code>
-                      <span className="text-sm text-muted-foreground">{item.result}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </FadeInSection>
-
-            <FadeInSection delay={0.2}>
-              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full">
-                <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                  <Terminal className="h-5 w-5 text-primary" />
-                  Editing Commands
-                </h3>
-                <div className="space-y-3">
-                  {[
-                    { command: '"delete that"', result: "Deletes the last phrase" },
-                    { command: '"backspace"', result: "Deletes previous character" },
-                    { command: '"undo"', result: "Undoes last action" },
-                    { command: '"redo"', result: "Redoes last action" },
-                    { command: '"select all"', result: "Selects all text" },
-                    { command: '"copy"', result: "Copies selected text" },
-                    { command: '"paste"', result: "Pastes from clipboard" },
-                    { command: '"capitalize"', result: "Capitalizes next word" },
-                  ].map((item, i) => (
-                    <div key={i} className="flex justify-between items-center py-2 border-b border-zinc-100 dark:border-zinc-700 last:border-0">
-                      <code className="text-sm bg-zinc-100 dark:bg-zinc-900 px-2 py-1 rounded">
-                        {item.command}
-                      </code>
-                      <span className="text-sm text-muted-foreground">{item.result}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </FadeInSection>
-          </div>
-        </div>
-      </section>
-
       {/* Speech Engines Section */}
       <section className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
         <div className="max-w-5xl mx-auto">
@@ -1053,11 +978,6 @@ export default function HomePage() {
                 <li>
                   <a href="#install" className="text-zinc-400 hover:text-white transition-colors">
                     Installation
-                  </a>
-                </li>
-                <li>
-                  <a href="#voice-commands" className="text-zinc-400 hover:text-white transition-colors">
-                    Voice Commands
                   </a>
                 </li>
                 <li>
