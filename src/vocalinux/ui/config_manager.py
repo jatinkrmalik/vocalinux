@@ -31,7 +31,9 @@ DEFAULT_CONFIG = {
         "device_name": None,  # Saved device name for display/reference
     },
     "shortcuts": {
-        "toggle_recognition": "ctrl+ctrl",  # Double-tap Ctrl
+        "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
+        # Supported values: "ctrl+ctrl", "alt+alt", "shift+shift", "super+super"
+        # These represent double-tap shortcuts for the respective modifier keys
     },
     "ui": {
         "start_minimized": False,

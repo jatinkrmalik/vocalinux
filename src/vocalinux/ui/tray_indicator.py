@@ -78,10 +78,11 @@ class TrayIndicator:
         self.text_injector = text_injector
         self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
 
-        # Initialize keyboard shortcut manager
-        self.shortcut_manager = (
-            KeyboardShortcutManager()
-        )  # Pass config_manager - Removed config_manager argument
+        # Get configured shortcut from config
+        shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+
+        # Initialize keyboard shortcut manager with configured shortcut
+        self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut)
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
@@ -278,6 +279,7 @@ class TrayIndicator:
             parent=None,  # Or get the main window if available
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
+            shortcut_update_callback=self.update_shortcut,
         )
 
         # Connect to the response signal
@@ -303,6 +305,20 @@ class TrayIndicator:
         if response == Gtk.ResponseType.CLOSE or response == Gtk.ResponseType.DELETE_EVENT:
             logger.info("Settings dialog closed.")
             dialog.destroy()
+
+    def update_shortcut(self, shortcut: str) -> bool:
+        """
+        Update the keyboard shortcut for toggling voice recognition.
+
+        This performs a live shortcut switch without requiring an app restart.
+
+        Args:
+            shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+
+        Returns:
+            True if the shortcut was updated successfully, False otherwise
+        """
+        return self.shortcut_manager.restart_with_shortcut(shortcut)
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""

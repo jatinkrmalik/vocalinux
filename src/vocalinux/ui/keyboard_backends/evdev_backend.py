@@ -11,7 +11,7 @@ import os
 import select
 import threading
 import time
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 # Try to import evdev
 try:
@@ -25,15 +25,28 @@ except ImportError:
     ecodes = None  # type: ignore
     EVDEV_AVAILABLE = False
 
-from .base import KeyboardBackend
+from .base import DEFAULT_SHORTCUT, KeyboardBackend
 
 logger = logging.getLogger(__name__)
 
 
-# Key code for Ctrl (left and right)
+# Key codes for modifier keys (left and right variants)
 KEY_LEFTCTRL = 29
 KEY_RIGHTCTRL = 97
-KEY_CTRL = {KEY_LEFTCTRL, KEY_RIGHTCTRL}
+KEY_LEFTALT = 56
+KEY_RIGHTALT = 100
+KEY_LEFTSHIFT = 42
+KEY_RIGHTSHIFT = 54
+KEY_LEFTMETA = 125  # Super/Windows key
+KEY_RIGHTMETA = 126
+
+# Map modifier key names to evdev key codes
+MODIFIER_KEY_CODES: Dict[str, Set[int]] = {
+    "ctrl": {KEY_LEFTCTRL, KEY_RIGHTCTRL},
+    "alt": {KEY_LEFTALT, KEY_RIGHTALT},
+    "shift": {KEY_LEFTSHIFT, KEY_RIGHTSHIFT},
+    "super": {KEY_LEFTMETA, KEY_RIGHTMETA},
+}
 
 
 def find_keyboard_devices() -> List[str]:
@@ -76,17 +89,22 @@ def find_keyboard_devices() -> List[str]:
     return keyboard_devices
 
 
-def device_has_ctrl_key(device_path: str) -> bool:
+def device_has_modifier_key(device_path: str, modifier: str = "ctrl") -> bool:
     """
-    Check if a device has Ctrl key capability.
+    Check if a device has a specific modifier key capability.
 
     Args:
         device_path: Path to the input device
+        modifier: The modifier key name ("ctrl", "alt", "shift", "super")
 
     Returns:
-        True if the device can send Ctrl key events
+        True if the device can send the specified modifier key events
     """
     if not EVDEV_AVAILABLE:
+        return False
+
+    key_codes = MODIFIER_KEY_CODES.get(modifier, set())
+    if not key_codes:
         return False
 
     try:
@@ -94,12 +112,13 @@ def device_has_ctrl_key(device_path: str) -> bool:
         capabilities = device.capabilities()
         device.close()
 
-        # Check if device has EV_KEY capability and supports Ctrl keys
+        # Check if device has EV_KEY capability and supports the modifier keys
         if ecodes.EV_KEY in capabilities:
             key_caps = capabilities[ecodes.EV_KEY]
-            # Check for left or right Ctrl key
-            if KEY_LEFTCTRL in key_caps or KEY_RIGHTCTRL in key_caps:
-                return True
+            # Check for left or right variant of the modifier
+            for key_code in key_codes:
+                if key_code in key_caps:
+                    return True
     except (OSError, IOError):
         pass
 
@@ -115,39 +134,48 @@ class EvdevKeyboardBackend(KeyboardBackend):
     to read from /dev/input/event* devices (member of 'input' group).
     """
 
-    def __init__(self):
-        """Initialize the evdev keyboard backend."""
-        super().__init__()
+    def __init__(self, shortcut: str = DEFAULT_SHORTCUT):
+        """
+        Initialize the evdev keyboard backend.
+
+        Args:
+            shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl")
+        """
+        super().__init__(shortcut)
         self.devices: List[InputDevice] = []
         self.device_fds: List[int] = []
         self.running = False
         self.monitor_thread: Optional[threading.Thread] = None
 
         self.last_trigger_time = 0
-        self.last_ctrl_press_time = 0
+        self.last_key_press_time = 0
         self.double_tap_threshold = 0.3  # seconds
-        self.ctrl_pressed_devices: Set[int] = set()
+        self.key_pressed_devices: Set[int] = set()
 
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
 
+    def _get_target_key_codes(self) -> Set[int]:
+        """Get the evdev key codes for the configured modifier."""
+        return MODIFIER_KEY_CODES.get(self._modifier_key, set())
+
     def is_available(self) -> bool:
-        """Check if evdev is available and we can access a keyboard device with Ctrl key."""
+        """Check if evdev is available and we can access a keyboard device with the modifier key."""
         if not EVDEV_AVAILABLE:
             return False
 
-        # Check if we can access at least one keyboard device with Ctrl key capability
+        # Check if we can access at least one keyboard device with the modifier key capability
         try:
             devices = find_keyboard_devices()
             if not devices:
                 return False
 
-            # Try to find at least one device with Ctrl key that we can open
+            # Try to find at least one device with the modifier key that we can open
             for device_path in devices:
-                if device_has_ctrl_key(device_path):
+                if device_has_modifier_key(device_path, self._modifier_key):
                     return True
 
-            # Could not find any accessible device with Ctrl key
+            # Could not find any accessible device with the modifier key
             return False
         except Exception:
             return False
@@ -204,11 +232,12 @@ class EvdevKeyboardBackend(KeyboardBackend):
             return False
 
         logger.info(f"Found {len(device_paths)} keyboard device(s)")
+        logger.info(f"Listening for shortcut: {self._shortcut}")
 
         # Open devices
         self.devices = []
         self.device_fds = []
-        self.ctrl_pressed_devices = set()
+        self.key_pressed_devices = set()
 
         for device_path in device_paths:
             try:
@@ -303,28 +332,30 @@ class EvdevKeyboardBackend(KeyboardBackend):
             code = event.code
             value = event.value  # 0 = release, 1 = press, 2 = repeat
 
-            # Check if this is a Ctrl key
-            if code in KEY_CTRL:
+            target_codes = self._get_target_key_codes()
+
+            # Check if this is our target modifier key
+            if code in target_codes:
                 device_id = id(device)
 
                 if value == 1:  # Key press
-                    self.ctrl_pressed_devices.add(device_id)
+                    self.key_pressed_devices.add(device_id)
                     current_time = time.time()
 
                     # Check for double-tap
                     if (
-                        current_time - self.last_ctrl_press_time < self.double_tap_threshold
+                        current_time - self.last_key_press_time < self.double_tap_threshold
                         and self.double_tap_callback is not None
                         and current_time - self.last_trigger_time > 0.5
                     ):
-                        logger.debug("Double-tap Ctrl detected (evdev)")
+                        logger.debug(f"Double-tap {self._modifier_key} detected (evdev)")
                         self.last_trigger_time = current_time
                         threading.Thread(target=self.double_tap_callback, daemon=True).start()
 
-                    self.last_ctrl_press_time = current_time
+                    self.last_key_press_time = current_time
 
                 elif value == 0:  # Key release
-                    self.ctrl_pressed_devices.discard(device_id)
+                    self.key_pressed_devices.discard(device_id)
 
         except Exception as e:
             logger.error(f"Error handling key event: {e}")
@@ -335,5 +366,5 @@ __all__ = [
     "EvdevKeyboardBackend",
     "EVDEV_AVAILABLE",
     "find_keyboard_devices",
-    "device_has_ctrl_key",
+    "device_has_modifier_key",
 ]

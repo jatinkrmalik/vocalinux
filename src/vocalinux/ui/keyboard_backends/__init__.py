@@ -9,7 +9,13 @@ import logging
 import os
 from typing import Optional
 
-from .base import KeyboardBackend
+from .base import (
+    DEFAULT_SHORTCUT,
+    SHORTCUT_DISPLAY_NAMES,
+    SUPPORTED_SHORTCUTS,
+    KeyboardBackend,
+    parse_shortcut,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,25 +68,29 @@ class DesktopEnvironment:
         return DesktopEnvironment.UNKNOWN
 
 
-def create_backend(preferred_backend: Optional[str] = None) -> Optional[KeyboardBackend]:
+def create_backend(
+    preferred_backend: Optional[str] = None, shortcut: str = DEFAULT_SHORTCUT
+) -> Optional[KeyboardBackend]:
     """
     Create a keyboard backend based on availability and environment.
 
     Args:
         preferred_backend: Optional backend name to force ('pynput' or 'evdev')
+        shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl", "alt+alt")
 
     Returns:
         A KeyboardBackend instance, or None if no backend is available
     """
     env = DesktopEnvironment.detect()
     logger.info(f"Detected desktop environment: {env}")
+    logger.info(f"Configured shortcut: {shortcut}")
 
     # If a specific backend is requested, try to use it
     if preferred_backend:
         if preferred_backend == "evdev":
             if EVDEV_AVAILABLE:
                 logger.info("Using evdev backend (preferred)")
-                backend = EvdevKeyboardBackend()  # type: ignore
+                backend = EvdevKeyboardBackend(shortcut=shortcut)  # type: ignore
                 if backend.is_available():
                     return backend
                 hint = backend.get_permission_hint()
@@ -92,7 +102,7 @@ def create_backend(preferred_backend: Optional[str] = None) -> Optional[Keyboard
         elif preferred_backend == "pynput":
             if PYNPUT_AVAILABLE:
                 logger.info("Using pynput backend (preferred)")
-                return PynputKeyboardBackend()  # type: ignore
+                return PynputKeyboardBackend(shortcut=shortcut)  # type: ignore
             logger.warning("Pynput backend not available")
         else:
             logger.warning(f"Unknown preferred backend: '{preferred_backend}'")
@@ -102,7 +112,7 @@ def create_backend(preferred_backend: Optional[str] = None) -> Optional[Keyboard
         # On Wayland, prefer evdev (if available) as pynput doesn't work
         if EVDEV_AVAILABLE:
             logger.info("Using evdev backend for Wayland")
-            backend = EvdevKeyboardBackend()  # type: ignore
+            backend = EvdevKeyboardBackend(shortcut=shortcut)  # type: ignore
             if backend.is_available():
                 return backend
             hint = backend.get_permission_hint()
@@ -120,11 +130,11 @@ def create_backend(preferred_backend: Optional[str] = None) -> Optional[Keyboard
     # Default to pynput for X11 or unknown
     if PYNPUT_AVAILABLE:
         logger.info("Using pynput backend")
-        return PynputKeyboardBackend()  # type: ignore
+        return PynputKeyboardBackend(shortcut=shortcut)  # type: ignore
 
     if EVDEV_AVAILABLE:
         logger.warning("Pynput not available, falling back to evdev backend")
-        backend = EvdevKeyboardBackend()  # type: ignore
+        backend = EvdevKeyboardBackend(shortcut=shortcut)  # type: ignore
         if backend.is_available():
             return backend
         hint = backend.get_permission_hint()
@@ -145,4 +155,8 @@ __all__ = [
     "EvdevKeyboardBackend",
     "EVDEV_AVAILABLE",
     "PYNPUT_AVAILABLE",
+    "SUPPORTED_SHORTCUTS",
+    "SHORTCUT_DISPLAY_NAMES",
+    "DEFAULT_SHORTCUT",
+    "parse_shortcut",
 ]
