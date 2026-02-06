@@ -40,25 +40,15 @@ import { useInView } from "react-intersection-observer";
 // The one-liner install command (split into three lines for display)
 // Downloads install.sh from main (which has --tag support) and passes the latest release tag
 const getInstallCommands = (latestRelease: string) => ({
-  interactiveInstallCommand: `curl \\
-  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
-  | bash -s -- --tag=${latestRelease} --interactive`,
+  interactiveInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --interactive`,
 
-  oneClickInstallCommand: `curl \\
-  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
-  | bash -s -- --tag=${latestRelease}`,
+  oneClickInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease}`,
 
-  oneClickInstallWhisperCpu: `curl \\
-  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
-  | bash -s -- --tag=${latestRelease} --whisper-cpu`,
+  oneClickInstallWhisperCpu: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --whisper-cpu`,
 
-  oneClickInstallNoWhisper: `curl \\
-  -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
-  | bash -s -- --tag=${latestRelease} --no-whisper`,
+  oneClickInstallNoWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --no-whisper`,
 
-  uninstallCommand: `curl -fsSL \\
-  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh \\
-  | bash`,
+  uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
 });
 
 const FeatureCard = ({
