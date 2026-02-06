@@ -357,8 +357,8 @@ export default function HomePage() {
                     <Terminal className="h-5 w-5 text-green-400" />
                   </div>
                   <div className="text-left">
-                    <h2 className="text-lg font-semibold text-white text-left">Quick Install</h2>
-                    <p className="text-xs text-zinc-400 text-left">Copy & paste in your terminal</p>
+                    <h2 className="text-lg font-semibold text-white text-left">Quick Install (Interactive)</h2>
+                    <p className="text-xs text-zinc-400 text-left">Guided installation with hardware detection</p>
                   </div>
                 </div>
 
@@ -370,11 +370,11 @@ export default function HomePage() {
                       <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
                       <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
                     </div>
-                    <CopyButton text={oneClickInstallCommand} />
+                    <CopyButton text={interactiveInstallCommand} />
                   </div>
                   <div className="p-4 sm:p-5">
                     <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre">
-                      <span className="text-zinc-500 select-none">$ </span>{oneClickInstallCommand}
+                      <span className="text-zinc-500 select-none">$ </span>{interactiveInstallCommand}
                     </pre>
                   </div>
                 </div>
@@ -602,43 +602,14 @@ export default function HomePage() {
           <FadeInSection delay={0.1}>
             <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 min-w-0">
               <div className="p-6 sm:p-8">
-                {/* Interactive Install - NEW PRIMARY OPTION */}
-                <div className="mb-8 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-xl p-6 -mx-6 -mt-8 sm:-mx-8 sm:-mt-8 border border-purple-500/20">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-purple-500/10 p-2 rounded-lg">
-                      <Sparkles className="h-5 w-5 text-purple-500" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-semibold">Interactive Install (Recommended)</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Guided installation with smart hardware detection
-                      </p>
-                    </div>
-                    <CopyButton text={interactiveInstallCommand} />
-                  </div>
-                  <div className="overflow-x-auto">
-                    <CodeBlock
-                      language="bash"
-                      className="rounded-lg text-sm sm:text-base"
-                      customStyle={{ margin: 0, maxWidth: "100%", overflowX: "auto" }}
-                      wrapLongLines={false}
-                    >
-                      {interactiveInstallCommand}
-                    </CodeBlock>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Detects your GPU and recommends the best option. Prompts for your preferences.
-                  </p>
-                </div>
-
-                {/* Primary install option */}
+                {/* Alternative: Auto-detect install */}
                 <div className="mb-8">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="bg-blue-500/10 p-2 rounded-lg">
                       <Zap className="h-5 w-5 text-blue-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold">Quick Install (Auto-detect)</h3>
+                      <h3 className="text-xl font-semibold">Auto-detect Install</h3>
                       <p className="text-sm text-muted-foreground">
                         Fastest for power users - no prompts (~3-10 min)
                       </p>
