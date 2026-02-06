@@ -204,7 +204,7 @@ export default function HomePage() {
             />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
             <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
-              v0.4.1 Alpha
+              v0.5.0 Beta
             </span>
           </Link>
 
@@ -307,7 +307,7 @@ export default function HomePage() {
               <div className="inline-flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full mb-6">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium text-primary">
-                  Alpha Release — Try it now!
+                  Beta Release — Try it now!
                 </span>
               </div>
 

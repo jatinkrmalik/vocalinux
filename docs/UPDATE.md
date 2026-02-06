@@ -9,7 +9,7 @@ This guide explains how to update Vocalinux to the latest version.
 Simply re-run the installation command with the new version tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
 ```
 
 The installer will:
@@ -24,7 +24,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.4.1-alpha
+git checkout v0.5.0-beta
 ./install.sh
 ```
 
@@ -50,7 +50,7 @@ cd vocalinux
 ./install.sh --tag=v0.4.1-alpha
 
 # Or via curl (for any installation)
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
 ```
 
 **What gets preserved:**
@@ -68,7 +68,7 @@ cd vocalinux
 
 # 2. Pull the latest changes
 git fetch origin
-git checkout v0.4.1-alpha
+git checkout v0.5.0-beta
 
 # 3. Activate your virtual environment
 source venv/bin/activate
@@ -97,18 +97,28 @@ git describe --tags
 
 ---
 
-## What's New in v0.4.1-alpha
+## What's New in v0.5.0-beta
+
+- **Customizable keyboard shortcuts**: Configure your own activation shortcuts via GUI
+- **Modern settings dialog**: Redesigned with GNOME HIG styling
+- **Improved audio feedback**: Pleasant gliding tones for recording status
+- **Enhanced Wayland support**: Better keyboard shortcut handling on Wayland
+- **Microphone reconnection**: Automatic reconnection when microphone disconnects
+- **80%+ test coverage**: Comprehensive test suite for reliability
+- **Interactive installer**: Smart hardware detection and guided installation
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.5.0-beta).
+
+---
+
+## Previous Versions
+
+### v0.4.1-alpha
 
 - **Language selector UI**: Choose from 10 languages with auto-detection support for Whisper
 - **App drawer launch fix**: Desktop entry now works when installing from local repo
 - **Better commit handling**: Fixed error with special characters in commit messages
 - **Improved update mechanism**: Corrected git fetch syntax for tag-based updates
-
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.4.1-alpha).
-
----
-
-## Previous Versions
 
 ### v0.4.0-alpha
 
@@ -132,7 +142,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 ./uninstall.sh --keep-config --keep-data
 
 # Reinstall
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
 ```
 
 ### Old Version Still Running
