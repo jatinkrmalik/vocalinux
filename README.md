@@ -74,19 +74,19 @@ We're excited to announce our first **Beta release**! Vocalinux has evolved sign
 Here are some screenshots showcasing Vocalinux in action:
 
 <p align="center">
-  <img src="docs/screenshots/00-transcription.png" alt="Transcription in Action" width="400">
+  <img src="resources/screenshots/00-transcription.png" alt="Transcription in Action" width="400">
   <br>
   <em>Real-time voice-to-text transcription in a text editor</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/02-system-tray.png" alt="System Tray" width="400">
+  <img src="resources/screenshots/02-system-tray.png" alt="System Tray" width="400">
   <br>
   <em>System tray with listening indicator and quick access to settings</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/04-features-overview.png" alt="Features Overview" width="400">
+  <img src="resources/screenshots/04-features-overview.png" alt="Features Overview" width="400">
   <br>
   <em>Overview of key features and configuration options with annotations</em>
 </p>
