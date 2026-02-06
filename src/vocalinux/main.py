@@ -219,7 +219,36 @@ def main():
         # Create a wrapper function to track injected text for action handler
         def text_callback_wrapper(text: str):
             """Wrapper to track injected text and handle it."""
-            success = text_system.inject_text(text)
+            # Check if we need to add a space before the new text
+            text_to_inject = text
+
+            # Punctuation and characters that typically need a space after them
+            chars_needing_space = {
+                ".",
+                ",",
+                "!",
+                "?",
+                ";",
+                ":",
+                ")",
+                "]",
+                "}",
+                "-",
+                "_",
+                # Also quotes
+                '"',
+                "'",
+            }
+
+            # If last injected text exists and ends with a character that needs space,
+            # add a space before the new text
+            if action_handler.last_injected_text and action_handler.last_injected_text.strip():
+                last_char = action_handler.last_injected_text[-1]
+                if last_char in chars_needing_space:
+                    text_to_inject = " " + text_to_inject
+                    logger.debug(f"Added space before new text (last char: '{last_char}')")
+
+            success = text_system.inject_text(text_to_inject)
             if success:
                 action_handler.set_last_injected_text(text)
 
