@@ -32,11 +32,17 @@ jobs:
           filters: |
             web:
               - 'web/**'
+              - '.github/workflows/**'
             python:
               - 'src/**'
               - 'tests/**'
               - 'pyproject.toml'
               - 'setup.py'
+              - 'setup.cfg'
+              - 'requirements*.txt'
+              - 'Makefile'
+              - '.pre-commit-config.yaml'
+              - '.github/workflows/**'
       - name: Check if website should deploy
         id: deploy_check
         run: |
@@ -54,6 +60,8 @@ jobs:
   python-lint:
     name: 🔍 Lint Python
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +91,8 @@ jobs:
   python-test:
     name: 🧪 Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    needs: python-lint
+    needs: [changes, python-lint]
+    if: needs.changes.outputs.python == 'true'
     strategy:
       fail-fast: false
       matrix:
