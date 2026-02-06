@@ -120,7 +120,7 @@ export default function RootLayout({
       "priceCurrency": "USD"
     },
     "description": "Free, open-source voice dictation for Linux. 100% offline with Whisper AI and VOSK. Works with X11 and Wayland.",
-    "softwareVersion": "0.0.0",
+    "softwareVersion": "0.4.1-alpha",
     "author": {
       "@type": "Person",
       "name": "Jatin K Malik",
@@ -180,7 +180,111 @@ export default function RootLayout({
     }
   };
 
-  const jsonLd = [softwareAppJsonLd, organizationJsonLd, webSiteJsonLd];
+  // FAQPage schema for rich results
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is Vocalinux really 100% offline?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! All speech recognition processing happens locally on your machine. Your voice data never leaves your computer. No internet connection is required after installation."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which Linux distributions are supported?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Vocalinux works on most modern Linux distributions including Ubuntu 22.04+, Fedora, Debian, Arch Linux, Linux Mint, Pop!_OS, and more. It supports both X11 and Wayland display servers."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I switch between Whisper and VOSK?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "You can switch engines via the settings GUI or command line. Use 'vocalinux --engine whisper' or 'vocalinux --engine vosk'. Whisper is recommended for accuracy, VOSK for speed."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What are the system requirements?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Minimum: 4GB RAM, dual-core CPU, Python 3.8+. For Whisper large models: 8GB+ RAM recommended. The tiny/base Whisper models and VOSK work great on modest hardware."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I use it in languages other than English?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! Whisper supports 99+ languages with varying accuracy levels. VOSK has models for 20+ languages. Download additional language models as needed."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I customize the activation shortcut?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The default is double-tap Ctrl. You can customize this via the GUI settings dialog or by editing ~/.config/vocalinux/config.yaml. Any key combination is supported."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Vocalinux free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, Vocalinux is completely free and open-source, licensed under GPL-3.0. No premium tiers, no subscriptions, no tracking — just free software."
+        }
+      }
+    ]
+  };
+
+  // HowTo schema for installation guide
+  const howToJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to Install Vocalinux on Linux",
+    "description": "Step-by-step guide to install Vocalinux voice dictation software on Linux",
+    "totalTime": "PT10M",
+    "estimatedCost": {
+      "@type": "MonetaryAmount",
+      "currency": "USD",
+      "value": "0"
+    },
+    "step": [
+      {
+        "@type": "HowToStep",
+        "name": "Run the installation command",
+        "text": "Open your terminal and run the one-liner installation command to download and install Vocalinux.",
+        "url": "https://vocalinux.com/#install"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Wait for installation to complete",
+        "text": "The installer will download dependencies, set up the environment, and download speech recognition models. This takes approximately 5-10 minutes.",
+        "url": "https://vocalinux.com/#install"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Launch Vocalinux",
+        "text": "After installation, launch Vocalinux from your terminal by typing 'vocalinux' or find it in your application menu.",
+        "url": "https://vocalinux.com/#install"
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Start dictating",
+        "text": "Double-tap Ctrl to start voice dictation. Speak clearly into your microphone. Double-tap Ctrl again to stop.",
+        "url": "https://vocalinux.com/#install"
+      }
+    ]
+  };
+
+  const jsonLd = [softwareAppJsonLd, organizationJsonLd, webSiteJsonLd, faqJsonLd, howToJsonLd];
 
   return (
     <html lang="en" className={`${GeistSans.variable} scroll-smooth`} suppressHydrationWarning>
