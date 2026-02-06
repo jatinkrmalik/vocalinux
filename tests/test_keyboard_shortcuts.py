@@ -520,18 +520,18 @@ class TestBackendFactory(unittest.TestCase):
         """Test creating backend with custom shortcut."""
         from vocalinux.ui.keyboard_backends import create_backend
 
-        with (
-            patch("vocalinux.ui.keyboard_backends.PYNPUT_AVAILABLE", True),
-            patch("vocalinux.ui.keyboard_backends.DesktopEnvironment.detect", return_value="x11"),
-            patch("vocalinux.ui.keyboard_backends.PynputKeyboardBackend") as MockPynput,
-        ):
-            mock_backend = MagicMock()
-            MockPynput.return_value = mock_backend
+        with patch("vocalinux.ui.keyboard_backends.PYNPUT_AVAILABLE", True):
+            with patch(
+                "vocalinux.ui.keyboard_backends.DesktopEnvironment.detect", return_value="x11"
+            ):
+                with patch("vocalinux.ui.keyboard_backends.PynputKeyboardBackend") as MockPynput:
+                    mock_backend = MagicMock()
+                    MockPynput.return_value = mock_backend
 
-            result = create_backend(shortcut="alt+alt")
+                    result = create_backend(shortcut="alt+alt")
 
-            self.assertIsNotNone(result)
-            MockPynput.assert_called_once_with(shortcut="alt+alt")
+                    self.assertIsNotNone(result)
+                    MockPynput.assert_called_once_with(shortcut="alt+alt")
 
 
 class TestShortcutParseFunction(unittest.TestCase):
