@@ -3,7 +3,7 @@
 #### Voice-to-text for Linux, finally done right!
 
 <!-- Project Status -->
-[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange)](https://github.com/jatinkrmalik/vocalinux)
+[![Status: Beta](https://img.shields.io/badge/Status-Beta-blue)](https://github.com/jatinkrmalik/vocalinux)
 [![GitHub release](https://img.shields.io/github/v/release/jatinkrmalik/vocalinux?include_prereleases)](https://github.com/jatinkrmalik/vocalinux/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -28,10 +28,10 @@
 
 **A seamless free open-source private voice dictation system for Linux**, comparable to the built-in solutions on macOS and Windows.
 
-> 🎉 **Alpha Release!**
+> 🎉 **Beta Release!**
 >
-> We're excited to share Vocalinux with the community.
-> Try it out and [let us know what you think](https://github.com/jatinkrmalik/vocalinux/issues)!
+> We're excited to share Vocalinux Beta with the community.
+> This release is feature-complete and ready for broader testing.
 
 ---
 
@@ -53,7 +53,7 @@
 Let the installer guide you through the setup with smart hardware detection:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha --interactive
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta --interactive
 ```
 
 The interactive installer will:
@@ -65,10 +65,10 @@ The interactive installer will:
 ### One-liner Installation (Quick Install)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
 ```
 
-> **Note**: Installs v0.4.1-alpha. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.5.0-beta. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 >
 > **GPU Detection**: The installer now automatically detects NVIDIA GPUs and uses CPU-only PyTorch when no GPU is present, saving you ~2GB of download!
 
@@ -86,13 +86,13 @@ This will:
 
 **Whisper with CPU-only PyTorch (no NVIDIA GPU needed):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha --whisper-cpu
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta --whisper-cpu
 ```
 This installs Whisper with CPU-only PyTorch (~200MB instead of ~2.3GB). Works great for systems without NVIDIA GPU.
 
 **For low-RAM systems (8GB or less) - VOSK only:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.4.1-alpha --no-whisper
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta --no-whisper
 ```
 This skips Whisper installation entirely and configures VOSK as the default engine.
 
