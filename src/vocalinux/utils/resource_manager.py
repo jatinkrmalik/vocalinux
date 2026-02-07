@@ -58,8 +58,8 @@ class ResourceManager:
         ]
 
         # Add XDG data directory paths
-        xdg_data = os.environ.get('XDG_DATA_DIRS', '/usr/local/share:/usr/share')
-        for base in xdg_data.split(':'):
+        xdg_data = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+        for base in xdg_data.split(":"):
             if base:  # Skip empty strings
                 candidates.append(Path(base) / "vocalinux" / "resources")
 

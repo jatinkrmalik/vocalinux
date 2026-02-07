@@ -25,7 +25,7 @@ def _setup_alsa_error_handler():
     try:
         # Try multiple library name variations for cross-distro compatibility
         # Different distributions may use different soname or library naming
-        for lib_name in ['libasound.so.2', 'libasound.so', 'libasound.so.0', 'asound']:
+        for lib_name in ["libasound.so.2", "libasound.so", "libasound.so.0", "asound"]:
             try:
                 asound = ctypes.CDLL(lib_name)
                 # Define error handler type
@@ -242,35 +242,38 @@ def _get_system_model_paths() -> list:
     paths = []
 
     # XDG standard paths from XDG_DATA_DIRS
-    xdg_data = os.environ.get('XDG_DATA_DIRS', '/usr/local/share:/usr/share')
-    for base in xdg_data.split(':'):
+    xdg_data = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+    for base in xdg_data.split(":"):
         if base:  # Skip empty strings
-            paths.append(os.path.join(base, 'vocalinux', 'models'))
+            paths.append(os.path.join(base, "vocalinux", "models"))
 
     # Distribution-specific paths
     # Try to detect the distribution from /etc/os-release
     try:
-        with open('/etc/os-release', 'r') as f:
+        with open("/etc/os-release", "r") as f:
             os_release = f.read().lower()
 
             # Fedora/RHEL/CentOS/Rocky/AlmaLinux use /usr/lib64
-            if any(id in os_release for id in ['fedora', 'rhel', 'centos', 'rocky', 'almalinux', 'red hat']):
-                paths.append('/usr/lib64/vocalinux/models')
-                paths.append('/usr/lib/vocalinux/models')
+            if any(
+                id in os_release
+                for id in ["fedora", "rhel", "centos", "rocky", "almalinux", "red hat"]
+            ):
+                paths.append("/usr/lib64/vocalinux/models")
+                paths.append("/usr/lib/vocalinux/models")
 
             # Arch Linux doesn't use /usr/local
-            if 'arch' in os_release:
-                paths.remove('/usr/local/share/vocalinux/models')
+            if "arch" in os_release:
+                paths.remove("/usr/local/share/vocalinux/models")
 
     except (IOError, OSError, FileNotFoundError):
         pass  # File doesn't exist on all systems
 
     # Add common fallback paths that might be used
     additional_paths = [
-        '/usr/local/lib/vocalinux/models',
-        '/usr/lib/vocalinux/models',
-        '/usr/lib64/vocalinux/models',
-        '/opt/vocalinux/models',  # Some distros use /opt
+        "/usr/local/lib/vocalinux/models",
+        "/usr/lib/vocalinux/models",
+        "/usr/lib64/vocalinux/models",
+        "/opt/vocalinux/models",  # Some distros use /opt
     ]
 
     for path in additional_paths:
