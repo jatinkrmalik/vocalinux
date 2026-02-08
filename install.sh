@@ -206,6 +206,16 @@ detect_distro() {
             DISTRO_FAMILY="arch"
         elif [[ "$ID" == "opensuse" || "$ID_LIKE" == *"suse"* ]]; then
             DISTRO_FAMILY="suse"
+        elif [[ "$ID" == "gentoo" ]]; then
+            DISTRO_FAMILY="gentoo"
+        elif [[ "$ID" == "alpine" ]]; then
+            DISTRO_FAMILY="alpine"
+        elif [[ "$ID" == "void" ]]; then
+            DISTRO_FAMILY="void"
+        elif [[ "$ID" == "solus" ]]; then
+            DISTRO_FAMILY="solus"
+        elif [[ "$ID" == "mageia" ]]; then
+            DISTRO_FAMILY="mageia"
         fi
 
         print_info "Detected: $DISTRO_NAME $DISTRO_VERSION ($DISTRO_FAMILY family)"
@@ -506,6 +516,14 @@ install_system_dependencies() {
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv wget curl unzip"
     local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
+    # Gentoo uses Portage and different package naming convention
+    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.8"
+    # Alpine Linux uses apk and has musl libc
+    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv wget curl unzip"
+    # Void Linux uses xbps
+    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel wget curl unzip"
+    # Solus uses eopkg
+    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv wget curl unzip"
 
     local MISSING_PACKAGES=""
     local INSTALL_CMD=""
@@ -622,6 +640,143 @@ install_system_dependencies() {
             sudo zypper install -y $ZYPPER_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
             ;;
 
+        gentoo)
+            # For Gentoo Linux
+            if ! command_exists emerge; then
+                print_error "Emerge package manager not found"
+                exit 1
+            fi
+
+            print_info "Gentoo detected. Installing dependencies..."
+            print_warning "Gentoo uses emerge. This may take longer as packages are compiled from source."
+
+            # Check for missing packages
+            MISSING_PACKAGES=""
+            for pkg in $EMERGE_PACKAGES; do
+                # Gentoo uses qlist to check if packages are installed
+                if ! qlist -I "$pkg" >/dev/null 2>&1; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                fi
+            done
+
+            if [ -n "$MISSING_PACKAGES" ]; then
+                print_info "Installing packages:$MISSING_PACKAGES"
+                # Update Portage tree first
+                sudo emerge --sync || { print_error "Failed to sync Portage tree"; exit 1; }
+                # Install missing packages
+                sudo emerge $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+            else
+                print_info "All required packages are already installed."
+            fi
+            ;;
+
+        alpine)
+            # For Alpine Linux
+            if ! command_exists apk; then
+                print_error "Apk package manager not found"
+                exit 1
+            fi
+
+            print_info "Alpine Linux detected."
+            print_warning "Alpine uses musl libc. Some Python packages may not have pre-built wheels."
+
+            # Check for missing packages
+            MISSING_PACKAGES=""
+            for pkg in $APK_PACKAGES; do
+                if ! apk info -e "$pkg" >/dev/null 2>&1; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                fi
+            done
+
+            if [ -n "$MISSING_PACKAGES" ]; then
+                print_info "Installing packages:$MISSING_PACKAGES"
+                sudo apk update || { print_error "Failed to update package indexes"; exit 1; }
+                sudo apk add $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+            else
+                print_info "All required packages are already installed."
+            fi
+            ;;
+
+        void)
+            # For Void Linux
+            if ! command_exists xbps; then
+                print_error "Xbps package manager not found"
+                exit 1
+            fi
+
+            print_info "Void Linux detected."
+
+            # Check for missing packages
+            MISSING_PACKAGES=""
+            for pkg in $XBPS_PACKAGES; do
+                if ! xbps-query -S "$pkg" >/dev/null 2>&1; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                fi
+            done
+
+            if [ -n "$MISSING_PACKAGES" ]; then
+                print_info "Installing packages:$MISSING_PACKAGES"
+                sudo xbps-install -Sy $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+            else
+                print_info "All required packages are already installed."
+            fi
+            ;;
+
+        solus)
+            # For Solus
+            if ! command_exists eopkg; then
+                print_error "Eopkg package manager not found"
+                exit 1
+            fi
+
+            print_info "Solus detected."
+
+            # Check for missing packages
+            MISSING_PACKAGES=""
+            for pkg in $EOPKG_PACKAGES; do
+                if ! eopkg info "$pkg" >/dev/null 2>&1; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                fi
+            done
+
+            if [ -n "$MISSING_PACKAGES" ]; then
+                print_info "Installing packages:$MISSING_PACKAGES"
+                sudo eopkg install $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+            else
+                print_info "All required packages are already installed."
+            fi
+            ;;
+
+        mageia)
+            # For Mageia
+            if command_exists dnf; then
+                INSTALL_CMD="sudo dnf install -y"
+                UPDATE_CMD="sudo dnf check-update"
+            elif command_exists urpmi; then
+                INSTALL_CMD="sudo urpmi --force"
+                UPDATE_CMD="sudo urpmi.update -a"
+            else
+                print_error "No supported package manager found (dnf/urpmi)"
+                exit 1
+            fi
+
+            # Use similar packages to Fedora/RHEL
+            for pkg in $DNF_PACKAGES; do
+                # Mageia uses rpm like Fedora
+                if ! rpm -q "$pkg" >/dev/null 2>&1; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                fi
+            done
+
+            if [ -n "$MISSING_PACKAGES" ]; then
+                print_info "Installing missing packages:$MISSING_PACKAGES"
+                $UPDATE_CMD 2>/dev/null || true
+                $INSTALL_CMD $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+            else
+                print_info "All required packages are already installed."
+            fi
+            ;;
+
         *)
             print_error "Unsupported distribution family: $DISTRO_FAMILY"
             print_warning "Please install the following dependencies manually:"
@@ -701,6 +856,43 @@ install_text_input_tools() {
                 suse)
                     sudo zypper install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
                     ;;
+                gentoo)
+                    if ! qlist -I wtype >/dev/null 2>&1; then
+                        sudo emerge wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                    else
+                        print_info "wtype is already installed."
+                    fi
+                    ;;
+                alpine)
+                    if ! apk info -e wtype >/dev/null 2>&1; then
+                        sudo apk add wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                    else
+                        print_info "wtype is already installed."
+                    fi
+                    ;;
+                void)
+                    if ! xbps-query -S wtype >/dev/null 2>&1; then
+                        sudo xbps-install -Sy wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                    else
+                        print_info "wtype is already installed."
+                    fi
+                    ;;
+                solus)
+                    if ! eopkg info wtype >/dev/null 2>&1; then
+                        sudo eopkg install wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                    else
+                        print_info "wtype is already installed."
+                    fi
+                    ;;
+                mageia)
+                    if command_exists dnf && ! rpm -q wtype >/dev/null 2>&1; then
+                        sudo dnf install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                    elif command_exists urpmi && ! rpm -q wtype >/dev/null 2>&1; then
+                        sudo urpmi -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                    else
+                        print_info "wtype is already installed."
+                    fi
+                    ;;
                 *)
                     print_warning "Unsupported distribution for Wayland text input tools."
                     print_warning "Please install 'wtype' manually for Wayland text input support."
@@ -774,6 +966,43 @@ install_text_input_tools() {
                 suse)
                     sudo zypper install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
                     ;;
+                gentoo)
+                    if ! qlist -I xdotool >/dev/null 2>&1; then
+                        sudo emerge xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                    else
+                        print_info "xdotool is already installed."
+                    fi
+                    ;;
+                alpine)
+                    if ! apk info -e xdotool >/dev/null 2>&1; then
+                        sudo apk add xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                    else
+                        print_info "xdotool is already installed."
+                    fi
+                    ;;
+                void)
+                    if ! xbps-query -S xdotool >/dev/null 2>&1; then
+                        sudo xbps-install -Sy xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                    else
+                        print_info "xdotool is already installed."
+                    fi
+                    ;;
+                solus)
+                    if ! eopkg info xdotool >/dev/null 2>&1; then
+                        sudo eopkg install xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                    else
+                        print_info "xdotool is already installed."
+                    fi
+                    ;;
+                mageia)
+                    if command_exists dnf && ! rpm -q xdotool >/dev/null 2>&1; then
+                        sudo dnf install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                    elif command_exists urpmi && ! rpm -q xdotool >/dev/null 2>&1; then
+                        sudo urpmi -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                    else
+                        print_info "xdotool is already installed."
+                    fi
+                    ;;
                 *)
                     print_warning "Unsupported distribution for X11 text input tools."
                     print_warning "Please install 'xdotool' manually for X11 text input support."
@@ -790,11 +1019,15 @@ install_text_input_tools() {
                 ubuntu|debian)
                     sudo apt install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
                     ;;
-                fedora)
+                fedora|mageia)
                     if command_exists dnf; then
                         sudo dnf install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
                     elif command_exists yum; then
                         sudo yum install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
+                    fi
+                    # Mageia also supports urpmi
+                    if [[ "$DISTRO_FAMILY" == "mageia" ]] && command_exists urpmi; then
+                        sudo urpmi -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
                     fi
                     ;;
                 arch)
@@ -802,6 +1035,18 @@ install_text_input_tools() {
                     ;;
                 suse)
                     sudo zypper install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
+                    ;;
+                gentoo)
+                    sudo emerge xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
+                    ;;
+                alpine)
+                    sudo apk add xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
+                    ;;
+                void)
+                    sudo xbps-install -Sy xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
+                    ;;
+                solus)
+                    sudo eopkg install xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
                     ;;
                 *)
                     print_warning "Unsupported distribution for text input tools."
