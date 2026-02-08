@@ -779,15 +779,32 @@ install_system_dependencies() {
 
         *)
             print_error "Unsupported distribution family: $DISTRO_FAMILY"
-            print_warning "Please install the following dependencies manually:"
-            print_warning "- Python 3.8 or newer with pip"
-            print_warning "- PyGObject (GTK3 bindings for Python)"
-            print_warning "- GTK3 development libraries"
-            print_warning "- AppIndicator3 support"
-            print_warning "- PortAudio development libraries"
-            print_warning "- Python virtual environment support"
+            print_info ""
+            print_info "Your distribution ($DISTRO_NAME) is not officially supported."
+            print_info "However, you can still install Vocalinux manually:"
+            print_info ""
+            print_info "1. Run the dependency checker:"
+            print_info "   bash scripts/check-system-deps.sh"
+            print_info ""
+            print_info "2. Install missing dependencies using your package manager"
+            print_info ""
+            print_info "3. Run the installer with --skip-system-deps:"
+            print_info "   ./install.sh --skip-system-deps"
+            print_info ""
+            print_info "4. Or install from source in a virtual environment:"
+            print_info "   python3 -m venv venv"
+            print_info "   source venv/bin/activate"
+            print_info "   pip install -e .[whisper]"
+            print_info ""
+            print_info "For more information, see the project wiki:"
+            print_info "  https://github.com/jatinkrmalik/vocalinux/wiki"
+            print_info ""
             if [[ "$NON_INTERACTIVE" != "yes" ]]; then
-                read -p "Press Enter to continue once dependencies are installed, or Ctrl+C to cancel..."
+                read -p "Continue anyway? (y/n) " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    exit 1
+                fi
             else
                 print_info "Non-interactive mode: continuing (dependencies may be missing)..."
             fi
