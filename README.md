@@ -209,10 +209,12 @@ For a complete list of changes, see the release notes.
 
 ## 📋 Requirements
 
-- **OS**: Ubuntu 22.04+ (other Linux distros may work)
+- **OS**: Linux (tested on Ubuntu 22.04+, Debian 11+, Fedora 39+, Arch Linux, openSUSE Tumbleweed)
 - **Python**: 3.8 or newer
 - **Display**: X11 or Wayland
 - **Hardware**: Microphone for voice input
+
+**Note:** See [Distribution Compatibility](docs/DISTRO_COMPATIBILITY.md) for distribution-specific information and experimental support for Gentoo, Alpine, Void, Solus, and more.
 
 ## 🎙️ Usage
 
