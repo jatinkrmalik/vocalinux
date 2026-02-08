@@ -508,22 +508,37 @@ pacman_package_installed() {
 install_system_dependencies() {
     print_info "Installing system dependencies..."
 
+    # Check for pkg-config first (required for library detection)
+    if ! command_exists pkg-config; then
+        print_error "pkg-config is not installed but is required for library detection"
+        print_info "Please install pkg-config using your package manager:"
+        print_info "  Ubuntu/Debian: sudo apt install pkg-config"
+        print_info "  Fedora/RHEL: sudo dnf install pkg-config"
+        print_info "  Arch: sudo pacman -S pkgconf"
+        print_info "  openSUSE: sudo zypper install pkg-config"
+        print_info "  Gentoo: sudo emerge pkgconf"
+        print_info "  Alpine: sudo apk add pkgconf"
+        print_info "  Void: sudo xbps-install -Sy pkg-config"
+        print_info "  Solus: sudo eopkg install pkg-config"
+        exit 1
+    fi
+
     # Define package names for different distributions
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
-    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev python3-dev portaudio19-dev python3-venv wget curl unzip"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev portaudio19-dev python3-venv pkg-config wget curl unzip"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev python3-dev portaudio19-dev python3-venv pkg-config wget curl unzip"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
-    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
-    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv wget curl unzip"
-    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv wget curl unzip"
+    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip"
+    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip"
+    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip"
     # Gentoo uses Portage and different package naming convention
-    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.8"
+    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.8 pkgconf"
     # Alpine Linux uses apk and has musl libc
-    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv wget curl unzip"
+    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf wget curl unzip"
     # Void Linux uses xbps
-    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel wget curl unzip"
+    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel pkg-config wget curl unzip"
     # Solus uses eopkg
-    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv wget curl unzip"
+    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip"
 
     local MISSING_PACKAGES=""
     local INSTALL_CMD=""
