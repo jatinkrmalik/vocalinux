@@ -146,3 +146,6 @@ temp/
 # Local Netlify folder
 .netlify
 .claude-workflow-rules.md
+# Analysis documents (keep local)
+CROSS_DISTRO_ANALYSIS.md
+FIX_PLAN.md

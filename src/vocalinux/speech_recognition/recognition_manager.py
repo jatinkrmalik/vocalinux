@@ -23,24 +23,33 @@ from .command_processor import CommandProcessor
 def _setup_alsa_error_handler():
     """Set up an error handler to suppress ALSA warnings."""
     try:
-        asound = ctypes.CDLL("libasound.so.2")
-        # Define error handler type
-        ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
-            None,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-        )
+        # Try multiple library name variations for cross-distro compatibility
+        # Different distributions may use different soname or library naming
+        for lib_name in ["libasound.so.2", "libasound.so", "libasound.so.0", "asound"]:
+            try:
+                asound = ctypes.CDLL(lib_name)
+                # Define error handler type
+                ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
+                    None,
+                    ctypes.c_char_p,
+                    ctypes.c_int,
+                    ctypes.c_char_p,
+                    ctypes.c_int,
+                    ctypes.c_char_p,
+                )
 
-        # Create a no-op error handler
-        def _error_handler(filename, line, function, err, fmt):
-            pass
+                # Create a no-op error handler
+                def _error_handler(filename, line, function, err, fmt):
+                    pass
 
-        _alsa_error_handler = ERROR_HANDLER_FUNC(_error_handler)
-        asound.snd_lib_error_set_handler(_alsa_error_handler)
-        return _alsa_error_handler  # Keep reference to prevent GC
+                _alsa_error_handler = ERROR_HANDLER_FUNC(_error_handler)
+                asound.snd_lib_error_set_handler(_alsa_error_handler)
+                # Note: Can't use logger here as it's not defined yet
+                return _alsa_error_handler  # Keep reference to prevent GC
+            except OSError:
+                continue
+        # If all library names fail, return None
+        return None
     except (OSError, AttributeError):
         # ALSA not available or different platform
         return None
@@ -218,11 +227,64 @@ def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
 
 # Define constants
 MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
-# Alternative locations for pre-installed models
-SYSTEM_MODELS_DIRS = [
-    "/usr/local/share/vocalinux/models",
-    "/usr/share/vocalinux/models",
-]
+
+
+def _get_system_model_paths() -> list:
+    """
+    Get system-wide model paths based on distro standards.
+
+    This function dynamically determines where system-wide models might be
+    installed based on XDG standards and distribution-specific conventions.
+
+    Returns:
+        List of paths to check for pre-installed models
+    """
+    paths = []
+
+    # XDG standard paths from XDG_DATA_DIRS
+    xdg_data = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+    for base in xdg_data.split(":"):
+        if base:  # Skip empty strings
+            paths.append(os.path.join(base, "vocalinux", "models"))
+
+    # Distribution-specific paths
+    # Try to detect the distribution from /etc/os-release
+    try:
+        with open("/etc/os-release", "r") as f:
+            os_release = f.read().lower()
+
+            # Fedora/RHEL/CentOS/Rocky/AlmaLinux use /usr/lib64
+            if any(
+                id in os_release
+                for id in ["fedora", "rhel", "centos", "rocky", "almalinux", "red hat"]
+            ):
+                paths.append("/usr/lib64/vocalinux/models")
+                paths.append("/usr/lib/vocalinux/models")
+
+            # Arch Linux doesn't use /usr/local
+            if "arch" in os_release:
+                paths.remove("/usr/local/share/vocalinux/models")
+
+    except (IOError, OSError, FileNotFoundError):
+        pass  # File doesn't exist on all systems
+
+    # Add common fallback paths that might be used
+    additional_paths = [
+        "/usr/local/lib/vocalinux/models",
+        "/usr/lib/vocalinux/models",
+        "/usr/lib64/vocalinux/models",
+        "/opt/vocalinux/models",  # Some distros use /opt
+    ]
+
+    for path in additional_paths:
+        if path not in paths:
+            paths.append(path)
+
+    return paths
+
+
+# Alternative locations for pre-installed models (now dynamic)
+SYSTEM_MODELS_DIRS = _get_system_model_paths()
 
 
 class SpeechRecognitionManager:

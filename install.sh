@@ -245,6 +245,41 @@ detect_nvidia_gpu() {
     fi
 }
 
+# Detect GI_TYPELIB_PATH for cross-distro compatibility
+detect_typelib_path() {
+    # Try pkg-config first (most reliable)
+    if command -v pkg-config >/dev/null 2>&1; then
+        local path=$(pkg-config --variable=typelibdir gobject-introspection-1.0 2>/dev/null)
+        if [ -n "$path" ] && [ -d "$path" ]; then
+            echo "$path"
+            return 0
+        fi
+    fi
+
+    # Fallback to common distribution-specific paths
+    # Order matters: more specific paths first
+    for path in \
+        /usr/lib/x86_64-linux-gnu/girepository-1.0 \
+        /usr/lib/aarch64-linux-gnu/girepository-1.0 \
+        /usr/lib/arm-linux-gnueabihf/girepository-1.0 \
+        /usr/lib/riscv64-linux-gnu/girepository-1.0 \
+        /usr/lib/powerpc64le-linux-gnu/girepository-1.0 \
+        /usr/lib/s390x-linux-gnu/girepository-1.0 \
+        /usr/lib64/girepository-1.0 \
+        /usr/lib/girepository-1.0 \
+        /usr/local/lib/girepository-1.0 \
+        /usr/local/lib64/girepository-1.0; do
+        if [ -d "$path" ]; then
+            echo "$path"
+            return 0
+        fi
+    done
+
+    # Ultimate fallback - will cause issues if wrong, but at least we try
+    echo "/usr/lib/girepository-1.0"
+    return 1
+}
+
 # Print section header for interactive mode
 clear_screen() {
     if [ -t 1 ] && command -v clear >/dev/null 2>&1 && [ -n "${TERM:-}" ]; then
@@ -1069,6 +1104,10 @@ VOSK_INTERACTIVE_CONFIG
         # Clean up log file if installation was successful
         rm -rf "$PIP_LOG_DIR"
 
+        # Detect GI_TYPELIB_PATH for cross-distro compatibility
+        GI_TYPELIB_DETECTED=$(detect_typelib_path)
+        print_info "Detected GI_TYPELIB_PATH: $GI_TYPELIB_DETECTED"
+
         # Create wrapper scripts in ~/.local/bin for easy access
         mkdir -p "$HOME/.local/bin"
 
@@ -1079,7 +1118,7 @@ VOSK_INTERACTIVE_CONFIG
 #!/bin/bash
 # Wrapper script for Vocalinux that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
-export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
+export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 
 # Check if user is in input group but current session doesn't have it
 if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
@@ -1097,7 +1136,7 @@ WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux GUI that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
-export GI_TYPELIB_PATH=/usr/lib/girepository-1.0
+export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 
 # Check if user is in input group but current session doesn't have it
 if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then

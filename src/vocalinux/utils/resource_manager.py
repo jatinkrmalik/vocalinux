@@ -47,7 +47,7 @@ class ResourceManager:
         # Get the directory where this module is located
         module_dir = Path(__file__).parent.absolute()
 
-        # Try several methods to find the resources directory
+        # Build list of candidate paths in priority order
         candidates = [
             # For direct repository execution (go up from src/vocalinux/utils to root)
             module_dir.parent.parent.parent / "resources",
@@ -55,10 +55,30 @@ class ResourceManager:
             Path(sys.prefix) / "share" / "vocalinux" / "resources",
             # For development in virtual environment
             Path(sys.prefix).parent / "resources",
-            # Additional fallbacks
+        ]
+
+        # Add XDG data directory paths
+        xdg_data = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+        for base in xdg_data.split(":"):
+            if base:  # Skip empty strings
+                candidates.append(Path(base) / "vocalinux" / "resources")
+
+        # Add distribution-specific standard paths
+        additional_paths = [
             Path("/usr/local/share/vocalinux/resources"),
             Path("/usr/share/vocalinux/resources"),
+            # Some distros use lib64 or lib for package data
+            Path("/usr/local/lib/vocalinux/resources"),
+            Path("/usr/lib/vocalinux/resources"),
+            Path("/usr/local/lib64/vocalinux/resources"),
+            Path("/usr/lib64/vocalinux/resources"),
+            # Flatpak specific path
+            Path("/app/share/vocalinux/resources"),
         ]
+
+        for path in additional_paths:
+            if path not in candidates:
+                candidates.append(path)
 
         # Log all candidates for debugging
         for candidate in candidates:
