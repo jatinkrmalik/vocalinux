@@ -1,5 +1,47 @@
 # Linux Distribution Compatibility
 
+## Implementation Status
+
+The cross-distribution compatibility improvements have been implemented in phases:
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase 1 | ✅ Complete | Dynamic GI_TYPELIB_PATH detection using pkg-config, multi-arch support, ALSA library fallbacks |
+| Phase 2 | ✅ Complete | Enhanced distro detection (Gentoo, Alpine, Void, Solus, Mageia) |
+| Phase 3 | ✅ Complete | System dependency checker, improved error messages |
+| Phase 4 | ✅ Complete | CI test matrix, pkg-config as core dependency |
+| **Phase 5** | ✅ **Complete** | **Fixed remaining hardcoded GI_TYPELIB_PATH values in install.sh and CI workflow** |
+| **Phase 6** | ✅ **Complete** | **Added wrapper script verification tests, updated documentation** |
+| Phase 7 | 📋 Planned | Flatpak packaging for universal distribution support |
+| Phase 8 | 📋 Planned | Snap packaging for Ubuntu Software Store |
+
+## Technical Implementation
+
+### Dynamic GI_TYPELIB_PATH Detection
+
+The installer now uses a robust multi-step approach to detect the correct GI_TYPELIB_PATH across different distributions:
+
+1. **Primary Method**: Uses `pkg-config --variable=typelibdir gobject-introspection-1.0` (most reliable)
+2. **Fallback Paths**: Checks common distribution-specific paths in priority order:
+   - Ubuntu/Debian multi-arch: `/usr/lib/x86_64-linux-gnu/girepository-1.0`
+   - ARM64: `/usr/lib/aarch64-linux-gnu/girepository-1.0`
+   - Fedora/RHEL: `/usr/lib64/girepository-1.0`
+   - Arch/Generic: `/usr/lib/girepository-1.0`
+   - Local installs: `/usr/local/lib/girepository-1.0`
+
+3. **Architecture Support**: Detected paths for x86_64, ARM64, ARMHF, RISC-V, POWER, and s390x
+
+### Wrapper Scripts
+
+The installer creates wrapper scripts (`~/.local/bin/vocalinux` and `~/.local/bin/vocalinux-gui`) that:
+- Set the correct `GI_TYPELIB_PATH` environment variable
+- Handle input group permissions for Wayland keyboard shortcuts
+- Provide seamless cross-distro compatibility
+
+### Desktop Entry
+
+The `.desktop` entry is automatically configured with the detected `GI_TYPELIB_PATH`, ensuring the application launches correctly from the application menu regardless of distribution.
+
 ## Officially Supported Distributions
 
 These distributions are tested and known to work well with Vocalinux:

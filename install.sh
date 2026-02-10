@@ -1201,11 +1201,18 @@ install_python_package() {
     local PIP_LOG_DIR=$(mktemp -d)
     local PIP_LOG_FILE="$PIP_LOG_DIR/pip_log.txt"
 
+    # Detect GI_TYPELIB_PATH early for cross-distro compatibility
+    # This ensures the path is available for both verification and wrapper scripts
+    local GI_TYPELIB_DETECTED
+    GI_TYPELIB_DETECTED=$(detect_typelib_path)
+    print_info "Detected GI_TYPELIB_PATH: $GI_TYPELIB_DETECTED"
+
     # Function to verify package installation
     verify_package_installed() {
         local PKG_NAME="vocalinux"
         # Use venv python and set GI_TYPELIB_PATH for PyGObject
-        GI_TYPELIB_PATH=/usr/lib/girepository-1.0 "$VENV_DIR/bin/python" -c "import $PKG_NAME" 2>/dev/null
+        # Use the detected path for cross-distro compatibility
+        GI_TYPELIB_PATH="$GI_TYPELIB_DETECTED" "$VENV_DIR/bin/python" -c "import $PKG_NAME" 2>/dev/null
         return $?
     }
 
@@ -1381,9 +1388,7 @@ VOSK_INTERACTIVE_CONFIG
         # Clean up log file if installation was successful
         rm -rf "$PIP_LOG_DIR"
 
-        # Detect GI_TYPELIB_PATH for cross-distro compatibility
-        GI_TYPELIB_DETECTED=$(detect_typelib_path)
-        print_info "Detected GI_TYPELIB_PATH: $GI_TYPELIB_DETECTED"
+        # GI_TYPELIB_PATH was already detected at the start of install_python_package
 
         # Create wrapper scripts in ~/.local/bin for easy access
         mkdir -p "$HOME/.local/bin"
@@ -1648,7 +1653,8 @@ install_desktop_entry() {
         print_warning "Desktop entry may not work correctly"
     else
         # Update Exec line to include GI_TYPELIB_PATH for PyGObject
-        sed -i "s|^Exec=vocalinux|Exec=env GI_TYPELIB_PATH=/usr/lib/girepository-1.0 $WRAPPER_SCRIPT|" "$DESKTOP_DIR/vocalinux.desktop" || {
+        # Use the detected path for cross-distro compatibility
+        sed -i "s|^Exec=vocalinux|Exec=env GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED $WRAPPER_SCRIPT|" "$DESKTOP_DIR/vocalinux.desktop" || {
             print_warning "Failed to update desktop entry path"
         }
         print_info "Updated desktop entry to use wrapper script with GI_TYPELIB_PATH"
