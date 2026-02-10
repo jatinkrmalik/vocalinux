@@ -35,6 +35,85 @@ declare global {
     }
 }
 
+// Language code to display name and flag mapping
+const LANGUAGE_MAP: Record<string, { name: string; flag: string }> = {
+    "en": { name: "English", flag: "🇬🇧" },
+    "en-US": { name: "English (US)", flag: "🇺🇸" },
+    "en-GB": { name: "English (UK)", flag: "🇬🇧" },
+    "en-CA": { name: "English (Canada)", flag: "🇨🇦" },
+    "en-AU": { name: "English (Australia)", flag: "🇦🇺" },
+    "fr": { name: "French", flag: "🇫🇷" },
+    "fr-FR": { name: "French (France)", flag: "🇫🇷" },
+    "fr-CA": { name: "French (Canada)", flag: "🇨🇦" },
+    "de": { name: "German", flag: "🇩🇪" },
+    "de-DE": { name: "German (Germany)", flag: "🇩🇪" },
+    "es": { name: "Spanish", flag: "🇪🇸" },
+    "es-ES": { name: "Spanish (Spain)", flag: "🇪🇸" },
+    "es-MX": { name: "Spanish (Mexico)", flag: "🇲🇽" },
+    "es-AR": { name: "Spanish (Argentina)", flag: "🇦🇷" },
+    "it": { name: "Italian", flag: "🇮🇹" },
+    "it-IT": { name: "Italian (Italy)", flag: "🇮🇹" },
+    "pt": { name: "Portuguese", flag: "🇵🇹" },
+    "pt-BR": { name: "Portuguese (Brazil)", flag: "🇧🇷" },
+    "pt-PT": { name: "Portuguese (Portugal)", flag: "🇵🇹" },
+    "nl": { name: "Dutch", flag: "🇳🇱" },
+    "nl-NL": { name: "Dutch (Netherlands)", flag: "🇳🇱" },
+    "ja": { name: "Japanese", flag: "🇯🇵" },
+    "ja-JP": { name: "Japanese (Japan)", flag: "🇯🇵" },
+    "ko": { name: "Korean", flag: "🇰🇷" },
+    "ko-KR": { name: "Korean (Korea)", flag: "🇰🇷" },
+    "zh": { name: "Chinese", flag: "🇨🇳" },
+    "zh-CN": { name: "Chinese (Simplified)", flag: "🇨🇳" },
+    "zh-TW": { name: "Chinese (Traditional)", flag: "🇹🇼" },
+    "ru": { name: "Russian", flag: "🇷🇺" },
+    "ru-RU": { name: "Russian (Russia)", flag: "🇷🇺" },
+    "ar": { name: "Arabic", flag: "🇸🇦" },
+    "ar-SA": { name: "Arabic (Saudi Arabia)", flag: "🇸🇦" },
+    "hi": { name: "Hindi", flag: "🇮🇳" },
+    "hi-IN": { name: "Hindi (India)", flag: "🇮🇳" },
+    "pl": { name: "Polish", flag: "🇵🇱" },
+    "pl-PL": { name: "Polish (Poland)", flag: "🇵🇱" },
+    "tr": { name: "Turkish", flag: "🇹🇷" },
+    "tr-TR": { name: "Turkish (Turkey)", flag: "🇹🇷" },
+    "sv": { name: "Swedish", flag: "🇸🇪" },
+    "sv-SE": { name: "Swedish (Sweden)", flag: "🇸🇪" },
+    "da": { name: "Danish", flag: "🇩🇰" },
+    "da-DK": { name: "Danish (Denmark)", flag: "🇩🇰" },
+    "fi": { name: "Finnish", flag: "🇫🇮" },
+    "fi-FI": { name: "Finnish (Finland)", flag: "🇫🇮" },
+    "no": { name: "Norwegian", flag: "🇳🇴" },
+    "no-NO": { name: "Norwegian (Norway)", flag: "🇳🇴" },
+    "cs": { name: "Czech", flag: "🇨🇿" },
+    "cs-CZ": { name: "Czech (Czech Republic)", flag: "🇨🇿" },
+    "el": { name: "Greek", flag: "🇬🇷" },
+    "el-GR": { name: "Greek (Greece)", flag: "🇬🇷" },
+    "he": { name: "Hebrew", flag: "🇮🇱" },
+    "he-IL": { name: "Hebrew (Israel)", flag: "🇮🇱" },
+    "th": { name: "Thai", flag: "🇹🇭" },
+    "th-TH": { name: "Thai (Thailand)", flag: "🇹🇭" },
+    "vi": { name: "Vietnamese", flag: "🇻🇳" },
+    "vi-VN": { name: "Vietnamese (Vietnam)", flag: "🇻🇳" },
+    "id": { name: "Indonesian", flag: "🇮🇩" },
+    "id-ID": { name: "Indonesian (Indonesia)", flag: "🇮🇩" },
+    "ms": { name: "Malay", flag: "🇲🇾" },
+    "ms-MY": { name: "Malay (Malaysia)", flag: "🇲🇾" },
+};
+
+// Helper function to get language display info
+function getLanguageInfo(locale: string): { name: string; flag: string } {
+    // Try exact match first
+    if (LANGUAGE_MAP[locale]) {
+        return LANGUAGE_MAP[locale];
+    }
+    // Try base language code (e.g., "en-US" -> "en")
+    const baseCode = locale.split("-")[0];
+    if (LANGUAGE_MAP[baseCode]) {
+        return LANGUAGE_MAP[baseCode];
+    }
+    // Fallback to locale code itself
+    return { name: locale, flag: "🌐" };
+}
+
 export function LiveDemo() {
     const [isSupported, setIsSupported] = useState<boolean | null>(null);
     const [isListening, setIsListening] = useState(false);
@@ -44,6 +123,7 @@ export function LiveDemo() {
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [lastCtrlPress, setLastCtrlPress] = useState<number | null>(null);
     const [showCtrlHint, setShowCtrlHint] = useState(false);
+    const [detectedLanguage, setDetectedLanguage] = useState<string>("en-US");
     const recognitionRef = useRef<SpeechRecognition | null>(null);
     const isListeningRef = useRef(false);
 
@@ -52,10 +132,14 @@ export function LiveDemo() {
         isListeningRef.current = isListening;
     }, [isListening]);
 
-    // Check for browser support
+    // Check for browser support and detect language
     useEffect(() => {
         const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
         setIsSupported(!!SpeechRecognitionAPI);
+        
+        // Detect browser language
+        const browserLang = navigator.language || "en-US";
+        setDetectedLanguage(browserLang);
     }, []);
 
     // Initialize recognition
@@ -245,6 +329,18 @@ export function LiveDemo() {
                     <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
                         Web Speech API
                     </span>
+                    {(() => {
+                        const langInfo = getLanguageInfo(detectedLanguage);
+                        return (
+                            <span 
+                                className="text-xs bg-zinc-700/50 text-zinc-300 px-2 py-0.5 rounded-full flex items-center gap-1"
+                                title={`Detected language: ${langInfo.name} (${detectedLanguage})`}
+                            >
+                                <span>{langInfo.flag}</span>
+                                <span className="hidden sm:inline">{langInfo.name}</span>
+                            </span>
+                        );
+                    })()}
                 </div>
                 {transcript && (
                     <button
@@ -330,15 +426,28 @@ export function LiveDemo() {
 
                     <div className="text-center mt-4">
                         {isListening ? (
-                            <p className="text-sm text-zinc-300">
-                                <span className="flex items-center justify-center gap-2">
-                                    <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                            <div className="space-y-2">
+                                <p className="text-sm font-medium text-zinc-200 flex items-center justify-center gap-2">
+                                    {(() => {
+                                        const langInfo = getLanguageInfo(detectedLanguage);
+                                        return (
+                                            <>
+                                                <span>{langInfo.flag}</span>
+                                                <span>Listening in {langInfo.name}</span>
+                                            </>
+                                        );
+                                    })()}
+                                </p>
+                                <p className="text-xs text-zinc-400">
+                                    <span className="flex items-center justify-center gap-2">
+                                        <span className="relative flex h-2 w-2">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                        </span>
+                                        Double-tap <kbd className="px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-xs mx-1 text-zinc-200 font-mono">Ctrl</kbd> or click to stop
                                     </span>
-                                    Listening... Double-tap <kbd className="px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-xs mx-1 text-zinc-200 font-mono">Ctrl</kbd> or click to stop
-                                </span>
-                            </p>
+                                </p>
+                            </div>
                         ) : (
                             <div className="space-y-1">
                                 <p className="text-sm text-zinc-200">
