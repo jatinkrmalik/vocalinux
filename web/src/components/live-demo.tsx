@@ -66,7 +66,7 @@ export function LiveDemo() {
         const recognition = new SpeechRecognitionAPI();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = "en-US";
+        recognition.lang = navigator.language || "en-US";
 
         recognition.onstart = () => {
             setIsListening(true);
