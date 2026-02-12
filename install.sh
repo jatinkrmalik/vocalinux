@@ -326,7 +326,7 @@ EOF
     print_header "Step 1: Your System"
     echo "Detected: $DISTRO_NAME $DISTRO_VERSION"
 
-    detect_nvidia_gpu
+    detect_nvidia_gpu || true
     if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
         echo "GPU: $GPU_NAME ($GPU_MEMORY)"
         RECOMMENDED_ENGINE="whisper-gpu"
@@ -470,7 +470,7 @@ fi
 # Auto-detect GPU for non-interactive mode when no explicit Whisper choice
 # This helps users who run curl | bash without any flags
 if [[ "$NON_INTERACTIVE" == "yes" ]] && [[ "$WITH_WHISPER" == "no" ]] && [[ "$NO_WHISPER_EXPLICIT" == "no" ]] && [[ "$INTERACTIVE_MODE" == "no" ]]; then
-    detect_nvidia_gpu
+    detect_nvidia_gpu || true
     if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
         WITH_WHISPER="yes"
         print_info "NVIDIA GPU detected: $GPU_NAME"
