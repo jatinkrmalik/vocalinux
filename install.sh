@@ -32,6 +32,7 @@ WHISPER_CPU="no"
 NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
 INTERACTIVE_MODE="yes"  # Default to interactive mode
+INTERACTIVE_MODE_EXPLICIT="no"  # Track if user explicitly requested interactive mode
 AUTO_MODE="no"
 HAS_NVIDIA_GPU="unknown"
 GPU_NAME=""
@@ -71,6 +72,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --interactive|-i)
             INTERACTIVE_MODE="yes"
+            INTERACTIVE_MODE_EXPLICIT="yes"
             shift
             ;;
         --tag=*)
@@ -544,7 +546,9 @@ fi
 # Run interactive installation if selected
 if [[ "$INTERACTIVE_MODE" == "yes" ]]; then
     # Check if we have a TTY (required for interactive mode)
-    if [ ! -t 0 ]; then
+    # If user explicitly requested interactive mode with --interactive, trust them
+    # even if stdin is not a TTY (e.g., curl | bash pipe)
+    if [ ! -t 0 ] && [[ "$INTERACTIVE_MODE_EXPLICIT" != "yes" ]]; then
         print_error "Interactive mode requires a terminal (TTY)."
         print_error "Please run from a terminal, or use automatic mode:"
         print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --auto"
