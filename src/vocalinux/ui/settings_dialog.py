@@ -1112,7 +1112,7 @@ class SettingsDialog(Gtk.Dialog):
         # Populate engine combo with only available engines
         available_engines = get_available_engines()
         available_count = 0
-        
+
         for engine in ENGINE_MODELS.keys():
             if available_engines.get(engine, False):
                 capitalized_engine = engine.capitalize()
@@ -1127,16 +1127,18 @@ class SettingsDialog(Gtk.Dialog):
                 self.engine_combo.append(capitalized_engine, capitalized_engine)
         else:
             logger.info(f"Populated {available_count} available engines: {available_engines}")
-        
+
         # Set engine active - check if current engine is available
         if not available_engines.get(self.current_engine, False):
-            logger.warning(f"Current engine '{self.current_engine}' is not available, selecting first available")
+            logger.warning(
+                f"Current engine '{self.current_engine}' is not available, selecting first available"
+            )
             # Find first available engine
             for engine in ENGINE_MODELS.keys():
                 if available_engines.get(engine, False):
                     self.current_engine = engine
                     break
-        
+
         engine_text = self.current_engine.capitalize()
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
