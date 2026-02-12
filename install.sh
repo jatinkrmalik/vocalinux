@@ -31,14 +31,20 @@ WITH_WHISPER="no"
 WHISPER_CPU="no"
 NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
-INTERACTIVE_MODE="no"
+INTERACTIVE_MODE="yes"  # Default to interactive mode
+AUTO_MODE="no"
 HAS_NVIDIA_GPU="unknown"
 GPU_NAME=""
 GPU_MEMORY=""
+HAS_VULKAN="no"
+VULKAN_DEVICE=""
 
 # Detect if running non-interactively (e.g., via curl | bash)
+# Interactive mode is now default, so only auto-detect non-interactive for curl pipes
 if [ ! -t 0 ]; then
-    NON_INTERACTIVE="yes"
+    # When piped via curl, we'll still try to be interactive if possible
+    # User can force non-interactive with --auto
+    INTERACTIVE_MODE="ask"
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -59,19 +65,8 @@ while [[ $# -gt 0 ]]; do
             SKIP_MODELS="yes"
             shift
             ;;
-        --with-whisper)
-            WITH_WHISPER="yes"
-            shift
-            ;;
-        --whisper-cpu)
-            WITH_WHISPER="yes"
-            WHISPER_CPU="yes"
-            shift
-            ;;
-        --no-whisper)
-            WITH_WHISPER="no"
-            NO_WHISPER_EXPLICIT="yes"
-            NON_INTERACTIVE="yes"  # Skip the prompt
+        --engine=*)
+            SELECTED_ENGINE="${1#*=}"
             shift
             ;;
         --interactive|-i)
@@ -82,25 +77,38 @@ while [[ $# -gt 0 ]]; do
             INSTALL_TAG="${1#*=}"
             shift
             ;;
-        -y|--yes)
+        --auto)
+            AUTO_MODE="yes"
+            INTERACTIVE_MODE="no"
             NON_INTERACTIVE="yes"
             shift
             ;;
         --help)
             echo "Vocalinux Installer"
+            echo ""
             echo "Usage: $0 [options]"
+            echo ""
+            echo "Installation Modes:"
+            echo "  (no flags)       Interactive mode - guided setup with recommendations"
+            echo "  --auto           Automatic mode - install with defaults (whisper.cpp)"
+            echo "  --auto --engine=whisper   Auto mode with specific engine"
+            echo ""
             echo "Options:"
-            echo "  --interactive, -i  Guided interactive installation with recommendations"
+            echo "  --interactive, -i  Force interactive mode (default)"
+            echo "  --auto           Non-interactive automatic installation"
+            echo "  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk"
             echo "  --dev            Install in development mode with all dev dependencies"
             echo "  --test           Run tests after installation"
-            echo "  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)"
+            echo "  --venv-dir=PATH  Specify custom virtual environment directory"
             echo "  --skip-models    Skip downloading speech models during installation"
-            echo "  --with-whisper   Install Whisper AI with GPU/CUDA (included by default)"
-            echo "  --whisper-cpu    Install Whisper with CPU-only PyTorch (smaller download, works on low-RAM)"
-            echo "  --no-whisper     VOSK-only install (skips Whisper entirely, uses VOSK as default)"
             echo "  --tag=TAG        Install specific release tag (default: v0.4.1-alpha)"
-            echo "  -y, --yes        Non-interactive mode (accept defaults)"
             echo "  --help           Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0                           # Interactive mode (recommended)"
+            echo "  $0 --auto                    # Auto-install with whisper.cpp"
+            echo "  $0 --auto --engine=vosk      # Auto-install VOSK only"
+            echo "  $0 --dev --test              # Dev mode with tests"
             exit 0
             ;;
         *)
@@ -255,6 +263,48 @@ detect_nvidia_gpu() {
     fi
 }
 
+# Detect Vulkan support for whisper.cpp
+detect_vulkan() {
+    # Check for vulkaninfo command
+    if command -v vulkaninfo >/dev/null 2>&1; then
+        local vulkan_output=$(vulkaninfo --summary 2>/dev/null | head -20)
+        if [ -n "$vulkan_output" ]; then
+            HAS_VULKAN="yes"
+            # Try to extract GPU name
+            VULKAN_DEVICE=$(echo "$vulkan_output" | grep -i "deviceName" | head -1 | cut -d'=' -f2 | xargs)
+            if [ -z "$VULKAN_DEVICE" ]; then
+                VULKAN_DEVICE="Vulkan-compatible GPU"
+            fi
+            return 0
+        fi
+    fi
+    HAS_VULKAN="no"
+    return 1
+}
+
+# Detect hardware and recommend best engine
+get_engine_recommendation() {
+    detect_nvidia_gpu || true
+    detect_vulkan || true
+    
+    # Get RAM info
+    local TOTAL_RAM_GB=$(free -g 2>/dev/null | awk '/^Mem:/{print $2}' || echo "0")
+    
+    if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
+        # NVIDIA GPU detected - whisper.cpp can use CUDA
+        echo "whisper_cpp:✓:NVIDIA GPU detected ($GPU_NAME) - Best performance with whisper.cpp"
+    elif [[ "$HAS_VULKAN" == "yes" ]]; then
+        # Non-NVIDIA GPU with Vulkan support
+        echo "whisper_cpp:✓:$VULKAN_DEVICE detected - Great performance with whisper.cpp Vulkan"
+    elif [ "$TOTAL_RAM_GB" -ge 8 ]; then
+        # No GPU but decent RAM
+        echo "whisper_cpp:✓:No GPU detected, but ${TOTAL_RAM_GB}GB RAM - whisper.cpp CPU mode"
+    else
+        # Low RAM, no GPU
+        echo "vosk:⚠:Low RAM (${TOTAL_RAM_GB}GB) and no GPU - VOSK recommended for best performance"
+    fi
+}
+
 # Detect GI_TYPELIB_PATH for cross-distro compatibility
 detect_typelib_path() {
     # Try pkg-config first (most reliable)
@@ -318,86 +368,103 @@ EOF
     echo "Welcome! This guided installation will help you set up Vocalinux"
     echo "with the best options for your system."
     echo ""
-    echo "Both speech engines are 100% offline, local, and private."
+    echo "All speech engines are 100% offline, local, and private."
     echo "Your voice data never leaves your computer."
     echo ""
 
     # Step 1: Detect and display system info
     print_header "Step 1: Your System"
     echo "Detected: $DISTRO_NAME $DISTRO_VERSION"
-
-    detect_nvidia_gpu || true
-    if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-        echo "GPU: $GPU_NAME ($GPU_MEMORY)"
-        RECOMMENDED_ENGINE="whisper-gpu"
-        RECOMMENDED_LABEL="Whisper AI with GPU acceleration"
-    else
-        echo "GPU: None detected (or no NVIDIA drivers)"
-        RECOMMENDED_ENGINE="whisper-cpu"
-        RECOMMENDED_LABEL="Whisper AI (CPU-only)"
-    fi
+    
+    # Get hardware recommendation
+    local RECOMMENDATION=$(get_engine_recommendation)
+    local RECOMMENDED_ENGINE=$(echo "$RECOMMENDATION" | cut -d':' -f1)
+    local RECOMMENDED_ICON=$(echo "$RECOMMENDATION" | cut -d':' -f2)
+    local RECOMMENDED_REASON=$(echo "$RECOMMENDATION" | cut -d':' -f3-)
+    
+    echo "Hardware: $RECOMMENDED_REASON"
     echo ""
 
-    # Step 2: Choose installation type
-    print_header "Step 2: Installation Type"
-    echo "Choose what to install:"
+    # Step 2: Choose speech recognition engine
+    print_header "Step 2: Choose Speech Recognition Engine"
     echo ""
-    echo "  1. Full install (recommended)"
-    echo "     • Whisper AI - highest accuracy, 99+ languages"
-    echo "     • VOSK - fast fallback engine"
-    echo "     • Can switch between engines in Settings"
+    echo "  ┌─────────────────────────────────────────────────────────────┐"
+    echo "  │  1. WHISPER.CPP  ★ RECOMMENDED                              │"
+    echo "  │     • Fastest, most accurate, works with any GPU            │"
+    echo "  │     • Supports NVIDIA (CUDA), AMD, Intel (Vulkan)           │"
+    echo "  │     • CPU-only mode available for older systems             │"
+    echo "  │     • Models: tiny (39MB) to large (1.5GB)                  │"
+    echo "  │     • 99+ languages with auto-detection                     │"
+    echo "  └─────────────────────────────────────────────────────────────┘"
     echo ""
-    echo "  2. Minimal install"
-    echo "     • VOSK only - lightweight and fast"
-    echo "     • Works on older/low-RAM systems"
-    echo "     • ~40MB vs ~2GB+ for full install"
+    echo "  ┌─────────────────────────────────────────────────────────────┐"
+    echo "  │  2. WHISPER (OpenAI)                                        │"
+    echo "  │     • PyTorch-based, high accuracy                          │"
+    echo "  │     • Only supports NVIDIA GPUs (CUDA)                      │"
+    echo "  │     • Larger download (~2GB with CUDA)                      │"
+    echo "  │     • Good for development/research                         │"
+    echo "  └─────────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "  ┌─────────────────────────────────────────────────────────────┐"
+    echo "  │  3. VOSK                                                    │"
+    echo "  │     • Lightweight and fast                                  │"
+    echo "  │     • Works on older/low-RAM systems                        │"
+    echo "  │     • ~40MB download                                        │"
+    echo "  │     • Good for basic dictation needs                        │"
+    echo "  └─────────────────────────────────────────────────────────────┘"
+    echo ""
+    
+    # Show recommendation
+    case "$RECOMMENDED_ENGINE" in
+        whisper_cpp)
+            echo "  → Recommendation: whisper.cpp (best performance for your hardware)"
+            DEFAULT_CHOICE="1"
+            ;;
+        vosk)
+            echo "  → Recommendation: VOSK (lightweight option for your system)"
+            DEFAULT_CHOICE="3"
+            ;;
+        *)
+            echo "  → Recommendation: whisper.cpp (best overall experience)"
+            DEFAULT_CHOICE="1"
+            ;;
+    esac
     echo ""
 
-    read -p "Choose installation type [1-2] (default: 1): " ENGINE_CHOICE
-    ENGINE_CHOICE=${ENGINE_CHOICE:-1}
+    read -p "Choose engine [1-3] (default: $DEFAULT_CHOICE): " ENGINE_CHOICE
+    ENGINE_CHOICE=${ENGINE_CHOICE:-$DEFAULT_CHOICE}
 
-    if [[ "$ENGINE_CHOICE" == "2" ]]; then
-        WITH_WHISPER="no"
-        NO_WHISPER_EXPLICIT="yes"
-        SELECTED_ENGINE="Minimal (VOSK only)"
-    else
-        WITH_WHISPER="yes"
-        SELECTED_ENGINE="Full (Whisper + VOSK)"
+    case "$ENGINE_CHOICE" in
+        1)
+            SELECTED_ENGINE="whisper_cpp"
+            ENGINE_DISPLAY="Whisper.cpp (Recommended)"
+            ;;
+        2)
+            SELECTED_ENGINE="whisper"
+            ENGINE_DISPLAY="Whisper (OpenAI)"
+            ;;
+        3)
+            SELECTED_ENGINE="vosk"
+            ENGINE_DISPLAY="VOSK (Lightweight)"
+            ;;
+        *)
+            SELECTED_ENGINE="whisper_cpp"
+            ENGINE_DISPLAY="Whisper.cpp (Recommended)"
+            ;;
+    esac
 
-        # Step 3: Whisper variant (if Whisper selected)
-        print_header "Step 3: Whisper Installation Type"
-        echo "How would you like to install Whisper?"
-        echo ""
-        echo "  1. GPU version (~2.3GB) - For NVIDIA GPUs"
-        echo "  2. CPU-only (~200MB) - For any system"
-        echo ""
-
-        if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-            DEFAULT_WHISPER="1"
-            echo "  -> Recommended: Option 1 (GPU detected)"
-        else
-            DEFAULT_WHISPER="2"
-            echo "  -> Recommended: Option 2 (no GPU detected)"
-        fi
-        echo ""
-
-        read -p "Choose installation type [1-2] (default: $DEFAULT_WHISPER): " WHISPER_CHOICE
-        WHISPER_CHOICE=${WHISPER_CHOICE:-$DEFAULT_WHISPER}
-
-        if [[ "$WHISPER_CHOICE" == "2" ]]; then
-            WHISPER_CPU="yes"
-            SELECTED_VARIANT="Whisper AI (CPU-only)"
-        else
-            SELECTED_VARIANT="Whisper AI (GPU)"
-        fi
-    fi
-
-    # Step 4: Download models now or later?
-    print_header "Step 4: Model Download"
-    echo "Speech recognition models need to be downloaded."
+    # Step 3: Model download preference
+    print_header "Step 3: Model Download"
     echo ""
-    echo "  1. Download now (recommended) - Faster first run"
-    echo "  2. Download later - Smaller install, models download on first use"
+    echo "Speech recognition models can be downloaded now or later."
+    echo ""
+    echo "  1. Download now (recommended)"
+    echo "     • Faster first run - ready to use immediately"
+    echo "     • Offline capable right after install"
+    echo ""
+    echo "  2. Download later"
+    echo "     • Smaller initial install"
+    echo "     • Models download automatically on first use"
     echo ""
 
     read -p "Download models now? [1-2] (default: 1): " MODELS_CHOICE
@@ -405,21 +472,20 @@ EOF
 
     if [[ "$MODELS_CHOICE" == "2" ]]; then
         SKIP_MODELS="yes"
+        MODELS_DISPLAY="Download on first use"
+    else
+        MODELS_DISPLAY="Download now (recommended)"
     fi
 
     # Summary
     print_header "Installation Summary"
-    echo "Install type: $SELECTED_ENGINE"
-    if [[ "$WITH_WHISPER" == "yes" ]]; then
-        echo "Whisper variant: ${SELECTED_VARIANT:-GPU}"
-    fi
-    echo "Models: $([[ "$SKIP_MODELS" == "yes" ]] && echo "Download on first use" || echo "Download now")"
     echo ""
-    read -p "Press Enter to continue, or Ctrl+C to cancel..."
+    echo "  Speech Engine: $ENGINE_DISPLAY"
+    echo "  Models: $MODELS_DISPLAY"
+    echo "  Install Location: ${INSTALL_DIR:-\$HOME/.local/share/vocalinux}"
     echo ""
-
-    # Set non-interactive to skip the old prompt
-    NON_INTERACTIVE="yes"
+    read -p "Press Enter to continue with installation, or Ctrl+C to cancel..."
+    echo ""
 }
 
 # Detect distribution
@@ -453,13 +519,35 @@ else
     fi
 fi
 
-# Check if interactive mode is requested
+# Handle installation mode selection
+if [[ "$INTERACTIVE_MODE" == "ask" ]]; then
+    # Running via curl pipe but we have a terminal - ask user preference
+    echo ""
+    echo "Installation Mode:"
+    echo "  1. Interactive (recommended) - guided setup with recommendations"
+    echo "  2. Automatic - quick install with defaults (whisper.cpp)"
+    echo ""
+    read -p "Choose mode [1-2] (default: 1): " MODE_CHOICE
+    MODE_CHOICE=${MODE_CHOICE:-1}
+    
+    if [[ "$MODE_CHOICE" == "2" ]]; then
+        AUTO_MODE="yes"
+        INTERACTIVE_MODE="no"
+        NON_INTERACTIVE="yes"
+    else
+        INTERACTIVE_MODE="yes"
+        NON_INTERACTIVE="no"
+    fi
+    echo ""
+fi
+
+# Run interactive installation if selected
 if [[ "$INTERACTIVE_MODE" == "yes" ]]; then
     # Check if we have a TTY (required for interactive mode)
     if [ ! -t 0 ]; then
         print_error "Interactive mode requires a terminal (TTY)."
-        print_error "Please run from a terminal, or use quick install mode:"
-        print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
+        print_error "Please run from a terminal, or use automatic mode:"
+        print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --auto"
         exit 1
     fi
 
@@ -467,20 +555,12 @@ if [[ "$INTERACTIVE_MODE" == "yes" ]]; then
     run_interactive_install
 fi
 
-# Auto-detect GPU for non-interactive mode when no explicit Whisper choice
-# This helps users who run curl | bash without any flags
-if [[ "$NON_INTERACTIVE" == "yes" ]] && [[ "$WITH_WHISPER" == "no" ]] && [[ "$NO_WHISPER_EXPLICIT" == "no" ]] && [[ "$INTERACTIVE_MODE" == "no" ]]; then
-    detect_nvidia_gpu || true
-    if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-        WITH_WHISPER="yes"
-        print_info "NVIDIA GPU detected: $GPU_NAME"
-        print_info "Installing Whisper with GPU support..."
-    else
-        WITH_WHISPER="yes"
-        WHISPER_CPU="yes"
-        print_info "No NVIDIA GPU detected"
-        print_info "Installing Whisper with CPU-only PyTorch (~200MB)..."
-    fi
+# Set default engine for auto/non-interactive mode
+if [[ "$NON_INTERACTIVE" == "yes" ]] && [[ -z "$SELECTED_ENGINE" ]]; then
+    # Default to whisper.cpp for best performance
+    SELECTED_ENGINE="whisper_cpp"
+    print_info "Automatic mode: Installing with whisper.cpp (default engine)"
+    print_info "For other engines, use: --engine=whisper or --engine=vosk"
     echo ""
 fi
 
@@ -1241,33 +1321,111 @@ install_python_package() {
     else
         print_info "Installing Vocalinux..."
 
-        # Install the package with logging
+        # Install the package with logging (includes pywhispercpp by default)
         pip install . --log "$PIP_LOG_FILE" || {
             print_error "Failed to install Vocalinux."
             print_error "Check the pip log for details: $PIP_LOG_FILE"
             return 1
         }
 
-        # Whisper installation logic:
-        # - Default (non-interactive via curl|bash): Install Whisper
-        # - --no-whisper flag: Skip Whisper, create config with VOSK as default
-        # - Interactive mode: Prompt user
-        if [ "$NO_WHISPER_EXPLICIT" = "yes" ]; then
-            # User explicitly requested --no-whisper (for low-RAM systems)
-            print_info "Skipping Whisper installation (--no-whisper flag)."
-            print_info "VOSK will be used as the default speech recognition engine."
-
-            # Create config file with VOSK as default engine
-            local CONFIG_FILE="$CONFIG_DIR/config.json"
-            if [ ! -f "$CONFIG_FILE" ]; then
-                print_info "Creating config with VOSK as default engine..."
-                cat > "$CONFIG_FILE" << 'VOSK_CONFIG'
+        # Engine installation logic:
+        # - SELECTED_ENGINE is set by interactive mode or --engine flag
+        # - Default is whisper_cpp for best performance
+        case "${SELECTED_ENGINE:-whisper_cpp}" in
+            whisper_cpp)
+                print_info ""
+                print_info "╔════════════════════════════════════════════════════════╗"
+                print_info "║  Installing WHISPER.CPP (Recommended)                  ║"
+                print_info "╠════════════════════════════════════════════════════════╣"
+                print_info "║  • Fastest speech recognition                          ║"
+                print_info "║  • Works with any GPU: NVIDIA, AMD, Intel              ║"
+                print_info "║  • Uses Vulkan for GPU acceleration                    ║"
+                print_info "║  • CPU-only mode available                             ║"
+                print_info "╚════════════════════════════════════════════════════════╝"
+                print_info ""
+                print_info "whisper.cpp is included by default and ready to use!"
+                print_info ""
+                
+                # Check for GPU acceleration support
+                detect_vulkan || true
+                if [[ "$HAS_VULKAN" == "yes" ]]; then
+                    print_info "✓ Vulkan detected: $VULKAN_DEVICE"
+                    print_info "  GPU acceleration will be used automatically"
+                elif [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
+                    print_info "✓ NVIDIA GPU detected: $GPU_NAME"
+                    print_info "  CUDA acceleration will be used automatically"
+                else
+                    print_info "ℹ No GPU detected - whisper.cpp will use CPU mode"
+                    print_info "  CPU mode is still very fast!"
+                fi
+                echo ""
+                ;;
+            
+            whisper)
+                print_info "Installing Whisper (OpenAI) with PyTorch..."
+                print_info "Note: This engine requires NVIDIA GPU for acceleration"
+                print_info "      For AMD/Intel GPUs, whisper.cpp is recommended"
+                
+                # Install PyTorch and whisper
+                pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
+                    print_warning "Failed to install PyTorch."
+                }
+                pip install openai-whisper --log "$PIP_LOG_FILE" || {
+                    print_warning "Failed to install Whisper."
+                    print_warning "Falling back to VOSK."
+                }
+                
+                # Create config with whisper as default
+                local WHISPER_CONFIG="$CONFIG_DIR/config.json"
+                if [ ! -f "$WHISPER_CONFIG" ]; then
+                    mkdir -p "$CONFIG_DIR"
+                    cat > "$WHISPER_CONFIG" << 'WHISPER_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "whisper",
+        "model_size": "tiny",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+WHISPER_CONFIG
+                fi
+                ;;
+            
+            vosk)
+                print_info "Installing VOSK (lightweight option)..."
+                print_info "VOSK is fast and works well on older systems."
+                
+                # Create config with vosk as default
+                local VOSK_CONFIG_FILE="$CONFIG_DIR/config.json"
+                if [ ! -f "$VOSK_CONFIG_FILE" ]; then
+                    mkdir -p "$CONFIG_DIR"
+                    cat > "$VOSK_CONFIG_FILE" << 'VOSK_CONFIG'
 {
     "speech_recognition": {
         "engine": "vosk",
         "model_size": "small",
         "vosk_model_size": "small",
         "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
         "vad_sensitivity": 3,
         "silence_timeout": 2.0
     },
@@ -1288,98 +1446,9 @@ install_python_package() {
     }
 }
 VOSK_CONFIG
-            fi
-        elif [ "$WHISPER_CPU" = "yes" ]; then
-            # CPU-only Whisper installation (smaller download, works on low-RAM systems)
-            print_info "Installing Whisper AI with CPU-only PyTorch (~200MB instead of ~2.3GB)..."
-            print_info "This is ideal for systems without NVIDIA GPU or with limited RAM."
-
-            # Install CPU-only PyTorch first
-            pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
-                print_warning "Failed to install CPU-only PyTorch."
-                print_warning "Voice recognition will fall back to VOSK."
-            }
-
-            # Install openai-whisper (without its torch dependency since we already installed it)
-            pip install openai-whisper --log "$PIP_LOG_FILE" || {
-                print_warning "Failed to install Whisper."
-                print_warning "Voice recognition will fall back to VOSK."
-            }
-        elif [ "$WITH_WHISPER" = "yes" ]; then
-            # Install Whisper with GPU support (set by --with-whisper flag or auto-detected in non-interactive mode)
-            print_info "Installing Whisper AI support with GPU/CUDA (~2.3GB download, ~5-10 min)..."
-            print_info "This enables high-accuracy speech recognition with GPU acceleration."
-            print_info "Tip: Use --whisper-cpu for a smaller download if you don't have an NVIDIA GPU."
-            pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
-                print_warning "Failed to install Whisper support."
-                print_warning "Voice recognition will fall back to VOSK."
-            }
-        else
-            # Interactive mode: Prompt user
-            echo ""
-            print_info "Choose installation type:"
-            print_info "  1) Full install - GPU (~2.3GB) - Whisper + VOSK, best accuracy"
-            print_info "  2) Full install - CPU (~200MB) - Whisper + VOSK, no GPU needed"
-            print_info "  3) Minimal install (~40MB) - VOSK only, lightweight"
-            read -p "Choose option [1/2/3]: " -n 1 -r
-            echo
-            if [[ $REPLY == "1" ]]; then
-                WITH_WHISPER="yes"
-                print_info "Installing full (Whisper + VOSK) with GPU support..."
-                pip install ".[whisper]" --log "$PIP_LOG_FILE" || {
-                    print_warning "Failed to install Whisper support."
-                    print_warning "Voice recognition will fall back to VOSK."
-                }
-            elif [[ $REPLY == "2" ]]; then
-                WITH_WHISPER="yes"
-                WHISPER_CPU="yes"
-                print_info "Installing full (Whisper + VOSK) with CPU-only PyTorch..."
-                pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
-                    print_warning "Failed to install CPU-only PyTorch."
-                }
-                pip install openai-whisper --log "$PIP_LOG_FILE" || {
-                    print_warning "Failed to install Whisper."
-                    print_warning "Voice recognition will fall back to VOSK."
-                }
-            elif [[ $REPLY == "3" ]]; then
-                # User selected minimal install (VOSK only)
-                NO_WHISPER_EXPLICIT="yes"
-                print_info "Installing minimal (VOSK only)..."
-
-                # Create config file with VOSK as default engine
-                local CONFIG_FILE_PATH="$CONFIG_DIR/config.json"
-                if [ ! -f "$CONFIG_FILE_PATH" ]; then
-                    print_info "Creating config with VOSK as default engine..."
-                    cat > "$CONFIG_FILE_PATH" << 'VOSK_INTERACTIVE_CONFIG'
-{
-    "speech_recognition": {
-        "engine": "vosk",
-        "model_size": "small",
-        "vosk_model_size": "small",
-        "whisper_model_size": "tiny",
-        "vad_sensitivity": 3,
-        "silence_timeout": 2.0
-    },
-    "audio": {
-        "device_index": null,
-        "device_name": null
-    },
-    "shortcuts": {
-        "toggle_recognition": "ctrl+ctrl"
-    },
-    "ui": {
-        "start_minimized": false,
-        "show_notifications": true
-    },
-    "advanced": {
-        "debug_logging": false,
-        "wayland_mode": false
-    }
-}
-VOSK_INTERACTIVE_CONFIG
                 fi
-            fi
-        fi
+                ;;
+        esac
     fi
 
     # Verify installation
