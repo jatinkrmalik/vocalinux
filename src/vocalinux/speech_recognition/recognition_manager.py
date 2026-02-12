@@ -9,6 +9,7 @@ import ctypes
 import json
 import logging
 import os
+import sys
 import threading
 import time
 from typing import Callable, List, Optional
@@ -563,6 +564,8 @@ class SpeechRecognitionManager:
 
     def _init_whispercpp(self):
         """Initialize the whisper.cpp speech recognition engine."""
+        import time
+
         try:
             from pywhispercpp.model import Model
 
@@ -592,12 +595,30 @@ class SpeechRecognitionManager:
 
             # Detect and log compute backend
             from ..utils.whispercpp_model_info import (
+                ComputeBackend,
                 detect_compute_backend,
                 get_backend_display_name,
             )
 
             backend, backend_info = detect_compute_backend()
-            logger.info(f"Using {get_backend_display_name(backend)} backend: {backend_info}")
+            logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
+            logger.info(
+                f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
+            )
+
+            # Log hardware summary
+            import psutil
+
+            total_ram_gb = psutil.virtual_memory().total // (1024**3)
+            logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
+
+            # Validate model file exists and get size
+            if os.path.exists(model_path):
+                model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
+                logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
+            else:
+                logger.error(f"whisper.cpp model file not found: {model_path}")
+                raise FileNotFoundError(f"Model file not found: {model_path}")
 
             logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
             # Ensure previous model is released if re-initializing
@@ -607,21 +628,30 @@ class SpeechRecognitionManager:
             # It auto-detects the best backend (Vulkan, CUDA, or CPU)
             # Use all available CPU cores for best performance
             import multiprocessing
+
             n_threads = multiprocessing.cpu_count()
+            cpu_count = multiprocessing.cpu_count()
+
+            load_start_time = time.time()
             self.model = Model(model_path, n_threads=n_threads)
-            logger.info(f"whisper.cpp using {n_threads} threads")
+            load_duration = time.time() - load_start_time
+
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} (detected {cpu_count} CPUs)"
+            )
+            logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({backend} backend)")
 
             self._model_initialized = True
-            logger.info(f"whisper.cpp model loaded ({backend} backend)")
             logger.info("whisper.cpp engine initialized successfully.")
 
         except ImportError as e:
             logger.error(f"Failed to import pywhispercpp: {e}")
+            logger.error(f"Python path: {sys.path}")
             logger.error("Please install with: pip install pywhispercpp")
             self.state = RecognitionState.ERROR
             raise
         except Exception as e:
-            logger.error(f"Failed to initialize whisper.cpp engine: {e}")
+            logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
             self.state = RecognitionState.ERROR
             raise
 
@@ -635,6 +665,8 @@ class SpeechRecognitionManager:
         Returns:
             Transcribed text
         """
+        import time
+
         try:
             import numpy as np
 
@@ -648,7 +680,10 @@ class SpeechRecognitionManager:
             audio_float = audio_data.astype(np.float32) / 32768.0
 
             duration = len(audio_float) / 16000.0  # 16kHz sample rate
-            logger.debug(f"Transcribing audio with whisper.cpp: {duration:.2f} seconds")
+            num_chunks = len(audio_buffer)
+            logger.debug(
+                f"whisper.cpp audio preprocessing: {len(audio_float)} samples, {duration:.2f}s, {num_chunks} chunks"
+            )
 
             # Prepare language parameter
             lang = self.language
@@ -657,9 +692,13 @@ class SpeechRecognitionManager:
             elif self.language == "auto":
                 lang = None  # Auto-detect
 
+            logger.debug(f"whisper.cpp using language: {lang or 'auto-detect'}")
+
             # Transcribe with whisper.cpp
             # pywhispercpp expects audio as numpy array
+            transcribe_start = time.time()
             segments = self.model.transcribe(audio_float, language=lang)
+            transcribe_duration = time.time() - transcribe_start
 
             # Extract text from segments
             text_parts = []
@@ -668,16 +707,30 @@ class SpeechRecognitionManager:
                     text_parts.append(segment.text.strip())
 
             text = " ".join(text_parts).strip()
+            num_segments = len(text_parts)
+
+            # Calculate RTF (Real-Time Factor)
+            rtf = transcribe_duration / duration if duration > 0 else 0
 
             if text:
                 logger.info(f"whisper.cpp transcribed: '{text}'")
+                logger.info(
+                    f"whisper.cpp transcription completed in {transcribe_duration:.3f}s for {duration:.2f}s audio (RTF: {rtf:.2f}x) - {num_segments} segments"
+                )
             else:
-                logger.debug("whisper.cpp returned empty transcription")
+                logger.debug(
+                    f"whisper.cpp returned empty transcription ({transcribe_duration:.3f}s)"
+                )
 
             return text
 
         except Exception as e:
-            logger.error(f"Error in whisper.cpp transcription: {e}", exc_info=True)
+            audio_info = (
+                f"audio buffer: {len(audio_buffer)} chunks"
+                if audio_buffer
+                else "empty audio buffer"
+            )
+            logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
             return ""
 
     def _download_whispercpp_model(self):
