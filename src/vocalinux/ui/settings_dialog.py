@@ -78,6 +78,24 @@ WHISPER_MODEL_INFO = {
 }
 
 
+def format_engine_display_name(engine_id):
+    """
+    Format engine ID for display in the UI.
+    
+    Args:
+        engine_id: The engine identifier (e.g., "whisper_cpp", "vosk")
+        
+    Returns:
+        User-friendly display name (e.g., "whisper.cpp", "Vosk")
+    """
+    display_names = {
+        "whisper_cpp": "whisper.cpp",
+        "whisper": "Whisper",
+        "vosk": "VOSK",
+    }
+    return display_names.get(engine_id, engine_id.capitalize())
+
+
 def get_available_engines():
     """
     Detect which speech recognition engines are available/installed.
@@ -685,7 +703,25 @@ class SettingsDialog(Gtk.Dialog):
 
         # Dialog configuration - Close button only (instant-apply pattern)
         self.add_button("_Close", Gtk.ResponseType.CLOSE)
-        self.set_default_size(520, 680)
+        # Calculate dialog size - 75% of screen height for better visibility
+        display = Gdk.Display.get_default()
+        if display:
+            monitor = display.get_primary_monitor()
+            if not monitor and display.get_n_monitors() > 0:
+                monitor = display.get_monitor(0)
+            if monitor:
+                geometry = monitor.get_geometry()
+                screen_height = geometry.height
+                screen_width = geometry.width
+            else:
+                screen_height = 1080  # Default fallback
+                screen_width = 1920
+        else:
+            screen_height = 1080  # Default fallback
+            screen_width = 1920
+        dialog_height = int(screen_height * 0.75)
+        dialog_width = min(520, int(screen_width * 0.8))
+        self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
 
         # Main scrolled window for content
@@ -1097,16 +1133,16 @@ class SettingsDialog(Gtk.Dialog):
         
         for engine in ENGINE_MODELS.keys():
             if available_engines.get(engine, False):
-                capitalized_engine = engine.capitalize()
-                self.engine_combo.append(capitalized_engine, capitalized_engine)
+                display_name = format_engine_display_name(engine)
+                self.engine_combo.append(display_name, display_name)
                 available_count += 1
-        
+
         if available_count == 0:
             logger.error("No speech recognition engines available!")
             # Still add them so the UI works, but log the error
             for engine in ENGINE_MODELS.keys():
-                capitalized_engine = engine.capitalize()
-                self.engine_combo.append(capitalized_engine, capitalized_engine)
+                display_name = format_engine_display_name(engine)
+                self.engine_combo.append(display_name, display_name)
         else:
             logger.info(f"Populated {available_count} available engines: {available_engines}")
         
@@ -1119,7 +1155,7 @@ class SettingsDialog(Gtk.Dialog):
                     self.current_engine = engine
                     break
         
-        engine_text = self.current_engine.capitalize()
+        engine_text = format_engine_display_name(self.current_engine)
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
             logger.warning("Could not set engine by ID, trying by index")
