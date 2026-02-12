@@ -194,7 +194,7 @@ export default function HomePage() {
             />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
             <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
-              v0.5.0 Beta
+              v0.6.0 Beta
             </span>
           </Link>
 
@@ -308,9 +308,11 @@ export default function HomePage() {
                 </span>
               </h1>
 
+              <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-2 max-w-3xl mx-auto">
+                100% offline voice dictation for Linux.
+              </p>
               <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto">
-                100% offline, privacy-first voice-to-text. Double-tap Ctrl to dictate anywhere.
-                Powered by <strong>whisper.cpp</strong> (C++ optimized, Vulkan GPU support). Free &amp; open-source.
+                Just double-tap Ctrl and speak.
               </p>
 
               {/* CTA Buttons */}
@@ -380,9 +382,25 @@ export default function HomePage() {
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Zap className="h-3.5 w-3.5 text-green-500" />
-                      ~1-2 min with whisper.cpp
+                      ~1-2 min
                     </span>
                   </div>
+                </div>
+
+                {/* Tech stack info */}
+                <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 mt-4 pt-4 border-t border-zinc-800/30 text-xs text-zinc-400">
+                  <span className="flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 text-yellow-500" />
+                    <strong className="text-zinc-300">whisper.cpp</strong> powered
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-blue-500" />
+                    AMD, Intel & NVIDIA GPUs
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Code className="h-3.5 w-3.5 text-purple-500" />
+                    Free & open-source
+                  </span>
                 </div>
               </div>
             </motion.div>
