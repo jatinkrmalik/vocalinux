@@ -1466,21 +1466,43 @@ install_python_package() {
                 print_info "║  • CPU-only mode available                             ║"
                 print_info "╚════════════════════════════════════════════════════════╝"
                 print_info ""
-                print_info "whisper.cpp is included by default and ready to use!"
-                print_info ""
-                
-                # Check for GPU acceleration support
+
+                # Detect GPU and install pywhispercpp with appropriate GPU support
+                detect_nvidia_gpu || true
                 detect_vulkan || true
-                if [[ "$HAS_VULKAN" == "yes" ]]; then
-                    print_info "✓ Vulkan detected: $VULKAN_DEVICE"
-                    print_info "  GPU acceleration will be used automatically"
-                elif [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
+
+                local PYWHISPERCPP_INSTALL_CMD="pip install pywhispercpp"
+                local GPU_BACKEND="CPU"
+
+                if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
                     print_info "✓ NVIDIA GPU detected: $GPU_NAME"
-                    print_info "  CUDA acceleration will be used automatically"
+                    print_info "  Installing pywhispercpp with CUDA support..."
+                    PYWHISPERCPP_INSTALL_CMD="GGML_CUDA=1 pip install --force-reinstall git+https://github.com/absadiki/pywhispercpp"
+                    GPU_BACKEND="CUDA"
+                elif [[ "$HAS_VULKAN" == "yes" ]]; then
+                    print_info "✓ Vulkan detected: $VULKAN_DEVICE"
+                    print_info "  Installing pywhispercpp with Vulkan support..."
+                    PYWHISPERCPP_INSTALL_CMD="GGML_VULKAN=1 pip install --force-reinstall git+https://github.com/absadiki/pywhispercpp"
+                    GPU_BACKEND="Vulkan"
                 else
-                    print_info "ℹ No GPU detected - whisper.cpp will use CPU mode"
+                    print_info "ℹ No GPU detected - installing CPU-only version"
                     print_info "  CPU mode is still very fast!"
+                    PYWHISPERCPP_INSTALL_CMD="pip install pywhispercpp"
+                    GPU_BACKEND="CPU"
                 fi
+
+                # Install pywhispercpp with GPU support
+                print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
+                if ! $PYWHISPERCPP_INSTALL_CMD --log "$PIP_LOG_FILE" 2>&1; then
+                    print_warning "Failed to install pywhispercpp with GPU support, falling back to CPU version..."
+                    pip install pywhispercpp --log "$PIP_LOG_FILE" || {
+                        print_error "Failed to install pywhispercpp"
+                        return 1
+                    }
+                    GPU_BACKEND="CPU (fallback)"
+                fi
+
+                print_success "pywhispercpp installed with $GPU_BACKEND backend"
                 echo ""
                 ;;
             
