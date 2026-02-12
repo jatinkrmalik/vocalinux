@@ -29,6 +29,13 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
+from ..utils.whispercpp_model_info import (
+    WHISPERCPP_MODEL_INFO,
+    detect_compute_backend,
+    get_backend_display_name,
+)
+from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
+from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
 from .keyboard_backends import SHORTCUT_DISPLAY_NAMES, SUPPORTED_SHORTCUTS  # noqa: E402
 
 # Avoid circular imports for type checking
@@ -52,6 +59,13 @@ ENGINE_MODELS = {
         "medium",
         "large",
     ],  # Add more whisper sizes if needed
+    "whisper_cpp": [
+        "tiny",
+        "base",
+        "small",
+        "medium",
+        "large",
+    ],  # whisper.cpp models (ggml format)
 }
 
 # Whisper model metadata for display
@@ -62,6 +76,42 @@ WHISPER_MODEL_INFO = {
     "medium": {"size_mb": 1500, "desc": "High accuracy, slower", "params": "769M"},
     "large": {"size_mb": 2900, "desc": "Highest accuracy, slowest", "params": "1550M"},
 }
+
+
+def get_available_engines():
+    """
+    Detect which speech recognition engines are available/installed.
+    Returns a dictionary of engine_name -> availability (bool).
+    """
+    engines = {"vosk": False, "whisper": False, "whisper_cpp": False}
+
+    # Check VOSK
+    try:
+        import vosk
+
+        engines["vosk"] = True
+    except ImportError:
+        pass
+
+    # Check OpenAI Whisper
+    try:
+        import whisper
+
+        engines["whisper"] = True
+    except ImportError:
+        pass
+
+    # Check whisper.cpp (pywhispercpp)
+    try:
+        from pywhispercpp.model import Model
+
+        engines["whisper_cpp"] = True
+    except ImportError:
+        pass
+
+    logger.debug(f"Available engines: {engines}")
+    return engines
+
 
 # Models directory
 MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
@@ -635,7 +685,25 @@ class SettingsDialog(Gtk.Dialog):
 
         # Dialog configuration - Close button only (instant-apply pattern)
         self.add_button("_Close", Gtk.ResponseType.CLOSE)
-        self.set_default_size(520, 680)
+        # Calculate dialog size - 75% of screen height for better visibility
+        display = Gdk.Display.get_default()
+        if display:
+            monitor = display.get_primary_monitor()
+            if not monitor and display.get_n_monitors() > 0:
+                monitor = display.get_monitor(0)
+            if monitor:
+                geometry = monitor.get_geometry()
+                screen_height = geometry.height
+                screen_width = geometry.width
+            else:
+                screen_height = 1080  # Default fallback
+                screen_width = 1920
+        else:
+            screen_height = 1080  # Default fallback
+            screen_width = 1920
+        dialog_height = int(screen_height * 0.75)
+        dialog_width = min(520, int(screen_width * 0.8))
+        self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
 
         # Main scrolled window for content
@@ -1041,20 +1109,50 @@ class SettingsDialog(Gtk.Dialog):
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
         )
 
-        # Populate engine combo
-        for engine in ENGINE_MODELS.keys():
-            capitalized_engine = engine.capitalize()
-            self.engine_combo.append(capitalized_engine, capitalized_engine)
+        # Populate engine combo with only available engines
+        available_engines = get_available_engines()
+        available_count = 0
 
-        # Set engine active
+        for engine in ENGINE_MODELS.keys():
+            if available_engines.get(engine, False):
+                capitalized_engine = engine.capitalize()
+                self.engine_combo.append(capitalized_engine, capitalized_engine)
+                available_count += 1
+
+        if available_count == 0:
+            logger.error("No speech recognition engines available!")
+            # Still add them so the UI works, but log the error
+            for engine in ENGINE_MODELS.keys():
+                capitalized_engine = engine.capitalize()
+                self.engine_combo.append(capitalized_engine, capitalized_engine)
+        else:
+            logger.info(f"Populated {available_count} available engines: {available_engines}")
+
+        # Set engine active - check if current engine is available
+        if not available_engines.get(self.current_engine, False):
+            logger.warning(
+                f"Current engine '{self.current_engine}' is not available, selecting first available"
+            )
+            # Find first available engine
+            for engine in ENGINE_MODELS.keys():
+                if available_engines.get(engine, False):
+                    self.current_engine = engine
+                    break
+
         engine_text = self.current_engine.capitalize()
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
             logger.warning("Could not set engine by ID, trying by index")
-            if self.current_engine == "vosk":
-                self.engine_combo.set_active(0)
-            elif self.current_engine == "whisper":
-                self.engine_combo.set_active(1)
+            # Find index of current engine
+            model = self.engine_combo.get_model()
+            for i, row in enumerate(model):
+                if row[0].lower() == self.current_engine.lower():
+                    self.engine_combo.set_active(i)
+                    break
+            else:
+                # Fallback to first available
+                if self.engine_combo.get_model():
+                    self.engine_combo.set_active(0)
 
         # Populate model options for the selected engine
         self._populate_model_options()
@@ -1115,17 +1213,21 @@ class SettingsDialog(Gtk.Dialog):
 
             downloaded_models = []
             smallest_model = None
-            recommended_model, _ = (
-                _get_recommended_whisper_model()
-                if engine == "whisper"
-                else _get_recommended_vosk_model()
-            )
+            if engine == "whisper":
+                recommended_model, _ = _get_recommended_whisper_model()
+            elif engine == "whisper_cpp":
+                recommended_model, _ = get_recommended_whispercpp_model()
+            else:
+                recommended_model, _ = _get_recommended_vosk_model()
 
             if engine in ENGINE_MODELS:
                 for size in ENGINE_MODELS[engine]:
                     if engine == "whisper" and size in WHISPER_MODEL_INFO:
                         info = WHISPER_MODEL_INFO[size]
                         is_downloaded = _is_whisper_model_downloaded(size)
+                    elif engine == "whisper_cpp" and size in WHISPERCPP_MODEL_INFO:
+                        info = WHISPERCPP_MODEL_INFO[size]
+                        is_downloaded = is_whispercpp_model_downloaded(size)
                     elif engine == "vosk" and size in VOSK_MODEL_INFO:
                         info = VOSK_MODEL_INFO[size]
                         is_downloaded = _is_vosk_model_downloaded(size, self.language)
@@ -1186,7 +1288,7 @@ class SettingsDialog(Gtk.Dialog):
                 current_lang == "auto" or not SUPPORTED_LANGUAGES.get(current_lang, {}).get("vosk")
             ):
                 self.language = "en-us"
-            elif engine == "whisper" and not current_lang:
+            elif engine in ["whisper", "whisper_cpp"] and not current_lang:
                 self.language = "auto"
 
         self._populate_model_options()
@@ -1229,7 +1331,8 @@ class SettingsDialog(Gtk.Dialog):
                     continue
                 is_downloaded = _is_vosk_model_downloaded("small", lang_code)
                 display_text += " ✓" if is_downloaded else " ↓"
-            elif engine == "whisper":
+            elif engine in ["whisper", "whisper_cpp"]:
+                # Both Whisper and whisper.cpp support auto-detect
                 if lang_code == "auto":
                     display_text += " ⚠"
             else:
@@ -1297,6 +1400,17 @@ class SettingsDialog(Gtk.Dialog):
             is_downloaded = _is_whisper_model_downloaded(model_name)
             recommended, reason = _get_recommended_whisper_model()
             extra_info = f"Parameters: {info['params']}"
+        elif engine == "whisper_cpp":
+            if model_name not in WHISPERCPP_MODEL_INFO:
+                self.model_info_card.hide()
+                return
+            info = WHISPERCPP_MODEL_INFO[model_name]
+            is_downloaded = is_whispercpp_model_downloaded(model_name)
+            recommended, reason = get_recommended_whispercpp_model()
+            backend, backend_info = detect_compute_backend()
+            extra_info = (
+                f"Parameters: {info['params']} • Backend: {get_backend_display_name(backend)}"
+            )
         elif engine == "vosk":
             if model_name not in VOSK_MODEL_INFO:
                 self.model_info_card.hide()
@@ -1357,6 +1471,9 @@ class SettingsDialog(Gtk.Dialog):
             if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
                 needs_download = True
                 model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
+            elif engine == "whisper_cpp" and not is_whispercpp_model_downloaded(model_name):
+                needs_download = True
+                model_info = WHISPERCPP_MODEL_INFO.get(model_name, {"size_mb": 39})
             elif engine == "vosk" and not _is_vosk_model_downloaded(model_name, self.language):
                 needs_download = True
                 model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})

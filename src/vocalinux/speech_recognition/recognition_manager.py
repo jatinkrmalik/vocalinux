@@ -2,13 +2,14 @@
 Speech recognition manager module for Vocalinux.
 
 This module provides a unified interface to different speech recognition engines,
-currently supporting VOSK and Whisper.
+currently supporting VOSK, Whisper, and whisper.cpp.
 """
 
 import ctypes
 import json
 import logging
 import os
+import sys
 import threading
 import time
 from typing import Callable, List, Optional
@@ -16,6 +17,11 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
+from ..utils.whispercpp_model_info import (
+    WHISPERCPP_MODEL_INFO,
+    get_model_path,
+    is_model_downloaded,
+)
 from .command_processor import CommandProcessor
 
 
@@ -368,6 +374,8 @@ class SpeechRecognitionManager:
             self._init_vosk()
         elif engine == "whisper":
             self._init_whisper()
+        elif engine == "whisper_cpp":
+            self._init_whispercpp()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
 
@@ -553,6 +561,273 @@ class SpeechRecognitionManager:
         except Exception as e:
             logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
             return ""
+
+    def _init_whispercpp(self):
+        """Initialize the whisper.cpp speech recognition engine."""
+        import time
+
+        try:
+            from pywhispercpp.model import Model
+
+            # Validate model size for whisper.cpp
+            valid_models = list(WHISPERCPP_MODEL_INFO.keys())
+            if self.model_size not in valid_models:
+                logger.warning(
+                    f"Model size '{self.model_size}' not valid for whisper.cpp. "
+                    f"Valid options: {valid_models}. Using 'tiny' instead."
+                )
+                self.model_size = "tiny"
+
+            # Check if model is downloaded
+            model_path = get_model_path(self.model_size)
+
+            if not os.path.exists(model_path):
+                if self._defer_download:
+                    logger.info(
+                        f"whisper.cpp model '{self.model_size}' not found at {model_path}. "
+                        "Will download when needed."
+                    )
+                    self._model_initialized = False
+                    return  # Don't block startup
+                else:
+                    logger.info(f"Downloading whisper.cpp '{self.model_size}' model...")
+                    self._download_whispercpp_model()
+
+            # Detect and log compute backend
+            from ..utils.whispercpp_model_info import (
+                ComputeBackend,
+                detect_compute_backend,
+                get_backend_display_name,
+            )
+
+            backend, backend_info = detect_compute_backend()
+            logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
+            logger.info(
+                f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
+            )
+
+            # Log hardware summary
+            import psutil
+
+            total_ram_gb = psutil.virtual_memory().total // (1024**3)
+            logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
+
+            # Validate model file exists and get size
+            if os.path.exists(model_path):
+                model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
+                logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
+            else:
+                logger.error(f"whisper.cpp model file not found: {model_path}")
+                raise FileNotFoundError(f"Model file not found: {model_path}")
+
+            logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
+            # Ensure previous model is released if re-initializing
+            self.model = None
+
+            # Load model with pywhispercpp
+            # It auto-detects the best backend (Vulkan, CUDA, or CPU)
+            # Use all available CPU cores for best performance
+            import multiprocessing
+
+            n_threads = multiprocessing.cpu_count()
+            cpu_count = multiprocessing.cpu_count()
+
+            load_start_time = time.time()
+            self.model = Model(model_path, n_threads=n_threads)
+            load_duration = time.time() - load_start_time
+
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} (detected {cpu_count} CPUs)"
+            )
+            logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({backend} backend)")
+
+            self._model_initialized = True
+            logger.info("whisper.cpp engine initialized successfully.")
+
+        except ImportError as e:
+            logger.error(f"Failed to import pywhispercpp: {e}")
+            logger.error(f"Python path: {sys.path}")
+            logger.error("Please install with: pip install pywhispercpp")
+            self.state = RecognitionState.ERROR
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _transcribe_with_whispercpp(self, audio_buffer: List[bytes]) -> str:
+        """
+        Transcribe audio buffer using whisper.cpp.
+
+        Args:
+            audio_buffer: List of audio data chunks (16-bit PCM at 16kHz)
+
+        Returns:
+            Transcribed text
+        """
+        import time
+
+        try:
+            import numpy as np
+
+            if not audio_buffer:
+                return ""
+
+            # Convert audio buffer to numpy array
+            audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+
+            # Convert to float32 and normalize to [-1, 1]
+            audio_float = audio_data.astype(np.float32) / 32768.0
+
+            duration = len(audio_float) / 16000.0  # 16kHz sample rate
+            num_chunks = len(audio_buffer)
+            logger.debug(
+                f"whisper.cpp audio preprocessing: {len(audio_float)} samples, {duration:.2f}s, {num_chunks} chunks"
+            )
+
+            # Prepare language parameter
+            lang = self.language
+            if self.language == "en-us":
+                lang = "en"
+            elif self.language == "auto":
+                lang = None  # Auto-detect
+
+            logger.debug(f"whisper.cpp using language: {lang or 'auto-detect'}")
+
+            # Transcribe with whisper.cpp
+            # pywhispercpp expects audio as numpy array
+            transcribe_start = time.time()
+            segments = self.model.transcribe(audio_float, language=lang)
+            transcribe_duration = time.time() - transcribe_start
+
+            # Extract text from segments
+            text_parts = []
+            for segment in segments:
+                if hasattr(segment, "text") and segment.text:
+                    text_parts.append(segment.text.strip())
+
+            text = " ".join(text_parts).strip()
+            num_segments = len(text_parts)
+
+            # Calculate RTF (Real-Time Factor)
+            rtf = transcribe_duration / duration if duration > 0 else 0
+
+            if text:
+                logger.info(f"whisper.cpp transcribed: '{text}'")
+                logger.info(
+                    f"whisper.cpp transcription completed in {transcribe_duration:.3f}s for {duration:.2f}s audio (RTF: {rtf:.2f}x) - {num_segments} segments"
+                )
+            else:
+                logger.debug(
+                    f"whisper.cpp returned empty transcription ({transcribe_duration:.3f}s)"
+                )
+
+            return text
+
+        except Exception as e:
+            audio_info = (
+                f"audio buffer: {len(audio_buffer)} chunks"
+                if audio_buffer
+                else "empty audio buffer"
+            )
+            logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
+            return ""
+
+    def _download_whispercpp_model(self):
+        """Download a whisper.cpp model with progress tracking."""
+        import requests
+
+        self._download_cancelled = False
+
+        model_info = WHISPERCPP_MODEL_INFO.get(self.model_size)
+        if not model_info:
+            raise ValueError(f"Unknown whisper.cpp model size: {self.model_size}")
+
+        url = model_info["url"]
+        model_path = get_model_path(self.model_size)
+        temp_file = model_path + ".tmp"
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
+
+        logger.info(f"Downloading whisper.cpp {self.model_size} model to {model_path}")
+        logger.info(f"Downloading from {url}")
+
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks
+
+            with open(temp_file, "wb") as f:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                        raise RuntimeError("Download cancelled")
+
+                    f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Rename temp file to final
+            os.rename(temp_file, model_path)
+            logger.info("whisper.cpp model downloaded successfully")
+
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download whisper.cpp model from {url}: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
+        except Exception as e:
+            logger.error(f"An error occurred during whisper.cpp model download: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise
 
     def _get_vosk_model_path(self) -> str:
         """Get the path to the VOSK model based on the selected size and language."""
@@ -1264,6 +1539,9 @@ class SpeechRecognitionManager:
         elif self.engine == "whisper":
             text = self._transcribe_with_whisper(self.audio_buffer)
 
+        elif self.engine == "whisper_cpp":
+            text = self._transcribe_with_whispercpp(self.audio_buffer)
+
         else:
             logger.error(f"Unknown engine: {self.engine}")
             return
@@ -1357,6 +1635,8 @@ class SpeechRecognitionManager:
                     self._init_vosk()
                 elif self.engine == "whisper":
                     self._init_whisper()
+                elif self.engine == "whisper_cpp":
+                    self._init_whispercpp()
                 else:
                     raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                 logger.info("Speech engine re-initialized successfully.")

@@ -47,6 +47,45 @@ safe_remove() {
     fi
 }
 
+# Function to kill running Vocalinux processes
+kill_vocalinux_processes() {
+    print_info "Checking for running Vocalinux processes..."
+    
+    # Find and kill vocalinux processes
+    local PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+    
+    if [ -n "$PIDS" ]; then
+        print_warning "Found running Vocalinux process(es): $PIDS"
+        print_info "Stopping Vocalinux..."
+        
+        # Try graceful termination first
+        echo "$PIDS" | xargs -r kill -TERM 2>/dev/null || true
+        
+        # Wait a moment for processes to terminate
+        sleep 2
+        
+        # Check if any processes are still running
+        local REMAINING_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+        
+        if [ -n "$REMAINING_PIDS" ]; then
+            print_warning "Some processes still running, forcing termination..."
+            echo "$REMAINING_PIDS" | xargs -r kill -KILL 2>/dev/null || true
+            sleep 1
+        fi
+        
+        # Final check
+        local FINAL_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+        if [ -n "$FINAL_PIDS" ]; then
+            print_error "Warning: Could not terminate all Vocalinux processes: $FINAL_PIDS"
+            print_error "You may need to manually kill these processes before continuing."
+        else
+            print_success "All Vocalinux processes stopped"
+        fi
+    else
+        print_info "No running Vocalinux processes found"
+    fi
+}
+
 print_info "Vocalinux Uninstaller"
 print_info "=============================="
 echo ""
@@ -354,6 +393,9 @@ print_uninstallation_summary() {
         print_warning "https://github.com/jatinkrmalik/vocalinux/issues"
     fi
 }
+
+# Kill any running Vocalinux processes first
+kill_vocalinux_processes
 
 # Perform uninstallation steps
 remove_virtual_environment

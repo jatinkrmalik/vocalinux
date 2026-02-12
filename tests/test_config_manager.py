@@ -149,13 +149,13 @@ class TestConfigManager(unittest.TestCase):
 
         importlib.reload(cm)
         self.assertEqual(
-            cm.DEFAULT_CONFIG["speech_recognition"]["engine"], "whisper"
-        )  # Default is whisper for better accuracy
+            cm.DEFAULT_CONFIG["speech_recognition"]["engine"], "whisper_cpp"
+        )  # Default is whisper_cpp for best performance with Vulkan support
 
         # Also test the get method works - it should return a valid engine value
         config_manager = ConfigManager()
         value = config_manager.get("speech_recognition", "engine")
-        self.assertIn(value, ["vosk", "whisper"])  # Should be one of valid engines
+        self.assertIn(value, ["vosk", "whisper", "whisper_cpp"])  # Should be one of valid engines
 
     def test_get_nonexistent_value(self):
         """Test getting a nonexistent configuration value."""
