@@ -126,6 +126,8 @@ export function LiveDemo() {
     const [detectedLanguage, setDetectedLanguage] = useState<string>("en-US");
     const recognitionRef = useRef<SpeechRecognition | null>(null);
     const isListeningRef = useRef(false);
+    const processedResultsRef = useRef<Set<string>>(new Set());
+    const lastTranscriptRef = useRef<string>("");
 
     // Keep ref in sync with state for use in event handlers
     useEffect(() => {
@@ -163,19 +165,51 @@ export function LiveDemo() {
         };
 
         recognition.onresult = (event: SpeechRecognitionEvent) => {
-            // On mobile browsers, the Web Speech API returns all previous results in the array
-            // with resultIndex staying at 0. Only process the LAST result which is the new one.
-            // This prevents the exponential duplication bug where text repeats like:
-            // "Hey Hey how Hey how are Hey how are you..."
-            const lastResultIndex = event.results.length - 1;
-            const result = event.results[lastResultIndex];
-            const transcript = result[0].transcript;
+            // On mobile Chrome, the Web Speech API has specific quirks:
+            // 1. Interim results may be incorrectly marked as isFinal with confidence=0
+            // 2. Final results may be emitted multiple times
+            // 3. resultIndex may stay at 0
+            // Solution: Check isFinal AND confidence > 0, plus debounce duplicates
+            let interim = "";
+            let final = "";
 
-            if (result.isFinal) {
-                setTranscript((prev) => prev + transcript + " ");
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                const transcript = result[0].transcript;
+                const confidence = result[0].confidence || 0;
+                
+                // On mobile Chrome, interim results can have isFinal=true but confidence=0
+                // Real final results have confidence > 0
+                const isReallyFinal = result.isFinal && confidence > 0;
+                
+                // Create a unique key for this result to prevent duplication
+                const resultKey = `${i}-${transcript}`;
+                
+                // Skip if we've already processed this exact result
+                if (processedResultsRef.current.has(resultKey)) {
+                    continue;
+                }
+                
+                // Mark this result as processed
+                processedResultsRef.current.add(resultKey);
+                
+                if (isReallyFinal) {
+                    // Debounce: skip if this is the same as the last final transcript
+                    // Mobile Chrome sometimes emits the same final result twice
+                    if (transcript !== lastTranscriptRef.current) {
+                        final += transcript;
+                        lastTranscriptRef.current = transcript;
+                    }
+                } else {
+                    interim += transcript;
+                }
+            }
+
+            if (final) {
+                setTranscript((prev) => prev + final + " ");
                 setInterimTranscript("");
             } else {
-                setInterimTranscript(transcript);
+                setInterimTranscript(interim);
             }
         };
 
@@ -202,6 +236,9 @@ export function LiveDemo() {
         if (recognitionRef.current) {
             setTranscript("");
             setInterimTranscript("");
+            // Clear processed results tracking for new session
+            processedResultsRef.current.clear();
+            lastTranscriptRef.current = "";
             try {
                 recognitionRef.current.start();
             } catch (e) {
