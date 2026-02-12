@@ -46,7 +46,11 @@ Vocalinux supports several commands that you can speak to control formatting:
 3. **Moderate pace**: Don't speak too quickly or too slowly
 4. **Quiet environment**: Minimize background noise when possible
 5. **Learn commands**: Familiarize yourself with voice commands for punctuation and formatting
-6. **Use larger models**: For better accuracy, use `vocalinux --model medium` or `--model large`
+6. **Use GPU acceleration**: If you have a GPU (AMD, Intel, or NVIDIA), whisper.cpp will automatically use it for faster transcription
+7. **Choose the right model**: 
+   - For real-time dictation: Use `tiny` or `base` (fastest)
+   - For better accuracy: Use `vocalinux --model medium` or `--model large`
+8. **Check debug logs**: Run `vocalinux --debug` to see which backend is being used (Vulkan, CUDA, or CPU)
 
 ## Customization
 
@@ -59,12 +63,65 @@ Vocalinux uses a double-tap Ctrl keyboard shortcut for starting and stopping voi
 
 ### Model Settings
 
-You can change the speech recognition model for better accuracy or faster performance:
+You can change the speech recognition engine and model for better accuracy or faster performance:
 
-1. Open settings from the tray icon menu
+### Choosing Your Engine
+
+Vocalinux now offers **three speech recognition engines**:
+
+1. **whisper.cpp** ⭐ (Default) - High-performance C++ engine
+   - Fastest installation (~1-2 min)
+   - Works with AMD, Intel, NVIDIA GPUs via Vulkan
+   - True multi-threading (no Python GIL)
+   - Best for most users
+
+2. **Whisper** (OpenAI) - PyTorch-based engine
+   - NVIDIA GPU only (requires CUDA)
+   - Larger download (~2.3GB with PyTorch)
+   - Installation takes ~5-10 min
+   - Use if you specifically need PyTorch features
+
+3. **VOSK** - Lightweight engine
+   - Smallest footprint (~40MB)
+   - CPU only
+   - Great for older systems or minimal resource usage
+
+### Changing Engine and Model
+
+1. Open settings from the tray icon menu (right-click)
 2. Go to the "Recognition" tab
-3. Select your preferred model size (tiny is the default, use larger models for better accuracy)
-4. Choose between Whisper (default, more accurate) and VOSK (lighter weight, faster)
+3. Select your **Speech Engine**:
+   - whisper_cpp (recommended)
+   - whisper
+   - vosk
+4. Select your **Model Size**:
+   - **tiny** (~39MB) - Fastest, good for real-time dictation
+   - **base** (~74MB) - Good balance
+   - **small** (~244MB) - Better accuracy
+   - **medium** (~769MB) - High accuracy
+   - **large** (~1.5GB) - Best accuracy, slower
+
+### When to Use Each Model
+
+**For real-time dictation:** Use **tiny** or **base** - they're fast enough to keep up with your speech.
+
+**For transcription:** Use **small** or **medium** - better accuracy for recorded audio.
+
+**For maximum accuracy:** Use **large** - best results but requires more RAM and GPU power.
+
+### GPU Acceleration
+
+**whisper.cpp** automatically uses GPU acceleration when available:
+
+- **Vulkan** (AMD, Intel, NVIDIA) - Automatically detected and used
+- **CUDA** (NVIDIA only) - Fallback if Vulkan not available
+- **CPU** - Always works as fallback
+
+To check which backend is being used, look for these log messages when starting Vocalinux:
+```
+[INFO] whisper.cpp using Vulkan GPU backend: AMD Radeon RX 6800
+[INFO] whisper.cpp configured with n_threads=16
+```
 
 ## Troubleshooting
 

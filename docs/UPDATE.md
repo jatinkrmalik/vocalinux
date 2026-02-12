@@ -9,7 +9,7 @@ This guide explains how to update Vocalinux to the latest version.
 Simply re-run the installation command with the new version tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.6.0-beta
 ```
 
 The installer will:
@@ -24,7 +24,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.5.0-beta
+git checkout v0.6.0-beta
 ./install.sh
 ```
 
@@ -50,7 +50,7 @@ cd vocalinux
 ./install.sh --tag=v0.4.1-alpha
 
 # Or via curl (for any installation)
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.6.0-beta
 ```
 
 **What gets preserved:**
@@ -68,7 +68,7 @@ cd vocalinux
 
 # 2. Pull the latest changes
 git fetch origin
-git checkout v0.5.0-beta
+git checkout v0.6.0-beta
 
 # 3. Activate your virtual environment
 source venv/bin/activate
@@ -97,17 +97,26 @@ git describe --tags
 
 ---
 
-## What's New in v0.5.0-beta
+## What's New in v0.6.0-beta
 
-- **Customizable keyboard shortcuts**: Configure your own activation shortcuts via GUI
-- **Modern settings dialog**: Redesigned with GNOME HIG styling
-- **Improved audio feedback**: Pleasant gliding tones for recording status
-- **Enhanced Wayland support**: Better keyboard shortcut handling on Wayland
-- **Microphone reconnection**: Automatic reconnection when microphone disconnects
-- **80%+ test coverage**: Comprehensive test suite for reliability
-- **Interactive installer**: Smart hardware detection and guided installation
+### 🚀 Major Feature: whisper.cpp is Now Default!
 
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.5.0-beta).
+This release brings **whisper.cpp** as the new default speech recognition engine—a game-changing upgrade!
+
+**Key Improvements:**
+- **⚡ 10x faster installation** — No more 2.3GB PyTorch downloads (~1-2 min vs ~5-10 min)
+- **🎮 Universal GPU support** — Works with AMD, Intel, and NVIDIA via Vulkan (not just NVIDIA CUDA)
+- **💾 Smaller footprint** — Tiny model is only ~39MB vs ~75MB
+- **🔥 Better performance** — C++ optimized inference with true multi-threading (no Python GIL)
+- **🌍 99+ languages** with automatic language detection
+
+**Additional Improvements:**
+- **Interactive installer**: Choose between 3 engines (whisper.cpp, Whisper, VOSK)
+- **Hardware auto-detection**: Automatically detects your GPU and recommends optimal settings
+- **Enhanced logging**: Comprehensive debug info for whisper.cpp troubleshooting
+- **Better documentation**: Updated all docs to reflect whisper.cpp as the new default
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.0-beta).
 
 ---
 
@@ -142,7 +151,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 ./uninstall.sh --keep-config --keep-data
 
 # Reinstall
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.6.0-beta
 ```
 
 ### Old Version Still Running

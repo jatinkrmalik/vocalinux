@@ -4,7 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.5.x   | :white_check_mark: |
+| 0.6.x   | :white_check_mark: |
+| 0.5.x   | :x:                |
 | 0.4.x   | :x:                |
 | < 0.4   | :x:                |
 
@@ -43,15 +44,25 @@ We take security seriously. If you discover a security vulnerability within Voca
 
 Vocalinux is designed with privacy in mind:
 
-- **Offline by default**: Both Whisper (default) and VOSK engines work completely offline
+- **Offline by default**: whisper.cpp (default), Whisper, and VOSK engines all work completely offline
 - **Local processing**: All speech recognition happens on your device
 - **No data collection**: We don't collect or transmit your voice data
 - **No telemetry**: We don't track usage or behavior
 
-### Whisper AI (Default Engine)
+### whisper.cpp (Default Engine)
 
-Whisper is the default speech recognition engine:
-- Whisper processes locally on your machine
+whisper.cpp is the default speech recognition engine:
+- High-performance C++ implementation
+- Processes completely locally on your machine
+- Models are downloaded once and cached locally
+- No audio data is sent to external servers
+- Supports Vulkan GPU acceleration for AMD, Intel, and NVIDIA GPUs
+
+### Whisper AI (OpenAI)
+
+OpenAI's Whisper is also available as an alternative:
+- PyTorch-based implementation
+- Processes locally on your machine
 - Models are downloaded once and cached locally
 - No audio data is sent to external servers
 

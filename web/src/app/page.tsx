@@ -44,9 +44,9 @@ const getInstallCommands = (latestRelease: string) => ({
 
   oneClickInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease}`,
 
-  oneClickInstallWhisperCpu: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --whisper-cpu`,
+  oneClickInstallWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --engine=whisper`,
 
-  oneClickInstallNoWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --no-whisper`,
+  oneClickInstallVosk: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --engine=vosk`,
 
   uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
 });
@@ -178,7 +178,7 @@ export default function HomePage() {
 
   // Get install commands based on the latest release
   const installCommands = getInstallCommands(latestRelease);
-  const { interactiveInstallCommand, oneClickInstallCommand, oneClickInstallWhisperCpu, oneClickInstallNoWhisper, uninstallCommand } = installCommands;
+  const { interactiveInstallCommand, oneClickInstallCommand, oneClickInstallWhisper, oneClickInstallVosk, uninstallCommand } = installCommands;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
@@ -194,7 +194,7 @@ export default function HomePage() {
             />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
             <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
-              v0.5.0 Beta
+              v0.6.0 Beta
             </span>
           </Link>
 
@@ -308,9 +308,11 @@ export default function HomePage() {
                 </span>
               </h1>
 
+              <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-2 max-w-3xl mx-auto">
+                100% offline voice dictation for Linux.
+              </p>
               <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto">
-                100% offline, privacy-first voice-to-text. Double-tap Ctrl to dictate anywhere.
-                Powered by Whisper AI &amp; VOSK. Free &amp; open-source.
+                Just double-tap Ctrl and speak.
               </p>
 
               {/* CTA Buttons */}
@@ -379,10 +381,26 @@ export default function HomePage() {
                       No sudo required
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Zap className="h-3.5 w-3.5 text-yellow-500" />
-                      ~5-10 min
+                      <Zap className="h-3.5 w-3.5 text-green-500" />
+                      ~1-2 min
                     </span>
                   </div>
+                </div>
+
+                {/* Tech stack info */}
+                <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 mt-4 pt-4 border-t border-zinc-800/30 text-xs text-zinc-400">
+                  <span className="flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 text-yellow-500" />
+                    <strong className="text-zinc-300">whisper.cpp</strong> powered
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-blue-500" />
+                    AMD, Intel & NVIDIA GPUs
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Code className="h-3.5 w-3.5 text-purple-500" />
+                    Free & open-source
+                  </span>
                 </div>
               </div>
             </motion.div>
@@ -498,7 +516,7 @@ export default function HomePage() {
             <FeatureCard
               icon={<Zap className="h-6 w-6 text-primary" />}
               title="Blazing Fast"
-              description="Optimized for real-time transcription. Choose from Whisper AI (accurate) or VOSK (lightweight) engines."
+              description="whisper.cpp brings C++ optimized inference with Vulkan GPU support. Works with AMD, Intel, and NVIDIA GPUs!"
             />
             <FeatureCard
               icon={<Keyboard className="h-6 w-6 text-primary" />}
@@ -591,16 +609,16 @@ export default function HomePage() {
           <FadeInSection delay={0.1}>
             <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 min-w-0">
               <div className="p-6 sm:p-8">
-                {/* Alternative: Auto-detect install */}
+                {/* Default: whisper.cpp install */}
                 <div className="mb-8">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-blue-500/10 p-2 rounded-lg">
-                      <Zap className="h-5 w-5 text-blue-500" />
+                    <div className="bg-green-500/10 p-2 rounded-lg">
+                      <Zap className="h-5 w-5 text-green-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold">Auto-detect Install</h3>
+                      <h3 className="text-xl font-semibold">Recommended: whisper.cpp (Default)</h3>
                       <p className="text-sm text-muted-foreground">
-                        Fastest for power users - no prompts (~3-10 min)
+                        Fastest installation (~1-2 min), Vulkan GPU support for AMD/Intel/NVIDIA
                       </p>
                     </div>
                     <CopyButton text={oneClickInstallCommand} />
@@ -617,19 +635,19 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Alternative install - CPU only */}
+                {/* Alternative install - Whisper (OpenAI) */}
                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="bg-cyan-500/10 p-2 rounded-lg">
                       <Cpu className="h-5 w-5 text-cyan-500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold">CPU-only Install</h3>
+                      <h3 className="text-lg font-semibold">OpenAI Whisper (PyTorch)</h3>
                       <p className="text-sm text-muted-foreground">
-                        Smaller download (~200MB vs ~2.3GB) - for systems without NVIDIA GPU (~3-4 min)
+                        PyTorch-based engine, NVIDIA GPU only (~5-10 min, ~2.3GB download)
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallWhisperCpu} />
+                    <CopyButton text={oneClickInstallWhisper} />
                   </div>
                   <div className="overflow-x-auto">
                     <CodeBlock
@@ -638,7 +656,7 @@ export default function HomePage() {
                       customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
                       wrapLongLines={false}
                     >
-                      {oneClickInstallWhisperCpu}
+                      {oneClickInstallWhisper}
                     </CodeBlock>
                   </div>
                 </div>
@@ -652,10 +670,10 @@ export default function HomePage() {
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold">VOSK Only (Lightweight)</h3>
                       <p className="text-sm text-muted-foreground">
-                        For low-RAM systems (8GB or less) - skips Whisper entirely (~2-3 min)
+                        For low-RAM systems (4GB or less) - minimal footprint (~40MB)
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallNoWhisper} />
+                    <CopyButton text={oneClickInstallVosk} />
                   </div>
                   <div className="overflow-x-auto">
                     <CodeBlock
@@ -664,7 +682,7 @@ export default function HomePage() {
                       customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
                       wrapLongLines={false}
                     >
-                      {oneClickInstallNoWhisper}
+                      {oneClickInstallVosk}
                     </CodeBlock>
                   </div>
                 </div>
@@ -765,7 +783,7 @@ export default function HomePage() {
             </div>
           </FadeInSection>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-3 gap-8">
             <FadeInSection delay={0.1}>
               <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border-2 border-primary h-full relative overflow-hidden">
                 <div className="absolute top-4 right-4">
@@ -775,19 +793,19 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="bg-primary/10 p-3 rounded-lg">
-                    <Sparkles className="h-6 w-6 text-primary" />
+                    <Zap className="h-6 w-6 text-primary" />
                   </div>
-                  <h3 className="text-xl font-bold">Whisper AI</h3>
+                  <h3 className="text-xl font-bold">whisper.cpp</h3>
                 </div>
                 <p className="text-muted-foreground mb-6">
-                  OpenAI&apos;s state-of-the-art speech recognition model, running locally on your machine.
+                  High-performance C++ port of Whisper with Vulkan GPU support. Our new default!
                 </p>
                 <ul className="space-y-2 mb-6">
                   {[
-                    "Highest accuracy available",
-                    "Multiple model sizes (tiny to large)",
-                    "Excellent multi-language support",
-                    "Best for clear, accurate transcription",
+                    "10x faster installation (~1-2 min)",
+                    "Universal GPU support (AMD/Intel/NVIDIA)",
+                    "C++ optimized, true multi-threading",
+                    "Tiny model only ~39MB",
                   ].map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -796,7 +814,7 @@ export default function HomePage() {
                   ))}
                 </ul>
                 <div className="text-sm text-muted-foreground">
-                  <strong>Model sizes:</strong> Tiny (75MB) • Base (142MB) • Small (466MB) • Medium (1.5GB) • Large (3GB)
+                  <strong>Model sizes:</strong> Tiny (39MB) • Base (74MB) • Small (244MB) • Medium (769MB) • Large (1.5GB)
                 </div>
               </div>
             </FadeInSection>
@@ -804,8 +822,38 @@ export default function HomePage() {
             <FadeInSection delay={0.2}>
               <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full">
                 <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-purple-500/10 p-3 rounded-lg">
+                    <Sparkles className="h-6 w-6 text-purple-500" />
+                  </div>
+                  <h3 className="text-xl font-bold">Whisper (OpenAI)</h3>
+                </div>
+                <p className="text-muted-foreground mb-6">
+                  OpenAI&apos;s original PyTorch-based Whisper model. NVIDIA GPU only.
+                </p>
+                <ul className="space-y-2 mb-6">
+                  {[
+                    "PyTorch-based implementation",
+                    "NVIDIA GPU support (CUDA)",
+                    "Same accuracy as whisper.cpp",
+                    "Larger download (~2.3GB)",
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-purple-500" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-sm text-muted-foreground">
+                  <strong>Install time:</strong> ~5-10 minutes with PyTorch
+                </div>
+              </div>
+            </FadeInSection>
+
+            <FadeInSection delay={0.3}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full">
+                <div className="flex items-center gap-3 mb-4">
                   <div className="bg-blue-500/10 p-3 rounded-lg">
-                    <Zap className="h-6 w-6 text-blue-500" />
+                    <Cpu className="h-6 w-6 text-blue-500" />
                   </div>
                   <h3 className="text-xl font-bold">VOSK</h3>
                 </div>
@@ -817,7 +865,7 @@ export default function HomePage() {
                     "Very lightweight and fast",
                     "Low memory footprint",
                     "Great for real-time streaming",
-                    "Good for basic transcription needs",
+                    "CPU only, minimal resources",
                   ].map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="h-4 w-4 text-blue-500" />
@@ -826,7 +874,7 @@ export default function HomePage() {
                   ))}
                 </ul>
                 <div className="text-sm text-muted-foreground">
-                  <strong>Footprint:</strong> ~50MB model, minimal CPU/RAM usage
+                  <strong>Footprint:</strong> ~40MB model, minimal CPU/RAM usage
                 </div>
               </div>
             </FadeInSection>
@@ -858,9 +906,9 @@ export default function HomePage() {
                   "Vocalinux works on most modern Linux distributions including Ubuntu 22.04+, Fedora, Debian, Arch Linux, Linux Mint, Pop!_OS, and more. It supports both X11 and Wayland display servers.",
               },
               {
-                question: "How do I switch between Whisper and VOSK?",
+                question: "How do I switch between speech engines?",
                 answer:
-                  'You can switch engines via the settings GUI or command line. Use "vocalinux --engine whisper" or "vocalinux --engine vosk". Whisper is recommended for accuracy, VOSK for speed.',
+                  'You can switch engines via the settings GUI or command line. Use "vocalinux --engine whisper_cpp" (default, recommended), "vocalinux --engine whisper" (OpenAI), or "vocalinux --engine vosk" (lightweight). whisper.cpp offers the best balance of speed and accuracy.',
               },
               {
                 question: "What are the system requirements?",
