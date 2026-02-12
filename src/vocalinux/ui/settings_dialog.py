@@ -31,11 +31,11 @@ from ..common_types import RecognitionState  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
-    get_recommended_model as get_recommended_whispercpp_model,
-    is_model_downloaded as is_whispercpp_model_downloaded,
-    get_backend_display_name,
     detect_compute_backend,
+    get_backend_display_name,
 )
+from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
+from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
 from .keyboard_backends import SHORTCUT_DISPLAY_NAMES, SUPPORTED_SHORTCUTS  # noqa: E402
 
 # Avoid circular imports for type checking
@@ -1324,7 +1324,9 @@ class SettingsDialog(Gtk.Dialog):
             is_downloaded = is_whispercpp_model_downloaded(model_name)
             recommended, reason = get_recommended_whispercpp_model()
             backend, backend_info = detect_compute_backend()
-            extra_info = f"Parameters: {info['params']} • Backend: {get_backend_display_name(backend)}"
+            extra_info = (
+                f"Parameters: {info['params']} • Backend: {get_backend_display_name(backend)}"
+            )
         elif engine == "vosk":
             if model_name not in VOSK_MODEL_INFO:
                 self.model_info_card.hide()

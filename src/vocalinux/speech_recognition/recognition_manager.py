@@ -597,9 +597,7 @@ class SpeechRecognitionManager:
             )
 
             backend, backend_info = detect_compute_backend()
-            logger.info(
-                f"Using {get_backend_display_name(backend)} backend: {backend_info}"
-            )
+            logger.info(f"Using {get_backend_display_name(backend)} backend: {backend_info}")
 
             logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
             # Ensure previous model is released if re-initializing
@@ -747,7 +745,9 @@ class SpeechRecognitionManager:
                             status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
                         else:
                             progress = 0
-                            status = f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
 
                         self._download_progress_callback(progress, speed_mbps, status)
                         last_update_time = current_time

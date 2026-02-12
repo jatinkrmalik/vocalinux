@@ -50,6 +50,7 @@ WHISPERCPP_MODEL_INFO = {
 # Available models list
 AVAILABLE_MODELS = list(WHISPERCPP_MODEL_INFO.keys())
 
+
 # Compute backend types
 class ComputeBackend:
     """Compute backend options for whisper.cpp."""
