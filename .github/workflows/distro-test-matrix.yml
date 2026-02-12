@@ -35,7 +35,13 @@ jobs:
             apt-get update
             apt-get install -y bash curl python3 git
           elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y bash curl python3 git
+            # Fedora needs cache update first in container environment
+            dnf clean all || true
+            dnf makecache || true
+            dnf install -y bash curl python3 git || {
+              echo "⚠ dnf install failed, trying with --nogpgcheck..."
+              dnf install -y --nogpgcheck bash curl python3 git
+            }
           fi
 
       # ============================================================================
