@@ -28,7 +28,7 @@
 
 **A seamless free open-source private voice dictation system for Linux**, comparable to built-in solutions on macOS and Windows.
 
-## 📚 What's New in v0.5.0-beta
+## 📚 What's New in v0.6.0-beta
 
 We're excited to announce our first **Beta release**! Vocalinux has evolved significantly with the biggest change yet: **whisper.cpp is now the default speech recognition engine**, bringing massive improvements to speed, compatibility, and ease of installation.
 
@@ -124,7 +124,7 @@ Here are some screenshots showcasing Vocalinux in action:
 Our new interactive installer guides you through setup with intelligent hardware detection:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.6.0-beta
 ```
 
 **Choose your engine:**
@@ -138,25 +138,25 @@ The installer will:
 - **Download the appropriate model** (~39MB for whisper.cpp tiny)
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
-> **Note**: Installs v0.5.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.6.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 ### Installation Options
 
 **Default (whisper.cpp - recommended):**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.6.0-beta
 ```
 Fastest installation (~1-2 min), universal GPU support via Vulkan.
 
 **Whisper (OpenAI) - if you prefer PyTorch:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --engine=whisper
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.6.0-beta --engine=whisper
 ```
 NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
 
 **VOSK only - for low-RAM systems:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --engine=vosk
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.6.0-beta --engine=vosk
 ```
 Lightweight option (~40MB), works on systems with 4GB RAM.
 
@@ -192,7 +192,7 @@ vocalinux
 
 Or launch it from your application menu!
 
-## 📚 What's New in v0.5.0-beta
+## 📚 What's New in v0.6.0-beta
 
 We're excited to announce our first **Beta release** featuring **whisper.cpp as the default engine** - a massive upgrade that brings 10x faster installation and universal GPU support!
 
