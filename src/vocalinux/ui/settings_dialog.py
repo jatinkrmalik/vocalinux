@@ -78,24 +78,6 @@ WHISPER_MODEL_INFO = {
 }
 
 
-def format_engine_display_name(engine_id):
-    """
-    Format engine ID for display in the UI.
-    
-    Args:
-        engine_id: The engine identifier (e.g., "whisper_cpp", "vosk")
-        
-    Returns:
-        User-friendly display name (e.g., "whisper.cpp", "Vosk")
-    """
-    display_names = {
-        "whisper_cpp": "whisper.cpp",
-        "whisper": "Whisper",
-        "vosk": "VOSK",
-    }
-    return display_names.get(engine_id, engine_id.capitalize())
-
-
 def get_available_engines():
     """
     Detect which speech recognition engines are available/installed.
@@ -1133,16 +1115,16 @@ class SettingsDialog(Gtk.Dialog):
         
         for engine in ENGINE_MODELS.keys():
             if available_engines.get(engine, False):
-                display_name = format_engine_display_name(engine)
-                self.engine_combo.append(display_name, display_name)
+                capitalized_engine = engine.capitalize()
+                self.engine_combo.append(capitalized_engine, capitalized_engine)
                 available_count += 1
 
         if available_count == 0:
             logger.error("No speech recognition engines available!")
             # Still add them so the UI works, but log the error
             for engine in ENGINE_MODELS.keys():
-                display_name = format_engine_display_name(engine)
-                self.engine_combo.append(display_name, display_name)
+                capitalized_engine = engine.capitalize()
+                self.engine_combo.append(capitalized_engine, capitalized_engine)
         else:
             logger.info(f"Populated {available_count} available engines: {available_engines}")
         
@@ -1155,7 +1137,7 @@ class SettingsDialog(Gtk.Dialog):
                     self.current_engine = engine
                     break
         
-        engine_text = format_engine_display_name(self.current_engine)
+        engine_text = self.current_engine.capitalize()
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
             logger.warning("Could not set engine by ID, trying by index")
