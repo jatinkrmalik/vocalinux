@@ -45,20 +45,24 @@ jobs:
               - '.github/workflows/**'
       - name: Check if website should deploy
         id: deploy_check
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           # Deploy if web files changed OR python files changed (for version updates)
-          COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
+          # Use heredoc to safely handle multi-line commit messages
+          COMMIT_MSG_FILE=$(mktemp)
+          printenv COMMIT_MESSAGE > "$COMMIT_MSG_FILE"
 
-          # Escape the commit message properly for shell comparison
-          # Use case-insensitive matching with grep instead of glob patterns
+          # Use case-insensitive matching with grep
           if [[ "${{ steps.filter.outputs.web }}" == "true" ]] || \
              [[ "${{ steps.filter.outputs.python }}" == "true" ]] || \
              [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
-             echo "$COMMIT_MESSAGE" | grep -iE "(feat\(website\)|docs\(website\)|chore\(website\)|fix\(website\)|refactor\(website\))"; then
+             grep -iE "(feat\(website\)|docs\(website\)|chore\(website\)|fix\(website\)|refactor\(website\))" "$COMMIT_MSG_FILE"; then
             echo "deploy=true" >> $GITHUB_OUTPUT
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
           fi
+          rm -f "$COMMIT_MSG_FILE"
 
   python-lint:
     name: 🔍 Lint Python
