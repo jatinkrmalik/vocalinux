@@ -192,41 +192,6 @@ vocalinux
 
 Or launch it from your application menu!
 
-## 📚 What's New in v0.6.0-beta
-
-We're excited to announce our first **Beta release** featuring **whisper.cpp as the default engine** - a massive upgrade that brings 10x faster installation and universal GPU support!
-
-### 🚀 Major Change: whisper.cpp is Now Default!
-
-**What makes whisper.cpp special:**
-- **⚡ 10x faster installation** - No more 2.3GB PyTorch downloads (installation now takes ~1-2 min instead of 5-10 min)
-- **🎮 Universal GPU support** - Works with AMD, Intel, and NVIDIA via Vulkan (not just NVIDIA CUDA like OpenAI Whisper)
-- **💾 Smaller footprint** - Tiny model is only ~39MB vs ~75MB for Whisper
-- **🔥 Better performance** - C++ optimized inference with true multi-threading (no Python GIL)
-- **🌍 99+ languages** with automatic language detection
-
-### 🐛 Critical Bug Fixes
-- Fixed text escaping issues (apostrophes and quotes no longer have backslash escapes)
-- Fixed stop sound being transcribed as "thank you"
-- Fixed missing spaces after punctuation when transcribing again
-
-### ✨ Key New Features
-- **🤖 whisper.cpp integration** - High-performance C++ speech recognition with Vulkan GPU acceleration
-- **📦 Interactive installer** - Choose between 3 engines: whisper.cpp (recommended), Whisper, or VOSK
-- **🔧 Hardware auto-detection** - Automatically detects your GPU and recommends optimal settings
-- **Customizable keyboard shortcuts** - Configure your own activation shortcuts via GUI
-- **Modern GNOME HIG settings dialog** - Complete UI overhaul following GNOME design guidelines
-- **Pleasant audio feedback** - Gliding tones replace harsh beeps
-- **Better Wayland support** - Native keyboard shortcuts without XWayland
-
-### 🔧 Quality Improvements
-- **80%+ test coverage** - Comprehensive test suite across all modules
-- **Microphone reconnection** - Automatic recovery when microphone disconnects
-- **Audio buffer management** - Prevents memory issues during long recordings
-- **Enhanced logging** - Comprehensive debug info for whisper.cpp troubleshooting
-
-For a complete list of changes, see the release notes.
-
 ## 📋 Requirements
 
 - **OS**: Linux (tested on Ubuntu 22.04+, Debian 11+, Fedora 39+, Arch Linux, openSUSE Tumbleweed)
