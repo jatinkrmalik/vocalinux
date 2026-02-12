@@ -148,6 +148,125 @@ REPO_URL="https://github.com/jatinkrmalik/vocalinux.git"
 INSTALL_DIR=""
 CLEANUP_ON_EXIT="no"
 
+# Function to check and install git if needed
+ensure_git_installed() {
+    if command -v git >/dev/null 2>&1; then
+        return 0
+    fi
+
+    print_warning "git is not installed. Attempting to install git..."
+
+    # Detect distribution for package manager selection
+    local DISTRO_FAMILY="unknown"
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [[ "$ID" == "ubuntu" || "$ID_LIKE" == *"ubuntu"* || "$ID" == "pop" || "$ID" == "linuxmint" || "$ID" == "elementary" || "$ID" == "zorin" ]]; then
+            DISTRO_FAMILY="ubuntu"
+        elif [[ "$ID" == "debian" || "$ID_LIKE" == *"debian"* ]]; then
+            DISTRO_FAMILY="debian"
+        elif [[ "$ID" == "fedora" || "$ID_LIKE" == *"fedora"* || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "rocky" || "$ID" == "almalinux" ]]; then
+            DISTRO_FAMILY="fedora"
+        elif [[ "$ID" == "arch" || "$ID_LIKE" == *"arch"* || "$ID" == "manjaro" || "$ID" == "endeavouros" ]]; then
+            DISTRO_FAMILY="arch"
+        elif [[ "$ID" == "opensuse" || "$ID_LIKE" == *"suse"* ]]; then
+            DISTRO_FAMILY="suse"
+        elif [[ "$ID" == "gentoo" ]]; then
+            DISTRO_FAMILY="gentoo"
+        elif [[ "$ID" == "alpine" ]]; then
+            DISTRO_FAMILY="alpine"
+        elif [[ "$ID" == "void" ]]; then
+            DISTRO_FAMILY="void"
+        elif [[ "$ID" == "solus" ]]; then
+            DISTRO_FAMILY="solus"
+        elif [[ "$ID" == "mageia" ]]; then
+            DISTRO_FAMILY="mageia"
+        fi
+    fi
+
+    case "$DISTRO_FAMILY" in
+        ubuntu|debian)
+            sudo apt update && sudo apt install -y git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  Ubuntu/Debian: sudo apt install git"
+                exit 1
+            }
+            ;;
+        fedora)
+            sudo dnf install -y git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  Fedora: sudo dnf install git"
+                exit 1
+            }
+            ;;
+        arch)
+            sudo pacman -S --noconfirm git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  Arch: sudo pacman -S git"
+                exit 1
+            }
+            ;;
+        suse)
+            sudo zypper install -y git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  openSUSE: sudo zypper install git"
+                exit 1
+            }
+            ;;
+        gentoo)
+            sudo emerge git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  Gentoo: sudo emerge git"
+                exit 1
+            }
+            ;;
+        alpine)
+            sudo apk add git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  Alpine: sudo apk add git"
+                exit 1
+            }
+            ;;
+        void)
+            sudo xbps-install -Sy git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  Void: sudo xbps-install -Sy git"
+                exit 1
+            }
+            ;;
+        solus)
+            sudo eopkg install git || {
+                print_error "Failed to install git. Please install git manually and run the installer again."
+                print_error "  Solus: sudo eopkg install git"
+                exit 1
+            }
+            ;;
+        mageia)
+            if command -v dnf >/dev/null 2>&1; then
+                sudo dnf install -y git || {
+                    print_error "Failed to install git. Please install git manually and run the installer again."
+                    exit 1
+                }
+            else
+                sudo urpmi --force git || {
+                    print_error "Failed to install git. Please install git manually and run the installer again."
+                    exit 1
+                }
+            fi
+            ;;
+        *)
+            print_error "git is not installed and could not auto-detect your distribution."
+            print_error "Please install git manually and run the installer again:"
+            print_error "  Ubuntu/Debian: sudo apt install git"
+            print_error "  Fedora/RHEL: sudo dnf install git"
+            print_error "  Arch: sudo pacman -S git"
+            print_error "  openSUSE: sudo zypper install git"
+            exit 1
+            ;;
+    esac
+
+    print_success "git installed successfully!"
+}
+
 if [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
     # Running from within the repo
     INSTALL_DIR="$(pwd)"
@@ -157,6 +276,10 @@ if [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
 else
     # Running remotely (e.g., via curl | bash)
     print_info "Installing Vocalinux version: ${INSTALL_TAG}"
+
+    # Ensure git is installed before attempting to clone
+    ensure_git_installed
+
     INSTALL_DIR="$HOME/.local/share/vocalinux-install"
     mkdir -p "$INSTALL_DIR"
 
