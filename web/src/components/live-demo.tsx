@@ -126,6 +126,8 @@ export function LiveDemo() {
     const [detectedLanguage, setDetectedLanguage] = useState<string>("en-US");
     const recognitionRef = useRef<SpeechRecognition | null>(null);
     const isListeningRef = useRef(false);
+    // Track the index up to which results have been processed to prevent duplicates on mobile
+    const processedResultIndexRef = useRef(0);
 
     // Keep ref in sync with state for use in event handlers
     useEffect(() => {
@@ -163,20 +165,30 @@ export function LiveDemo() {
         };
 
         recognition.onresult = (event: SpeechRecognitionEvent) => {
+            // Get the base index - on some browsers (especially mobile), resultIndex
+            // may be 0 but the array contains all previous results. We need to
+            // track which results we've already processed to avoid duplicates.
+            const startIndex = Math.max(event.resultIndex, processedResultIndexRef.current);
+
             let interim = "";
             let final = "";
 
-            for (let i = event.resultIndex; i < event.results.length; i++) {
+            // Only process new results (from startIndex to end)
+            for (let i = startIndex; i < event.results.length; i++) {
                 const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    final += transcript;
+                    final += transcript + " ";
                 } else {
                     interim += transcript;
                 }
             }
 
+            // Update processed index to the end of current results
+            // Any results before this have been handled
+            processedResultIndexRef.current = event.results.length;
+
             if (final) {
-                setTranscript((prev) => prev + final + " ");
+                setTranscript((prev) => prev + final);
                 setInterimTranscript("");
             } else {
                 setInterimTranscript(interim);
@@ -206,6 +218,7 @@ export function LiveDemo() {
         if (recognitionRef.current) {
             setTranscript("");
             setInterimTranscript("");
+            processedResultIndexRef.current = 0; // Reset processed result index
             try {
                 recognitionRef.current.start();
             } catch (e) {
