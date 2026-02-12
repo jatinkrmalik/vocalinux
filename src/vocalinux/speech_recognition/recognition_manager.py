@@ -605,7 +605,11 @@ class SpeechRecognitionManager:
 
             # Load model with pywhispercpp
             # It auto-detects the best backend (Vulkan, CUDA, or CPU)
-            self.model = Model(model_path)
+            # Use all available CPU cores for best performance
+            import multiprocessing
+            n_threads = multiprocessing.cpu_count()
+            self.model = Model(model_path, n_threads=n_threads)
+            logger.info(f"whisper.cpp using {n_threads} threads")
 
             self._model_initialized = True
             logger.info(f"whisper.cpp model loaded ({backend} backend)")

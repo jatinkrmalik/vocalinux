@@ -77,6 +77,42 @@ WHISPER_MODEL_INFO = {
     "large": {"size_mb": 2900, "desc": "Highest accuracy, slowest", "params": "1550M"},
 }
 
+
+def get_available_engines():
+    """
+    Detect which speech recognition engines are available/installed.
+    Returns a dictionary of engine_name -> availability (bool).
+    """
+    engines = {"vosk": False, "whisper": False, "whisper_cpp": False}
+
+    # Check VOSK
+    try:
+        import vosk
+
+        engines["vosk"] = True
+    except ImportError:
+        pass
+
+    # Check OpenAI Whisper
+    try:
+        import whisper
+
+        engines["whisper"] = True
+    except ImportError:
+        pass
+
+    # Check whisper.cpp (pywhispercpp)
+    try:
+        from pywhispercpp.model import Model
+
+        engines["whisper_cpp"] = True
+    except ImportError:
+        pass
+
+    logger.debug(f"Available engines: {engines}")
+    return engines
+
+
 # Models directory
 MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
 SYSTEM_MODELS_DIRS = [
@@ -1055,20 +1091,48 @@ class SettingsDialog(Gtk.Dialog):
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
         )
 
-        # Populate engine combo
+        # Populate engine combo with only available engines
+        available_engines = get_available_engines()
+        available_count = 0
+        
         for engine in ENGINE_MODELS.keys():
-            capitalized_engine = engine.capitalize()
-            self.engine_combo.append(capitalized_engine, capitalized_engine)
-
-        # Set engine active
+            if available_engines.get(engine, False):
+                capitalized_engine = engine.capitalize()
+                self.engine_combo.append(capitalized_engine, capitalized_engine)
+                available_count += 1
+        
+        if available_count == 0:
+            logger.error("No speech recognition engines available!")
+            # Still add them so the UI works, but log the error
+            for engine in ENGINE_MODELS.keys():
+                capitalized_engine = engine.capitalize()
+                self.engine_combo.append(capitalized_engine, capitalized_engine)
+        else:
+            logger.info(f"Populated {available_count} available engines: {available_engines}")
+        
+        # Set engine active - check if current engine is available
+        if not available_engines.get(self.current_engine, False):
+            logger.warning(f"Current engine '{self.current_engine}' is not available, selecting first available")
+            # Find first available engine
+            for engine in ENGINE_MODELS.keys():
+                if available_engines.get(engine, False):
+                    self.current_engine = engine
+                    break
+        
         engine_text = self.current_engine.capitalize()
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
             logger.warning("Could not set engine by ID, trying by index")
-            if self.current_engine == "vosk":
-                self.engine_combo.set_active(0)
-            elif self.current_engine == "whisper":
-                self.engine_combo.set_active(1)
+            # Find index of current engine
+            model = self.engine_combo.get_model()
+            for i, row in enumerate(model):
+                if row[0].lower() == self.current_engine.lower():
+                    self.engine_combo.set_active(i)
+                    break
+            else:
+                # Fallback to first available
+                if self.engine_combo.get_model():
+                    self.engine_combo.set_active(0)
 
         # Populate model options for the selected engine
         self._populate_model_options()

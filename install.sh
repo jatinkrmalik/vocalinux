@@ -1693,6 +1693,83 @@ install_vosk_models() {
     fi
 }
 
+# Function to download and install whisper.cpp tiny model
+install_whispercpp_model() {
+    print_info "Installing whisper.cpp tiny model (~39MB)..."
+
+    # Create whisper.cpp models directory
+    local WHISPERCPP_DIR="$DATA_DIR/models/whispercpp"
+    mkdir -p "$WHISPERCPP_DIR"
+
+    # whisper.cpp tiny model URL and path
+    local TINY_MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+    local TINY_MODEL_PATH="$WHISPERCPP_DIR/ggml-tiny.bin"
+
+    # Check if model already exists
+    if [ -f "$TINY_MODEL_PATH" ]; then
+        print_info "whisper.cpp tiny model already exists at $TINY_MODEL_PATH"
+        return 0
+    fi
+
+    # Check internet connectivity
+    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
+        print_warning "Neither wget nor curl found. Cannot download whisper.cpp model."
+        print_warning "Model will be downloaded on first application run."
+        return 1
+    fi
+
+    # Test internet connectivity
+    if ! ping -c 1 google.com >/dev/null 2>&1; then
+        print_warning "No internet connection detected."
+        print_warning "whisper.cpp model will be downloaded on first application run."
+        return 1
+    fi
+
+    print_info "Downloading whisper.cpp tiny model..."
+    print_info "This may take a few minutes depending on your internet connection."
+
+    local TEMP_FILE="$TINY_MODEL_PATH.tmp"
+
+    # Download the model
+    if command -v wget >/dev/null 2>&1; then
+        if ! wget --progress=bar:force:noscroll -O "$TEMP_FILE" "$TINY_MODEL_URL" 2>&1; then
+            print_error "Failed to download whisper.cpp model with wget"
+            rm -f "$TEMP_FILE"
+            return 1
+        fi
+    elif command -v curl >/dev/null 2>&1; then
+        if ! curl -L --progress-bar -o "$TEMP_FILE" "$TINY_MODEL_URL"; then
+            print_error "Failed to download whisper.cpp model with curl"
+            rm -f "$TEMP_FILE"
+            return 1
+        fi
+    fi
+
+    # Verify download
+    if [ ! -f "$TEMP_FILE" ] || [ ! -s "$TEMP_FILE" ]; then
+        print_error "Downloaded model file is empty or missing"
+        rm -f "$TEMP_FILE"
+        return 1
+    fi
+
+    # Move to final location
+    mv "$TEMP_FILE" "$TINY_MODEL_PATH"
+
+    # Verify the model file
+    if [ -f "$TINY_MODEL_PATH" ]; then
+        local MODEL_SIZE=$(du -h "$TINY_MODEL_PATH" | cut -f1)
+        print_success "whisper.cpp tiny model installed successfully ($MODEL_SIZE)"
+
+        # Create a marker file to indicate this model was pre-installed
+        echo "$(date)" > "$WHISPERCPP_DIR/.vocalinux_preinstalled"
+
+        return 0
+    else
+        print_error "whisper.cpp model installation failed"
+        return 1
+    fi
+}
+
 # Function to install desktop entry with error handling
 install_desktop_entry() {
     print_info "Installing desktop entry..."
@@ -1817,27 +1894,28 @@ install_desktop_entry || print_warning "Desktop entry installation failed"
 # Install icons
 install_icons || print_warning "Icon installation failed"
 
-# Install Whisper tiny model if Whisper is available
-# This is important because Whisper is the default engine in config_manager.py
-# We check if Whisper was actually installed (importable) rather than relying on flags
+# Install models based on selected engine
+# whisper.cpp is now the default engine
 if [ "$SKIP_MODELS" = "no" ]; then
+    # Check which engines are installed and download appropriate models
+    
+    # Install whisper.cpp model (default engine)
+    if "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" 2>/dev/null; then
+        print_info "whisper.cpp is installed - downloading tiny model (default engine)..."
+        install_whispercpp_model || print_warning "whisper.cpp model download failed - model will be downloaded on first run"
+    fi
+    
+    # Install OpenAI Whisper model if whisper engine is installed
     if "$VENV_DIR/bin/python" -c "import whisper" 2>/dev/null; then
-        print_info "Whisper is installed - downloading tiny model (default engine)..."
+        print_info "Whisper (OpenAI) is installed - downloading tiny model..."
         install_whisper_model || print_warning "Whisper model download failed - model will be downloaded on first run"
-    elif [ "$NO_WHISPER_EXPLICIT" != "yes" ]; then
-        # Whisper is not installed but wasn't explicitly disabled
-        # This shouldn't happen in normal flow, but warn the user
-        print_warning "Whisper not available but is the default engine."
-        print_warning "The app will try to download the model on first run."
-    else
-        print_info "Whisper not installed (VOSK-only mode), skipping Whisper model download"
     fi
 else
-    print_info "Skipping Whisper model download (--skip-models specified)"
-    print_info "Model will be downloaded automatically on first application run"
+    print_info "Skipping model downloads (--skip-models specified)"
+    print_info "Models will be downloaded automatically on first application run"
 fi
 
-# Install VOSK models (always useful as fallback, and required for VOSK-only mode)
+# Install VOSK models (always useful as fallback)
 if [ "$SKIP_MODELS" = "no" ]; then
     install_vosk_models || print_warning "VOSK model installation failed - models will be downloaded on first run"
 else
