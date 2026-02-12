@@ -29,6 +29,13 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
+from ..utils.whispercpp_model_info import (
+    WHISPERCPP_MODEL_INFO,
+    get_recommended_model as get_recommended_whispercpp_model,
+    is_model_downloaded as is_whispercpp_model_downloaded,
+    get_backend_display_name,
+    detect_compute_backend,
+)
 from .keyboard_backends import SHORTCUT_DISPLAY_NAMES, SUPPORTED_SHORTCUTS  # noqa: E402
 
 # Avoid circular imports for type checking
@@ -52,6 +59,13 @@ ENGINE_MODELS = {
         "medium",
         "large",
     ],  # Add more whisper sizes if needed
+    "whisper_cpp": [
+        "tiny",
+        "base",
+        "small",
+        "medium",
+        "large",
+    ],  # whisper.cpp models (ggml format)
 }
 
 # Whisper model metadata for display
@@ -1115,17 +1129,21 @@ class SettingsDialog(Gtk.Dialog):
 
             downloaded_models = []
             smallest_model = None
-            recommended_model, _ = (
-                _get_recommended_whisper_model()
-                if engine == "whisper"
-                else _get_recommended_vosk_model()
-            )
+            if engine == "whisper":
+                recommended_model, _ = _get_recommended_whisper_model()
+            elif engine == "whisper_cpp":
+                recommended_model, _ = get_recommended_whispercpp_model()
+            else:
+                recommended_model, _ = _get_recommended_vosk_model()
 
             if engine in ENGINE_MODELS:
                 for size in ENGINE_MODELS[engine]:
                     if engine == "whisper" and size in WHISPER_MODEL_INFO:
                         info = WHISPER_MODEL_INFO[size]
                         is_downloaded = _is_whisper_model_downloaded(size)
+                    elif engine == "whisper_cpp" and size in WHISPERCPP_MODEL_INFO:
+                        info = WHISPERCPP_MODEL_INFO[size]
+                        is_downloaded = is_whispercpp_model_downloaded(size)
                     elif engine == "vosk" and size in VOSK_MODEL_INFO:
                         info = VOSK_MODEL_INFO[size]
                         is_downloaded = _is_vosk_model_downloaded(size, self.language)
@@ -1186,7 +1204,7 @@ class SettingsDialog(Gtk.Dialog):
                 current_lang == "auto" or not SUPPORTED_LANGUAGES.get(current_lang, {}).get("vosk")
             ):
                 self.language = "en-us"
-            elif engine == "whisper" and not current_lang:
+            elif engine in ["whisper", "whisper_cpp"] and not current_lang:
                 self.language = "auto"
 
         self._populate_model_options()
@@ -1229,7 +1247,8 @@ class SettingsDialog(Gtk.Dialog):
                     continue
                 is_downloaded = _is_vosk_model_downloaded("small", lang_code)
                 display_text += " ✓" if is_downloaded else " ↓"
-            elif engine == "whisper":
+            elif engine in ["whisper", "whisper_cpp"]:
+                # Both Whisper and whisper.cpp support auto-detect
                 if lang_code == "auto":
                     display_text += " ⚠"
             else:
@@ -1297,6 +1316,15 @@ class SettingsDialog(Gtk.Dialog):
             is_downloaded = _is_whisper_model_downloaded(model_name)
             recommended, reason = _get_recommended_whisper_model()
             extra_info = f"Parameters: {info['params']}"
+        elif engine == "whisper_cpp":
+            if model_name not in WHISPERCPP_MODEL_INFO:
+                self.model_info_card.hide()
+                return
+            info = WHISPERCPP_MODEL_INFO[model_name]
+            is_downloaded = is_whispercpp_model_downloaded(model_name)
+            recommended, reason = get_recommended_whispercpp_model()
+            backend, backend_info = detect_compute_backend()
+            extra_info = f"Parameters: {info['params']} • Backend: {get_backend_display_name(backend)}"
         elif engine == "vosk":
             if model_name not in VOSK_MODEL_INFO:
                 self.model_info_card.hide()
@@ -1357,6 +1385,9 @@ class SettingsDialog(Gtk.Dialog):
             if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
                 needs_download = True
                 model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
+            elif engine == "whisper_cpp" and not is_whispercpp_model_downloaded(model_name):
+                needs_download = True
+                model_info = WHISPERCPP_MODEL_INFO.get(model_name, {"size_mb": 39})
             elif engine == "vosk" and not _is_vosk_model_downloaded(model_name, self.language):
                 needs_download = True
                 model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
