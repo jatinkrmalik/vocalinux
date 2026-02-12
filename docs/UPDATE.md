@@ -9,7 +9,7 @@ This guide explains how to update Vocalinux to the latest version.
 Simply re-run the installation command with the new version tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.6.0-beta
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.0-beta/install.sh | bash
 ```
 
 The installer will:
@@ -50,7 +50,7 @@ cd vocalinux
 ./install.sh --tag=v0.4.1-alpha
 
 # Or via curl (for any installation)
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.6.0-beta
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.0-beta/install.sh | bash
 ```
 
 **What gets preserved:**
@@ -151,7 +151,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 ./uninstall.sh --keep-config --keep-data
 
 # Reinstall
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.6.0-beta
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.0-beta/install.sh | bash
 ```
 
 ### Old Version Still Running

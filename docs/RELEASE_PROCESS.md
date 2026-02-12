@@ -112,7 +112,7 @@ Change the Development Status classifier:
 **Install Commands:**
 Update all curl commands to use the new tag:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.0-beta/install.sh | bash
 ```
 
 **Release Announcement (lines ~31-34):**
