@@ -125,10 +125,27 @@ class TextInjector:
             xdotool_available = shutil.which("xdotool") is not None
 
             if ydotool_available:
-                self.wayland_tool = "ydotool"
-                logger.info(
-                    f"Using {self.wayland_tool} for Wayland text injection (universal compatibility)"
-                )
+                # Verify ydotoold daemon is running before selecting ydotool
+                try:
+                    subprocess.run(
+                        ["ydotool", "type", ""], check=True, stderr=subprocess.PIPE, timeout=2
+                    )
+                    self.wayland_tool = "ydotool"
+                    logger.info(
+                        f"Using {self.wayland_tool} for Wayland text injection (universal compatibility)"
+                    )
+                except (
+                    subprocess.CalledProcessError,
+                    subprocess.TimeoutExpired,
+                    FileNotFoundError,
+                ):
+                    if wtype_available:
+                        self.wayland_tool = "wtype"
+                        logger.info(
+                            f"Using {self.wayland_tool} for Wayland text injection (ydotoold not running)"
+                        )
+                    else:
+                        logger.warning("ydotool found but ydotoold daemon not running")
             elif wtype_available:
                 self.wayland_tool = "wtype"
                 logger.info(f"Using {self.wayland_tool} for Wayland text injection")
