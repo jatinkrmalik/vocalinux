@@ -62,9 +62,20 @@ jobs:
           for file in dist/*; do
             base=$(basename "$file")
             if [[ "$base" == vocalinux-* ]]; then
-              # Rename vocalinux-0.5.0b0-py3-none-any.whl -> vocalinux-0.5.0b0.dev20250211+g1234567-py3-none-any.whl
-              newname=$(echo "$base" | sed "s/vocalinux-\([^-]*\)-/vocalinux-${{ steps.version.outputs.version }}-/")
-              mv "$file" "dist/$newname"
+              # Extract the file extension
+              if [[ "$base" == *.whl ]]; then
+                # vocalinux-0.5.0b0-py3-none-any.whl -> vocalinux-0.5.0b0.dev20250211+g1234567-py3-none-any.whl
+                newname="vocalinux-${{ steps.version.outputs.version }}-py3-none-any.whl"
+              elif [[ "$base" == *.tar.gz ]]; then
+                # vocalinux-0.5.0b0.tar.gz -> vocalinux-0.5.0b0.dev20250211+g1234567.tar.gz
+                newname="vocalinux-${{ steps.version.outputs.version }}.tar.gz"
+              else
+                # Fallback: replace version in filename
+                newname=$(echo "$base" | sed 's/vocalinux-[^[:space:]]*/vocalinux-${{ steps.version.outputs.version }}/')
+              fi
+              if [[ "$base" != "$newname" ]]; then
+                mv "$file" "dist/$newname"
+              fi
             fi
           done
           ls -la dist/
