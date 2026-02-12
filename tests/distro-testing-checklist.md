@@ -40,7 +40,7 @@ Use this checklist when testing Vocalinux on a new Linux distribution.
 ### Standard Installation
 - [ ] Download installer
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.0-beta/install.sh -o /tmp/vl.sh
+  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh -o /tmp/vl.sh
   ```
 
 - [ ] Run installer
