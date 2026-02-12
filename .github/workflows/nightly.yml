@@ -3,13 +3,14 @@ name: Nightly Build
 on:
   schedule:
     - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual triggering for testing
 
 permissions:
-  contents: read
+  contents: write  # Required to create/update releases
 
 jobs:
   nightly:
-    name: Build and Upload Nightly
+    name: Build and Publish Nightly
     runs-on: ubuntu-latest
 
     steps:
@@ -46,20 +47,157 @@ jobs:
       - name: Generate nightly version
         id: version
         run: |
-          NIGHTLY_VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
+          BASE_VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
           DATE=$(date +%Y%m%d)
-          echo "version=${NIGHTLY_VERSION}.dev${DATE}" >> $GITHUB_OUTPUT
-          echo "Built version: ${NIGHTLY_VERSION}.dev${DATE}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          NIGHTLY_VERSION="${BASE_VERSION}.dev${DATE}+${SHORT_SHA}"
+          echo "version=${NIGHTLY_VERSION}" >> $GITHUB_OUTPUT
+          echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
+          echo "date=${DATE}" >> $GITHUB_OUTPUT
+          echo "sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "Built version: ${NIGHTLY_VERSION}"
 
-      - name: Rename artifacts
+      - name: Rename artifacts for nightly
         run: |
           for file in dist/*; do
             base=$(basename "$file")
-            mv "$file" "dist/nightly-${base#vocalinux-}"
+            if [[ "$base" == vocalinux-* ]]; then
+              # Rename vocalinux-0.5.0b0-py3-none-any.whl -> vocalinux-0.5.0b0.dev20250211+g1234567-py3-none-any.whl
+              newname=$(echo "$base" | sed "s/vocalinux-\([^-]*\)-/vocalinux-${{ steps.version.outputs.version }}-/")
+              mv "$file" "dist/$newname"
+            fi
           done
           ls -la dist/
 
-      - name: Upload artifacts
+      - name: Cleanup old nightly releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get list of nightly releases (tagged with nightly-YYYY-MM-DD), sorted by date descending
+          # Keep only the 3 most recent, delete the rest
+          gh release list --repo ${{ github.repository }} --limit 100 | \
+            grep "nightly-" | \
+            sort -t$'\t' -k3 -r | \
+            tail -n +4 | \
+            while IFS=$'\t' read -r tag name date; do
+              echo "Deleting old nightly release: $tag"
+              gh release delete "$tag" --yes --repo ${{ github.repository }} 2>/dev/null || true
+              git push origin :refs/tags/"$tag" 2>/dev/null || true
+            done
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" HEAD)
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an" HEAD)
+          COMMIT_DATE=$(git log -1 --pretty=format:"%ci" HEAD)
+          COMMIT_BODY=$(git log -1 --pretty=format:"%b" HEAD)
+          
+          # Get recent commits (last 10) for changelog
+          RECENT_COMMITS=$(git log --oneline -10 --no-decorate | sed 's/^/- /')
+          
+          # Get changes since last tag (if exists)
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "nightly-*" 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            CHANGES_SINCE=$(git log --oneline "$LAST_TAG"..HEAD --no-decorate | sed 's/^/- /')
+            CHANGES_SECTION="### Changes Since Last Nightly
+          ${CHANGES_SINCE:-"*No new commits since last nightly*"}"
+          else
+            CHANGES_SECTION="### Recent Commits
+          ${RECENT_COMMITS}"
+          fi
+          
+          cat > /tmp/release_notes.md << EOF
+          ## Nightly Build ${{ steps.version.outputs.version }}
+
+          **This is a nightly development build. It may contain bugs or incomplete features. Use at your own risk.**
+
+          ---
+
+          ### What's in This Build
+
+          **Commit Details:**
+          - **SHA:** \`${{ steps.version.outputs.sha }}\`
+          - **Message:** ${COMMIT_MSG}
+          - **Author:** ${COMMIT_AUTHOR}
+          - **Date:** ${COMMIT_DATE}
+
+          ${CHANGES_SECTION}
+
+          ---
+
+          ### Installation
+
+          #### Quick Install (Recommended)
+          Download the wheel file below and install:
+          \`\`\`bash
+          pip install vocalinux-${{ steps.version.outputs.version }}-py3-none-any.whl
+          \`\`\`
+
+          #### From PyPI (Stable)
+          For the latest stable release:
+          \`\`\`bash
+          pip install vocalinux
+          \`\`\`
+
+          #### Using Install Script
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+          \`\`\`
+
+          ---
+
+          ### Build Information
+
+          | Property | Value |
+          |----------|-------|
+          | **Version** | ${{ steps.version.outputs.version }} |
+          | **Base Version** | ${{ steps.version.outputs.base_version }} |
+          | **Build Date** | ${{ steps.version.outputs.date }} |
+          | **Python** | 3.8+ |
+          | **OS** | Linux (X11 & Wayland) |
+
+          ---
+
+          ### Files
+
+          - **\`vocalinux-${{ steps.version.outputs.version }}-py3-none-any.whl\`** - Python wheel (recommended)
+          - **\`vocalinux-${{ steps.version.outputs.version }}.tar.gz\`** - Source distribution
+
+          ---
+
+          ### Links
+
+          - [Documentation](https://vocalinux.com)
+          - [Report Issues](https://github.com/jatinkrmalik/vocalinux/issues)
+          - [Other Releases](https://github.com/jatinkrmalik/vocalinux/releases)
+
+          ---
+
+          *Only the 3 most recent nightly builds are kept. This build will be automatically deleted when newer nightlies are created.*
+          
+          *Generated on $(date -u +"%Y-%m-%d %H:%M:%S UTC")*
+          EOF
+          echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create nightly release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create release with dated tag: nightly-2025-02-11
+          RELEASE_TAG="nightly-$(date +%Y-%m-%d)"
+          
+          # If a release for today already exists, delete it first
+          gh release delete "$RELEASE_TAG" --yes --repo ${{ github.repository }} 2>/dev/null || true
+          git push origin :refs/tags/"$RELEASE_TAG" 2>/dev/null || true
+          
+          gh release create "$RELEASE_TAG" \
+            --title "Nightly Build - ${{ steps.version.outputs.version }}" \
+            --notes-file ${{ steps.release_notes.outputs.notes_file }} \
+            --prerelease \
+            dist/*
+
+      - name: Upload artifacts (backup)
         uses: actions/upload-artifact@v4
         with:
           name: vocalinux-nightly-${{ steps.version.outputs.version }}
