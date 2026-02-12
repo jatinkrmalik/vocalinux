@@ -38,17 +38,17 @@ import { CodeBlock } from "@/components/code-block";
 import { useInView } from "react-intersection-observer";
 
 // The one-liner install command (split into three lines for display)
-// Downloads install.sh from main (which has --tag support) and passes the latest release tag
+// Downloads install.sh from the specific release tag to ensure version consistency
 const getInstallCommands = (latestRelease: string) => ({
-  interactiveInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --interactive`,
+  interactiveInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive`,
 
-  oneClickInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease}`,
+  oneClickInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh`,
 
-  oneClickInstallWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --engine=whisper`,
+  oneClickInstallWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper`,
 
-  oneClickInstallVosk: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=${latestRelease} --engine=vosk`,
+  oneClickInstallVosk: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk`,
 
-  uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
+  uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
 });
 
 const FeatureCard = ({
