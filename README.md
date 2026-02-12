@@ -30,7 +30,16 @@
 
 ## 📚 What's New in v0.5.0-beta
 
-We're excited to announce our first **Beta release**! Vocalinux has evolved significantly since the last alpha, with numerous bug fixes and feature improvements.
+We're excited to announce our first **Beta release**! Vocalinux has evolved significantly with the biggest change yet: **whisper.cpp is now the default speech recognition engine**, bringing massive improvements to speed, compatibility, and ease of installation.
+
+### 🚀 Major Change: whisper.cpp is Now Default!
+
+**Why this is a game-changer:**
+- **⚡ 10x faster installation** - No more 2.3GB PyTorch downloads (was ~5-10 min, now ~1-2 min)
+- **🎮 Universal GPU support** - Works with AMD, Intel, and NVIDIA via Vulkan (not just NVIDIA CUDA)
+- **💾 Smaller footprint** - Tiny model is only ~39MB vs ~75MB Whisper
+- **🔥 Better performance** - C++ optimized inference with multi-threading
+- **🐍 No Python GIL** - True parallel processing for faster transcription
 
 ### 🐛 Critical Bug Fixes
 - Fixed text escaping issues (apostrophes and quotes no longer have backslash escapes)
@@ -38,23 +47,27 @@ We're excited to announce our first **Beta release**! Vocalinux has evolved sign
 - Fixed missing spaces after punctuation when transcribing again
 
 ### ✨ Key New Features
+- **🤖 whisper.cpp integration** - High-performance C++ speech recognition with Vulkan GPU acceleration
+- **📦 Interactive installer** - Choose between 3 engines: whisper.cpp (recommended), Whisper, or VOSK
+- **🔧 Hardware auto-detection** - Automatically detects your GPU and recommends optimal settings
 - **Customizable keyboard shortcuts** - Configure your own activation shortcuts via GUI
 - **Modern GNOME HIG settings dialog** - Complete UI overhaul following GNOME design guidelines
 - **Pleasant audio feedback** - Gliding tones replace harsh beeps
-- **Interactive installer with GPU detection** - Smart hardware auto-detection
 - **Better Wayland support** - Native keyboard shortcuts without XWayland
 
 ### 🔧 Quality Improvements
 - **80%+ test coverage** - Comprehensive test suite across all modules
 - **Microphone reconnection** - Automatic recovery when microphone disconnects
 - **Audio buffer management** - Prevents memory issues during long recordings
+- **Enhanced logging** - Comprehensive debug info for whisper.cpp troubleshooting
 
 ---
 
-> 🎉 **Beta Release!**
+> 🎉 **Beta Release with whisper.cpp!**
 >
 > We're excited to share Vocalinux Beta with the community!
-> See "What's New" above for details on this release.
+> whisper.cpp brings **10x faster installation** and **universal GPU support**.
+> See "What's New" above for details.
 
 ---
 
@@ -63,11 +76,13 @@ We're excited to announce our first **Beta release**! Vocalinux has evolved sign
 - 🎤 **Double-tap Ctrl** to start/stop voice dictation
 - ⚡ **Real-time transcription** with minimal latency
 - 🌎 **Universal compatibility** across all Linux applications
-- 🔒 **Offline operation** for privacy and reliability (with VOSK)
-- 🤖 **Optional Whisper AI** support for enhanced accuracy
+- 🔒 **100% Offline operation** for privacy and reliability
+- 🤖 **whisper.cpp by default** - High-performance C++ speech recognition
+- 🎮 **Universal GPU support** - Vulkan acceleration for AMD, Intel, and NVIDIA
 - 🎨 **System tray integration** with visual status indicators
 - 🔊 **Pleasant audio feedback** - smooth gliding tones, headphone-friendly
 - ⚙️ **Graphical settings** dialog for easy configuration
+- 📦 **3 engine choices** - whisper.cpp (default), OpenAI Whisper, or VOSK
 
 ## 📸 Screenshots
 
@@ -104,53 +119,46 @@ Here are some screenshots showcasing Vocalinux in action:
 
 ## 🚀 Quick Install
 
-### Interactive Install (Recommended for New Users)
+### Interactive Install (Recommended)
 
-Let the installer guide you through the setup with smart hardware detection:
-
-```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --interactive
-```
-
-The interactive installer will:
-- **Auto-detect your hardware** (GPU, RAM)
-- **Recommend the best configuration** for your system
-- **Guide you through each step** with clear explanations
-- **Show you how to launch and use** Vocalinux after installation
-
-### One-liner Installation (Quick Install)
+Our new interactive installer guides you through setup with intelligent hardware detection:
 
 ```bash
 curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta
 ```
 
-> **Note**: Installs v0.5.0-beta. For the most recent version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
->
-> **GPU Detection**: The installer now automatically detects NVIDIA GPUs and uses CPU-only PyTorch when no GPU is present, saving you ~2GB of download!
+**Choose your engine:**
+1. **whisper.cpp** ⭐ (Recommended) - Fast, works with any GPU via Vulkan
+2. **Whisper** (OpenAI) - PyTorch-based, NVIDIA GPU only
+3. **VOSK** - Lightweight, works on older systems
 
-This will:
-- Clone the repository to `~/.local/share/vocalinux-install`
-- Install all system dependencies
-- Set up a virtual environment in `~/.local/share/vocalinux/venv`
-- Install **both VOSK and Whisper AI** speech engines:
-  - **VOSK**: installs the `vosk` Python package from PyPI
-  - **Whisper**: installs the `openai-whisper` package from PyPI, which also pulls in PyTorch (the ML framework Whisper requires)
-- Create a symlink at `~/.local/bin/vocalinux`
-- Download the default **Whisper tiny** speech model (~75MB)
+The installer will:
+- **Auto-detect your hardware** (GPU, RAM, Vulkan support)
+- **Recommend the best engine** for your system
+- **Download the appropriate model** (~39MB for whisper.cpp tiny)
+- **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
-> ⏱️ **Note**: Installation takes ~5-10 minutes due to Whisper AI dependencies (PyTorch with CUDA support, ~2.3GB).
+> **Note**: Installs v0.5.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
-**Whisper with CPU-only PyTorch (no NVIDIA GPU needed):**
+### Installation Options
+
+**Default (whisper.cpp - recommended):**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --whisper-cpu
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta
 ```
-This installs Whisper with CPU-only PyTorch (~200MB instead of ~2.3GB). Works great for systems without NVIDIA GPU.
+Fastest installation (~1-2 min), universal GPU support via Vulkan.
 
-**For low-RAM systems (8GB or less) - VOSK only:**
+**Whisper (OpenAI) - if you prefer PyTorch:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --no-whisper
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --engine=whisper
 ```
-This skips Whisper installation entirely and configures VOSK as the default engine.
+NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
+
+**VOSK only - for low-RAM systems:**
+```bash
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --tag=v0.5.0-beta --engine=vosk
+```
+Lightweight option (~40MB), works on systems with 4GB RAM.
 
 ### Alternative: Install from Source
 
@@ -186,7 +194,16 @@ Or launch it from your application menu!
 
 ## 📚 What's New in v0.5.0-beta
 
-We're excited to announce our first **Beta release**! Vocalinux has evolved significantly since the last alpha, with numerous bug fixes and feature improvements.
+We're excited to announce our first **Beta release** featuring **whisper.cpp as the default engine** - a massive upgrade that brings 10x faster installation and universal GPU support!
+
+### 🚀 Major Change: whisper.cpp is Now Default!
+
+**What makes whisper.cpp special:**
+- **⚡ 10x faster installation** - No more 2.3GB PyTorch downloads (installation now takes ~1-2 min instead of 5-10 min)
+- **🎮 Universal GPU support** - Works with AMD, Intel, and NVIDIA via Vulkan (not just NVIDIA CUDA like OpenAI Whisper)
+- **💾 Smaller footprint** - Tiny model is only ~39MB vs ~75MB for Whisper
+- **🔥 Better performance** - C++ optimized inference with true multi-threading (no Python GIL)
+- **🌍 99+ languages** with automatic language detection
 
 ### 🐛 Critical Bug Fixes
 - Fixed text escaping issues (apostrophes and quotes no longer have backslash escapes)
@@ -194,16 +211,19 @@ We're excited to announce our first **Beta release**! Vocalinux has evolved sign
 - Fixed missing spaces after punctuation when transcribing again
 
 ### ✨ Key New Features
+- **🤖 whisper.cpp integration** - High-performance C++ speech recognition with Vulkan GPU acceleration
+- **📦 Interactive installer** - Choose between 3 engines: whisper.cpp (recommended), Whisper, or VOSK
+- **🔧 Hardware auto-detection** - Automatically detects your GPU and recommends optimal settings
 - **Customizable keyboard shortcuts** - Configure your own activation shortcuts via GUI
 - **Modern GNOME HIG settings dialog** - Complete UI overhaul following GNOME design guidelines
 - **Pleasant audio feedback** - Gliding tones replace harsh beeps
-- **Interactive installer with GPU detection** - Smart hardware auto-detection
 - **Better Wayland support** - Native keyboard shortcuts without XWayland
 
 ### 🔧 Quality Improvements
 - **80%+ test coverage** - Comprehensive test suite across all modules
 - **Microphone reconnection** - Automatic recovery when microphone disconnects
 - **Audio buffer management** - Prevents memory issues during long recordings
+- **Enhanced logging** - Comprehensive debug info for whisper.cpp troubleshooting
 
 For a complete list of changes, see the release notes.
 
@@ -239,11 +259,13 @@ For a complete list of changes, see the release notes.
 ### Command Line Options
 
 ```bash
-vocalinux --help              # Show all options
-vocalinux --debug             # Enable debug logging
-vocalinux --engine whisper    # Use Whisper AI engine
-vocalinux --model medium      # Use medium-sized model
-vocalinux --wayland           # Force Wayland mode
+vocalinux --help                  # Show all options
+vocalinux --debug                 # Enable debug logging
+vocalinux --engine whisper_cpp    # Use whisper.cpp engine (default)
+vocalinux --engine whisper        # Use OpenAI Whisper engine
+vocalinux --engine vosk           # Use VOSK engine
+vocalinux --model medium          # Use medium-sized model
+vocalinux --wayland               # Force Wayland mode
 ```
 
 ## ⚙️ Configuration
@@ -253,8 +275,8 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 ```json
 {
   "speech_recognition": {
-    "engine": "vosk",
-    "model_size": "small",
+    "engine": "whisper_cpp",
+    "model_size": "tiny",
     "vad_sensitivity": 3,
     "silence_timeout": 2.0
   }
@@ -285,17 +307,20 @@ python -m vocalinux.main --debug
 
 ```
 vocalinux/
-├── src/vocalinux/           # Main application code
-│   ├── speech_recognition/  # Speech recognition engines
-│   ├── text_injection/      # Text injection (X11/Wayland)
-│   ├── ui/                  # GTK UI components
-│   └── utils/               # Utility functions
-├── tests/                   # Test suite
-├── scripts/                 # Development utilities
-│   └── generate_sounds.py   # Sound generation script
-├── resources/               # Icons and sounds
-├── docs/                    # Documentation
-└── web/                     # Website source
+├── src/vocalinux/                 # Main application code
+│   ├── speech_recognition/        # Speech recognition engines (VOSK, Whisper, whisper.cpp)
+│   │   └── recognition_manager.py # Unified engine interface
+│   ├── text_injection/            # Text injection (X11/Wayland)
+│   ├── ui/                        # GTK UI components
+│   └── utils/                     # Utility functions
+│       ├── whispercpp_model_info.py   # whisper.cpp model metadata & hardware detection
+│       └── vosk_model_info.py         # VOSK model metadata
+├── tests/                         # Test suite
+├── scripts/                       # Development utilities
+│   └── generate_sounds.py         # Sound generation script
+├── resources/                     # Icons and sounds
+├── docs/                          # Documentation
+└── web/                           # Website source
 ```
 
 ## 📖 Documentation
@@ -331,6 +356,8 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [x] ~~Graphical settings dialog~~ ✅
 - [x] ~~Whisper AI support~~ ✅
 - [x] ~~Multi-language support (FR, DE, RU)~~ ✅
+- [x] ~~whisper.cpp integration (default engine)~~ ✅
+- [x] ~~Vulkan GPU support~~ ✅
 - [ ] In-app update mechanism
 - [ ] Application-specific commands
 - [ ] Debian/Ubuntu package (.deb)

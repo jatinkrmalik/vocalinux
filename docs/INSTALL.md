@@ -2,7 +2,7 @@
 
 This guide provides detailed instructions for installing Vocalinux on Linux systems.
 
-## Quick Start
+## 🚀 Quick Start
 
 ### One-liner Installation (Recommended)
 
@@ -10,11 +10,15 @@ This guide provides detailed instructions for installing Vocalinux on Linux syst
 curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash -s -- --tag=v0.5.0-beta
 ```
 
-> **Note**: Installs v0.5.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.5.0-beta with **whisper.cpp** (our new default engine). For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
-That's it! The installer handles everything automatically, including Whisper AI support.
+That's it! The installer handles everything automatically:
+- ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
+- ✅ Auto-detects your GPU (AMD, Intel, NVIDIA all supported)
+- ✅ Downloads the tiny model (~39MB)
+- ✅ Configures everything automatically
 
-> ⏱️ **Note**: Installation takes ~5-10 minutes due to Whisper AI dependencies.
+> ⏱️ **Installation Time**: ~1-2 minutes (vs 5-10 minutes with old Whisper AI)
 
 ### From Source
 
@@ -30,28 +34,45 @@ git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./ins
 | **Python** | 3.8 or newer |
 | **Display Server** | X11 or Wayland |
 | **Hardware** | Microphone for speech input |
-| **Disk Space** | ~500MB (including speech models) |
-| **RAM** | 4GB minimum, 8GB recommended for Whisper |
+| **Disk Space** | ~200MB (including whisper.cpp model) |
+| **RAM** | 4GB minimum, works great with 8GB |
+
+### GPU Support (Optional)
+
+**whisper.cpp** supports GPU acceleration via **Vulkan**, which works with:
+- ✅ AMD GPUs (RX series, integrated graphics)
+- ✅ Intel GPUs (Arc, integrated graphics)
+- ✅ NVIDIA GPUs (RTX, GTX series)
+
+No special drivers needed - if your GPU supports Vulkan, whisper.cpp will use it automatically!
+
+To check Vulkan support: `vulkaninfo --summary`
 
 ## Installation Options
 
-### Standard Installation
+### Interactive Installation (Recommended)
+
+The new interactive installer guides you through engine selection:
 
 ```bash
-# Clone the repository
-git clone https://github.com/jatinkrmalik/vocalinux.git
-cd vocalinux
-
-# Run the installer
 ./install.sh
 ```
 
-### Installation with Whisper Support
+**Choose your engine:**
+1. **whisper.cpp** ⭐ (Recommended) - Fast, works with any GPU via Vulkan
+2. **Whisper** (OpenAI) - PyTorch-based, NVIDIA GPU only  
+3. **VOSK** - Lightweight, works on older systems
 
-Whisper provides better accuracy but requires more resources:
+The installer will auto-detect your hardware and recommend the best option!
+
+### Automatic Installation
+
+Skip the interactive prompts with `--auto`:
 
 ```bash
-./install.sh --with-whisper
+./install.sh --auto                    # Default: whisper.cpp
+./install.sh --auto --engine=whisper   # Use OpenAI Whisper
+./install.sh --auto --engine=vosk      # Use VOSK only
 ```
 
 ### Development Installation
@@ -69,15 +90,27 @@ This installs additional tools: pytest, black, isort, flake8, pre-commit.
 ```bash
 ./install.sh --help
 
+Installation Modes:
+  (no flags)       Interactive mode - guided setup with recommendations
+  --auto           Automatic mode - install with defaults (whisper.cpp)
+  --auto --engine=whisper   Auto mode with Whisper engine
+
 Options:
+  --interactive, -i  Force interactive mode (default)
+  --auto           Non-interactive automatic installation
+  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk
   --dev            Install in development mode with all dev dependencies
   --test           Run tests after installation
-  --venv-dir=PATH  Specify custom virtual environment directory (default: venv)
-  --skip-models    Skip downloading VOSK models during installation
-  --with-whisper   Install Whisper AI support (default in curl install)
-  --no-whisper     Skip Whisper installation (faster, VOSK only)
-  -y, --yes        Non-interactive mode (accept defaults)
+  --venv-dir=PATH  Specify custom virtual environment directory
+  --skip-models    Skip downloading speech models during installation
+  --tag=TAG        Install specific release tag
   --help           Show this help message
+
+Examples:
+  ./install.sh                           # Interactive mode (recommended)
+  ./install.sh --auto                    # Auto-install with whisper.cpp
+  ./install.sh --auto --engine=vosk      # Auto-install VOSK only
+  ./install.sh --dev --test              # Dev mode with tests
 ```
 
 ## What the Installer Does
@@ -85,9 +118,24 @@ Options:
 1. **Detects your Linux distribution** and installs appropriate system packages
 2. **Creates a Python virtual environment** with system site-packages access
 3. **Installs the Vocalinux package** and all dependencies
-4. **Downloads speech recognition models** (Whisper tiny model by default, VOSK as fallback)
-5. **Installs desktop integration** (icons, .desktop file)
-6. **Creates activation script** for easy environment activation
+4. **Installs the speech recognition engine** you selected:
+   - **whisper.cpp** (default): High-performance C++ engine with Vulkan GPU support
+   - **Whisper**: OpenAI's PyTorch-based engine (NVIDIA GPU only)
+   - **VOSK**: Lightweight engine for older systems
+5. **Downloads speech recognition models**:
+   - whisper.cpp: ~39MB tiny model (or larger if selected)
+   - Whisper: ~75MB tiny model + PyTorch dependencies (~2.3GB with CUDA)
+   - VOSK: ~40MB small model
+6. **Installs desktop integration** (icons, .desktop file)
+7. **Creates activation script** for easy environment activation
+
+### Installation Time Comparison
+
+| Engine | Download Size | Install Time | GPU Support |
+|--------|---------------|--------------|-------------|
+| **whisper.cpp** (default) | ~39-500MB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
+| Whisper (OpenAI) | ~2.3GB+ | ~5-10 min | NVIDIA only (CUDA) |
+| VOSK | ~40MB | ~30 sec | CPU only |
 
 ## Running Vocalinux
 
@@ -108,15 +156,16 @@ vocalinux
 ### Command Line Options
 
 ```bash
-vocalinux --help              # Show all options
-vocalinux --debug             # Enable debug logging
-vocalinux --engine whisper    # Use Whisper AI engine (default)
-vocalinux --engine vosk       # Use VOSK engine
-vocalinux --model tiny        # Use tiny model (default, fastest)
-vocalinux --model small       # Use small model
-vocalinux --model medium      # Use medium model
-vocalinux --model large       # Use large model
-vocalinux --wayland           # Force Wayland compatibility mode
+vocalinux --help                  # Show all options
+vocalinux --debug                 # Enable debug logging
+vocalinux --engine whisper_cpp    # Use whisper.cpp engine (default)
+vocalinux --engine whisper        # Use OpenAI Whisper engine
+vocalinux --engine vosk           # Use VOSK engine
+vocalinux --model tiny            # Use tiny model (default, fastest)
+vocalinux --model small           # Use small model
+vocalinux --model medium          # Use medium model
+vocalinux --model large           # Use large model
+vocalinux --wayland               # Force Wayland compatibility mode
 ```
 
 ## Directory Structure
@@ -259,6 +308,65 @@ cp resources/icons/scalable/*.svg ~/.local/share/icons/hicolor/scalable/apps/
 # Update icon cache
 gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 ```
+
+## About whisper.cpp
+
+### What is whisper.cpp?
+
+**whisper.cpp** is a high-performance C++ port of OpenAI's Whisper speech recognition model. It's now the **default engine** in Vocalinux because it offers significant advantages:
+
+**Performance Benefits:**
+- **10x faster installation** - No 2.3GB PyTorch download (just ~39MB model)
+- **C++ optimized inference** - Faster than Python-based Whisper
+- **True multi-threading** - Uses all CPU cores (no Python GIL limitations)
+- **Lower memory usage** - More efficient than PyTorch
+
+**GPU Support:**
+- **Vulkan acceleration** - Works with AMD, Intel, and NVIDIA GPUs
+- **Automatic backend selection** - Uses Vulkan → CUDA → CPU (in that order)
+- **No special drivers** - Just needs standard Vulkan support
+
+**Models:**
+whisper.cpp uses the same models as OpenAI Whisper, converted to `ggml` format:
+- **tiny** (~39MB) - Fastest, good for real-time dictation
+- **base** (~74MB) - Good balance of speed and accuracy
+- **small** (~244MB) - Better accuracy, still fast
+- **medium** (~769MB) - High accuracy
+- **large** (~1.5GB) - Best accuracy, slower
+
+### Checking GPU Support
+
+To verify your GPU is detected:
+
+```bash
+# Check Vulkan support (for AMD, Intel, NVIDIA)
+vulkaninfo --summary | grep -i "deviceName"
+
+# In Vocalinux, look for these log messages:
+# [INFO] whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU
+# [INFO] whisper.cpp using Vulkan GPU backend: AMD Radeon RX 6800
+```
+
+### Switching Engines
+
+If you want to try a different engine after installation:
+
+```bash
+# Edit the config file
+nano ~/.config/vocalinux/config.json
+```
+
+Change the `engine` field:
+```json
+{
+  "speech_recognition": {
+    "engine": "whisper_cpp",  // Options: whisper_cpp, whisper, vosk
+    "model_size": "tiny"
+  }
+}
+```
+
+Or use the GUI: Right-click tray icon → Settings → Speech Engine
 
 ## Troubleshooting
 
