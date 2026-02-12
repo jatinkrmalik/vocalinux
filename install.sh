@@ -1477,18 +1477,85 @@ install_python_package() {
                 if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
                     print_info "✓ NVIDIA GPU detected: $GPU_NAME"
                     print_info "  Installing pywhispercpp with CUDA support..."
+                    print_info "  (This may take a few minutes as it compiles from source)"
                     GPU_BACKEND="CUDA"
-                    print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                    if GGML_CUDA=1 pip install --force-reinstall git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                    print_info "Installing pywhispercpp ($GPU_BACKEND backend) from source..."
+                    
+                    # Install build dependencies for CUDA
+                    if GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp 2>&1 | tee -a "$PIP_LOG_FILE"; then
                         GPU_INSTALL_SUCCESS=true
+                    else
+                        print_warning "CUDA build failed. This may be due to:"
+                        print_warning "  - Missing CUDA toolkit (install with: sudo apt install nvidia-cuda-toolkit)"
+                        print_warning "  - CUDA version incompatibility"
+                        print_warning "  - Missing build dependencies"
                     fi
                 elif [[ "$HAS_VULKAN" == "yes" ]]; then
                     print_info "✓ Vulkan detected: $VULKAN_DEVICE"
                     print_info "  Installing pywhispercpp with Vulkan support..."
+                    print_info "  (This may take a few minutes as it compiles from source)"
                     GPU_BACKEND="Vulkan"
-                    print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                    if GGML_VULKAN=1 pip install --force-reinstall git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                    print_info "Installing pywhispercpp ($GPU_BACKEND backend) from source..."
+                    
+                    # Install build dependencies for Vulkan if not present
+                    if ! pkg-config --exists vulkan 2>/dev/null; then
+                        print_warning "Vulkan development libraries not found. Attempting to install..."
+                        install_packages "vulkan-validationlayers-dev" "vulkan-devel" "vulkan-devel" "vulkan-devel" || true
+                    fi
+                    
+                    if GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp 2>&1 | tee -a "$PIP_LOG_FILE"; then
                         GPU_INSTALL_SUCCESS=true
+                    else
+                        print_warning "Vulkan build failed. This may be due to:"
+                        print_warning "  - Missing Vulkan SDK (install with: sudo apt install vulkan-sdk)"
+                        print_warning "  - Missing GPU drivers"
+                        print_warning "  - Missing build dependencies"
+                    fi
+                fi
+
+                # Verify GPU support was actually compiled in
+                if [[ "$GPU_INSTALL_SUCCESS" == "true" ]]; then
+                    print_info "Verifying GPU support in pywhispercpp..."
+                    
+                    # Create a Python script to check GPU support
+                    local GPU_CHECK_SCRIPT=$(mktemp)
+                    cat > "$GPU_CHECK_SCRIPT" << 'GPUCHECK'
+import sys
+try:
+    import _pywhispercpp as pw
+    backends = ["CPU"]
+    has_gpu = False
+    
+    if hasattr(pw, "GGML_USE_VULKAN") and pw.GGML_USE_VULKAN:
+        backends.append("Vulkan")
+        has_gpu = True
+    if hasattr(pw, "GGML_USE_CUDA") and pw.GGML_USE_CUDA:
+        backends.append("CUDA")
+        has_gpu = True
+    if hasattr(pw, "GGML_USE_METAL") and pw.GGML_USE_METAL:
+        backends.append("Metal")
+        has_gpu = True
+    
+    print(f"BACKENDS: {','.join(backends)}")
+    print(f"HAS_GPU: {has_gpu}")
+    sys.exit(0)
+except Exception as e:
+    print(f"ERROR: {e}")
+    sys.exit(1)
+GPUCHECK
+                    
+                    local GPU_CHECK_OUTPUT=$("$VENV_DIR/bin/python" "$GPU_CHECK_SCRIPT" 2>&1)
+                    rm -f "$GPU_CHECK_SCRIPT"
+                    
+                    if echo "$GPU_CHECK_OUTPUT" | grep -q "HAS_GPU: True"; then
+                        local DETECTED_BACKENDS=$(echo "$GPU_CHECK_OUTPUT" | grep "BACKENDS:" | cut -d':' -f2-)
+                        print_success "GPU support verified! Available backends: $DETECTED_BACKENDS"
+                    else
+                        print_warning "GPU support was requested but not compiled into pywhispercpp"
+                        print_warning "Available backends: $(echo "$GPU_CHECK_OUTPUT" | grep "BACKENDS:" | cut -d':' -f2-)"
+                        print_warning "Build may have failed silently. Falling back to CPU-only mode."
+                        GPU_INSTALL_SUCCESS=false
+                        GPU_BACKEND="CPU"
                     fi
                 fi
 

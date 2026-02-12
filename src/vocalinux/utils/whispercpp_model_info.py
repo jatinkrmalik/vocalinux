@@ -278,3 +278,121 @@ def get_backend_display_name(backend: str) -> str:
         ComputeBackend.CPU: "CPU",
     }
     return names.get(backend, backend.upper())
+
+
+def check_pywhispercpp_gpu_support() -> Tuple[str, bool]:
+    """
+    Check what GPU backends are actually compiled into pywhispercpp.
+
+    This function inspects the pywhispercpp library to determine which
+    GPU backends (Vulkan, CUDA) are actually available, as opposed to
+    what the system supports.
+
+    Returns:
+        Tuple of (available_backends, has_gpu_support)
+        - available_backends: comma-separated list of available backends
+        - has_gpu_support: True if any GPU backend is available
+    """
+    backends = ["CPU"]  # CPU is always available
+    has_gpu = False
+
+    try:
+        import _pywhispercpp as pw
+
+        # Check for Vulkan support
+        if hasattr(pw, "GGML_USE_VULKAN") and pw.GGML_USE_VULKAN:
+            backends.append("Vulkan")
+            has_gpu = True
+        elif hasattr(pw, "ggml_vk_get_device_count"):
+            # Alternative check for Vulkan functions
+            backends.append("Vulkan")
+            has_gpu = True
+
+        # Check for CUDA support
+        if hasattr(pw, "GGML_USE_CUDA") and pw.GGML_USE_CUDA:
+            backends.append("CUDA")
+            has_gpu = True
+        elif hasattr(pw, "ggml_cuda_get_device_count"):
+            # Alternative check for CUDA functions
+            backends.append("CUDA")
+            has_gpu = True
+
+        # Check for other GPU backends
+        if hasattr(pw, "GGML_USE_METAL") and pw.GGML_USE_METAL:
+            backends.append("Metal")
+            has_gpu = True
+
+        if hasattr(pw, "GGML_USE_SYCL") and pw.GGML_USE_SYCL:
+            backends.append("SYCL")
+            has_gpu = True
+
+        if hasattr(pw, "GGML_USE_OPENCL") and pw.GGML_USE_OPENCL:
+            backends.append("OpenCL")
+            has_gpu = True
+
+    except ImportError:
+        logger.debug("Could not import _pywhispercpp to check GPU support")
+        return "CPU", False
+    except Exception as e:
+        logger.debug(f"Error checking pywhispercpp GPU support: {e}")
+        return "CPU", False
+
+    return ", ".join(backends), has_gpu
+
+
+def verify_backend_compatibility(
+    detected_backend: str, detected_info: str
+) -> Tuple[bool, str, str]:
+    """
+    Verify if the detected system backend is compatible with pywhispercpp build.
+
+    This function checks if pywhispercpp was compiled with support for the
+    GPU backend detected on the system.
+
+    Args:
+        detected_backend: The backend detected by detect_compute_backend()
+        detected_info: The backend info string from detect_compute_backend()
+
+    Returns:
+        Tuple of (is_compatible, actual_backend, warning_message)
+        - is_compatible: True if pywhispercpp supports the detected backend
+        - actual_backend: The backend that will actually be used
+        - warning_message: Warning message if there's a mismatch, empty otherwise
+    """
+    available_backends, has_gpu_support = check_pywhispercpp_gpu_support()
+
+    # If pywhispercpp only has CPU support, report that
+    if not has_gpu_support:
+        if detected_backend != ComputeBackend.CPU:
+            warning = (
+                f"System has {detected_backend.upper()} GPU ({detected_info}), "
+                f"but pywhispercpp was compiled without GPU support. "
+                f"Falling back to CPU. To enable GPU acceleration, reinstall with: "
+                f"GGML_{detected_backend.upper()}=1 pip install --force-reinstall "
+                f"git+https://github.com/absadiki/pywhispercpp"
+            )
+            return False, ComputeBackend.CPU, warning
+        return True, ComputeBackend.CPU, ""
+
+    # Check if the detected backend is available in pywhispercpp
+    if detected_backend == ComputeBackend.VULKAN and "Vulkan" not in available_backends:
+        warning = (
+            f"System has Vulkan GPU ({detected_info}), but pywhispercpp "
+            f"was compiled without Vulkan support (available: {available_backends}). "
+            f"Falling back to CPU. To enable Vulkan, reinstall with: "
+            f"GGML_VULKAN=1 pip install --force-reinstall "
+            f"git+https://github.com/absadiki/pywhispercpp"
+        )
+        return False, ComputeBackend.CPU, warning
+
+    if detected_backend == ComputeBackend.CUDA and "CUDA" not in available_backends:
+        warning = (
+            f"System has NVIDIA GPU ({detected_info}), but pywhispercpp "
+            f"was compiled without CUDA support (available: {available_backends}). "
+            f"Falling back to CPU. To enable CUDA, reinstall with: "
+            f"GGML_CUDA=1 pip install --force-reinstall "
+            f"git+https://github.com/absadiki/pywhispercpp"
+        )
+        return False, ComputeBackend.CPU, warning
+
+    return True, detected_backend, ""

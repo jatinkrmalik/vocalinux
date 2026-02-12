@@ -598,10 +598,32 @@ class SpeechRecognitionManager:
                 ComputeBackend,
                 detect_compute_backend,
                 get_backend_display_name,
+                verify_backend_compatibility,
             )
 
-            backend, backend_info = detect_compute_backend()
+            detected_backend, detected_info = detect_compute_backend()
             logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
+            logger.info(
+                f"whisper.cpp system detection: {get_backend_display_name(detected_backend)} ({detected_info})"
+            )
+
+            # Verify pywhispercpp actually supports the detected backend
+            is_compatible, actual_backend, warning_msg = verify_backend_compatibility(
+                detected_backend, detected_info
+            )
+
+            if warning_msg:
+                logger.warning(warning_msg)
+                _show_notification(
+                    "GPU Acceleration Not Available",
+                    f"GPU detected but pywhispercpp was built without {detected_backend.upper()} support. "
+                    "Falling back to CPU. See logs for details.",
+                )
+
+            # Use the actual backend that will be used
+            backend = actual_backend
+            backend_info = detected_info if is_compatible else "CPU-only build"
+
             logger.info(
                 f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
             )
