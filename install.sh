@@ -405,6 +405,53 @@ detect_vulkan() {
     return 1
 }
 
+# Detect available GPU backends for whisper.cpp and recommend the best option
+detect_whispercpp_backends() {
+    detect_nvidia_gpu || true
+    detect_vulkan || true
+    
+    # Check for Vulkan dev libraries
+    local HAS_VULKAN_DEV=false
+    if pkg-config --exists vulkan 2>/dev/null || [ -f /usr/include/vulkan/vulkan.h ]; then
+        HAS_VULKAN_DEV=true
+    fi
+    
+    # Check for CUDA
+    local HAS_CUDA_DEV=false
+    if command -v nvcc >/dev/null 2>&1; then
+        HAS_CUDA_DEV=true
+    fi
+    
+    # Determine recommendation
+    local RECOMMENDED_BACKEND="cpu"
+    local RECOMMENDED_REASON=""
+    local CAN_BUILD_GPU=false
+    
+    if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" ]]; then
+        RECOMMENDED_BACKEND="vulkan"
+        RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
+        CAN_BUILD_GPU=true
+    elif [[ "$HAS_NVIDIA_GPU" == "yes" && "$HAS_CUDA_DEV" == "true" ]]; then
+        RECOMMENDED_BACKEND="cuda"
+        RECOMMENDED_REASON="NVIDIA GPU with CUDA toolkit"
+        CAN_BUILD_GPU=true
+    elif [[ "$HAS_VULKAN" == "yes" || "$HAS_NVIDIA_GPU" == "yes" ]]; then
+        RECOMMENDED_BACKEND="cpu"
+        if [[ "$HAS_VULKAN" == "yes" ]]; then
+            RECOMMENDED_REASON="GPU detected but dev libraries missing (will use CPU)"
+        else
+            RECOMMENDED_REASON="NVIDIA GPU detected but CUDA not installed (will use CPU)"
+        fi
+        CAN_BUILD_GPU=false
+    else
+        RECOMMENDED_BACKEND="cpu"
+        RECOMMENDED_REASON="No compatible GPU detected"
+        CAN_BUILD_GPU=false
+    fi
+    
+    echo "${RECOMMENDED_BACKEND}:${RECOMMENDED_REASON}:${CAN_BUILD_GPU}:${HAS_VULKAN}:${HAS_NVIDIA_GPU}:${HAS_VULKAN_DEV}:${HAS_CUDA_DEV}"
+}
+
 # Detect hardware and recommend best engine
 get_engine_recommendation() {
     detect_nvidia_gpu || true
@@ -576,8 +623,87 @@ EOF
             ;;
     esac
 
-    # Step 3: Model download preference
-    print_header "Step 3: Model Download"
+    # Step 3: Whisper.cpp backend selection (if whisper.cpp chosen)
+    if [[ "$SELECTED_ENGINE" == "whisper_cpp" ]]; then
+        print_header "Step 3: Choose Whisper.cpp Backend"
+        echo ""
+        
+        # Detect available backends
+        local BACKEND_INFO=$(detect_whispercpp_backends)
+        local RECOMMENDED_BACKEND=$(echo "$BACKEND_INFO" | cut -d':' -f1)
+        local RECOMMENDED_REASON=$(echo "$BACKEND_INFO" | cut -d':' -f2)
+        local CAN_BUILD_GPU=$(echo "$BACKEND_INFO" | cut -d':' -f3)
+        local HAS_VULKAN=$(echo "$BACKEND_INFO" | cut -d':' -f4)
+        local HAS_NVIDIA=$(echo "$BACKEND_INFO" | cut -d':' -f5)
+        local HAS_VULKAN_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f6)
+        local HAS_CUDA_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f7)
+        
+        echo "Whisper.cpp can use different backends for speech recognition:"
+        echo ""
+        
+        if [[ "$CAN_BUILD_GPU" == "true" ]]; then
+            echo "  ┌─────────────────────────────────────────────────────────────┐"
+            echo "  │  1. GPU (Vulkan/CUDA)  ★ RECOMMENDED                        │"
+            echo "  │     • Fastest performance with GPU acceleration             │"
+            echo "  │     • $RECOMMENDED_REASON                                   │"
+            echo "  │     • Requires building from source (takes ~2-5 min)        │"
+            echo "  └─────────────────────────────────────────────────────────────┘"
+            echo ""
+            echo "  ┌─────────────────────────────────────────────────────────────┐"
+            echo "  │  2. CPU (Pre-built)                                         │"
+            echo "  │     • Works on all systems                                  │"
+            echo "  │     • Faster installation (no compilation)                  │"
+            echo "  │     • Good performance on modern CPUs                       │"
+            echo "  └─────────────────────────────────────────────────────────────┘"
+            echo ""
+            echo "  → Recommendation: GPU backend for best performance"
+            local DEFAULT_BACKEND="1"
+        else
+            echo "  ┌─────────────────────────────────────────────────────────────┐"
+            echo "  │  1. GPU (Vulkan/CUDA)                                       │"
+            echo "  │     • ⚠️  GPU libraries not detected                        │"
+            echo "  │     • Requires: libvulkan-dev, glslc (Vulkan)               │"
+            echo "  │              or: CUDA toolkit (NVIDIA)                      │"
+            echo "  └─────────────────────────────────────────────────────────────┘"
+            echo ""
+            echo "  ┌─────────────────────────────────────────────────────────────┐"
+            echo "  │  2. CPU (Pre-built)  ★ RECOMMENDED                          │"
+            echo "  │     • Works on all systems                                  │"
+            echo "  │     • Fast installation (no compilation)                    │"
+            echo "  │     • Good performance on modern CPUs                       │"
+            echo "  └─────────────────────────────────────────────────────────────┘"
+            echo ""
+            
+            if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" != "true" ]]; then
+                echo "  💡 Tip: Install 'libvulkan-dev' and 'glslc' for GPU support:"
+                echo "     sudo apt install libvulkan-dev glslc"
+                echo ""
+            elif [[ "$HAS_NVIDIA" == "yes" && "$HAS_CUDA_DEV" != "true" ]]; then
+                echo "  💡 Tip: Install CUDA toolkit for NVIDIA GPU support:"
+                echo "     https://developer.nvidia.com/cuda-downloads"
+                echo ""
+            fi
+            
+            echo "  → Recommendation: CPU backend (GPU libraries not detected)"
+            local DEFAULT_BACKEND="2"
+        fi
+        
+        read -p "Choose backend [1-2] (default: $DEFAULT_BACKEND): " BACKEND_CHOICE
+        BACKEND_CHOICE=${BACKEND_CHOICE:-$DEFAULT_BACKEND}
+        
+        if [[ "$BACKEND_CHOICE" == "1" ]]; then
+            WHISPERCPP_BACKEND="gpu"
+            BACKEND_DISPLAY="GPU (Vulkan/CUDA)"
+        else
+            WHISPERCPP_BACKEND="cpu"
+            BACKEND_DISPLAY="CPU (Pre-built)"
+        fi
+        
+        echo ""
+    fi
+
+    # Step 4: Model download preference
+    print_header "Step 4: Model Download"
     echo ""
     echo "Speech recognition models can be downloaded now or later."
     echo ""
@@ -604,6 +730,12 @@ EOF
     print_header "Installation Summary"
     echo ""
     echo "  Speech Engine: $ENGINE_DISPLAY"
+    if [[ "$SELECTED_ENGINE" == "whisper_cpp" ]]; then
+        echo "  Backend: ${BACKEND_DISPLAY:-CPU (Pre-built)}"
+        if [[ "${WHISPERCPP_BACKEND}" == "gpu" ]]; then
+            echo "  Note: GPU build will compile from source (2-5 minutes)"
+        fi
+    fi
     echo "  Models: $MODELS_DISPLAY"
     echo "  Install Location: ${INSTALL_DIR:-\$HOME/.local/share/vocalinux}"
     echo ""
@@ -727,13 +859,13 @@ install_system_dependencies() {
     fi
 
     # Define package names for different distributions
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools"
-    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev glslc"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev glslc"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
-    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools"
-    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip base-devel vulkan-tools"
-    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools"
+    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-loader-devel glslang"
+    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip base-devel vulkan-tools vulkan-headers glslang"
+    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-devel glslang"
     # Gentoo uses Portage and different package naming convention
     local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.8 pkgconf"
     # Alpine Linux uses apk and has musl libc
@@ -1453,6 +1585,7 @@ install_python_package() {
 
         # Engine installation logic:
         # - SELECTED_ENGINE is set by interactive mode or --engine flag
+        # - WHISPERCPP_BACKEND is set by interactive mode ("gpu" or "cpu")
         # - Default is whisper_cpp for best performance
         case "${SELECTED_ENGINE:-whisper_cpp}" in
             whisper_cpp)
@@ -1474,21 +1607,33 @@ install_python_package() {
                 local GPU_BACKEND="CPU"
                 local GPU_INSTALL_SUCCESS=false
 
-                if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-                    print_info "✓ NVIDIA GPU detected: $GPU_NAME"
-                    print_info "  Installing pywhispercpp with CUDA support..."
-                    GPU_BACKEND="CUDA"
-                    print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                    if GGML_CUDA=1 pip install --force-reinstall git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
-                        GPU_INSTALL_SUCCESS=true
+                # Check if user explicitly chose CPU backend in interactive mode
+                if [[ "${WHISPERCPP_BACKEND}" == "cpu" ]]; then
+                    print_info "ℹ Installing CPU-only version (as requested)..."
+                    GPU_BACKEND="CPU"
+                else
+                    # Try Vulkan first (works with all GPUs: NVIDIA, AMD, Intel)
+                    if [[ "$HAS_VULKAN" == "yes" ]]; then
+                        print_info "✓ Vulkan detected: $VULKAN_DEVICE"
+                        print_info "  Installing pywhispercpp with Vulkan support..."
+                        GPU_BACKEND="Vulkan"
+                        print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
+                        if GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                            GPU_INSTALL_SUCCESS=true
+                        else
+                            print_warning "Vulkan build failed - checking for NVIDIA GPU to try CUDA..."
+                        fi
                     fi
-                elif [[ "$HAS_VULKAN" == "yes" ]]; then
-                    print_info "✓ Vulkan detected: $VULKAN_DEVICE"
-                    print_info "  Installing pywhispercpp with Vulkan support..."
-                    GPU_BACKEND="Vulkan"
-                    print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                    if GGML_VULKAN=1 pip install --force-reinstall git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
-                        GPU_INSTALL_SUCCESS=true
+
+                    # If Vulkan failed or not available, try CUDA for NVIDIA GPUs
+                    if [[ "$GPU_INSTALL_SUCCESS" != "true" && "$HAS_NVIDIA_GPU" == "yes" ]]; then
+                        print_info "✓ NVIDIA GPU detected: $GPU_NAME"
+                        print_info "  Installing pywhispercpp with CUDA support..."
+                        GPU_BACKEND="CUDA"
+                        print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
+                        if GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                            GPU_INSTALL_SUCCESS=true
+                        fi
                     fi
                 fi
 
@@ -1496,7 +1641,18 @@ install_python_package() {
                 if [[ "$GPU_INSTALL_SUCCESS" != "true" ]]; then
                     if [[ "$GPU_BACKEND" != "CPU" ]]; then
                         print_warning "Failed to install pywhispercpp with $GPU_BACKEND support, falling back to CPU version..."
-                    else
+                        
+                        # Provide helpful error messages for common issues
+                        if [[ "$GPU_BACKEND" == "Vulkan" ]]; then
+                            print_info "  To use Vulkan GPU acceleration, please install Vulkan development libraries:"
+                            print_info "    Ubuntu/Debian: sudo apt install libvulkan-dev vulkan-tools glslc"
+                            print_info "    Fedora: sudo dnf install vulkan-loader-devel vulkan-tools glslang"
+                            print_info "    Arch: sudo pacman -S vulkan-headers vulkan-tools glslang"
+                        elif [[ "$GPU_BACKEND" == "CUDA" ]]; then
+                            print_info "  To use CUDA GPU acceleration, please install CUDA toolkit:"
+                            print_info "    Visit: https://developer.nvidia.com/cuda-downloads"
+                        fi
+                    elif [[ "${WHISPERCPP_BACKEND}" != "cpu" ]]; then
                         print_info "ℹ No GPU detected - installing CPU-only version"
                         print_info "  CPU mode is still very fast!"
                     fi
@@ -2133,38 +2289,38 @@ verify_installation() {
     # Check if virtual environment exists and is activated
     if [ ! -d "$VENV_DIR" ] || [ ! -f "$VENV_DIR/bin/activate" ]; then
         print_error "Virtual environment not found or incomplete."
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
 
     # Check if vocalinux command is available
     if ! command -v vocalinux &>/dev/null && [ ! -f "$VENV_DIR/bin/vocalinux" ]; then
         print_error "Vocalinux command not found."
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
 
     # Check if desktop entry is installed
     if [ ! -f "$DESKTOP_DIR/vocalinux.desktop" ]; then
         print_warning "Desktop entry not found. Application may not appear in application menu."
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
 
     # Check if icons are installed
     local ICON_COUNT=0
     for icon in vocalinux.svg vocalinux-microphone.svg vocalinux-microphone-off.svg vocalinux-microphone-process.svg; do
         if [ -f "$ICON_DIR/$icon" ]; then
-            ((ICON_COUNT++))
+            ICON_COUNT=$((ICON_COUNT + 1))
         fi
     done
 
     if [ "$ICON_COUNT" -lt 4 ]; then
         print_warning "Some icons are missing. Application may not display correctly."
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
 
     # Check if Python package is importable using venv python
     if ! "$VENV_DIR/bin/python" -c "import vocalinux" &>/dev/null; then
         print_error "Vocalinux Python package cannot be imported."
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
 
     # Return the number of issues found
@@ -2175,10 +2331,8 @@ verify_installation() {
 print_welcome_message() {
     local ISSUES=$1
 
-    clear_screen
-
     # ASCII art header
-    cat << "EOF"
+    cat << 'EOF'
 
   ▗▖  ▗▖ ▗▄▖  ▗▄▄▖ ▗▄▖ ▗▖   ▗▄▄▄▖▗▖  ▗▖▗▖ ▗▖▗▖  ▗▖
   ▐▌  ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌     █  ▐▛▚▖▐▌▐▌ ▐▌ ▝▚▞▘
@@ -2197,50 +2351,114 @@ EOF
         print_warning "The application should still work normally."
     fi
 
+    # Get engine info for display
+    local ENGINE_INFO="${SELECTED_ENGINE:-whisper_cpp}"
+    local ENGINE_DISPLAY_NAME=""
+    local BACKEND_INFO=""
+    
+    case "$ENGINE_INFO" in
+        whisper_cpp)
+            ENGINE_DISPLAY_NAME="Whisper.cpp"
+            if [[ "${WHISPERCPP_BACKEND}" == "gpu" ]]; then
+                BACKEND_INFO="GPU Accelerated"
+            else
+                BACKEND_INFO="CPU"
+            fi
+            ;;
+        whisper)
+            ENGINE_DISPLAY_NAME="Whisper (OpenAI)"
+            BACKEND_INFO="PyTorch/CUDA"
+            ;;
+        vosk)
+            ENGINE_DISPLAY_NAME="VOSK"
+            BACKEND_INFO="Lightweight"
+            ;;
+    esac
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Getting Started"
+    echo "  📦 What Was Installed"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "1. Launch Vocalinux from your app menu"
-    echo "   Look for 'Vocalinux' in your application launcher."
+    echo "  Application:    Vocalinux (voice dictation for Linux)"
+    echo "  Engine:         $ENGINE_DISPLAY_NAME"
+    if [[ -n "$BACKEND_INFO" ]]; then
+        echo "  Backend:        $BACKEND_INFO"
+    fi
+    echo "  Location:       ${INSTALL_DIR:-\$HOME/.local/share/vocalinux}"
+    echo "  Virtual Env:    $VENV_DIR"
+    echo "  Config:         $CONFIG_DIR"
     echo ""
-    echo -e "   Or from terminal: \e[36mvocalinux\e[0m"
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  🚀 Getting Started"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "2. Find Vocalinux in your system tray (top bar)"
-    echo "   • Click the icon to access settings"
-    echo "   • Right-click for options (Quit, Settings, etc.)"
+    echo "1. Launch Vocalinux"
+    echo "   • From app menu: Look for 'Vocalinux'"
+    echo "   • From terminal: Run 'vocalinux' command"
+    echo ""
+    echo "2. Find the icon in your system tray (top bar)"
+    echo "   • Click for settings and status"
+    echo "   • Right-click for menu options"
     echo ""
     echo "3. Start dictating!"
-    echo -e "   \e[1mDouble-tap Ctrl\e[0m anywhere to start/stop dictation"
+    echo -e "   \e[1mDouble-tap Ctrl\e[0m anywhere to toggle recording"
     echo ""
+
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  First Run Tips"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "• Speak clearly and at a natural pace"
-    echo "• Use voice commands: 'period', 'comma', 'new line', 'delete that'"
-    echo "• Both engines are 100% offline - your privacy is protected"
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Need Help?"
+    echo "  🎤 Testing Your Setup"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "• Report issues: https://github.com/jatinkrmalik/vocalinux/issues"
-    echo "• Documentation: https://github.com/jatinkrmalik/vocalinux"
-    echo "• Star us on GitHub: ⭐ https://github.com/jatinkrmalik/vocalinux"
+    echo "1. Open any text editor (gedit, VS Code, LibreOffice, etc.)"
+    echo "2. Double-tap Ctrl to start recording"
+    echo "3. Say: 'Hello world period'"
+    echo "4. Double-tap Ctrl to stop"
+    echo "5. You should see: 'Hello world.'"
+    echo ""
+    echo "💡 Voice commands: 'period' 'comma' 'new line' 'delete that'"
+    echo ""
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  🔧 Managing Vocalinux"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Commands:"
+    echo "  vocalinux              Start the application"
+    echo "  vocalinux --debug      Start with debug logging"
+    echo "  vocalinux-gui          Open settings GUI"
+    echo ""
+    echo "To activate the virtual environment:"
+    echo "  source ${ACTIVATION_SCRIPT:-activate-vocalinux.sh}"
+    echo ""
+    echo "To uninstall:"
+    echo "  ./uninstall.sh"
+    echo ""
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  📚 Need Help?"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "• Issues & Bugs:  https://github.com/jatinkrmalik/vocalinux/issues"
+    echo "• Documentation:  https://github.com/jatinkrmalik/vocalinux"
+    echo "• Star on GitHub: ⭐ https://github.com/jatinkrmalik/vocalinux"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "  \e[1m\e[32m✨ Happy Dictating! ✨\e[0m"
     echo ""
 
     # Installation details (optional, for debugging)
     if [[ "$VERBOSE" == "yes" ]]; then
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "  Installation Details"
+        echo "  🔍 Installation Details (Debug Mode)"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
         echo "Virtual environment: $VENV_DIR"
         echo "Desktop entry: $DESKTOP_DIR/vocalinux.desktop"
         echo "Configuration: $CONFIG_DIR"
         echo "Data directory: $DATA_DIR"
+        echo "Wrapper script: $HOME/.local/bin/vocalinux"
         echo ""
     fi
 }
