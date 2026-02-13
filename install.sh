@@ -1673,20 +1673,35 @@ install_python_package() {
                 print_info "Note: This engine requires NVIDIA GPU for acceleration"
                 print_info "      For AMD/Intel GPUs, whisper.cpp is recommended"
                 
-                # Install PyTorch and whisper
-                pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" || {
-                    print_warning "Failed to install PyTorch."
-                }
-                pip install openai-whisper --log "$PIP_LOG_FILE" || {
-                    print_warning "Failed to install Whisper."
-                    print_warning "Falling back to VOSK."
-                }
+                local WHISPER_INSTALL_SUCCESS=false
                 
-                # Create config with whisper as default
-                local WHISPER_CONFIG="$CONFIG_DIR/config.json"
-                if [ ! -f "$WHISPER_CONFIG" ]; then
-                    mkdir -p "$CONFIG_DIR"
-                    cat > "$WHISPER_CONFIG" << 'WHISPER_CONFIG'
+                # Install PyTorch and whisper
+                print_info "Installing PyTorch..."
+                if pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" 2>&1; then
+                    print_success "PyTorch installed successfully"
+                    
+                    print_info "Installing openai-whisper..."
+                    if pip install openai-whisper --log "$PIP_LOG_FILE" 2>&1; then
+                        # Verify the installation by importing the module
+                        if "$VENV_DIR/bin/python" -c "import whisper" 2>/dev/null; then
+                            WHISPER_INSTALL_SUCCESS=true
+                            print_success "Whisper installed and verified successfully"
+                        else
+                            print_error "Whisper package installed but import failed"
+                        fi
+                    else
+                        print_error "Failed to install openai-whisper package"
+                    fi
+                else
+                    print_error "Failed to install PyTorch"
+                fi
+                
+                if [[ "$WHISPER_INSTALL_SUCCESS" == "true" ]]; then
+                    # Create config with whisper as default
+                    local WHISPER_CONFIG="$CONFIG_DIR/config.json"
+                    if [ ! -f "$WHISPER_CONFIG" ]; then
+                        mkdir -p "$CONFIG_DIR"
+                        cat > "$WHISPER_CONFIG" << 'WHISPER_CONFIG'
 {
     "speech_recognition": {
         "engine": "whisper",
@@ -1714,6 +1729,59 @@ install_python_package() {
     }
 }
 WHISPER_CONFIG
+                    fi
+                else
+                    print_warning "Failed to install Whisper (OpenAI)"
+                    print_warning "Falling back to whisper.cpp (recommended engine)"
+                    print_info ""
+                    print_info "The Whisper (OpenAI) engine installation failed."
+                    print_info "whisper.cpp will be installed instead, which is:"
+                    print_info "  - Faster and more accurate"
+                    print_info "  - Works with any GPU (NVIDIA, AMD, Intel)"
+                    print_info "  - Uses Vulkan for GPU acceleration"
+                    print_info ""
+                    
+                    # Fall back to whisper.cpp installation
+                    pip install pywhispercpp --log "$PIP_LOG_FILE" || {
+                        print_error "Failed to install pywhispercpp fallback"
+                        print_error "Please try installing manually: pip install pywhispercpp"
+                        return 1
+                    }
+                    print_success "Installed whisper.cpp as fallback"
+                    
+                    # Create config with whisper_cpp as default
+                    local FALLBACK_CONFIG="$CONFIG_DIR/config.json"
+                    if [ ! -f "$FALLBACK_CONFIG" ]; then
+                        mkdir -p "$CONFIG_DIR"
+                        cat > "$FALLBACK_CONFIG" << 'FALLBACK_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "whisper_cpp",
+        "model_size": "tiny",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+FALLBACK_CONFIG
+                    fi
                 fi
                 ;;
             
