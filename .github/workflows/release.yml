@@ -154,16 +154,24 @@ jobs:
         run: |
           VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
           echo "Syncing version: $VERSION"
-          # Update softwareVersion in layout.tsx
-          sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/layout.tsx
+          # Update softwareVersion where JSON-LD currently lives
+          if grep -q '"softwareVersion": "' web/src/app/page.tsx; then
+            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/page.tsx
+            echo "Updated page.tsx version:"
+            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/page.tsx
+          elif grep -q '"softwareVersion": "' web/src/app/layout.tsx; then
+            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/layout.tsx
+            echo "Updated layout.tsx version:"
+            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/layout.tsx
+          else
+            echo "::warning::No softwareVersion field found in page.tsx or layout.tsx; skipping sync"
+          fi
           # Update package.json version (remove -alpha/beta/rc suffix for npm)
           NPM_VERSION=${VERSION%-*}
           NPM_VERSION=${NPM_VERSION%-beta*}
           NPM_VERSION=${NPM_VERSION%-rc*}
           sed -i 's/"version": "[^"]*"/"version": "'"$NPM_VERSION"'"/' web/package.json
           # Verify the changes
-          echo "Updated layout.tsx version:"
-          grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/layout.tsx
           echo "Updated package.json version:"
           grep -oP '"version":\s*"\K[^"]+' web/package.json
 
