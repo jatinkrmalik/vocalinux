@@ -34,6 +34,12 @@ class TestTextInjector(unittest.TestCase):
         self.patch_sleep = patch("time.sleep")
         self.mock_sleep = self.patch_sleep.start()
 
+        # Disable IBus for these tests (testing fallback paths)
+        self.patch_ibus_available = patch(
+            "vocalinux.text_injection.text_injector.is_ibus_available", return_value=False
+        )
+        self.patch_ibus_available.start()
+
         # Setup environment variable patching
         self.env_patcher = patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"})
         self.env_patcher.start()
@@ -56,6 +62,7 @@ class TestTextInjector(unittest.TestCase):
         self.patch_which.stop()
         self.patch_subprocess.stop()
         self.patch_sleep.stop()
+        self.patch_ibus_available.stop()
         self.env_patcher.stop()
 
     def test_detect_x11_environment(self):
@@ -487,6 +494,7 @@ class TestDesktopEnvironmentEnum(unittest.TestCase):
         self.assertEqual(DesktopEnvironment.X11.value, "x11")
         self.assertEqual(DesktopEnvironment.WAYLAND.value, "wayland")
         self.assertEqual(DesktopEnvironment.WAYLAND_XDOTOOL.value, "wayland-xdotool")
+        self.assertEqual(DesktopEnvironment.WAYLAND_IBUS.value, "wayland-ibus")
         self.assertEqual(DesktopEnvironment.UNKNOWN.value, "unknown")
 
 
@@ -505,6 +513,12 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
         self.patch_sleep = patch("time.sleep")
         self.mock_sleep = self.patch_sleep.start()
 
+        # Disable IBus for these tests (testing fallback paths)
+        self.patch_ibus_available = patch(
+            "vocalinux.text_injection.text_injector.is_ibus_available", return_value=False
+        )
+        self.patch_ibus_available.start()
+
         mock_process = MagicMock()
         mock_process.returncode = 0
         mock_process.stdout = "1234"
@@ -516,6 +530,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
         self.patch_which.stop()
         self.patch_subprocess.stop()
         self.patch_sleep.stop()
+        self.patch_ibus_available.stop()
 
     def test_wtype_test_exception(self):
         """Test wtype test handling exceptions gracefully."""
