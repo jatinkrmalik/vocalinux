@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { LiveDemo } from "@/components/live-demo";
 import {
-  Mic,
   Terminal,
   Lock,
   Zap,
@@ -14,7 +13,6 @@ import {
   Settings,
   Code,
   Github,
-  Edit,
   Star,
   Download,
   ChevronRight,
@@ -30,7 +28,6 @@ import {
   Volume2,
   Sparkles,
   Heart,
-  ExternalLink,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { VocalinuxLogo } from "@/components/optimized-image";
@@ -50,6 +47,99 @@ const getInstallCommands = (latestRelease: string) => ({
 
   uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
 });
+
+const homeJsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "@id": "https://vocalinux.com/#softwareapplication",
+    name: "Vocalinux",
+    applicationCategory: "UtilitiesApplication",
+    operatingSystem: "Linux",
+    isAccessibleForFree: true,
+    license: "https://github.com/jatinkrmalik/vocalinux/blob/main/LICENSE",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+    description:
+      "Offline voice dictation and speech-to-text for Linux with whisper.cpp and VOSK.",
+    "softwareVersion": "0.6.1-beta",
+    author: {
+      "@type": "Person",
+      name: "Jatin K Malik",
+      url: "https://github.com/jatinkrmalik",
+    },
+    url: "https://vocalinux.com/",
+    downloadUrl: "https://github.com/jatinkrmalik/vocalinux",
+    screenshot: "https://vocalinux.com/og-image.png",
+    featureList: [
+      "100% offline speech recognition",
+      "Works with X11 and Wayland",
+      "Double-tap Ctrl activation",
+      "whisper.cpp, Whisper, and VOSK support",
+      "Linux desktop integration",
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      {
+        "@type": "Question",
+        name: "Is Vocalinux really 100% offline?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Yes. All speech recognition runs locally on your Linux machine. Voice data does not leave your computer.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "Which Linux distributions are supported?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Vocalinux supports Ubuntu, Fedora, Debian, Arch, Linux Mint, Pop!_OS, and other modern Linux distributions across X11 and Wayland.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "How do I switch between speech engines?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Use the settings GUI or the CLI flags: vocalinux --engine whisper_cpp, vocalinux --engine whisper, or vocalinux --engine vosk.",
+        },
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Install Vocalinux on Linux",
+    description: "Install offline voice dictation on Linux in a few minutes.",
+    totalTime: "PT10M",
+    step: [
+      {
+        "@type": "HowToStep",
+        name: "Run the install command",
+        text: "Copy the install command from vocalinux.com and run it in terminal.",
+        url: "https://vocalinux.com/#install",
+      },
+      {
+        "@type": "HowToStep",
+        name: "Complete the guided setup",
+        text: "Pick your speech engine and model size in the interactive installer.",
+        url: "https://vocalinux.com/#install",
+      },
+      {
+        "@type": "HowToStep",
+        name: "Start dictating",
+        text: "Launch vocalinux and double-tap Ctrl to begin voice dictation.",
+        url: "https://vocalinux.com/#install",
+      },
+    ],
+  },
+];
 
 const FeatureCard = ({
   icon,
@@ -173,6 +263,7 @@ export default function HomePage() {
     { href: "#demo", label: "Demo" },
     { href: "#features", label: "Features" },
     { href: "#install", label: "Install" },
+    { href: "#guides", label: "Guides" },
     { href: "#faq", label: "FAQ" },
   ];
 
@@ -182,6 +273,11 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }}
+      />
+
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
@@ -439,7 +535,7 @@ export default function HomePage() {
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-                Try It Yourself
+                Try Linux Speech-to-Text in Your Browser
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                 Experience voice-to-text right here in your browser. Click the microphone and start speaking!
@@ -493,7 +589,7 @@ export default function HomePage() {
           <FadeInSection>
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-                Why Choose Vocalinux?
+                Offline Voice Dictation Features for Linux
               </h2>
               <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
                 Finally, Linux users get the voice dictation experience they deserve —
@@ -598,7 +694,7 @@ export default function HomePage() {
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-                Get Started in Seconds
+                How to Install Voice Dictation on Linux
               </h2>
               <p className="text-lg text-muted-foreground">
                 One command. That&apos;s all it takes.
@@ -769,13 +865,80 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* SEO Guide Hub Section */}
+      <section id="guides" className="py-16 sm:py-24 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto">
+          <FadeInSection>
+            <div className="text-center mb-12">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+                Linux Voice Dictation Guides by Distribution
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+                Follow distro-specific setup instructions for Ubuntu, Fedora, and Arch Linux.
+                These pages are written for real desktop workflows and include post-install checks.
+              </p>
+            </div>
+          </FadeInSection>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {[
+              {
+                href: "/install/ubuntu/",
+                title: "Ubuntu Voice Typing Guide",
+                description:
+                  "Install offline speech-to-text on Ubuntu 22.04+ for GNOME, KDE, X11, and Wayland.",
+              },
+              {
+                href: "/install/fedora/",
+                title: "Fedora Speech-to-Text Guide",
+                description:
+                  "Set up Vocalinux on Fedora Workstation with distro-specific notes for a stable dictation flow.",
+              },
+              {
+                href: "/install/arch/",
+                title: "Arch Linux Dictation Guide",
+                description:
+                  "Lean setup for Arch, Manjaro, and EndeavourOS with hardware and injection sanity checks.",
+              },
+            ].map((guide) => (
+              <Link
+                key={guide.href}
+                href={guide.href}
+                className="group rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+              >
+                <h3 className="mb-3 text-xl font-semibold">{guide.title}</h3>
+                <p className="mb-4 text-sm text-muted-foreground">{guide.description}</p>
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary group-hover:underline">
+                  Read guide <ChevronRight className="h-4 w-4" />
+                </span>
+              </Link>
+            ))}
+          </div>
+
+          <FadeInSection delay={0.15}>
+            <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/5 p-6 sm:p-8">
+              <h3 className="text-2xl font-bold mb-3">Need help choosing an engine?</h3>
+              <p className="text-muted-foreground mb-4">
+                Compare whisper.cpp, Whisper, and VOSK for speed, hardware support, and model size.
+              </p>
+              <Link
+                href="/compare/"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+              >
+                View speech engine comparison <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </FadeInSection>
+        </div>
+      </section>
+
       {/* Speech Engines Section */}
       <section className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
         <div className="max-w-5xl mx-auto">
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-                Choose Your Engine
+                Choose Your Linux Speech Recognition Engine
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                 Vocalinux supports multiple speech recognition engines. Pick the one that suits your needs.
@@ -1023,6 +1186,31 @@ export default function HomePage() {
                     FAQ
                   </a>
                 </li>
+                <li>
+                  <Link href="/install/" className="text-zinc-400 hover:text-white transition-colors">
+                    Linux Install Guides
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/install/ubuntu/" className="text-zinc-400 hover:text-white transition-colors">
+                    Ubuntu Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/install/fedora/" className="text-zinc-400 hover:text-white transition-colors">
+                    Fedora Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/install/arch/" className="text-zinc-400 hover:text-white transition-colors">
+                    Arch Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/compare/" className="text-zinc-400 hover:text-white transition-colors">
+                    Engine Comparison
+                  </Link>
+                </li>
               </ul>
             </div>
 
@@ -1058,6 +1246,16 @@ export default function HomePage() {
                   >
                     Discussions
                   </a>
+                </li>
+                <li>
+                  <Link href="/install/" className="text-zinc-400 hover:text-white transition-colors">
+                    Setup by Distribution
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/compare/" className="text-zinc-400 hover:text-white transition-colors">
+                    whisper.cpp vs Whisper vs VOSK
+                  </Link>
                 </li>
                 <li>
                   <a
