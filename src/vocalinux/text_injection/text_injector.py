@@ -7,6 +7,7 @@ application, supporting both X11 and Wayland environments.
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -194,6 +195,57 @@ class TextInjector:
         except Exception as e:
             logger.error(f"Failed to test XWayland fallback: {e}")
 
+    def _get_current_keyboard_layout(self) -> Optional[str]:
+        """
+        Get the current keyboard layout using setxkbmap.
+
+        Returns:
+            The current layout string (e.g., 'us', 'fr') or None if detection fails.
+        """
+        try:
+            result = subprocess.run(
+                ["setxkbmap", "-query"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=2,
+            )
+            if result.returncode == 0:
+                match = re.search(r"layout:\s+(\w+)", result.stdout)
+                if match:
+                    layout = match.group(1)
+                    logger.debug(f"Detected keyboard layout: {layout}")
+                    return layout
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.debug(f"Could not detect keyboard layout: {e}")
+        return None
+
+    def _set_keyboard_layout(self, layout: str) -> bool:
+        """
+        Set the keyboard layout using setxkbmap.
+
+        Args:
+            layout: The layout to set (e.g., 'us', 'fr')
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            result = subprocess.run(
+                ["setxkbmap", "-layout", layout],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=2,
+            )
+            if result.returncode == 0:
+                logger.debug(f"Set keyboard layout to: {layout}")
+                return True
+            logger.warning(f"Failed to set keyboard layout: {result.stderr}")
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.warning(f"Could not set keyboard layout: {e}")
+        return False
+
     def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently focused application.
@@ -259,9 +311,33 @@ class TextInjector:
         Args:
             text: The text to inject
         """
-        # Create environment with explicit X11 settings for Wayland compatibility
         env = os.environ.copy()
 
+        original_layout = self._get_current_keyboard_layout()
+        layout_switched = False
+        if original_layout and original_layout != "us":
+            logger.info(
+                f"Temporarily switching keyboard layout from {original_layout} to us for text injection"
+            )
+            if self._set_keyboard_layout("us"):
+                layout_switched = True
+                time.sleep(0.05)
+
+        try:
+            self._do_xdotool_injection(text, env)
+        finally:
+            if layout_switched and original_layout:
+                self._set_keyboard_layout(original_layout)
+                logger.debug(f"Restored keyboard layout to {original_layout}")
+
+    def _do_xdotool_injection(self, text: str, env: dict):
+        """
+        Perform the actual xdotool text injection.
+
+        Args:
+            text: The text to inject
+            env: Environment variables for subprocess
+        """
         if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
             # Force X11 backend for XWayland
             env["GDK_BACKEND"] = "x11"

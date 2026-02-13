@@ -139,6 +139,7 @@ class TestTextInjector(unittest.TestCase):
                 calls.append((args, kwargs))
                 process = MagicMock()
                 process.returncode = 0
+                process.stdout = "layout:     us"
                 return process
 
             self.mock_subprocess.side_effect = capture_call
@@ -219,6 +220,7 @@ class TestTextInjector(unittest.TestCase):
                 calls.append((args, kwargs))
                 process = MagicMock()
                 process.returncode = 0
+                process.stdout = "layout:     us"
                 return process
 
             self.mock_subprocess.side_effect = capture_call
@@ -422,6 +424,7 @@ class TestTextInjector(unittest.TestCase):
 
         mock_process = MagicMock()
         mock_process.returncode = 0
+        mock_process.stdout = "layout:     us"
         self.mock_subprocess.return_value = mock_process
 
         result = injector.inject_text("Test")
@@ -707,6 +710,12 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
                 cmd = args[0] if args else kwargs.get("args", [])
                 call_count[0] += 1
                 if isinstance(cmd, list):
+                    if "setxkbmap" in cmd:
+                        result = MagicMock()
+                        result.returncode = 0
+                        result.stdout = "layout:     us"
+                        result.stderr = ""
+                        return result
                     if "getactivewindow" in cmd:
                         result = MagicMock()
                         result.returncode = 0
@@ -717,6 +726,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
                         raise real_subprocess.TimeoutExpired(cmd, 5)
                 result = MagicMock()
                 result.returncode = 0
+                result.stdout = "layout:     us"
                 result.stderr = ""
                 return result
 
@@ -1074,3 +1084,159 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
                     # Should create injector and log error but not crash
                     injector = TextInjector()
                     self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_XDOTOOL)
+
+    def test_get_keyboard_layout_success(self):
+        """Test successful keyboard layout detection."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.return_value = "/usr/bin/xdotool"
+
+            injector = TextInjector()
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "rules:      evdev\nmodel:      pc105\nlayout:     fr\n"
+            self.mock_subprocess.return_value = mock_result
+
+            layout = injector._get_current_keyboard_layout()
+            self.assertEqual(layout, "fr")
+
+    def test_get_keyboard_layout_failure(self):
+        """Test keyboard layout detection failure."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.return_value = "/usr/bin/xdotool"
+
+            injector = TextInjector()
+
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            self.mock_subprocess.return_value = mock_result
+
+            layout = injector._get_current_keyboard_layout()
+            self.assertIsNone(layout)
+
+    def test_set_keyboard_layout_success(self):
+        """Test successful keyboard layout setting."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.return_value = "/usr/bin/xdotool"
+
+            injector = TextInjector()
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            self.mock_subprocess.return_value = mock_result
+
+            result = injector._set_keyboard_layout("us")
+            self.assertTrue(result)
+
+    def test_set_keyboard_layout_failure(self):
+        """Test keyboard layout setting failure."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.return_value = "/usr/bin/xdotool"
+
+            injector = TextInjector()
+
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Error"
+            self.mock_subprocess.return_value = mock_result
+
+            result = injector._set_keyboard_layout("us")
+            self.assertFalse(result)
+
+    def test_injection_switches_layout(self):
+        """Test that injection temporarily switches keyboard layout."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.return_value = "/usr/bin/xdotool"
+
+            injector = TextInjector()
+
+            call_count = [0]
+
+            def mock_run(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("args", [])
+                call_count[0] += 1
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = "layout:     fr"
+                result.stderr = ""
+                if isinstance(cmd, list):
+                    if "setxkbmap" in cmd and "-query" in cmd:
+                        result.stdout = "layout:     fr"
+                    elif "setxkbmap" in cmd and "-layout" in cmd:
+                        result.stdout = ""
+                    elif "xdotool" in cmd:
+                        result.stdout = "12345"
+                return result
+
+            self.mock_subprocess.side_effect = mock_run
+
+            injector._inject_with_xdotool("test")
+
+            setxkbmap_calls = [
+                call for call in self.mock_subprocess.call_args_list if "setxkbmap" in str(call)
+            ]
+            self.assertGreaterEqual(len(setxkbmap_calls), 2)
+
+    def test_injection_keeps_us_layout(self):
+        """Test that injection doesn't switch layout when already US."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.return_value = "/usr/bin/xdotool"
+
+            injector = TextInjector()
+
+            def mock_run(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("args", [])
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = "layout:     us"
+                result.stderr = ""
+                if isinstance(cmd, list) and "xdotool" in cmd:
+                    result.stdout = "12345"
+                return result
+
+            self.mock_subprocess.side_effect = mock_run
+
+            injector._inject_with_xdotool("test")
+
+            setxkbmap_layout_calls = [
+                call
+                for call in self.mock_subprocess.call_args_list
+                if "setxkbmap" in str(call) and "-layout" in str(call)
+            ]
+            self.assertEqual(len(setxkbmap_layout_calls), 0)
+
+    def test_injection_restores_layout_on_error(self):
+        """Test that layout is restored even on injection error."""
+        import subprocess as real_subprocess
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.return_value = "/usr/bin/xdotool"
+
+            injector = TextInjector()
+
+            call_order = []
+
+            def mock_run(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("args", [])
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = "layout:     fr"
+                result.stderr = ""
+                if isinstance(cmd, list):
+                    if "setxkbmap" in cmd:
+                        call_order.append("setxkbmap")
+                    elif "xdotool" in cmd and "type" in cmd:
+                        call_order.append("xdotool_type")
+                        raise real_subprocess.CalledProcessError(1, cmd, stderr="Error")
+                return result
+
+            self.mock_subprocess.side_effect = mock_run
+
+            try:
+                injector._inject_with_xdotool("test")
+            except real_subprocess.CalledProcessError:
+                pass
+
+            setxkbmap_calls = [c for c in call_order if c == "setxkbmap"]
+            self.assertGreaterEqual(len(setxkbmap_calls), 2)
