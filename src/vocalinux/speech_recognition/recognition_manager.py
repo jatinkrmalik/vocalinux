@@ -1661,6 +1661,8 @@ class SpeechRecognitionManager:
         Returns:
             bool: True if reconnection was successful, False otherwise
         """
+        import pyaudio
+
         self._reconnection_attempts += 1
 
         if self._reconnection_attempts > self._max_reconnection_attempts:
@@ -1689,7 +1691,7 @@ class SpeechRecognitionManager:
 
             # Stream configuration
             CHUNK = 1024
-            FORMAT = audio_instance.paInt16
+            FORMAT = pyaudio.paInt16
             CHANNELS = 1
             RATE = 16000
 
