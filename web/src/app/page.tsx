@@ -1192,6 +1192,21 @@ export default function HomePage() {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/install/ubuntu/" className="text-zinc-400 hover:text-white transition-colors">
+                    Ubuntu Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/install/fedora/" className="text-zinc-400 hover:text-white transition-colors">
+                    Fedora Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/install/arch/" className="text-zinc-400 hover:text-white transition-colors">
+                    Arch Guide
+                  </Link>
+                </li>
+                <li>
                   <Link href="/compare/" className="text-zinc-400 hover:text-white transition-colors">
                     Engine Comparison
                   </Link>

@@ -81,6 +81,18 @@
 - Added SEO asset tests: `src/app/__tests__/seo-assets.test.ts`
   - validates robots directives and sitemap URL coverage
 
+### 6) UX-linking improvements for crawl and users
+
+- Added shared subpage shell: `src/components/seo-subpage-shell.tsx`
+  - consistent header links (`Home`, `Install Guides`, `Engine Compare`) on all SEO subpages
+  - footer call-to-action back to homepage for clearer navigation loops
+- Enhanced subpage visual hierarchy with colorful SVG icons and accent panels in:
+  - `src/app/install/page.tsx`
+  - `src/app/install/[distro]/page.tsx`
+  - `src/app/compare/page.tsx`
+- Expanded homepage footer with direct links to distro pages for stronger internal linking:
+  - `/install/ubuntu/`, `/install/fedora/`, `/install/arch/`
+
 ## Expected SEO Impact
 
 - Better indexing depth via dedicated landing pages mapped to high-intent Linux distro queries.

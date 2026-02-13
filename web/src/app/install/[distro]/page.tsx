@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { type Metadata } from "next";
 import { notFound } from "next/navigation";
+import {
+  CheckCircle2,
+  ChevronRight,
+  Cpu,
+  Laptop,
+  Shield,
+  Sparkles,
+  Terminal,
+} from "lucide-react";
+import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 type DistroSlug = "ubuntu" | "fedora" | "arch";
@@ -143,6 +153,33 @@ const resolveParams = async (params: DistroParams): Promise<{ distro: string }> 
   return Promise.resolve(params);
 };
 
+const getDistroStyles = (distro: DistroSlug) => {
+  if (distro === "ubuntu") {
+    return {
+      icon: Laptop,
+      iconClass: "text-orange-500",
+      chipClass: "border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400",
+      panelClass: "from-orange-500/15 to-amber-500/10",
+    };
+  }
+
+  if (distro === "fedora") {
+    return {
+      icon: Sparkles,
+      iconClass: "text-blue-500",
+      chipClass: "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+      panelClass: "from-blue-500/15 to-cyan-500/10",
+    };
+  }
+
+  return {
+    icon: Cpu,
+    iconClass: "text-emerald-500",
+    chipClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    panelClass: "from-emerald-500/15 to-teal-500/10",
+  };
+};
+
 export function generateStaticParams() {
   return Object.keys(distroConfig).map((distro) => ({ distro }));
 }
@@ -185,6 +222,8 @@ export default async function DistroInstallPage({
   }
 
   const config = distroConfig[distro];
+  const styles = getDistroStyles(distro);
+  const DistroIcon = styles.icon;
 
   const howToJsonLd = {
     "@context": "https://schema.org",
@@ -232,67 +271,119 @@ export default async function DistroInstallPage({
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white px-4 pb-16 pt-24 dark:from-zinc-900 dark:to-zinc-950 sm:px-6 sm:pt-32">
+    <SeoSubpageShell>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }}
       />
 
-      <section className="mx-auto max-w-4xl">
-        <Link href="/install/" className="mb-6 inline-block text-sm font-medium text-primary hover:underline">
-          Back to all install guides
+      <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <Link href="/" className="hover:text-foreground hover:underline">
+          Home
         </Link>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl">{config.title}</h1>
-        <p className="mb-8 text-lg text-muted-foreground">{config.intro}</p>
+        <ChevronRight className="h-4 w-4" />
+        <Link href="/install/" className="hover:text-foreground hover:underline">
+          Install Guides
+        </Link>
+        <ChevronRight className="h-4 w-4" />
+        <span className="font-medium text-foreground">{config.name}</span>
+      </nav>
 
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-950 p-6 text-left shadow-lg dark:border-zinc-700">
-          <h2 className="mb-3 text-xl font-semibold text-white">Install command</h2>
-          <code className="block overflow-x-auto whitespace-pre-wrap break-all text-sm text-green-400 sm:text-base">
-            {config.installCommand}
-          </code>
+      <section>
+        <p
+          className={`mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium ${styles.chipClass}`}
+        >
+          <DistroIcon className={`h-4 w-4 ${styles.iconClass}`} />
+          {config.name} Setup Guide
+        </p>
+
+        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl">{config.title}</h1>
+        <p className="mb-8 max-w-4xl text-lg text-muted-foreground">{config.intro}</p>
+
+        <div
+          className={`rounded-2xl border border-zinc-200 bg-gradient-to-br p-6 dark:border-zinc-700 ${styles.panelClass}`}
+        >
+          <h2 className="mb-3 inline-flex items-center gap-2 text-xl font-semibold">
+            <Terminal className="h-5 w-5 text-green-600 dark:text-green-400" />
+            Install command
+          </h2>
+          <div className="rounded-xl bg-zinc-950 p-4">
+            <code className="block overflow-x-auto whitespace-pre-wrap break-all text-sm text-green-400 sm:text-base">
+              {config.installCommand}
+            </code>
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto mt-10 grid max-w-4xl gap-6 md:grid-cols-2">
+      <section className="mt-10 grid gap-6 md:grid-cols-2">
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-4 text-2xl font-semibold">Prerequisites</h2>
+          <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
+            <Shield className="h-5 w-5 text-blue-500" />
+            Prerequisites
+          </h2>
           <ul className="space-y-2 text-muted-foreground">
             {config.prerequisites.map((item) => (
-              <li key={item}>- {item}</li>
+              <li key={item} className="inline-flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                {item}
+              </li>
             ))}
           </ul>
         </article>
 
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-4 text-2xl font-semibold">Tested environments</h2>
+          <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
+            <Sparkles className="h-5 w-5 text-violet-500" />
+            Tested environments
+          </h2>
           <ul className="space-y-2 text-muted-foreground">
             {config.testedOn.map((item) => (
-              <li key={item}>- {item}</li>
+              <li key={item} className="inline-flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                {item}
+              </li>
             ))}
           </ul>
         </article>
       </section>
 
-      <section className="mx-auto mt-10 max-w-4xl rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-semibold">Setup notes for {config.name}</h2>
+      <section className="mt-10 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
+          <Cpu className="h-5 w-5 text-cyan-500" />
+          Setup notes for {config.name}
+        </h2>
         <ol className="space-y-3 text-muted-foreground">
           {config.setupNotes.map((item) => (
-            <li key={item}>- {item}</li>
+            <li key={item} className="inline-flex items-start gap-2">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+              {item}
+            </li>
           ))}
         </ol>
       </section>
 
-      <section className="mx-auto mt-10 max-w-4xl rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/70">
-        <h2 className="mb-4 text-2xl font-semibold">Post-install checklist</h2>
+      <section className="mt-10 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/70">
+        <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
+          <CheckCircle2 className="h-5 w-5 text-green-500" />
+          Post-install checklist
+        </h2>
         <ul className="space-y-3 text-muted-foreground">
           {config.postInstallChecks.map((item) => (
-            <li key={item}>- {item}</li>
+            <li key={item} className="inline-flex items-start gap-2">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+              {item}
+            </li>
           ))}
         </ul>
+
         <p className="mt-6 text-sm text-muted-foreground">
-          Need help selecting an engine? Read the <Link href="/compare/" className="font-semibold text-primary hover:underline">whisper.cpp vs Whisper vs VOSK comparison</Link>.
+          Need help selecting an engine? Read the
+          <Link href="/compare/" className="ml-1 font-semibold text-primary hover:underline">
+            whisper.cpp vs Whisper vs VOSK comparison
+          </Link>
+          .
         </p>
       </section>
-    </main>
+    </SeoSubpageShell>
   );
 }

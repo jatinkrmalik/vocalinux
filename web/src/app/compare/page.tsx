@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { type Metadata } from "next";
+import { CheckCircle2, Cpu, Sparkles, Zap } from "lucide-react";
+import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const engineTable = [
@@ -10,6 +12,9 @@ const engineTable = [
     accuracy: "High (best overall balance)",
     footprint: "Small models available (~39MB tiny)",
     bestFor: "Most users who want strong speed + quality",
+    icon: Zap,
+    iconColor: "text-amber-500",
+    iconBg: "bg-amber-500/10",
   },
   {
     engine: "Whisper (OpenAI)",
@@ -18,6 +23,9 @@ const engineTable = [
     accuracy: "High",
     footprint: "Large dependency footprint (~2.3GB)",
     bestFor: "Users already standardized on PyTorch stack",
+    icon: Sparkles,
+    iconColor: "text-violet-500",
+    iconBg: "bg-violet-500/10",
   },
   {
     engine: "VOSK",
@@ -26,6 +34,9 @@ const engineTable = [
     accuracy: "Good for lightweight use",
     footprint: "Very lightweight (~40MB model)",
     bestFor: "Older hardware and minimal-resource environments",
+    icon: Cpu,
+    iconColor: "text-cyan-500",
+    iconBg: "bg-cyan-500/10",
   },
 ];
 
@@ -67,14 +78,15 @@ export default function CompareEnginesPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white px-4 pb-16 pt-24 dark:from-zinc-900 dark:to-zinc-950 sm:px-6 sm:pt-32">
+    <SeoSubpageShell>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
       />
 
-      <section className="mx-auto max-w-6xl">
-        <p className="mb-4 inline-flex rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+      <section>
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+          <Sparkles className="h-4 w-4" />
           Speech Engine Comparison
         </p>
         <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
@@ -86,7 +98,7 @@ export default function CompareEnginesPage() {
         </p>
       </section>
 
-      <section className="mx-auto max-w-6xl overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+      <section className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
         <table className="w-full min-w-[860px] border-collapse text-left">
           <thead>
             <tr className="border-b border-zinc-200 dark:border-zinc-700">
@@ -99,21 +111,34 @@ export default function CompareEnginesPage() {
             </tr>
           </thead>
           <tbody>
-            {engineTable.map((row) => (
-              <tr key={row.engine} className="border-b border-zinc-100 align-top dark:border-zinc-700/70">
-                <td className="px-4 py-4 font-semibold">{row.engine}</td>
-                <td className="px-4 py-4 text-sm text-muted-foreground">{row.speed}</td>
-                <td className="px-4 py-4 text-sm text-muted-foreground">{row.hardware}</td>
-                <td className="px-4 py-4 text-sm text-muted-foreground">{row.accuracy}</td>
-                <td className="px-4 py-4 text-sm text-muted-foreground">{row.footprint}</td>
-                <td className="px-4 py-4 text-sm text-muted-foreground">{row.bestFor}</td>
-              </tr>
-            ))}
+            {engineTable.map((row) => {
+              const Icon = row.icon;
+              return (
+                <tr
+                  key={row.engine}
+                  className="border-b border-zinc-100 align-top dark:border-zinc-700/70"
+                >
+                  <td className="px-4 py-4 font-semibold">
+                    <span className="inline-flex items-center gap-2">
+                      <span className={`inline-flex rounded-md p-1.5 ${row.iconBg}`}>
+                        <Icon className={`h-4 w-4 ${row.iconColor}`} />
+                      </span>
+                      {row.engine}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.speed}</td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.hardware}</td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.accuracy}</td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.footprint}</td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.bestFor}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>
 
-      <section className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-3">
+      <section className="mt-12 grid gap-6 md:grid-cols-3">
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
           <h2 className="mb-3 text-2xl font-semibold">When to pick whisper.cpp</h2>
           <p className="text-sm text-muted-foreground">
@@ -139,14 +164,41 @@ export default function CompareEnginesPage() {
         </article>
       </section>
 
-      <section className="mx-auto mt-12 max-w-6xl rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
+      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-4 text-2xl font-bold">Next steps</h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li>Install by distro: <Link href="/install/ubuntu/" className="font-semibold text-primary hover:underline">Ubuntu</Link>, <Link href="/install/fedora/" className="font-semibold text-primary hover:underline">Fedora</Link>, <Link href="/install/arch/" className="font-semibold text-primary hover:underline">Arch Linux</Link>.</li>
-          <li>Use interactive install to detect your hardware and pick the best engine defaults automatically.</li>
-          <li>After install, tune model size for your preferred latency and accuracy level.</li>
+          <li>
+            <span className="inline-flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              Install by distro:
+              <Link href="/install/ubuntu/" className="font-semibold text-primary hover:underline">
+                Ubuntu
+              </Link>
+              ,
+              <Link href="/install/fedora/" className="font-semibold text-primary hover:underline">
+                Fedora
+              </Link>
+              ,
+              <Link href="/install/arch/" className="font-semibold text-primary hover:underline">
+                Arch Linux
+              </Link>
+              .
+            </span>
+          </li>
+          <li>
+            <span className="inline-flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              Use interactive install to detect your hardware and pick the best engine defaults.
+            </span>
+          </li>
+          <li>
+            <span className="inline-flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              After install, tune model size for your preferred latency and accuracy level.
+            </span>
+          </li>
         </ul>
       </section>
-    </main>
+    </SeoSubpageShell>
   );
 }
