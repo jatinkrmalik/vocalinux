@@ -26,6 +26,8 @@ DEFAULT_CONFIG = {
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
+        "session_timeout": 10.0,  # Seconds of inactivity before auto-stop
+        "enable_session_timeout": True,  # Enable auto-stop after inactivity
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
