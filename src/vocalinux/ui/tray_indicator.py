@@ -169,6 +169,13 @@ class TrayIndicator:
         self._add_menu_item("Start Voice Typing", self._on_start_clicked)
         self._add_menu_item("Stop Voice Typing", self._on_stop_clicked)
         self._add_menu_separator()
+
+        self._autostart_menu_item = self._add_menu_checkbox(
+            "Start on Login", self._on_autostart_toggled
+        )
+        self._update_autostart_checkbox()
+
+        self._add_menu_separator()
         self._add_menu_item("Settings", self._on_settings_clicked)
         self._add_menu_item("View Logs", self._on_logs_clicked)
         self._add_menu_separator()
@@ -210,6 +217,42 @@ class TrayIndicator:
         """Add a separator to the indicator menu."""
         separator = Gtk.SeparatorMenuItem()
         self.menu.append(separator)
+
+    def _add_menu_checkbox(self, label: str, callback: Callable) -> Gtk.CheckMenuItem:
+        """
+        Add a checkbox menu item to the indicator menu.
+
+        Args:
+            label: The label for the menu item
+            callback: The callback function to call when the item is toggled
+
+        Returns:
+            The checkbox menu item
+        """
+        item = Gtk.CheckMenuItem.new_with_label(label)
+        item.connect("toggled", callback)
+        self.menu.append(item)
+        return item
+
+    def _update_autostart_checkbox(self):
+        """Update the autostart checkbox state based on current config."""
+        autostart_enabled = self.config_manager.get("general", "autostart", False)
+        self._autostart_menu_item.set_active(autostart_enabled)
+
+    def _on_autostart_toggled(self, widget):
+        """Handle toggle of the Start on Login menu item."""
+        enabled = widget.get_active()
+        logger.info(f"Autostart toggled: {enabled}")
+
+        from . import autostart_manager
+
+        if autostart_manager.set_autostart(enabled):
+            self.config_manager.set("general", "autostart", enabled)
+            self.config_manager.save_settings()
+            status = "enabled" if enabled else "disabled"
+            logger.info(f"Autostart {status}")
+        else:
+            widget.set_active(not enabled)
 
     def _on_recognition_state_changed(self, state: RecognitionState):
         """
