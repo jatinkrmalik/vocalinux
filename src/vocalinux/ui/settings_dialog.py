@@ -918,11 +918,39 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(silence_row)
 
+        # Session Timeout (Auto-stop after inactivity)
+        self.session_timeout_spin = Gtk.SpinButton.new_with_range(1.0, 60.0, 1.0)
+        self.session_timeout_spin.set_digits(1)
+        self.session_timeout_spin.set_tooltip_text(
+            "Auto-stop microphone after this many seconds of inactivity"
+        )
+        _prevent_scroll_on_hover(self.session_timeout_spin)
+        session_timeout_row = PreferenceRow(
+            title="Session Timeout",
+            subtitle="Seconds of inactivity before auto-stop",
+            widget=self.session_timeout_spin,
+        )
+        group.add_row(session_timeout_row)
+
+        # Enable Session Timeout toggle
+        self.session_timeout_switch = Gtk.Switch()
+        self.session_timeout_switch.set_tooltip_text(
+            "Automatically stop microphone after inactivity timeout"
+        )
+        session_timeout_enable_row = PreferenceRow(
+            title="Auto-Stop on Inactivity",
+            subtitle="Enable automatic stop after session timeout",
+            widget=self.session_timeout_switch,
+        )
+        group.add_row(session_timeout_enable_row)
+
         self.content_box.pack_start(group, False, False, 0)
 
         # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
+        self.session_timeout_spin.connect("value-changed", self._on_session_timeout_changed)
+        self.session_timeout_switch.connect("state-set", self._on_session_timeout_toggled)
 
     def _build_shortcuts_section(self):
         """Build the Keyboard Shortcuts section."""
@@ -1104,6 +1132,8 @@ class SettingsDialog(Gtk.Dialog):
         self.current_model_size = settings["model_size"]
         self.current_vad = settings.get("vad_sensitivity", 3)
         self.current_silence = settings.get("silence_timeout", 2.0)
+        self.current_session_timeout = settings.get("session_timeout", 10.0)
+        self.current_enable_session_timeout = settings.get("enable_session_timeout", True)
 
         logger.info(
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
@@ -1168,6 +1198,8 @@ class SettingsDialog(Gtk.Dialog):
         # Set spin button values
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
+        self.session_timeout_spin.set_value(self.current_session_timeout)
+        self.session_timeout_switch.set_active(self.current_enable_session_timeout)
 
     def _get_current_settings(self):
         """Get current settings from config manager."""
@@ -1180,10 +1212,13 @@ class SettingsDialog(Gtk.Dialog):
         model_size = self.config_manager.get_model_size_for_engine(engine)
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
+        session_timeout = sr_settings.get("session_timeout", 10.0)
+        enable_session_timeout = sr_settings.get("enable_session_timeout", True)
 
         logger.info(
             f"Loaded current settings: engine={engine}, language={language}, model_size={model_size}, "
-            f"vad={vad_sensitivity}, silence={silence_timeout}"
+            f"vad={vad_sensitivity}, silence={silence_timeout}, session={session_timeout}, "
+            f"session_enabled={enable_session_timeout}"
         )
 
         return {
@@ -1192,6 +1227,8 @@ class SettingsDialog(Gtk.Dialog):
             "model_size": model_size,
             "vad_sensitivity": vad_sensitivity,
             "silence_timeout": silence_timeout,
+            "session_timeout": session_timeout,
+            "enable_session_timeout": enable_session_timeout,
         }
 
     def _populate_model_options(self):
@@ -1311,6 +1348,14 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_silence_changed(self, widget):
         """Handle changes in silence timeout."""
+        self._auto_apply_settings()
+
+    def _on_session_timeout_changed(self, widget):
+        """Handle changes in session timeout."""
+        self._auto_apply_settings()
+
+    def _on_session_timeout_toggled(self, widget, state):
+        """Handle session timeout toggle."""
         self._auto_apply_settings()
 
     def _populate_language_options(self):
@@ -1557,6 +1602,8 @@ class SettingsDialog(Gtk.Dialog):
             "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
+            "session_timeout": self.session_timeout_spin.get_value(),
+            "enable_session_timeout": self.session_timeout_switch.get_active(),
         }
 
     def _on_test_clicked(self, widget):
