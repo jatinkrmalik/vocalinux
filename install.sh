@@ -662,7 +662,7 @@ EOF
             echo "  ┌─────────────────────────────────────────────────────────────┐"
             echo "  │  1. GPU (Vulkan/CUDA)                                       │"
             echo "  │     • ⚠️  GPU libraries not detected                        │"
-            echo "  │     • Requires: libvulkan-dev, glslc (Vulkan)               │"
+            echo "  │     • Requires: libvulkan-dev, glslc/glslang-tools (Vulkan) │"
             echo "  │              or: CUDA toolkit (NVIDIA)                      │"
             echo "  └─────────────────────────────────────────────────────────────┘"
             echo ""
@@ -675,8 +675,8 @@ EOF
             echo ""
             
             if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" != "true" ]]; then
-                echo "  💡 Tip: Install 'libvulkan-dev' and 'glslc' for GPU support:"
-                echo "     sudo apt install libvulkan-dev glslc"
+                echo "  💡 Tip: Install 'libvulkan-dev' and a shader compiler for GPU support:"
+                echo "     sudo apt install libvulkan-dev glslc 2>/dev/null || sudo apt install libvulkan-dev glslang-tools"
                 echo ""
             elif [[ "$HAS_NVIDIA" == "yes" && "$HAS_CUDA_DEV" != "true" ]]; then
                 echo "  💡 Tip: Install CUDA toolkit for NVIDIA GPU support:"
@@ -858,9 +858,15 @@ install_system_dependencies() {
         exit 1
     fi
 
+    # Determine which Vulkan shader package is available (glslc for Ubuntu 24.04+, glslang-tools for 22.04)
+    local VULKAN_SHADER_PKG="glslang-tools"  # Default fallback
+    if apt-cache show glslc &>/dev/null 2>&1; then
+        VULKAN_SHADER_PKG="glslc"
+    fi
+
     # Define package names for different distributions
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev glslc"
-    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev glslc"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 libgirepository1.0-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-loader-devel glslang"
@@ -1645,7 +1651,7 @@ install_python_package() {
                         # Provide helpful error messages for common issues
                         if [[ "$GPU_BACKEND" == "Vulkan" ]]; then
                             print_info "  To use Vulkan GPU acceleration, please install Vulkan development libraries:"
-                            print_info "    Ubuntu/Debian: sudo apt install libvulkan-dev vulkan-tools glslc"
+                            print_info "    Ubuntu/Debian: sudo apt install libvulkan-dev vulkan-tools glslc || glslang-tools"
                             print_info "    Fedora: sudo dnf install vulkan-loader-devel vulkan-tools glslang"
                             print_info "    Arch: sudo pacman -S vulkan-headers vulkan-tools glslang"
                         elif [[ "$GPU_BACKEND" == "CUDA" ]]; then

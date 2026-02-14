@@ -56,7 +56,7 @@ This patch release brings significant improvements to the installation experienc
   - No risk of main branch changes affecting releases
 
 - **Better GPU Support** - Fixed Vulkan development library detection
-  - Properly installs `libvulkan-dev`, `glslc`, and other required packages
+  - Properly installs `libvulkan-dev`, `glslc`/`glslang-tools`, and other required packages
   - Falls back gracefully when GPU libraries are missing
   - Clear error messages with installation instructions
 
