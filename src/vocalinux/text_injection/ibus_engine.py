@@ -17,6 +17,7 @@ without requiring compositor-specific protocols.
 import logging
 import os
 import socket
+import struct
 import threading
 from pathlib import Path
 from typing import Optional
@@ -51,8 +52,41 @@ COMPONENT_NAME = "org.freedesktop.IBus.Vocalinux"
 
 
 def ensure_ibus_dir() -> None:
-    """Ensure the IBus data directory exists."""
+    """Ensure the IBus data directory exists with secure permissions."""
     VOCALINUX_IBUS_DIR.mkdir(parents=True, exist_ok=True)
+    # Secure the directory - only owner can access (prevents socket hijacking)
+    VOCALINUX_IBUS_DIR.chmod(0o700)
+
+
+def verify_peer_credentials(conn: socket.socket) -> bool:
+    """
+    Verify that the connecting process belongs to the same user.
+
+    Uses SO_PEERCRED to get the UID of the peer process and compares
+    it to our own UID. This prevents other users from injecting text.
+
+    Args:
+        conn: The connected socket
+
+    Returns:
+        True if peer is same user, False otherwise
+    """
+    try:
+        # SO_PEERCRED returns a struct with pid, uid, gid
+        # struct ucred { pid_t pid; uid_t uid; gid_t gid; }
+        cred = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("iII"))
+        pid, uid, gid = struct.unpack("iII", cred)
+
+        my_uid = os.getuid()
+        if uid != my_uid:
+            logger.warning(f"Rejected connection from UID {uid} (expected {my_uid})")
+            return False
+
+        logger.debug(f"Accepted connection from PID {pid}, UID {uid}")
+        return True
+    except (OSError, struct.error) as e:
+        logger.error(f"Failed to verify peer credentials: {e}")
+        return False
 
 
 def is_ibus_available() -> bool:
@@ -319,6 +353,11 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
                     try:
                         conn, _ = cls._server_socket.accept()
                         with conn:
+                            # Verify peer is same user (defense in depth)
+                            if not verify_peer_credentials(conn):
+                                conn.sendall(b"UNAUTHORIZED")
+                                continue
+
                             data = conn.recv(65536)  # Max text size
                             if data:
                                 text = data.decode("utf-8")
