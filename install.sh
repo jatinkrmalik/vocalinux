@@ -873,13 +873,13 @@ install_system_dependencies() {
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip base-devel vulkan-tools vulkan-headers glslang"
     local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-devel glslang"
     # Gentoo uses Portage and different package naming convention
-    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.8 pkgconf"
+    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.8 pkgconf dev-util/glslang"
     # Alpine Linux uses apk and has musl libc
-    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf wget curl unzip"
+    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf wget curl unzip glslang vulkan-tools"
     # Void Linux uses xbps
-    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel pkg-config wget curl unzip"
+    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel pkg-config wget curl unzip glslang Vulkan-Tools"
     # Solus uses eopkg
-    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip"
+    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip glslang vulkan-tools"
 
     local MISSING_PACKAGES=""
     local INSTALL_CMD=""
