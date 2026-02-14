@@ -286,7 +286,7 @@ else
     if [ -d "$INSTALL_DIR/.git" ]; then
         print_info "Updating existing clone..."
         cd "$INSTALL_DIR"
-        git fetch origin "tag" "$INSTALL_TAG"
+        git fetch origin tag "$INSTALL_TAG"
         git reset --hard "$INSTALL_TAG"
     else
         rm -rf "$INSTALL_DIR"
@@ -409,24 +409,24 @@ detect_vulkan() {
 detect_whispercpp_backends() {
     detect_nvidia_gpu || true
     detect_vulkan || true
-    
+
     # Check for Vulkan dev libraries
     local HAS_VULKAN_DEV=false
     if pkg-config --exists vulkan 2>/dev/null || [ -f /usr/include/vulkan/vulkan.h ]; then
         HAS_VULKAN_DEV=true
     fi
-    
+
     # Check for CUDA
     local HAS_CUDA_DEV=false
     if command -v nvcc >/dev/null 2>&1; then
         HAS_CUDA_DEV=true
     fi
-    
+
     # Determine recommendation
     local RECOMMENDED_BACKEND="cpu"
     local RECOMMENDED_REASON=""
     local CAN_BUILD_GPU=false
-    
+
     if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" ]]; then
         RECOMMENDED_BACKEND="vulkan"
         RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
@@ -448,7 +448,7 @@ detect_whispercpp_backends() {
         RECOMMENDED_REASON="No compatible GPU detected"
         CAN_BUILD_GPU=false
     fi
-    
+
     echo "${RECOMMENDED_BACKEND}:${RECOMMENDED_REASON}:${CAN_BUILD_GPU}:${HAS_VULKAN}:${HAS_NVIDIA_GPU}:${HAS_VULKAN_DEV}:${HAS_CUDA_DEV}"
 }
 
@@ -456,10 +456,10 @@ detect_whispercpp_backends() {
 get_engine_recommendation() {
     detect_nvidia_gpu || true
     detect_vulkan || true
-    
+
     # Get RAM info
     local TOTAL_RAM_GB=$(free -g 2>/dev/null | awk '/^Mem:/{print $2}' || echo "0")
-    
+
     if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
         # NVIDIA GPU detected - whisper.cpp can use CUDA
         echo "whisper_cpp:✓:NVIDIA GPU detected ($GPU_NAME) - Best performance with whisper.cpp"
@@ -545,13 +545,13 @@ EOF
     # Step 1: Detect and display system info
     print_header "Step 1: Your System"
     echo "Detected: $DISTRO_NAME $DISTRO_VERSION"
-    
+
     # Get hardware recommendation
     local RECOMMENDATION=$(get_engine_recommendation)
     local RECOMMENDED_ENGINE=$(echo "$RECOMMENDATION" | cut -d':' -f1)
     local RECOMMENDED_ICON=$(echo "$RECOMMENDATION" | cut -d':' -f2)
     local RECOMMENDED_REASON=$(echo "$RECOMMENDATION" | cut -d':' -f3-)
-    
+
     echo "Hardware: $RECOMMENDED_REASON"
     echo ""
 
@@ -583,7 +583,7 @@ EOF
     echo "  │     • Good for basic dictation needs                        │"
     echo "  └─────────────────────────────────────────────────────────────┘"
     echo ""
-    
+
     # Show recommendation
     case "$RECOMMENDED_ENGINE" in
         whisper_cpp)
@@ -627,7 +627,7 @@ EOF
     if [[ "$SELECTED_ENGINE" == "whisper_cpp" ]]; then
         print_header "Step 3: Choose Whisper.cpp Backend"
         echo ""
-        
+
         # Detect available backends
         local BACKEND_INFO=$(detect_whispercpp_backends)
         local RECOMMENDED_BACKEND=$(echo "$BACKEND_INFO" | cut -d':' -f1)
@@ -637,10 +637,10 @@ EOF
         local HAS_NVIDIA=$(echo "$BACKEND_INFO" | cut -d':' -f5)
         local HAS_VULKAN_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f6)
         local HAS_CUDA_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f7)
-        
+
         echo "Whisper.cpp can use different backends for speech recognition:"
         echo ""
-        
+
         if [[ "$CAN_BUILD_GPU" == "true" ]]; then
             echo "  ┌─────────────────────────────────────────────────────────────┐"
             echo "  │  1. GPU (Vulkan/CUDA)  ★ RECOMMENDED                        │"
@@ -673,7 +673,7 @@ EOF
             echo "  │     • Good performance on modern CPUs                       │"
             echo "  └─────────────────────────────────────────────────────────────┘"
             echo ""
-            
+
             if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" != "true" ]]; then
                 echo "  💡 Tip: Install 'libvulkan-dev' and a shader compiler for GPU support:"
                 echo "     sudo apt install libvulkan-dev glslc 2>/dev/null || sudo apt install libvulkan-dev glslang-tools"
@@ -683,14 +683,14 @@ EOF
                 echo "     https://developer.nvidia.com/cuda-downloads"
                 echo ""
             fi
-            
+
             echo "  → Recommendation: CPU backend (GPU libraries not detected)"
             local DEFAULT_BACKEND="2"
         fi
-        
+
         read -p "Choose backend [1-2] (default: $DEFAULT_BACKEND): " BACKEND_CHOICE
         BACKEND_CHOICE=${BACKEND_CHOICE:-$DEFAULT_BACKEND}
-        
+
         if [[ "$BACKEND_CHOICE" == "1" ]]; then
             WHISPERCPP_BACKEND="gpu"
             BACKEND_DISPLAY="GPU (Vulkan/CUDA)"
@@ -698,7 +698,7 @@ EOF
             WHISPERCPP_BACKEND="cpu"
             BACKEND_DISPLAY="CPU (Pre-built)"
         fi
-        
+
         echo ""
     fi
 
@@ -784,7 +784,7 @@ if [[ "$INTERACTIVE_MODE" == "ask" ]]; then
     echo ""
     read -p "Choose mode [1-2] (default: 1): " MODE_CHOICE
     MODE_CHOICE=${MODE_CHOICE:-1}
-    
+
     if [[ "$MODE_CHOICE" == "2" ]]; then
         AUTO_MODE="yes"
         INTERACTIVE_MODE="no"
@@ -870,14 +870,14 @@ install_system_dependencies() {
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-loader-devel glslang"
-    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip base-devel vulkan-tools vulkan-headers glslang"
+    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip base-devel vulkan-tools vulkan-headers glslang"
     local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-devel glslang"
     # Gentoo uses Portage and different package naming convention
-    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.8 pkgconf dev-util/glslang"
+    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.8 pkgconf dev-util/glslang"
     # Alpine Linux uses apk and has musl libc
     local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf wget curl unzip glslang vulkan-tools"
     # Void Linux uses xbps
-    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel pkg-config wget curl unzip glslang Vulkan-Tools"
+    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator-gtk3 gobject-introspection portaudio-devel python3-devel pkg-config wget curl unzip glslang Vulkan-Tools"
     # Solus uses eopkg
     local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip glslang vulkan-tools"
 
@@ -1065,7 +1065,7 @@ install_system_dependencies() {
             # Check for missing packages
             MISSING_PACKAGES=""
             for pkg in $XBPS_PACKAGES; do
-                if ! xbps-query -S "$pkg" >/dev/null 2>&1; then
+                if ! xbps-query "$pkg" >/dev/null 2>&1; then
                     MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
                 fi
             done
@@ -1090,7 +1090,7 @@ install_system_dependencies() {
             # Check for missing packages
             MISSING_PACKAGES=""
             for pkg in $EOPKG_PACKAGES; do
-                if ! eopkg info "$pkg" >/dev/null 2>&1; then
+                if ! eopkg list-installed | grep -qw "$pkg"; then
                     MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
                 fi
             done
@@ -1244,14 +1244,14 @@ install_text_input_tools() {
                     fi
                     ;;
                 void)
-                    if ! xbps-query -S wtype >/dev/null 2>&1; then
+                    if ! xbps-query wtype >/dev/null 2>&1; then
                         sudo xbps-install -Sy wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
                     else
                         print_info "wtype is already installed."
                     fi
                     ;;
                 solus)
-                    if ! eopkg info wtype >/dev/null 2>&1; then
+                    if ! eopkg list-installed | grep -qw wtype; then
                         sudo eopkg install wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
                     else
                         print_info "wtype is already installed."
@@ -1354,14 +1354,14 @@ install_text_input_tools() {
                     fi
                     ;;
                 void)
-                    if ! xbps-query -S xdotool >/dev/null 2>&1; then
+                    if ! xbps-query xdotool >/dev/null 2>&1; then
                         sudo xbps-install -Sy xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
                     else
                         print_info "xdotool is already installed."
                     fi
                     ;;
                 solus)
-                    if ! eopkg info xdotool >/dev/null 2>&1; then
+                    if ! eopkg list-installed | grep -qw xdotool; then
                         sudo eopkg install xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
                     else
                         print_info "xdotool is already installed."
@@ -1647,7 +1647,7 @@ install_python_package() {
                 if [[ "$GPU_INSTALL_SUCCESS" != "true" ]]; then
                     if [[ "$GPU_BACKEND" != "CPU" ]]; then
                         print_warning "Failed to install pywhispercpp with $GPU_BACKEND support, falling back to CPU version..."
-                        
+
                         # Provide helpful error messages for common issues
                         if [[ "$GPU_BACKEND" == "Vulkan" ]]; then
                             print_info "  To use Vulkan GPU acceleration, please install Vulkan development libraries:"
@@ -1673,19 +1673,19 @@ install_python_package() {
                 print_success "pywhispercpp installed with $GPU_BACKEND backend"
                 echo ""
                 ;;
-            
+
             whisper)
                 print_info "Installing Whisper (OpenAI) with PyTorch..."
                 print_info "Note: This engine requires NVIDIA GPU for acceleration"
                 print_info "      For AMD/Intel GPUs, whisper.cpp is recommended"
-                
+
                 local WHISPER_INSTALL_SUCCESS=false
-                
+
                 # Install PyTorch and whisper
                 print_info "Installing PyTorch..."
                 if pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --log "$PIP_LOG_FILE" 2>&1; then
                     print_success "PyTorch installed successfully"
-                    
+
                     print_info "Installing openai-whisper..."
                     if pip install openai-whisper --log "$PIP_LOG_FILE" 2>&1; then
                         # Verify the installation by importing the module
@@ -1701,7 +1701,7 @@ install_python_package() {
                 else
                     print_error "Failed to install PyTorch"
                 fi
-                
+
                 if [[ "$WHISPER_INSTALL_SUCCESS" == "true" ]]; then
                     # Create config with whisper as default
                     local WHISPER_CONFIG="$CONFIG_DIR/config.json"
@@ -1746,7 +1746,7 @@ WHISPER_CONFIG
                     print_info "  - Works with any GPU (NVIDIA, AMD, Intel)"
                     print_info "  - Uses Vulkan for GPU acceleration"
                     print_info ""
-                    
+
                     # Fall back to whisper.cpp installation
                     pip install pywhispercpp --log "$PIP_LOG_FILE" || {
                         print_error "Failed to install pywhispercpp fallback"
@@ -1754,7 +1754,7 @@ WHISPER_CONFIG
                         return 1
                     }
                     print_success "Installed whisper.cpp as fallback"
-                    
+
                     # Create config with whisper_cpp as default
                     local FALLBACK_CONFIG="$CONFIG_DIR/config.json"
                     if [ ! -f "$FALLBACK_CONFIG" ]; then
@@ -1790,11 +1790,11 @@ FALLBACK_CONFIG
                     fi
                 fi
                 ;;
-            
+
             vosk)
                 print_info "Installing VOSK (lightweight option)..."
                 print_info "VOSK is fast and works well on older systems."
-                
+
                 # Create config with vosk as default
                 local VOSK_CONFIG_FILE="$CONFIG_DIR/config.json"
                 if [ ! -f "$VOSK_CONFIG_FILE" ]; then
@@ -2279,13 +2279,13 @@ install_icons || print_warning "Icon installation failed"
 # whisper.cpp is now the default engine
 if [ "$SKIP_MODELS" = "no" ]; then
     # Check which engines are installed and download appropriate models
-    
+
     # Install whisper.cpp model (default engine)
     if "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" 2>/dev/null; then
         print_info "whisper.cpp is installed - downloading tiny model (default engine)..."
         install_whispercpp_model || print_warning "whisper.cpp model download failed - model will be downloaded on first run"
     fi
-    
+
     # Install OpenAI Whisper model if whisper engine is installed
     if "$VENV_DIR/bin/python" -c "import whisper" 2>/dev/null; then
         print_info "Whisper (OpenAI) is installed - downloading tiny model..."
@@ -2429,7 +2429,7 @@ EOF
     local ENGINE_INFO="${SELECTED_ENGINE:-whisper_cpp}"
     local ENGINE_DISPLAY_NAME=""
     local BACKEND_INFO=""
-    
+
     case "$ENGINE_INFO" in
         whisper_cpp)
             ENGINE_DISPLAY_NAME="Whisper.cpp"
