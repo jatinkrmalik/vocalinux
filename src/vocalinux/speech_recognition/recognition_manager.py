@@ -352,6 +352,7 @@ class SpeechRecognitionManager:
         self.should_record = False
         self.audio_buffer = []
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
+        self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
@@ -526,28 +527,35 @@ class SpeechRecognitionManager:
             duration = len(audio_float) / 16000.0  # 16kHz sample rate
             logger.debug(f"Transcribing audio: {duration:.2f} seconds")
 
-            # Determine if we should use fp16 (only on CUDA)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                import torch
-            use_fp16 = self.model.device != torch.device("cpu")
+            # Lock model access to prevent race condition with reconfigure
+            with self._model_lock:
+                # Check if model is still valid
+                if self.model is None:
+                    logger.warning("Model is None during transcription, returning empty result")
+                    return ""
 
-            lang = self.language
-            if self.language == "en-us":
-                lang = "en"
-            elif self.language == "auto":
-                lang = None  # Auto-detect
+                # Determine if we should use fp16 (only on CUDA)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    import torch
+                use_fp16 = self.model.device != torch.device("cpu")
 
-            # Transcribe with Whisper (handles variable length audio automatically)
-            result = self.model.transcribe(
-                audio_float,
-                language=lang,
-                task="transcribe",
-                verbose=False,
-                temperature=0.0,  # Greedy decoding for consistency
-                no_speech_threshold=0.6,
-                fp16=use_fp16,  # Explicitly set to avoid warning on CPU
-            )
+                lang = self.language
+                if self.language == "en-us":
+                    lang = "en"
+                elif self.language == "auto":
+                    lang = None  # Auto-detect
+
+                # Transcribe with Whisper (handles variable length audio automatically)
+                result = self.model.transcribe(
+                    audio_float,
+                    language=lang,
+                    task="transcribe",
+                    verbose=False,
+                    temperature=0.0,  # Greedy decoding for consistency
+                    no_speech_threshold=0.6,
+                    fp16=use_fp16,  # Explicitly set to avoid warning on CPU
+                )
 
             text = result.get("text", "").strip()
 
@@ -699,11 +707,20 @@ class SpeechRecognitionManager:
 
             logger.debug(f"whisper.cpp using language: {lang or 'auto-detect'}")
 
-            # Transcribe with whisper.cpp
-            # pywhispercpp expects audio as numpy array
-            transcribe_start = time.time()
-            segments = self.model.transcribe(audio_float, language=lang)
-            transcribe_duration = time.time() - transcribe_start
+            # Lock model access to prevent race condition with reconfigure
+            # This is critical because self.model is a C++ object via pywhispercpp
+            # and accessing it while reconfigure() sets it to None causes a segfault
+            with self._model_lock:
+                # Check if model is still valid
+                if self.model is None:
+                    logger.warning("Model is None during transcription, returning empty result")
+                    return ""
+
+                # Transcribe with whisper.cpp
+                # pywhispercpp expects audio as numpy array
+                transcribe_start = time.time()
+                segments = self.model.transcribe(audio_float, language=lang)
+                transcribe_duration = time.time() - transcribe_start
 
             # Extract text from segments
             text_parts = []
@@ -1535,11 +1552,17 @@ class SpeechRecognitionManager:
             return
 
         if self.engine == "vosk":
-            for data in self.audio_buffer:
-                self.recognizer.AcceptWaveform(data)
+            # Lock recognizer access to prevent race condition with reconfigure
+            with self._model_lock:
+                # Check if recognizer is still valid
+                if self.recognizer is None:
+                    logger.warning("Recognizer is None during processing, returning empty result")
+                    return
+                for data in self.audio_buffer:
+                    self.recognizer.AcceptWaveform(data)
 
-            result = json.loads(self.recognizer.FinalResult())
-            text = result.get("text", "")
+                result = json.loads(self.recognizer.FinalResult())
+                text = result.get("text", "")
 
         elif self.engine == "whisper":
             text = self._transcribe_with_whisper(self.audio_buffer)
@@ -1632,26 +1655,30 @@ class SpeechRecognitionManager:
             # When reconfiguring from UI, allow downloads
             old_defer = self._defer_download
             self._defer_download = not force_download
-            # Release old resources explicitly if necessary (Python's GC might handle it)
-            self.model = None
-            self.recognizer = None
-            try:
-                if self.engine == "vosk":
-                    self._init_vosk()
-                elif self.engine == "whisper":
-                    self._init_whisper()
-                elif self.engine == "whisper_cpp":
-                    self._init_whispercpp()
-                else:
-                    raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
-                logger.info("Speech engine re-initialized successfully.")
-            except Exception as e:
-                logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
-                self._update_state(RecognitionState.ERROR)
-                # Re-raise or handle appropriately
-                raise
-            finally:
-                self._defer_download = old_defer
+
+            # Lock model access during reinitialization to prevent race condition
+            # with transcription threads that may be using the model/recognizer
+            with self._model_lock:
+                # Release old resources explicitly if necessary (Python's GC might handle it)
+                self.model = None
+                self.recognizer = None
+                try:
+                    if self.engine == "vosk":
+                        self._init_vosk()
+                    elif self.engine == "whisper":
+                        self._init_whisper()
+                    elif self.engine == "whisper_cpp":
+                        self._init_whispercpp()
+                    else:
+                        raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
+                    logger.info("Speech engine re-initialized successfully.")
+                except Exception as e:
+                    logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
+                    self._update_state(RecognitionState.ERROR)
+                    # Re-raise or handle appropriately
+                    raise
+                finally:
+                    self._defer_download = old_defer
         else:
             # If only VOSK params changed, just log it
             logger.info("Applied VAD/silence timeout changes.")
