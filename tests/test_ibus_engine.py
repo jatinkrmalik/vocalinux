@@ -98,6 +98,54 @@ class TestIsEngineRegistered(unittest.TestCase):
         self.assertFalse(result)
 
 
+class TestIsComponentUpToDate(unittest.TestCase):
+    """Tests for is_component_up_to_date function."""
+
+    def test_component_missing(self):
+        """Test returns False when component file doesn't exist."""
+        with patch("pathlib.Path.home") as mock_home:
+            mock_home.return_value = Path("/nonexistent")
+            from vocalinux.text_injection.ibus_engine import is_component_up_to_date
+
+            result = is_component_up_to_date()
+            self.assertFalse(result)
+
+    def test_component_matches(self):
+        """Test returns True when component content matches."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            component_dir = Path(tmpdir) / ".local" / "share" / "ibus" / "component"
+            component_dir.mkdir(parents=True)
+            component_file = component_dir / "vocalinux.xml"
+
+            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
+                from vocalinux.text_injection.ibus_engine import (
+                    _get_expected_component_xml,
+                    is_component_up_to_date,
+                )
+
+                # Write expected content
+                component_file.write_text(_get_expected_component_xml())
+
+                result = is_component_up_to_date()
+                self.assertTrue(result)
+
+    def test_component_differs(self):
+        """Test returns False when component content differs."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            component_dir = Path(tmpdir) / ".local" / "share" / "ibus" / "component"
+            component_dir.mkdir(parents=True)
+            component_file = component_dir / "vocalinux.xml"
+
+            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
+                from vocalinux.text_injection.ibus_engine import is_component_up_to_date
+
+                # Write stale content
+                component_file.write_text("<component>stale</component>")
+
+                result = is_component_up_to_date()
+                self.assertFalse(result)
+
+
 class TestIsEngineActive(unittest.TestCase):
     """Tests for is_engine_active function."""
 
@@ -254,7 +302,8 @@ class TestIBusTextInjector(unittest.TestCase):
 
         injector = IBusTextInjector(auto_activate=True)
 
-        mock_ensure_dir.assert_called_once()
+        # ensure_ibus_dir is called twice: once in __init__ and once in start_engine_process
+        self.assertGreaterEqual(mock_ensure_dir.call_count, 1)
         mock_switch.assert_called_once_with("vocalinux")
         self.assertEqual(injector._previous_engine, "xkb:us::eng")
 

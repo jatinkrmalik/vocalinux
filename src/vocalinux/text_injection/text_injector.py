@@ -15,7 +15,6 @@ from typing import Optional  # noqa: F401
 
 from .ibus_engine import (
     IBusTextInjector,
-    is_engine_registered,
     is_ibus_available,
 )
 
@@ -250,7 +249,7 @@ class TextInjector:
         try:
             if self.environment == DesktopEnvironment.WAYLAND_IBUS:
                 # Use IBus for text injection
-                if hasattr(self, "_ibus_injector"):
+                if self._ibus_injector is not None:
                     return self._ibus_injector.inject_text(text)
                 else:
                     logger.error("IBus injector not initialized")

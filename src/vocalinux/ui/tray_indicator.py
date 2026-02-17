@@ -339,6 +339,10 @@ class TrayIndicator:
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
 
+        # Stop the text injector (restores previous IBus engine)
+        if hasattr(self, "text_injector") and self.text_injector is not None:
+            self.text_injector.stop()
+
         Gtk.main_quit()
 
     def run(self):

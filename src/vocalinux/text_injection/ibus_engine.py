@@ -16,8 +16,11 @@ without requiring compositor-specific protocols.
 
 import logging
 import os
+import signal
 import socket
 import struct
+import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Optional
@@ -43,6 +46,7 @@ except (ImportError, ValueError) as e:
 # File paths for communication
 VOCALINUX_IBUS_DIR = Path.home() / ".local" / "share" / "vocalinux-ibus"
 SOCKET_PATH = VOCALINUX_IBUS_DIR / "inject.sock"
+PID_FILE = VOCALINUX_IBUS_DIR / "engine.pid"
 
 # Engine identification
 ENGINE_NAME = "vocalinux"
@@ -94,14 +98,65 @@ def is_ibus_available() -> bool:
     return IBUS_AVAILABLE
 
 
+def _get_expected_component_xml() -> str:
+    """Generate the expected component XML content for the current installation."""
+    engine_script = Path(__file__).resolve()
+    python_exec = sys.executable
+
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<component>
+    <name>{COMPONENT_NAME}</name>
+    <description>{ENGINE_DESCRIPTION}</description>
+    <exec>{python_exec} {engine_script}</exec>
+    <version>1.0</version>
+    <author>Vocalinux</author>
+    <license>GPL-3.0</license>
+    <homepage>https://github.com/jatinkrmalik/vocalinux</homepage>
+    <textdomain>vocalinux</textdomain>
+    <engines>
+        <engine>
+            <name>{ENGINE_NAME}</name>
+            <language>other</language>
+            <license>GPL-3.0</license>
+            <author>Vocalinux</author>
+            <icon>audio-input-microphone</icon>
+            <layout>default</layout>
+            <longname>{ENGINE_LONGNAME}</longname>
+            <description>{ENGINE_DESCRIPTION}</description>
+            <rank>50</rank>
+        </engine>
+    </engines>
+</component>
+"""
+
+
+def is_component_up_to_date() -> bool:
+    """
+    Check if the installed IBus component XML matches the current installation.
+
+    Returns:
+        True if component exists and matches expected content, False otherwise
+    """
+    component_file = Path.home() / ".local" / "share" / "ibus" / "component" / "vocalinux.xml"
+
+    if not component_file.exists():
+        return False
+
+    try:
+        installed_content = component_file.read_text()
+        expected_content = _get_expected_component_xml()
+        return installed_content.strip() == expected_content.strip()
+    except Exception as e:
+        logger.debug(f"Failed to check component XML: {e}")
+        return False
+
+
 def is_engine_registered() -> bool:
     """Check if the Vocalinux IBus engine is registered."""
     if not IBUS_AVAILABLE:
         return False
 
     try:
-        import subprocess
-
         result = subprocess.run(
             ["ibus", "list-engine"],
             capture_output=True,
@@ -177,15 +232,22 @@ def switch_engine(engine_name: str) -> bool:
 def is_engine_process_running() -> bool:
     """Check if the Vocalinux IBus engine process is running."""
     try:
-        import subprocess
+        if not PID_FILE.exists():
+            return False
 
-        result = subprocess.run(
-            ["pgrep", "-f", "ibus_engine.py"],
-            capture_output=True,
-            text=True,
-        )
-        return result.returncode == 0
-    except (subprocess.SubprocessError, FileNotFoundError):
+        pid = int(PID_FILE.read_text().strip())
+        # Check if process exists and is our engine
+        os.kill(pid, 0)  # Raises OSError if process doesn't exist
+        # Verify it's actually our process by checking cmdline
+        cmdline_path = Path(f"/proc/{pid}/cmdline")
+        if cmdline_path.exists():
+            cmdline = cmdline_path.read_text()
+            return "ibus_engine.py" in cmdline and "vocalinux" in cmdline
+        return True  # Process exists but can't verify cmdline
+    except (OSError, ValueError, FileNotFoundError):
+        # Process doesn't exist or PID file is invalid
+        if PID_FILE.exists():
+            PID_FILE.unlink()  # Clean up stale PID file
         return False
 
 
@@ -199,7 +261,6 @@ def start_engine_process() -> bool:
     Returns:
         True if the engine was started or is already running, False otherwise
     """
-    import subprocess
     import time
 
     if is_engine_process_running():
@@ -210,13 +271,26 @@ def start_engine_process() -> bool:
     logger.info(f"Starting IBus engine process: {engine_script}")
 
     try:
-        # Start the engine process in the background
-        subprocess.Popen(
-            ["python3", str(engine_script)],
+        # Start the engine process using the same Python interpreter
+        # and inherit the current environment (for venv compatibility)
+        env = os.environ.copy()
+        # Ensure PYTHONPATH includes current site-packages if in a venv
+        if hasattr(sys, "prefix") and sys.prefix != sys.base_prefix:
+            # We're in a virtual environment - ensure it's preserved
+            env["VIRTUAL_ENV"] = sys.prefix
+            # Keep PATH so the venv's bin is first
+
+        process = subprocess.Popen(
+            [sys.executable, str(engine_script)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
+            env=env,
         )
+
+        # Write PID file for tracking
+        ensure_ibus_dir()
+        PID_FILE.write_text(str(process.pid))
 
         # Wait a bit for the engine to start
         for _ in range(10):
@@ -236,15 +310,27 @@ def start_engine_process() -> bool:
 def stop_engine_process() -> None:
     """Stop the IBus engine process if running."""
     try:
-        import subprocess
+        if not PID_FILE.exists():
+            logger.debug("No PID file found, engine not running")
+            return
 
-        subprocess.run(
-            ["pkill", "-f", "ibus_engine.py"],
-            capture_output=True,
-        )
-        logger.info("IBus engine process stopped")
-    except Exception as e:
+        pid = int(PID_FILE.read_text().strip())
+        # Verify it's our process before killing
+        cmdline_path = Path(f"/proc/{pid}/cmdline")
+        if cmdline_path.exists():
+            cmdline = cmdline_path.read_text()
+            if "ibus_engine.py" not in cmdline or "vocalinux" not in cmdline:
+                logger.warning(f"PID {pid} is not our engine process, skipping kill")
+                PID_FILE.unlink()
+                return
+
+        os.kill(pid, signal.SIGTERM)
+        logger.info(f"IBus engine process (PID {pid}) stopped")
+        PID_FILE.unlink()
+    except (OSError, ValueError, FileNotFoundError) as e:
         logger.debug(f"Failed to stop IBus engine process: {e}")
+        if PID_FILE.exists():
+            PID_FILE.unlink()
 
 
 class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
@@ -267,6 +353,7 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
     _active_instance: Optional["VocalinuxEngine"] = None
     _socket_server: Optional[threading.Thread] = None
     _server_socket: Optional[socket.socket] = None
+    _server_running: bool = False
 
     def __init__(self):
         """Initialize the Vocalinux IBus engine."""
@@ -340,6 +427,8 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
         if SOCKET_PATH.exists():
             SOCKET_PATH.unlink()
 
+        cls._server_running = True
+
         def server_thread():
             try:
                 cls._server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -349,7 +438,7 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
 
                 logger.info(f"Socket server listening on {SOCKET_PATH}")
 
-                while True:
+                while cls._server_running:
                     try:
                         conn, _ = cls._server_socket.accept()
                         with conn:
@@ -373,11 +462,18 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
                                 else:
                                     logger.warning("No active engine instance")
                                     conn.sendall(b"NO_ENGINE")
+                    except OSError as e:
+                        # Check if we're shutting down
+                        if not cls._server_running:
+                            logger.debug("Socket server shutting down")
+                            break
+                        logger.error(f"Socket connection error: {e}")
                     except Exception as e:
                         logger.error(f"Socket connection error: {e}")
 
             except Exception as e:
-                logger.error(f"Socket server error: {e}")
+                if cls._server_running:
+                    logger.error(f"Socket server error: {e}")
 
         cls._socket_server = threading.Thread(target=server_thread, daemon=True)
         cls._socket_server.start()
@@ -385,6 +481,7 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
     @classmethod
     def stop_socket_server(cls) -> None:
         """Stop the socket server."""
+        cls._server_running = False
         if cls._server_socket:
             try:
                 cls._server_socket.close()
@@ -467,13 +564,15 @@ class IBusTextInjector:
 
     def _setup_engine(self) -> None:
         """Install and activate the IBus engine."""
-        # Install component if not registered
+        # Install or update component if needed
         if not is_engine_registered():
             logger.info("IBus engine not registered, installing...")
-            # Try user-level first (no sudo needed)
             if not install_ibus_component(system_wide=False):
                 logger.info("User-level install failed, trying system-wide...")
                 install_ibus_component(system_wide=True)
+        elif not is_component_up_to_date():
+            logger.info("IBus component XML is outdated, updating...")
+            install_ibus_component(system_wide=False)
 
         # Check again after installation
         if not is_engine_registered():
@@ -576,36 +675,7 @@ def install_ibus_component(system_wide: bool = False) -> bool:
     Returns:
         True if installation was successful, False otherwise
     """
-    import subprocess
-
-    # Get the path to the engine script
-    engine_script = Path(__file__).resolve()
-
-    component_xml = f"""<?xml version="1.0" encoding="utf-8"?>
-<component>
-    <name>{COMPONENT_NAME}</name>
-    <description>{ENGINE_DESCRIPTION}</description>
-    <exec>python3 {engine_script}</exec>
-    <version>1.0</version>
-    <author>Vocalinux</author>
-    <license>GPL-3.0</license>
-    <homepage>https://github.com/jatinkrmalik/vocalinux</homepage>
-    <textdomain>vocalinux</textdomain>
-    <engines>
-        <engine>
-            <name>{ENGINE_NAME}</name>
-            <language>other</language>
-            <license>GPL-3.0</license>
-            <author>Vocalinux</author>
-            <icon>audio-input-microphone</icon>
-            <layout>default</layout>
-            <longname>{ENGINE_LONGNAME}</longname>
-            <description>{ENGINE_DESCRIPTION}</description>
-            <rank>50</rank>
-        </engine>
-    </engines>
-</component>
-"""
+    component_xml = _get_expected_component_xml()
 
     try:
         if system_wide:
@@ -644,6 +714,7 @@ def install_ibus_component(system_wide: bool = False) -> bool:
 
         # Refresh IBus - restart with component path set so it picks up user components
         import time
+
         user_component_dir = Path.home() / ".local" / "share" / "ibus" / "component"
         env = os.environ.copy()
         env["IBUS_COMPONENT_PATH"] = f"{user_component_dir}:/usr/share/ibus/component"
