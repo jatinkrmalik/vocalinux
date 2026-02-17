@@ -633,7 +633,12 @@ class SpeechRecognitionManager:
             cpu_count = multiprocessing.cpu_count()
 
             load_start_time = time.time()
-            self.model = Model(model_path, n_threads=n_threads)
+            self.model = Model(
+                model_path,
+                n_threads=n_threads,
+                suppress_blank=True,
+                suppress_non_speech_tokens=True,
+            )
             load_duration = time.time() - load_start_time
 
             logger.info(
