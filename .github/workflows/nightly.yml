@@ -84,16 +84,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get list of nightly releases (tagged with nightly-YYYY-MM-DD), sorted by date descending
-          # Keep only the 3 most recent, delete the rest
-          gh release list --repo ${{ github.repository }} --limit 100 | \
-            grep "nightly-" | \
-            sort -t$'\t' -k3 -r | \
-            tail -n +4 | \
-            while IFS=$'\t' read -r tag name date; do
-              echo "Deleting old nightly release: $tag"
-              gh release delete "$tag" --yes --repo ${{ github.repository }} 2>/dev/null || true
-              git push origin :refs/tags/"$tag" 2>/dev/null || true
+          # Calculate the cutoff date (3 days ago) in seconds since epoch
+          CUTOFF_DATE=$(date -d '3 days ago' +%s)
+          echo "Cutoff date: $(date -d @$CUTOFF_DATE -u +"%Y-%m-%d %H:%M:%S UTC") (3 days ago)"
+
+          # Get nightly releases with their actual creation timestamps using JSON output
+          # Filter for releases older than 3 days and delete them
+          gh release list --repo ${{ github.repository }} --json tagName,createdAt --limit 100 | \
+            jq -r '.[] | select(.tagName | startswith("nightly-")) | [.tagName, .createdAt] | @tsv' | \
+            while IFS=$'\t' read -r tag created_at; do
+              # Parse the ISO 8601 date to seconds since epoch
+              RELEASE_DATE=$(date -d "$created_at" +%s 2>/dev/null || echo "0")
+
+              if [ "$RELEASE_DATE" != "0" ] && [ "$RELEASE_DATE" -lt "$CUTOFF_DATE" ]; then
+                echo "Deleting old nightly release: $tag (created: $(date -d @$RELEASE_DATE -u +"%Y-%m-%d %H:%M:%S UTC"))"
+                gh release delete "$tag" --yes --repo ${{ github.repository }} 2>/dev/null || true
+                git push origin :refs/tags/"$tag" 2>/dev/null || true
+                git tag -d "$tag" 2>/dev/null || true
+              else
+                echo "Keeping nightly release: $tag (created: $(date -d @$RELEASE_DATE -u +"%Y-%m-%d %H:%M:%S UTC"))"
+              fi
             done
 
       - name: Generate release notes
@@ -201,6 +211,7 @@ jobs:
           # If a release for today already exists, delete it first
           gh release delete "$RELEASE_TAG" --yes --repo ${{ github.repository }} 2>/dev/null || true
           git push origin :refs/tags/"$RELEASE_TAG" 2>/dev/null || true
+          git tag -d "$RELEASE_TAG" 2>/dev/null || true
           
           gh release create "$RELEASE_TAG" \
             --title "Nightly Build - ${{ steps.version.outputs.version }}" \
