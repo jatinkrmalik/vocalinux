@@ -223,3 +223,11 @@ docs(readme): update installation instructions
 - `docs/` - Documentation updates
 - `refactor/` - Code refactoring
 - `test/` - Test additions/updates
+- `release/` - Release preparation (e.g., `release/v0.6.2-beta`)
+
+## Important Rules
+
+- **Never push directly to `main`** - Always create a branch and PR
+- **All changes require a PR** - Even small fixes and documentation updates
+- **Wait for CI to pass** before merging PRs
+- **Squash merge** PRs to keep history clean
