@@ -36,7 +36,9 @@ class TestIBusEngineHelpers(unittest.TestCase):
 
     def test_ensure_ibus_dir_creates_directory(self):
         """Test that ensure_ibus_dir creates the directory."""
-        with patch("vocalinux.text_injection.ibus_engine.VOCALINUX_IBUS_DIR") as mock_dir:
+        with patch(
+            "vocalinux.text_injection.ibus_engine.VOCALINUX_IBUS_DIR"
+        ) as mock_dir:
             mock_dir.mkdir = MagicMock()
             from vocalinux.text_injection.ibus_engine import ensure_ibus_dir
 
@@ -45,7 +47,10 @@ class TestIBusEngineHelpers(unittest.TestCase):
 
     def test_is_ibus_available_returns_constant(self):
         """Test is_ibus_available returns the module constant."""
-        from vocalinux.text_injection.ibus_engine import IBUS_AVAILABLE, is_ibus_available
+        from vocalinux.text_injection.ibus_engine import (
+            IBUS_AVAILABLE,
+            is_ibus_available,
+        )
 
         self.assertEqual(is_ibus_available(), IBUS_AVAILABLE)
 
@@ -57,7 +62,9 @@ class TestIsEngineRegistered(unittest.TestCase):
     @patch("subprocess.run")
     def test_engine_registered(self, mock_run):
         """Test detection when engine is registered."""
-        mock_run.return_value = MagicMock(stdout="vocalinux\nxkb:us::eng\n", returncode=0)
+        mock_run.return_value = MagicMock(
+            stdout="vocalinux\nxkb:us::eng\n", returncode=0
+        )
 
         from vocalinux.text_injection.ibus_engine import is_engine_registered
 
@@ -280,21 +287,26 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.install_ibus_component")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
     @patch("vocalinux.text_injection.ibus_engine.switch_engine")
     def test_init_auto_activate(
         self,
         mock_switch,
         mock_get_current,
+        mock_start_engine,
         mock_is_active,
         mock_is_registered,
+        mock_install,
         mock_ensure_dir,
     ):
         """Test initialization with auto_activate=True."""
         mock_is_registered.return_value = True
         mock_is_active.return_value = False
+        mock_start_engine.return_value = True
         mock_get_current.return_value = "xkb:us::eng"
         mock_switch.return_value = True
 
@@ -302,8 +314,11 @@ class TestIBusTextInjector(unittest.TestCase):
 
         injector = IBusTextInjector(auto_activate=True)
 
-        # ensure_ibus_dir is called twice: once in __init__ and once in start_engine_process
+        # ensure_ibus_dir is called at least once
         self.assertGreaterEqual(mock_ensure_dir.call_count, 1)
+        # Engine should be started
+        mock_start_engine.assert_called_once()
+        # Should switch to vocalinux engine
         mock_switch.assert_called_once_with("vocalinux")
         self.assertEqual(injector._previous_engine, "xkb:us::eng")
 
@@ -401,7 +416,9 @@ class TestIBusTextInjector(unittest.TestCase):
         server_thread = threading.Thread(target=handle_connection, daemon=True)
         server_thread.start()
 
-        with patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH", self.socket_path):
+        with patch(
+            "vocalinux.text_injection.ibus_engine.SOCKET_PATH", self.socket_path
+        ):
             injector = IBusTextInjector(auto_activate=False)
             result = injector.inject_text("Hello World")
 
@@ -428,7 +445,9 @@ class TestIBusTextInjector(unittest.TestCase):
         server_thread = threading.Thread(target=handle_connection, daemon=True)
         server_thread.start()
 
-        with patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH", self.socket_path):
+        with patch(
+            "vocalinux.text_injection.ibus_engine.SOCKET_PATH", self.socket_path
+        ):
             injector = IBusTextInjector(auto_activate=False)
             result = injector.inject_text("Hello")
 
@@ -446,9 +465,13 @@ class TestIBusTextInjector(unittest.TestCase):
 
         with patch("socket.socket") as mock_socket_class:
             mock_socket_instance = MagicMock()
-            mock_socket_class.return_value.__enter__ = MagicMock(return_value=mock_socket_instance)
+            mock_socket_class.return_value.__enter__ = MagicMock(
+                return_value=mock_socket_instance
+            )
             mock_socket_class.return_value.__exit__ = MagicMock(return_value=False)
-            mock_socket_instance.connect.side_effect = socket.timeout("Connection timeout")
+            mock_socket_instance.connect.side_effect = socket.timeout(
+                "Connection timeout"
+            )
 
             injector = IBusTextInjector(auto_activate=False)
             result = injector.inject_text("Hello")
@@ -491,7 +514,9 @@ class TestInstallIBusComponent(unittest.TestCase):
 
         # Verify sudo was called
         sudo_calls = [
-            call for call in mock_run.call_args_list if call[0][0] and "sudo" in call[0][0]
+            call
+            for call in mock_run.call_args_list
+            if call[0][0] and "sudo" in call[0][0]
         ]
         self.assertTrue(len(sudo_calls) > 0)
 
@@ -569,7 +594,9 @@ class TestTextInjectorWithIBus(unittest.TestCase):
                     injector = TextInjector()
 
                     # Should be using IBus
-                    self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+                    self.assertEqual(
+                        injector.environment, DesktopEnvironment.WAYLAND_IBUS
+                    )
 
     @patch("vocalinux.text_injection.text_injector.is_ibus_available")
     def test_wayland_fallback_when_ibus_unavailable(self, mock_ibus_available):
