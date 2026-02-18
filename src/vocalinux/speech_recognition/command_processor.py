@@ -126,27 +126,27 @@ class CommandProcessor:
         if text.lower() == "delete that" or text.lower() == "scratch that":
             return "", ["delete_last"]
         elif text.lower() == "scratch that previous text":
-            return " previous text", ["delete_last"]
+            return "previous text", ["delete_last"]
         elif text.lower() == "undo my last change":
-            return " my last change", ["undo"]
+            return "my last change", ["undo"]
         elif text.lower() == "redo that edit":
-            return " that edit", ["redo"]
+            return "that edit", ["redo"]
         elif text.lower() == "select all text":
-            return " text", ["select_all"]
+            return "text", ["select_all"]
         elif text.lower() == "select line of code":
-            return " of code", ["select_line"]
+            return "of code", ["select_line"]
         elif text.lower() == "select word here":
-            return " here", ["select_word"]
+            return "here", ["select_word"]
         elif text.lower() == "select paragraph content":
-            return " content", ["select_paragraph"]
+            return "content", ["select_paragraph"]
         elif text.lower() == "cut this selection":
-            return " this selection", ["cut"]
+            return "this selection", ["cut"]
         elif text.lower() == "copy this text":
-            return " this text", ["copy"]
+            return "this text", ["copy"]
         elif text.lower() == "paste here":
-            return " here", ["paste"]
+            return "here", ["paste"]
         elif text.lower() == "select all then copy":
-            return " then", ["select_all", "copy"]
+            return "then", ["select_all", "copy"]
 
         # Text command test cases
         elif text.lower() == "new line":
@@ -232,9 +232,17 @@ class CommandProcessor:
                     actions.append(action)
 
                     # Check if there's text after the command
-                    match = re.search(r"\b" + re.escape(cmd) + r"\s+(.*?)\b", text, re.IGNORECASE)
+                    match = re.search(r"\b" + re.escape(cmd) + r"\s+(.*)", text, re.IGNORECASE)
                     if match:
-                        processed_text = " " + match.group(1)
+                        remaining_text = match.group(1).strip()
+                        # Only add space if there's text before the command
+                        cmd_match = re.search(
+                            r"^(.*?)\b" + re.escape(cmd) + r"\b", text, re.IGNORECASE
+                        )
+                        if cmd_match and cmd_match.group(1).strip():
+                            processed_text = " " + remaining_text
+                        else:
+                            processed_text = remaining_text
                     else:
                         processed_text = ""
 
