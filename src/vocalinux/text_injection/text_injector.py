@@ -25,6 +25,7 @@ class DesktopEnvironment(Enum):
     """Enum representing the desktop environment."""
 
     X11 = "x11"
+    X11_IBUS = "x11-ibus"  # X11 with IBus engine (preferred for non-US layouts)
     WAYLAND = "wayland"
     WAYLAND_XDOTOOL = "wayland-xdotool"  # Wayland with XWayland fallback
     WAYLAND_IBUS = "wayland-ibus"  # Wayland with IBus engine (preferred)
@@ -130,24 +131,28 @@ class TextInjector:
 
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
+        # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
+        # bypassing keyboard layout issues entirely
+        if is_ibus_available():
+            try:
+                self._ibus_injector = IBusTextInjector(auto_activate=True)
+                if self.environment == DesktopEnvironment.X11:
+                    self.environment = DesktopEnvironment.X11_IBUS
+                else:
+                    self.environment = DesktopEnvironment.WAYLAND_IBUS
+                logger.info(
+                    f"Using IBus for {self.environment.value} text injection (best compatibility)"
+                )
+                return
+            except Exception as e:
+                logger.warning(f"IBus initialization failed: {e}, trying alternatives")
+
         if self.environment == DesktopEnvironment.X11:
             # Check for xdotool
             if not shutil.which("xdotool"):
                 logger.error("xdotool not found. Please install it with: sudo apt install xdotool")
                 raise RuntimeError("Missing required dependency: xdotool")
         else:
-            # For Wayland, prefer IBus as it works universally with any keyboard layout
-            # IBus is usually pre-installed on GNOME systems
-            if is_ibus_available():
-                try:
-                    self._ibus_injector = IBusTextInjector(auto_activate=True)
-                    self.environment = DesktopEnvironment.WAYLAND_IBUS
-                    self.wayland_tool = "ibus"
-                    logger.info("Using IBus for Wayland text injection (best compatibility)")
-                    return
-                except Exception as e:
-                    logger.warning(f"IBus initialization failed: {e}, trying alternatives")
-
             # Fallback: Check for wtype or ydotool for Wayland
             wtype_available = shutil.which("wtype") is not None
             ydotool_available = shutil.which("ydotool") is not None
@@ -157,7 +162,10 @@ class TextInjector:
                 # Verify ydotoold daemon is running before selecting ydotool
                 try:
                     subprocess.run(
-                        ["ydotool", "type", ""], check=True, stderr=subprocess.PIPE, timeout=2
+                        ["ydotool", "type", ""],
+                        check=True,
+                        stderr=subprocess.PIPE,
+                        timeout=2,
                     )
                     self.wayland_tool = "ydotool"
                     logger.info(f"Using {self.wayland_tool} for Wayland text injection")
@@ -247,8 +255,10 @@ class TextInjector:
         logger.debug(f"Text to inject: '{text}'")
 
         try:
-            if self.environment == DesktopEnvironment.WAYLAND_IBUS:
-                # Use IBus for text injection
+            if (
+                self.environment == DesktopEnvironment.WAYLAND_IBUS
+                or self.environment == DesktopEnvironment.X11_IBUS
+            ):
                 if self._ibus_injector is not None:
                     return self._ibus_injector.inject_text(text)
                 else:
@@ -360,7 +370,12 @@ class TextInjector:
                         logger.debug(f"Injecting chunk {chunk_num}/{total_chunks}: '{chunk}'")
 
                         subprocess.run(
-                            cmd, env=env, check=True, stderr=subprocess.PIPE, text=True, timeout=5
+                            cmd,
+                            env=env,
+                            check=True,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            timeout=5,
                         )
 
                         # Add a larger delay between chunks
@@ -374,7 +389,7 @@ class TextInjector:
                 except subprocess.CalledProcessError as chunk_error:
                     if retry < max_retries:
                         logger.warning(
-                            f"Retrying text injection (attempt {retry+1}/{max_retries}): "
+                            f"Retrying text injection (attempt {retry + 1}/{max_retries}): "
                             f"{chunk_error.stderr}"
                         )
                         time.sleep(0.5)  # Wait before retry
@@ -384,7 +399,7 @@ class TextInjector:
                 except subprocess.TimeoutExpired:
                     if retry < max_retries:
                         logger.warning(
-                            f"Text injection timeout, retrying (attempt {retry+1}/{max_retries})"
+                            f"Text injection timeout, retrying (attempt {retry + 1}/{max_retries})"
                         )
                         time.sleep(0.5)
                     else:
