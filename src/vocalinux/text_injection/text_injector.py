@@ -13,6 +13,11 @@ import time
 from enum import Enum
 from typing import Optional  # noqa: F401
 
+from .ibus_engine import (
+    IBusTextInjector,
+    is_ibus_available,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +27,7 @@ class DesktopEnvironment(Enum):
     X11 = "x11"
     WAYLAND = "wayland"
     WAYLAND_XDOTOOL = "wayland-xdotool"  # Wayland with XWayland fallback
+    WAYLAND_IBUS = "wayland-ibus"  # Wayland with IBus engine (preferred)
     UNKNOWN = "unknown"
 
 
@@ -40,6 +46,7 @@ class TextInjector:
         Args:
             wayland_mode: Force Wayland compatibility mode
         """
+        self._ibus_injector: Optional[IBusTextInjector] = None
         self.environment = self._detect_environment()
 
         # Force Wayland mode if requested
@@ -88,6 +95,17 @@ class TextInjector:
             except Exception as e:
                 logger.error(f"XWayland fallback test failed: {e}")
 
+    def stop(self) -> None:
+        """
+        Clean up resources and restore previous state.
+
+        Call this when shutting down Vocalinux.
+        """
+        if self._ibus_injector:
+            logger.info("Stopping IBus text injector")
+            self._ibus_injector.stop()
+            self._ibus_injector = None
+
     def _detect_environment(self) -> DesktopEnvironment:
         """
         Detect the current desktop environment (X11 or Wayland).
@@ -118,8 +136,19 @@ class TextInjector:
                 logger.error("xdotool not found. Please install it with: sudo apt install xdotool")
                 raise RuntimeError("Missing required dependency: xdotool")
         else:
-            # Check for wtype or ydotool for Wayland
-            # Prefer ydotool as it works universally (including GNOME Wayland)
+            # For Wayland, prefer IBus as it works universally with any keyboard layout
+            # IBus is usually pre-installed on GNOME systems
+            if is_ibus_available():
+                try:
+                    self._ibus_injector = IBusTextInjector(auto_activate=True)
+                    self.environment = DesktopEnvironment.WAYLAND_IBUS
+                    self.wayland_tool = "ibus"
+                    logger.info("Using IBus for Wayland text injection (best compatibility)")
+                    return
+                except Exception as e:
+                    logger.warning(f"IBus initialization failed: {e}, trying alternatives")
+
+            # Fallback: Check for wtype or ydotool for Wayland
             wtype_available = shutil.which("wtype") is not None
             ydotool_available = shutil.which("ydotool") is not None
             xdotool_available = shutil.which("xdotool") is not None
@@ -131,9 +160,7 @@ class TextInjector:
                         ["ydotool", "type", ""], check=True, stderr=subprocess.PIPE, timeout=2
                     )
                     self.wayland_tool = "ydotool"
-                    logger.info(
-                        f"Using {self.wayland_tool} for Wayland text injection (universal compatibility)"
-                    )
+                    logger.info(f"Using {self.wayland_tool} for Wayland text injection")
                 except (
                     subprocess.CalledProcessError,
                     subprocess.TimeoutExpired,
@@ -158,6 +185,7 @@ class TextInjector:
             else:
                 logger.error(
                     "No text injection tools found. Please install one of:\n"
+                    "- IBus (recommended, usually pre-installed)\n"
                     "- wtype: sudo apt install wtype\n"
                     "- ydotool: sudo apt install ydotool\n"
                     "- xdotool: sudo apt install xdotool"
@@ -219,7 +247,14 @@ class TextInjector:
         logger.debug(f"Text to inject: '{text}'")
 
         try:
-            if (
+            if self.environment == DesktopEnvironment.WAYLAND_IBUS:
+                # Use IBus for text injection
+                if self._ibus_injector is not None:
+                    return self._ibus_injector.inject_text(text)
+                else:
+                    logger.error("IBus injector not initialized")
+                    return False
+            elif (
                 self.environment == DesktopEnvironment.X11
                 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
             ):
