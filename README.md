@@ -30,51 +30,30 @@
 
 ## 📚 What's New in v0.6.2-beta
 
-This patch release brings important bug fixes and installation improvements!
+> 🎉 **Beta Release with whisper.cpp!** — Fast, private, offline voice dictation for Linux.
 
-### 🐛 Bug Fixes
+### 🚀 Highlights (v0.6.0 → v0.6.2)
 
-- **Fixed #221**: Add missing `psutil` dependency - Fresh installs now work correctly (pywhispercpp requires psutil)
-- **Fixed #219**: Suppress `[BLANK_AUDIO]` tokens in whisper.cpp output - Cleaner transcription results
-- **Fixed #204**: Resolve PyAudio `paInt16` attribute error on audio device reconnection
-- **Fixed #205**: Ensure whisper module is properly installed with `--auto` flag
+| Feature | Description |
+|---------|-------------|
+| **⚡ whisper.cpp Default** | 10x faster installation (~1-2 min), C++ optimized inference |
+| **🎮 Universal GPU Support** | Vulkan acceleration for AMD, Intel, and NVIDIA GPUs |
+| **📦 Interactive Installer** | Choose between 3 engines with hardware auto-detection |
+| **🔧 Multi-Distro Support** | Works on Ubuntu, Debian, Fedora, Arch, and more |
 
-### 🔧 Improvements
+### 🐛 Bug Fixes (v0.6.2)
 
-- **Better Multi-Distro Installation** - Improved Vulkan shader package detection and installation for Ubuntu, Debian, Fedora, Arch, and more
-- **CI Improvements** - Fixed nightly build tag cleanup and older release deletion
+- **#221**: Fixed missing `psutil` dependency for fresh installs
+- **#219**: Suppressed `[BLANK_AUDIO]` tokens in whisper.cpp output
+- **#204**: Fixed PyAudio `paInt16` error on device reconnection
+- **#205**: Fixed whisper module installation with `--auto` flag
 
----
+### 🔧 Recent Improvements
 
-## Previous Release: v0.6.2-beta
-
-**Installation experience improvements!**
-
-- **Interactive Backend Selection** - Choose between GPU (Vulkan/CUDA) or CPU backend
-- **Enhanced Welcome Message** - Redesigned end-of-installation experience
-- **Simplified Install Commands** - No more `--tag` parameter needed
-- **Better GPU Support** - Fixed Vulkan development library detection
-
----
-
-## Previous Release: v0.6.0-beta
-
-**Major milestone: whisper.cpp is now the default engine!**
-
-- **⚡ 10x faster installation** (~1-2 min vs ~5-10 min)
-- **🎮 Universal GPU support** - AMD, Intel, NVIDIA via Vulkan
-- **🤖 whisper.cpp integration** - C++ optimized speech recognition
-- **📦 Interactive installer** - Choose between 3 engines
-- **🔧 Hardware auto-detection** - GPU, RAM, Vulkan support detection
-- **🐛 Critical bug fixes** - Text escaping, audio feedback, punctuation
-
----
-
-> 🎉 **Beta Release with whisper.cpp!**
->
-> We're excited to share Vocalinux Beta with the community!
-> whisper.cpp brings **10x faster installation** and **universal GPU support**.
-> See "What's New" above for details.
+- **Interactive Backend Selection** — Choose GPU (Vulkan/CUDA) or CPU backend
+- **Enhanced Welcome Message** — Clear post-install instructions
+- **Simplified Install Commands** — No more `--tag` parameter needed
+- **Better Vulkan Detection** — Improved shader package installation
 
 ---
 
