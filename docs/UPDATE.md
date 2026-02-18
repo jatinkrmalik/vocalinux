@@ -2,37 +2,32 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
-## What's New in v0.6.1-beta
-
-### ✨ New Features
-
-- **Interactive Backend Selection**: When installing whisper.cpp, you can now choose between GPU (Vulkan/CUDA) or CPU backend with intelligent hardware detection
-- **Enhanced Welcome Message**: Completely redesigned end-of-installation message showing what was installed, testing instructions, and voice command examples
-
-### 🔧 Improvements
-
-- **Version Consistency**: Install commands now download install.sh directly from the release tag, ensuring perfect version matching
-- **Simplified Install Commands**: No more `--tag` parameter needed - cleaner syntax like `curl .../v0.6.1-beta/install.sh | bash`
-- **Better GPU Support**: Fixed Vulkan development library detection and installation
+## What's New in v0.6.2-beta
 
 ### 🐛 Bug Fixes
 
-- **Fixed TTY Check**: Interactive mode now works correctly with `--interactive` flag
-- **Auto-install Git**: Installer now automatically installs git if not present
-- **GPU Installation**: Fixed pip command execution for GPU backend installation
-- **Bash Arithmetic**: Fixed issues with `((var++))` and `set -e` compatibility
+- **Fixed #221**: Add missing `psutil` dependency - Fresh installs now work correctly (pywhispercpp requires psutil internally)
+- **Fixed #219**: Suppress `[BLANK_AUDIO]` tokens in whisper.cpp output - Cleaner transcription results
+- **Fixed #204**: Resolve PyAudio `paInt16` attribute error on audio device reconnection
+- **Fixed #205**: Ensure whisper module is properly installed with `--auto` flag
 
-### 📚 Documentation
+### 🔧 Improvements
 
-- Updated all install commands to use tag-based URLs
-- Improved error messages with correct install instructions
-- Better inline help in install script
+- **Better Multi-Distro Installation** - Improved Vulkan shader package detection and installation for Ubuntu, Debian, Fedora, Arch, and more
+- **CI Improvements** - Fixed nightly build tag cleanup and older release deletion
 
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.1-beta).
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.2-beta).
 
 ---
 
 ## Previous Versions
+
+### v0.6.2-beta
+
+- **Interactive Backend Selection**: Choose between GPU (Vulkan/CUDA) or CPU backend
+- **Enhanced Welcome Message**: Redesigned end-of-installation experience
+- **Simplified Install Commands**: No more `--tag` parameter needed
+- **Better GPU Support**: Fixed Vulkan development library detection
 
 ### v0.6.0-beta
 
@@ -50,7 +45,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 Simply re-run the installation command with the new version tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh | bash
 ```
 
 The installer will:
@@ -65,7 +60,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.6.1-beta
+git checkout v0.6.2-beta
 ./install.sh
 ```
 
@@ -91,7 +86,7 @@ cd vocalinux
 ./install.sh --tag=v0.4.1-alpha
 
 # Or via curl (for any installation)
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh | bash
 ```
 
 **What gets preserved:**
@@ -109,7 +104,7 @@ cd vocalinux
 
 # 2. Pull the latest changes
 git fetch origin
-git checkout v0.6.1-beta
+git checkout v0.6.2-beta
 
 # 3. Activate your virtual environment
 source venv/bin/activate
@@ -138,7 +133,7 @@ git describe --tags
 
 ---
 
-## What's New in v0.6.1-beta
+## What's New in v0.6.2-beta
 
 ### 🚀 Major Feature: whisper.cpp is Now Default!
 
@@ -157,7 +152,7 @@ This release brings **whisper.cpp** as the new default speech recognition engine
 - **Enhanced logging**: Comprehensive debug info for whisper.cpp troubleshooting
 - **Better documentation**: Updated all docs to reflect whisper.cpp as the new default
 
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.1-beta).
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.2-beta).
 
 ---
 
@@ -192,7 +187,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 ./uninstall.sh --keep-config --keep-data
 
 # Reinstall
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh | bash
 ```
 
 ### Old Version Still Running
