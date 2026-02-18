@@ -843,21 +843,6 @@ pacman_package_installed() {
 install_system_dependencies() {
     print_info "Installing system dependencies..."
 
-    # Check for pkg-config first (required for library detection)
-    if ! command_exists pkg-config; then
-        print_error "pkg-config is not installed but is required for library detection"
-        print_info "Please install pkg-config using your package manager:"
-        print_info "  Ubuntu/Debian: sudo apt install pkg-config"
-        print_info "  Fedora/RHEL: sudo dnf install pkg-config"
-        print_info "  Arch: sudo pacman -S pkgconf"
-        print_info "  openSUSE: sudo zypper install pkg-config"
-        print_info "  Gentoo: sudo emerge pkgconf"
-        print_info "  Alpine: sudo apk add pkgconf"
-        print_info "  Void: sudo xbps-install -Sy pkg-config"
-        print_info "  Solus: sudo eopkg install pkg-config"
-        exit 1
-    fi
-
     # Determine which Vulkan shader package is available (glslc for Ubuntu 24.04+, glslang-tools for 22.04)
     local VULKAN_SHADER_PKG="glslang-tools"  # Default fallback
     if apt-cache show glslc &>/dev/null 2>&1; then
