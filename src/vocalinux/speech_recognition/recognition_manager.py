@@ -216,6 +216,57 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
 logger = logging.getLogger(__name__)
 
 
+def _filter_non_speech(text: str) -> str:
+    """
+    Filter out non-speech tokens from transcription results.
+
+    This handles cases where whisper.cpp outputs special tokens like
+    [BLANK_AUDIO], music notes, or other non-speech artifacts when
+    transcribing silent or ambiguous audio.
+
+    Args:
+        text: The transcribed text to filter
+
+    Returns:
+        Filtered text, or empty string if it's all non-speech
+    """
+    import re
+
+    if not text or not text.strip():
+        return ""
+
+    text = text.strip()
+
+    # Non-speech patterns to filter out
+    non_speech_patterns = [
+        r"^\[BLANK_AUDIO\]$",
+        r"^\[.*\]$",  # Any bracketed token like [MUSIC], [APPLAUSE]
+        r"^[\s\[\]{}()<>@#$%^&*\-_+=|\\~`\"\'\.,!?;:]+$",  # Pure punctuation
+        r"^[♪♫♬♩♭♮♯]+$",  # Music notes
+        r"^[「」『』]+$",  # Japanese brackets
+        r"^[<>]+$",  # Angle brackets
+        r"^[-]{2,}$",  # Multiple dashes
+        r"^\.{2,}$",  # Multiple dots
+        r"^\s*$",  # Whitespace only
+    ]
+
+    for pattern in non_speech_patterns:
+        if re.match(pattern, text, re.IGNORECASE):
+            logger.debug(f"Filtered non-speech token: '{text}'")
+            return ""
+
+    # Check if text has enough actual speech content
+    # At least 30% of characters should be alphanumeric or common speech punctuation
+    speech_chars = sum(1 for c in text if c.isalnum() or c in ".,!?-'\"")
+    total_chars = len(text)
+
+    if total_chars > 0 and speech_chars / total_chars < 0.3:
+        logger.debug(f"Filtered low-speech-content text: '{text}'")
+        return ""
+
+    return text
+
+
 def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
     """Show a desktop notification."""
     try:
@@ -645,7 +696,8 @@ class SpeechRecognitionManager:
                 model_path,
                 n_threads=n_threads,
                 suppress_blank=True,
-                suppress_non_speech_tokens=True,
+                no_speech_thold=0.6,
+                entropy_thold=2.4,
             )
             load_duration = time.time() - load_start_time
 
@@ -722,11 +774,13 @@ class SpeechRecognitionManager:
                 segments = self.model.transcribe(audio_float, language=lang)
                 transcribe_duration = time.time() - transcribe_start
 
-            # Extract text from segments
+            # Extract text from segments, filtering non-speech tokens
             text_parts = []
             for segment in segments:
                 if hasattr(segment, "text") and segment.text:
-                    text_parts.append(segment.text.strip())
+                    filtered_text = _filter_non_speech(segment.text.strip())
+                    if filtered_text:
+                        text_parts.append(filtered_text)
 
             text = " ".join(text_parts).strip()
             num_segments = len(text_parts)
@@ -898,9 +952,9 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
 
         model_urls = {
-            "small": f'https://alphacephei.com/vosk/models/{self.vosk_model_map["small"]}.zip',
-            "medium": f'https://alphacephei.com/vosk/models/{self.vosk_model_map["medium"]}.zip',
-            "large": f'https://alphacephei.com/vosk/models/{self.vosk_model_map["large"]}.zip',
+            "small": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['small']}.zip",
+            "medium": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['medium']}.zip",
+            "large": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['large']}.zip",
         }
 
         url = model_urls.get(self.model_size)
@@ -1338,7 +1392,6 @@ class SpeechRecognitionManager:
             return
 
         try:
-
             # PyAudio configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
