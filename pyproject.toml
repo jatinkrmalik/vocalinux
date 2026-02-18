@@ -49,6 +49,7 @@ dependencies = [
     "pyaudio>=0.2.13",
     "python-xlib; sys_platform == 'linux'",
     "PyGObject; sys_platform == 'linux'",
+    "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]
