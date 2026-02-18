@@ -41,8 +41,18 @@
 | **📦 Interactive Installer** | Choose between 3 engines with hardware auto-detection |
 | **🔧 Multi-Distro Support** | Works on Ubuntu, Debian, Fedora, Arch, and more |
 
+### ✨ New Features (v0.6.2)
+
+- **IBus Text Injection Engine** — Full Wayland support via IBus input method
+- **X11 IBus Support** — Extended IBus support to X11 for non-US keyboard layouts
+- **Thread-Safe Model Access** — Improved stability with concurrent model operations
+
 ### 🐛 Bug Fixes (v0.6.2)
 
+- **#229**: Fixed `[BLANK_AUDIO]` token suppression in whisper.cpp output
+- **#228**: Removed premature pkg-config check in installer
+- **#227**: Fixed text injection for non-US keyboard layouts on X11
+- **#216**: Fixed thread safety crash when accessing speech models
 - **#221**: Fixed missing `psutil` dependency for fresh installs
 - **#219**: Suppressed `[BLANK_AUDIO]` tokens in whisper.cpp output
 - **#204**: Fixed PyAudio `paInt16` error on device reconnection
@@ -312,7 +322,7 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [ ] In-app update mechanism
 - [ ] Application-specific commands
 - [ ] Debian/Ubuntu package (.deb)
-- [x] ~~Improved Wayland support~~ ✅
+- [x] ~~Wayland support via IBus~~ ✅
 - [ ] Voice command customization
 
 ## 🤝 Contributing
