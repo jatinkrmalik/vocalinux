@@ -28,44 +28,32 @@
 
 **A seamless free open-source private voice dictation system for Linux**, comparable to built-in solutions on macOS and Windows.
 
-## 📚 What's New in v0.6.1-beta
+## 📚 What's New in v0.6.2-beta
 
-This patch release brings significant improvements to the installation experience and GPU support!
-
-### ✨ New Features
-
-- **Interactive Backend Selection** - When installing whisper.cpp, choose between GPU (Vulkan/CUDA) or CPU backend
-  - Intelligent hardware detection recommends the best option
-  - Shows helpful tips when GPU libraries are missing
-  - Respects your choice during installation
-
-- **Enhanced Welcome Message** - Completely redesigned end-of-installation experience
-  - Shows exactly what was installed (engine, backend, locations)
-  - Clear step-by-step testing instructions
-  - Voice command examples ("period", "comma", "new line", "delete that")
-  - All management commands in one place
-
-### 🔧 Improvements
-
-- **Simplified Install Commands** - No more `--tag` parameter needed
-  - Before: `curl .../main/install.sh | bash -s -- --tag=v0.6.1-beta`
-  - After: `curl .../v0.6.1-beta/install.sh | bash`
-  
-- **Version Consistency** - Install script is now downloaded directly from the release tag
-  - Ensures perfect version matching between script and code
-  - No risk of main branch changes affecting releases
-
-- **Better GPU Support** - Fixed Vulkan development library detection
-  - Properly installs `libvulkan-dev`, `glslc`/`glslang-tools`, and other required packages
-  - Falls back gracefully when GPU libraries are missing
-  - Clear error messages with installation instructions
+This patch release brings important bug fixes and installation improvements!
 
 ### 🐛 Bug Fixes
 
-- **Fixed Bash Compatibility** - Resolved `((var++))` arithmetic issues with `set -e`
-- **Fixed TTY Detection** - Interactive mode now works correctly with `--interactive` flag
-- **Auto-install Git** - Installer now automatically installs git if not present
-- **Fixed GPU Installation** - Properly executes pip commands for GPU backend installation
+- **Fixed #221**: Add missing `psutil` dependency - Fresh installs now work correctly (pywhispercpp requires psutil)
+- **Fixed #219**: Suppress `[BLANK_AUDIO]` tokens in whisper.cpp output - Cleaner transcription results
+- **Fixed #204**: Resolve PyAudio `paInt16` attribute error on audio device reconnection
+- **Fixed #205**: Ensure whisper module is properly installed with `--auto` flag
+
+### 🔧 Improvements
+
+- **Better Multi-Distro Installation** - Improved Vulkan shader package detection and installation for Ubuntu, Debian, Fedora, Arch, and more
+- **CI Improvements** - Fixed nightly build tag cleanup and older release deletion
+
+---
+
+## Previous Release: v0.6.2-beta
+
+**Installation experience improvements!**
+
+- **Interactive Backend Selection** - Choose between GPU (Vulkan/CUDA) or CPU backend
+- **Enhanced Welcome Message** - Redesigned end-of-installation experience
+- **Simplified Install Commands** - No more `--tag` parameter needed
+- **Better GPU Support** - Fixed Vulkan development library detection
 
 ---
 
@@ -143,7 +131,7 @@ Here are some screenshots showcasing Vocalinux in action:
 Our new interactive installer guides you through setup with intelligent hardware detection:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 
 **Choose your engine:**
@@ -157,25 +145,25 @@ The installer will:
 - **Download the appropriate model** (~39MB for whisper.cpp tiny)
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
-> **Note**: Installs v0.6.1-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.6.2-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 ### Installation Options
 
 **Default (whisper.cpp - recommended):**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 Fastest installation (~1-2 min), universal GPU support via Vulkan.
 
 **Whisper (OpenAI) - if you prefer PyTorch:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
 ```
 NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
 
 **VOSK only - for low-RAM systems:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
 ```
 Lightweight option (~40MB), works on systems with 4GB RAM.
 

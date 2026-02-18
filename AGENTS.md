@@ -7,8 +7,15 @@ Guidelines for AI agents working on this codebase.
 Vocalinux is a voice dictation system for Linux. It uses:
 - **Python 3.8+** for the main application
 - **GTK 3** (via PyGObject) for the desktop UI and system tray
-- **Vosk** and **OpenAI Whisper** for speech recognition
+- **whisper.cpp** (default), **OpenAI Whisper**, and **Vosk** for speech recognition
 - **Next.js/TypeScript** for the website (in `web/`)
+
+### Key Dependencies
+- `pywhispercpp` - Python bindings for whisper.cpp (default engine)
+- `vosk` - Lightweight speech recognition
+- `pyaudio` - Audio capture
+- `PyGObject` - GTK integration
+- `psutil` - Process utilities (required by pywhispercpp)
 
 ## Build & Test Commands
 
@@ -158,7 +165,7 @@ src/vocalinux/
 ├── version.py                 # Version info
 ├── common_types.py            # Shared types/enums/protocols
 ├── speech_recognition/
-│   ├── recognition_manager.py # VOSK/Whisper management
+│   ├── recognition_manager.py # VOSK/Whisper/whisper.cpp management
 │   └── command_processor.py   # Voice command processing
 ├── text_injection/
 │   └── text_injector.py       # X11/Wayland text injection
@@ -168,8 +175,25 @@ src/vocalinux/
 │   ├── config_manager.py      # Configuration handling
 │   └── keyboard_backends/     # Keyboard input handling
 └── utils/
-    └── resource_manager.py    # Resource utilities
+    ├── resource_manager.py    # Resource utilities
+    ├── whispercpp_model_info.py   # whisper.cpp model metadata & hardware detection
+    └── vosk_model_info.py         # VOSK model metadata
 ```
+
+## Release Process
+
+See `docs/RELEASE_PROCESS.md` for detailed release instructions.
+
+Quick summary:
+1. Update version in `src/vocalinux/version.py`
+2. Update version references in README.md, docs/INSTALL.md, docs/UPDATE.md
+3. Update web/src/app/page.tsx and web/package.json
+4. Run `make lint` to verify code quality
+5. Create branch `release/vX.Y.Z-PHASE`
+6. Commit with `chore(release): prepare vX.Y.Z-PHASE`
+7. Push and create PR
+8. After merge, create and push tag: `git tag -a vX.Y.Z-PHASE -m "Release X.Y.Z-PHASE"`
+9. GitHub Actions will build and publish automatically
 
 ## Commit Message Format
 
@@ -199,3 +223,11 @@ docs(readme): update installation instructions
 - `docs/` - Documentation updates
 - `refactor/` - Code refactoring
 - `test/` - Test additions/updates
+- `release/` - Release preparation (e.g., `release/v0.6.2-beta`)
+
+## Important Rules
+
+- **Never push directly to `main`** - Always create a branch and PR
+- **All changes require a PR** - Even small fixes and documentation updates
+- **Wait for CI to pass** before merging PRs
+- **Squash merge** PRs to keep history clean
