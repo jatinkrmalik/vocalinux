@@ -139,7 +139,9 @@ class TestMainModule(unittest.TestCase):
 
         # Mock config
         mock_config_instance = MagicMock()
-        mock_config_instance.get_settings.return_value = {}
+        mock_config_instance.get_settings.return_value = {
+            "general": {"first_run": False},
+        }
         mock_config.return_value = mock_config_instance
 
         # Make SpeechRecognitionManager raise an exception
@@ -176,7 +178,10 @@ class TestMainModule(unittest.TestCase):
 
         # Mock ConfigManager to return empty settings (use command-line defaults)
         mock_config_instance = MagicMock()
-        mock_config_instance.get_settings.return_value = {"speech_recognition": {}}
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
         mock_config_manager.return_value = mock_config_instance
 
         # Mock objects
@@ -254,7 +259,10 @@ class TestMainModule(unittest.TestCase):
 
         # Mock ConfigManager
         mock_config_instance = MagicMock()
-        mock_config_instance.get_settings.return_value = {"speech_recognition": {}}
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
         mock_config_manager.return_value = mock_config_instance
 
         # Mock objects
@@ -429,7 +437,8 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 "engine": "vosk",
                 "model_size": "small",
                 "language": "en-us",
-            }
+            },
+            "general": {"first_run": False},
         }
         mock_config_manager.return_value = mock_config_instance
 
@@ -445,7 +454,16 @@ class TestMainConfigPrecedence(unittest.TestCase):
 
         # Simulate CLI args being set
         with patch(
-            "sys.argv", ["vocalinux", "--engine", "whisper", "--model", "large", "--language", "fr"]
+            "sys.argv",
+            [
+                "vocalinux",
+                "--engine",
+                "whisper",
+                "--model",
+                "large",
+                "--language",
+                "fr",
+            ],
         ):
             with patch("vocalinux.main.logger"):
                 main()
@@ -488,6 +506,7 @@ class TestMainConfigPrecedence(unittest.TestCase):
             "audio": {
                 "device_index": 2,
             },
+            "general": {"first_run": False},
         }
         mock_config_manager.return_value = mock_config_instance
 
