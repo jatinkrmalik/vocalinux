@@ -172,6 +172,18 @@ cd vocalinux
 
 The installer handles everything: system dependencies, Python environment, speech models, and desktop integration.
 
+### 🌙 Nightly Releases (Bleeding Edge)
+
+For developers and early adopters who want to test the latest features, check out our [GitHub Releases page](https://github.com/jatinkrmalik/vocalinux/releases) which includes both beta and nightly builds.
+
+> **⚠️ Warning**: Nightly releases contain the absolute latest code and may be unstable. For production use, we recommend using the latest beta release.
+
+Nightly builds are automatically generated from the `main` branch every day. They include all merged changes but haven't undergone the same testing as beta releases.
+
+**Release Channels:**
+- **Beta** (Recommended) — Tested pre-releases with known features
+- **Nightly** — Untested bleeding edge with latest commits
+
 ### After Installation
 
 ```bash
