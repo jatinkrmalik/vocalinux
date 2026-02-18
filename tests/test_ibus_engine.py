@@ -45,7 +45,10 @@ class TestIBusEngineHelpers(unittest.TestCase):
 
     def test_is_ibus_available_returns_constant(self):
         """Test is_ibus_available returns the module constant."""
-        from vocalinux.text_injection.ibus_engine import IBUS_AVAILABLE, is_ibus_available
+        from vocalinux.text_injection.ibus_engine import (
+            IBUS_AVAILABLE,
+            is_ibus_available,
+        )
 
         self.assertEqual(is_ibus_available(), IBUS_AVAILABLE)
 
@@ -280,21 +283,26 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.install_ibus_component")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
     @patch("vocalinux.text_injection.ibus_engine.switch_engine")
     def test_init_auto_activate(
         self,
         mock_switch,
         mock_get_current,
+        mock_start_engine,
         mock_is_active,
         mock_is_registered,
+        mock_install,
         mock_ensure_dir,
     ):
         """Test initialization with auto_activate=True."""
         mock_is_registered.return_value = True
         mock_is_active.return_value = False
+        mock_start_engine.return_value = True
         mock_get_current.return_value = "xkb:us::eng"
         mock_switch.return_value = True
 
@@ -302,8 +310,11 @@ class TestIBusTextInjector(unittest.TestCase):
 
         injector = IBusTextInjector(auto_activate=True)
 
-        # ensure_ibus_dir is called twice: once in __init__ and once in start_engine_process
+        # ensure_ibus_dir is called at least once
         self.assertGreaterEqual(mock_ensure_dir.call_count, 1)
+        # Engine should be started
+        mock_start_engine.assert_called_once()
+        # Should switch to vocalinux engine
         mock_switch.assert_called_once_with("vocalinux")
         self.assertEqual(injector._previous_engine, "xkb:us::eng")
 
