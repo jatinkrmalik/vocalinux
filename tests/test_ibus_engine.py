@@ -582,6 +582,52 @@ class TestTextInjectorWithIBus(unittest.TestCase):
                     # Should be using IBus
                     self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
 
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_available")
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector")
+    def test_x11_prefers_ibus(self, mock_injector_class, mock_ibus_available):
+        """Test that X11 environment prefers IBus when available."""
+        mock_ibus_available.return_value = True
+        mock_injector_instance = MagicMock()
+        mock_injector_class.return_value = mock_injector_instance
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            from vocalinux.text_injection.text_injector import (
+                DesktopEnvironment,
+                TextInjector,
+            )
+
+            with patch(
+                "vocalinux.text_injection.text_injector.is_ibus_available",
+                return_value=True,
+            ):
+                with patch(
+                    "vocalinux.text_injection.text_injector.IBusTextInjector",
+                    mock_injector_class,
+                ):
+                    injector = TextInjector()
+
+                    self.assertEqual(injector.environment, DesktopEnvironment.X11_IBUS)
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available")
+    def test_x11_fallback_when_ibus_unavailable(self, mock_ibus_available):
+        """Test X11 falls back to xdotool when IBus unavailable."""
+        mock_ibus_available.return_value = False
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            self.mock_which.side_effect = lambda cmd: (
+                "/usr/bin/xdotool" if cmd == "xdotool" else None
+            )
+
+            from vocalinux.text_injection.text_injector import (
+                DesktopEnvironment,
+                TextInjector,
+            )
+
+            injector = TextInjector()
+
+            self.assertEqual(injector.environment, DesktopEnvironment.X11)
+
     @patch("vocalinux.text_injection.text_injector.is_ibus_available")
     def test_wayland_fallback_when_ibus_unavailable(self, mock_ibus_available):
         """Test Wayland falls back to other tools when IBus unavailable."""
@@ -640,13 +686,19 @@ class TestTextInjectorWithIBus(unittest.TestCase):
 
 
 class TestDesktopEnvironmentEnumWithIBus(unittest.TestCase):
-    """Tests for DesktopEnvironment enum including IBus variant."""
+    """Tests for DesktopEnvironment enum including IBus variants."""
 
     def test_enum_includes_wayland_ibus(self):
         """Test that WAYLAND_IBUS enum value exists."""
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
         self.assertEqual(DesktopEnvironment.WAYLAND_IBUS.value, "wayland-ibus")
+
+    def test_enum_includes_x11_ibus(self):
+        """Test that X11_IBUS enum value exists."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        self.assertEqual(DesktopEnvironment.X11_IBUS.value, "x11-ibus")
 
 
 if __name__ == "__main__":
