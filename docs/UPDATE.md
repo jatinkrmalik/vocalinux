@@ -2,10 +2,11 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
-## What's New in v0.6.2-beta
+## What's New in v0.6.3-beta
 
 ### 🐛 Bug Fixes
 
+- **Fixed #220**: Installer default tag now points to correct version - Users will get the version they expect
 - **Fixed #221**: Add missing `psutil` dependency - Fresh installs now work correctly (pywhispercpp requires psutil internally)
 - **Fixed #219**: Suppress `[BLANK_AUDIO]` tokens in whisper.cpp output - Cleaner transcription results
 - **Fixed #204**: Resolve PyAudio `paInt16` attribute error on audio device reconnection
@@ -16,7 +17,7 @@ This guide explains how to update Vocalinux to the latest version.
 - **Better Multi-Distro Installation** - Improved Vulkan shader package detection and installation for Ubuntu, Debian, Fedora, Arch, and more
 - **CI Improvements** - Fixed nightly build tag cleanup and older release deletion
 
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.2-beta).
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.3-beta).
 
 ---
 
@@ -45,7 +46,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 Simply re-run the installation command with the new version tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh | bash
 ```
 
 The installer will:
@@ -60,7 +61,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.6.2-beta
+git checkout v0.6.3-beta
 ./install.sh
 ```
 
@@ -86,7 +87,7 @@ cd vocalinux
 ./install.sh --tag=v0.4.1-alpha
 
 # Or via curl (for any installation)
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh | bash
 ```
 
 **What gets preserved:**
@@ -104,7 +105,7 @@ cd vocalinux
 
 # 2. Pull the latest changes
 git fetch origin
-git checkout v0.6.2-beta
+git checkout v0.6.3-beta
 
 # 3. Activate your virtual environment
 source venv/bin/activate
@@ -130,31 +131,6 @@ python3 -c "import vocalinux; print(vocalinux.version.__version__)"
 # Or check from the repo
 git describe --tags
 ```
-
----
-
-## What's New in v0.6.2-beta
-
-### 🚀 Major Feature: whisper.cpp is Now Default!
-
-This release brings **whisper.cpp** as the new default speech recognition engine—a game-changing upgrade!
-
-**Key Improvements:**
-- **⚡ 10x faster installation** — No more 2.3GB PyTorch downloads (~1-2 min vs ~5-10 min)
-- **🎮 Universal GPU support** — Works with AMD, Intel, and NVIDIA via Vulkan (not just NVIDIA CUDA)
-- **💾 Smaller footprint** — Tiny model is only ~39MB vs ~75MB
-- **🔥 Better performance** — C++ optimized inference with true multi-threading (no Python GIL)
-- **🌍 99+ languages** with automatic language detection
-
-**Additional Improvements:**
-- **Interactive installer**: Choose between 3 engines (whisper.cpp, Whisper, VOSK)
-- **Hardware auto-detection**: Automatically detects your GPU and recommends optimal settings
-- **Enhanced logging**: Comprehensive debug info for whisper.cpp troubleshooting
-- **Better documentation**: Updated all docs to reflect whisper.cpp as the new default
-
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.6.2-beta).
-
----
 
 ## Previous Versions
 
@@ -187,7 +163,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 ./uninstall.sh --keep-config --keep-data
 
 # Reinstall
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.2-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh | bash
 ```
 
 ### Old Version Still Running
