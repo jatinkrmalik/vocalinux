@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { BookOpen, ChevronRight, Cpu, Home } from "lucide-react";
+import { BookOpen, ChevronRight, Cpu, HelpCircle, Home, Map, Rss, Shield, Users } from "lucide-react";
 import { VocalinuxLogo } from "@/components/optimized-image";
 
 interface SeoSubpageShellProps {
@@ -22,6 +22,31 @@ const navLinks = [
     href: "/compare/",
     label: "Engine Compare",
     icon: Cpu,
+  },
+  {
+    href: "/use-cases/",
+    label: "Use Cases",
+    icon: Users,
+  },
+  {
+    href: "/faq/",
+    label: "FAQ",
+    icon: HelpCircle,
+  },
+  {
+    href: "/changelog/",
+    label: "Changelog",
+    icon: Rss,
+  },
+  {
+    href: "/privacy/",
+    label: "Privacy",
+    icon: Shield,
+  },
+  {
+    href: "/alternatives/",
+    label: "Alternatives",
+    icon: Map,
   },
 ];
 
