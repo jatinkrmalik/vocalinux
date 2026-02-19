@@ -452,6 +452,54 @@ detect_vulkan() {
     return 1
 }
 
+# Check for incompatible Intel GPUs that don't support VK_KHR_16bit_storage
+# These GPUs will fail with "device does not support 16-bit storage" error
+# Affected: Intel Gen7 and older (Ivy Bridge, Haswell, Sandy Bridge)
+# See: https://github.com/jatinkrmalik/vocalinux/issues/238
+check_vulkan_gpu_compatibility() {
+    # List of known incompatible GPU patterns
+    local INCOMPATIBLE_PATTERNS=(
+        "Ivy Bridge"
+        "Haswell"
+        "Sandy Bridge"
+        "HD Graphics 2500"
+        "HD Graphics 4000"
+        "HD Graphics 4400"
+        "HD Graphics 4600"
+        "HD Graphics P4600"
+        "HD Graphics P4700"
+        "IVB"
+        "HSW"
+        "SNB"
+    )
+    
+    # Check if vulkaninfo is available
+    if ! command -v vulkaninfo >/dev/null 2>&1; then
+        echo "unknown:vulkaninfo not available"
+        return 1
+    fi
+    
+    # Get GPU device name
+    local DEVICE_NAME
+    DEVICE_NAME=$(vulkaninfo --summary 2>/dev/null | grep -i "deviceName" | head -1 | cut -d'=' -f2 | xargs)
+    
+    if [ -z "$DEVICE_NAME" ]; then
+        echo "unknown:Could not detect GPU name"
+        return 1
+    fi
+    
+    # Check against incompatible patterns
+    for pattern in "${INCOMPATIBLE_PATTERNS[@]}"; do
+        if echo "$DEVICE_NAME" | grep -iq "$pattern"; then
+            echo "incompatible:$DEVICE_NAME"
+            return 1
+        fi
+    done
+    
+    echo "compatible:$DEVICE_NAME"
+    return 0
+}
+
 # Detect available GPU backends for whisper.cpp and recommend the best option
 detect_whispercpp_backends() {
     detect_nvidia_gpu || true
@@ -468,13 +516,24 @@ detect_whispercpp_backends() {
     if command -v nvcc >/dev/null 2>&1; then
         HAS_CUDA_DEV=true
     fi
+    
+    # Check Vulkan GPU compatibility (Gen7 and older Intel GPUs lack 16-bit storage support)
+    local VULKAN_COMPATIBLE="unknown"
+    local VULKAN_COMPAT_REASON=""
+    if [[ "$HAS_VULKAN" == "yes" ]]; then
+        local COMPAT_RESULT
+        COMPAT_RESULT=$(check_vulkan_gpu_compatibility)
+        VULKAN_COMPATIBLE=$(echo "$COMPAT_RESULT" | cut -d':' -f1)
+        VULKAN_COMPAT_REASON=$(echo "$COMPAT_RESULT" | cut -d':' -f2-)
+    fi
 
     # Determine recommendation
     local RECOMMENDED_BACKEND="cpu"
     local RECOMMENDED_REASON=""
     local CAN_BUILD_GPU=false
 
-    if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" ]]; then
+    # Only recommend Vulkan if GPU is compatible
+    if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" && "$VULKAN_COMPATIBLE" == "compatible" ]]; then
         RECOMMENDED_BACKEND="vulkan"
         RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
         CAN_BUILD_GPU=true
@@ -482,6 +541,10 @@ detect_whispercpp_backends() {
         RECOMMENDED_BACKEND="cuda"
         RECOMMENDED_REASON="NVIDIA GPU with CUDA toolkit"
         CAN_BUILD_GPU=true
+    elif [[ "$VULKAN_COMPATIBLE" == "incompatible" ]]; then
+        RECOMMENDED_BACKEND="cpu"
+        RECOMMENDED_REASON="Incompatible GPU ($VULKAN_COMPAT_REASON) - CPU mode recommended"
+        CAN_BUILD_GPU=false
     elif [[ "$HAS_VULKAN" == "yes" || "$HAS_NVIDIA_GPU" == "yes" ]]; then
         RECOMMENDED_BACKEND="cpu"
         if [[ "$HAS_VULKAN" == "yes" ]]; then
@@ -496,7 +559,7 @@ detect_whispercpp_backends() {
         CAN_BUILD_GPU=false
     fi
 
-    echo "${RECOMMENDED_BACKEND}:${RECOMMENDED_REASON}:${CAN_BUILD_GPU}:${HAS_VULKAN}:${HAS_NVIDIA_GPU}:${HAS_VULKAN_DEV}:${HAS_CUDA_DEV}"
+    echo "${RECOMMENDED_BACKEND}:${RECOMMENDED_REASON}:${CAN_BUILD_GPU}:${HAS_VULKAN}:${HAS_NVIDIA_GPU}:${HAS_VULKAN_DEV}:${HAS_CUDA_DEV}:${VULKAN_COMPATIBLE}:${VULKAN_COMPAT_REASON}"
 }
 
 # Detect hardware and recommend best engine
@@ -684,6 +747,26 @@ EOF
         local HAS_NVIDIA=$(echo "$BACKEND_INFO" | cut -d':' -f5)
         local HAS_VULKAN_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f6)
         local HAS_CUDA_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f7)
+        local VULKAN_COMPAT=$(echo "$BACKEND_INFO" | cut -d':' -f8)
+        local VULKAN_COMPAT_REASON=$(echo "$BACKEND_INFO" | cut -d':' -f9)
+
+        # Show warning for incompatible GPUs
+        if [[ "$VULKAN_COMPAT" == "incompatible" ]]; then
+            echo ""
+            print_warning "═══════════════════════════════════════════════════════════════"
+            print_warning "  ⚠️  INCOMPATIBLE GPU DETECTED"
+            print_warning "═══════════════════════════════════════════════════════════════"
+            print_warning ""
+            print_warning "  Your GPU: $VULKAN_COMPAT_REASON"
+            print_warning ""
+            print_warning "  This Intel GPU lacks VK_KHR_16bit_storage support, which is"
+            print_warning "  required for whisper.cpp Vulkan acceleration."
+            print_warning ""
+            print_warning "  The CPU backend will be used instead, which is still fast!"
+            print_warning ""
+            print_warning "═══════════════════════════════════════════════════════════════"
+            echo ""
+        fi
 
         echo "Whisper.cpp can use different backends for speech recognition:"
         echo ""
