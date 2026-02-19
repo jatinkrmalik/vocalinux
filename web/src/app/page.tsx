@@ -1211,12 +1211,47 @@ export default function HomePage() {
                     Engine Comparison
                   </Link>
                 </li>
+                <li>
+                  <Link href="/use-cases/" className="text-zinc-400 hover:text-white transition-colors">
+                    Use Cases
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/alternatives/" className="text-zinc-400 hover:text-white transition-colors">
+                    Alternatives
+                  </Link>
+                </li>
               </ul>
             </div>
 
             <div>
               <h3 className="font-semibold mb-4">Resources</h3>
               <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/faq/" className="text-zinc-400 hover:text-white transition-colors">
+                    FAQ
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/changelog/" className="text-zinc-400 hover:text-white transition-colors">
+                    Changelog
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/shortcuts/" className="text-zinc-400 hover:text-white transition-colors">
+                    Keyboard Shortcuts
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/troubleshooting/" className="text-zinc-400 hover:text-white transition-colors">
+                    Troubleshooting
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/privacy/" className="text-zinc-400 hover:text-white transition-colors">
+                    Privacy Policy
+                  </Link>
+                </li>
                 <li>
                   <a
                     href="https://github.com/jatinkrmalik/vocalinux"
@@ -1246,16 +1281,6 @@ export default function HomePage() {
                   >
                     Discussions
                   </a>
-                </li>
-                <li>
-                  <Link href="/install/" className="text-zinc-400 hover:text-white transition-colors">
-                    Setup by Distribution
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/compare/" className="text-zinc-400 hover:text-white transition-colors">
-                    whisper.cpp vs Whisper vs VOSK
-                  </Link>
                 </li>
                 <li>
                   <a
