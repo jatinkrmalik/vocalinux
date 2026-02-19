@@ -99,7 +99,7 @@ export default function CompareEnginesPage() {
       </section>
 
       <section className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-        <table className="w-full min-w-[860px] border-collapse text-left">
+        <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-zinc-200 dark:border-zinc-700">
               <th className="px-4 py-3 text-sm font-semibold">Engine</th>

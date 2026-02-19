@@ -77,17 +77,18 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
           </nav>
         </div>
 
-        <div className="mx-auto flex max-w-6xl gap-2 px-4 pb-4 sm:hidden">
+        <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 pb-4 sm:hidden scrollbar-thin">
           {navLinks.map((item) => {
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground dark:border-zinc-700 dark:bg-zinc-800"
+                title={item.label}
+                className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white p-2 text-muted-foreground transition-colors hover:bg-zinc-50 hover:text-foreground dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                aria-label={item.label}
               >
-                <Icon className="h-3.5 w-3.5" />
-                {item.label}
+                <Icon className="h-4 w-4" />
               </Link>
             );
           })}
