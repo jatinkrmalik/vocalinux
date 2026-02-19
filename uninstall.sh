@@ -51,20 +51,24 @@ safe_remove() {
 kill_vocalinux_processes() {
     print_info "Checking for running Vocalinux processes..."
     
-    # Find and kill vocalinux processes
     local PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
     
     if [ -n "$PIDS" ]; then
         print_warning "Found running Vocalinux process(es): $PIDS"
+        
+        if [[ "$NON_INTERACTIVE" != "yes" ]]; then
+            read -p "Kill running Vocalinux process(es)? (Y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
+                print_warning "Processes not killed. Uninstallation may be incomplete."
+                return 0
+            fi
+        fi
+        
         print_info "Stopping Vocalinux..."
-        
-        # Try graceful termination first
         echo "$PIDS" | xargs -r kill -TERM 2>/dev/null || true
-        
-        # Wait a moment for processes to terminate
         sleep 2
         
-        # Check if any processes are still running
         local REMAINING_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
         
         if [ -n "$REMAINING_PIDS" ]; then
@@ -73,7 +77,6 @@ kill_vocalinux_processes() {
             sleep 1
         fi
         
-        # Final check
         local FINAL_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
         if [ -n "$FINAL_PIDS" ]; then
             print_error "Warning: Could not terminate all Vocalinux processes: $FINAL_PIDS"
@@ -149,16 +152,12 @@ CURL_INSTALL_DIR="$HOME/.local/share/vocalinux-install"
 CURL_VENV_DIR="$HOME/.local/share/vocalinux/venv"
 CURL_BIN_DIR="$HOME/.local/bin"
 
-# Print uninstallation options
 echo "Uninstallation options:"
 echo "- Local virtual environment: $VENV_DIR"
 echo "- Curl-installed venv: $CURL_VENV_DIR"
 echo "- Curl-installed repo: $CURL_INSTALL_DIR"
-[[ "$KEEP_CONFIG" == "yes" ]] && echo "- Keeping configuration files"
-[[ "$KEEP_DATA" == "yes" ]] && echo "- Keeping application data"
 echo
 
-# Ask for confirmation
 if [[ "$NON_INTERACTIVE" == "yes" ]]; then
     print_info "Non-interactive mode: proceeding with uninstallation..."
 else
@@ -167,6 +166,16 @@ else
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Uninstallation cancelled."
         exit 0
+    fi
+    
+    if [[ "$KEEP_DATA" != "yes" ]]; then
+        read -p "Do you want to keep your data (models, config)? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            KEEP_DATA="yes"
+            KEEP_CONFIG="yes"
+            print_info "Data and configuration will be preserved."
+        fi
     fi
 fi
 

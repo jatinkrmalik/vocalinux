@@ -21,6 +21,52 @@ print_warning() {
     echo -e "\e[1;33m[WARNING]\e[0m $1"
 }
 
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+check_running_processes() {
+    local PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+    
+    if [ -n "$PIDS" ]; then
+        print_warning "Found running Vocalinux process(es): $PIDS"
+        echo ""
+        
+        if [[ "$NON_INTERACTIVE" == "yes" ]]; then
+            print_info "Non-interactive mode: stopping Vocalinux automatically..."
+        else
+            read -p "Vocalinux must be stopped before installation. Kill running process(es)? (Y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
+                print_error "Cannot proceed with installation while Vocalinux is running."
+                print_info "Please stop Vocalinux manually and run the installer again."
+                exit 1
+            fi
+        fi
+        
+        print_info "Stopping Vocalinux..."
+        echo "$PIDS" | xargs -r kill -TERM 2>/dev/null || true
+        sleep 2
+        
+        local REMAINING_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+        
+        if [ -n "$REMAINING_PIDS" ]; then
+            print_warning "Some processes still running, forcing termination..."
+            echo "$REMAINING_PIDS" | xargs -r kill -KILL 2>/dev/null || true
+            sleep 1
+        fi
+        
+        local FINAL_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+        if [ -n "$FINAL_PIDS" ]; then
+            print_error "Could not terminate all Vocalinux processes: $FINAL_PIDS"
+            print_error "Please manually kill these processes and run the installer again."
+            exit 1
+        else
+            print_success "All Vocalinux processes stopped"
+        fi
+    fi
+}
+
 # Parse command line arguments
 INSTALL_MODE="user"
 RUN_TESTS="no"
@@ -140,7 +186,8 @@ print_info "Vocalinux Installer"
 print_info "=============================="
 echo ""
 
-# Default to installing from latest stable release instead of main branch
+check_running_processes
+
 INSTALL_TAG="${INSTALL_TAG:-v0.6.1-beta}"
 
 # Check if running from within the vocalinux repo or remotely (via curl)
