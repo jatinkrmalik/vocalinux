@@ -138,7 +138,7 @@ export default function AlternativesPage() {
 
       <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 overflow-x-auto dark:border-zinc-700 dark:bg-zinc-800">
         <h2 className="mb-6 text-2xl font-bold">Feature Comparison</h2>
-        <table className="w-full min-w-[600px] text-left">
+        <table className="w-full text-left">
           <thead>
             <tr className="border-b border-zinc-200 dark:border-zinc-700">
               <th className="pb-3 text-sm font-semibold">Feature</th>

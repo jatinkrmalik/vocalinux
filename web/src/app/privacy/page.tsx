@@ -202,7 +202,7 @@ export default function PrivacyPage() {
       <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-6 text-2xl font-bold">Vocalinux vs Cloud Dictation Services</h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[500px] text-left">
+          <table className="w-full text-left">
             <thead>
               <tr className="border-b border-zinc-200 dark:border-zinc-700">
                 <th className="pb-3 text-sm font-semibold">Feature</th>
