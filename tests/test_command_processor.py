@@ -65,18 +65,20 @@ class TestCommandProcessor(unittest.TestCase):
         # Test action commands
         test_cases = [
             ("delete that", "", ["delete_last"]),
-            ("scratch that previous text", " previous text", ["delete_last"]),
-            ("undo my last change", " my last change", ["undo"]),
-            ("redo that edit", " that edit", ["redo"]),
-            ("select all text", " text", ["select_all"]),
-            ("select line of code", " of code", ["select_line"]),
-            ("select word here", " here", ["select_word"]),
-            ("select paragraph content", " content", ["select_paragraph"]),
-            ("cut this selection", " this selection", ["cut"]),
-            ("copy this text", " this text", ["copy"]),
-            ("paste here", " here", ["paste"]),
+            ("scratch that previous text", "previous text", ["delete_last"]),
+            ("undo my last change", "my last change", ["undo"]),
+            ("redo that edit", "that edit", ["redo"]),
+            ("select all text", "text", ["select_all"]),
+            ("select line of code", "of code", ["select_line"]),
+            ("select word here", "here", ["select_word"]),
+            ("select paragraph content", "content", ["select_paragraph"]),
+            ("cut this selection", "this selection", ["cut"]),
+            ("copy this text", "this text", ["copy"]),
+            ("paste here", "here", ["paste"]),
             # Test multiple actions
-            ("select all then copy", " then", ["select_all", "copy"]),
+            ("select all then copy", "then", ["select_all", "copy"]),
+            # Test action with text before command (should add space)
+            ("hello select all world", " world", ["select_all"]),
         ]
 
         for input_text, expected_output, expected_actions in test_cases:
