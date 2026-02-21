@@ -122,6 +122,52 @@ SYSTEM_MODELS_DIRS = [
 
 # CSS for modern styling
 SETTINGS_CSS = """
+/* Notebook (tab) styling */
+.notebook {
+    background-color: transparent;
+    border: none;
+}
+
+.notebook tab {
+    background-color: transparent;
+    border: none;
+    padding: 10px 16px;
+    color: @theme_unfocused_fg_color;
+}
+
+.notebook tab:hover {
+    background-color: alpha(@theme_selected_bg_color, 0.1);
+}
+
+.notebook tab:active {
+    background-color: alpha(@theme_selected_bg_color, 0.2);
+}
+
+.notebook tab:selected {
+    background-color: transparent;
+    color: @theme_fg_color;
+}
+
+.notebook tab label {
+    font-weight: 500;
+    font-size: 0.95em;
+}
+
+.notebook tab:selected label {
+    font-weight: 600;
+}
+
+.notebook header {
+    background-color: alpha(@theme_bg_color, 0.5);
+    border-bottom: 1px solid alpha(@borders, 0.3);
+    box-shadow: 0 1px 3px alpha(@theme_bg_color, 0.2);
+}
+
+/* Tab content area */
+.notebook stack {
+    background-color: transparent;
+}
+
 /* Modern GNOME-style settings dialog */
 .settings-dialog {
     background-color: @theme_bg_color;
@@ -702,26 +748,68 @@ class SettingsDialog(Gtk.Dialog):
             screen_height = 1080  # Default fallback
             screen_width = 1920
         dialog_height = int(screen_height * 0.75)
-        dialog_width = min(520, int(screen_width * 0.8))
+        dialog_width = min(700, int(screen_width * 0.8))
         self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
 
-        # Main scrolled window for content
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.get_style_context().add_class("scrolled-content")
+        # Create notebook for tabbed interface
+        notebook = Gtk.Notebook()
+        notebook.set_show_tabs(True)
+        notebook.set_show_border(False)
+        notebook.get_style_context().add_class("notebook")
 
-        # Main content box
-        self.content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.content_box.set_margin_top(16)
-        self.content_box.set_margin_bottom(16)
-        self.content_box.set_margin_start(16)
-        self.content_box.set_margin_end(16)
+        # Create tab content boxes
+        self.recognition_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.recognition_tab.set_margin_top(16)
+        self.recognition_tab.set_margin_bottom(16)
+        self.recognition_tab.set_margin_start(16)
+        self.recognition_tab.set_margin_end(16)
 
-        scrolled.add(self.content_box)
-        self.get_content_area().pack_start(scrolled, True, True, 0)
+        self.audio_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.audio_tab.set_margin_top(16)
+        self.audio_tab.set_margin_bottom(16)
+        self.audio_tab.set_margin_start(16)
+        self.audio_tab.set_margin_end(16)
 
-        # Build UI sections
+        self.shortcuts_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.shortcuts_tab.set_margin_top(16)
+        self.shortcuts_tab.set_margin_bottom(16)
+        self.shortcuts_tab.set_margin_start(16)
+        self.shortcuts_tab.set_margin_end(16)
+
+        self.general_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.general_tab.set_margin_top(16)
+        self.general_tab.set_margin_bottom(16)
+        self.general_tab.set_margin_start(16)
+        self.general_tab.set_margin_end(16)
+
+        # Add tabs to notebook
+        # Recognition tab
+        recognition_label = Gtk.Label(label="Recognition")
+        recognition_label.set_tooltip_text("Speech engine and recognition settings")
+        notebook.append_page(self.recognition_tab, recognition_label)
+
+        # Audio tab
+        audio_label = Gtk.Label(label="Audio")
+        audio_label.set_tooltip_text("Microphone and audio settings")
+        notebook.append_page(self.audio_tab, audio_label)
+
+        # Shortcuts tab
+        shortcuts_label = Gtk.Label(label="Shortcuts")
+        shortcuts_label.set_tooltip_text("Keyboard shortcuts")
+        notebook.append_page(self.shortcuts_tab, shortcuts_label)
+
+        # General tab
+        general_label = Gtk.Label(label="General")
+        general_label.set_tooltip_text("General settings")
+        notebook.append_page(self.general_tab, general_label)
+
+        self.get_content_area().pack_start(notebook, True, True, 0)
+
+        # Set content_box to recognition_tab for backward compatibility
+        self.content_box = self.recognition_tab
+
+        # Build UI sections into appropriate tabs
         self._build_general_section()
         self._build_audio_section()
         self._build_engine_section()
@@ -801,8 +889,8 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_test_status.set_margin_top(4)
         self.audio_test_status.get_style_context().add_class("status-info")
 
-        self.content_box.pack_start(group, False, False, 0)
-        self.content_box.pack_start(self.audio_test_status, False, False, 0)
+        self.audio_tab.pack_start(group, False, False, 0)
+        self.audio_tab.pack_start(self.audio_test_status, False, False, 0)
 
         # Populate devices
         self._populate_audio_devices()
@@ -830,7 +918,7 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(start_minimized_row)
 
-        self.content_box.pack_start(group, False, False, 0)
+        self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
@@ -1015,7 +1103,7 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(shortcut_row)
 
-        self.content_box.pack_start(group, False, False, 0)
+        self.shortcuts_tab.pack_start(group, False, False, 0)
 
         # Info box about the shortcut
         info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1035,7 +1123,7 @@ class SettingsDialog(Gtk.Dialog):
         self.shortcut_info_label.get_style_context().add_class("tip-label")
         info_box.pack_start(self.shortcut_info_label, True, True, 0)
 
-        self.content_box.pack_start(info_box, False, False, 0)
+        self.shortcuts_tab.pack_start(info_box, False, False, 0)
 
         # Connect signal
         self.shortcut_combo.connect("changed", self._on_shortcut_changed)
