@@ -166,7 +166,20 @@ vocalinux --model small           # Use small model
 vocalinux --model medium          # Use medium model
 vocalinux --model large           # Use large model
 vocalinux --wayland               # Force Wayland compatibility mode
+vocalinux --start-minimized       # Start without first-run modal prompts
 ```
+
+## Autostart Approach
+
+Vocalinux autostart is implemented with **XDG Autostart** (desktop entry), not as a `systemd` background service.
+
+- Enabling **Start on Login** creates `vocalinux.desktop` in:
+  - `$XDG_CONFIG_HOME/autostart/`, or
+  - `~/.config/autostart/` (fallback)
+- The autostart entry launches Vocalinux as a normal user desktop app at login.
+- No `systemd --user` unit is created by Vocalinux for this feature.
+
+This keeps behavior aligned with standard Linux desktop sessions and avoids service/session environment mismatches for GUI apps.
 
 ## Directory Structure
 

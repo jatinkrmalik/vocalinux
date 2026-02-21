@@ -204,6 +204,21 @@ For unsupported or experimental distributions:
 | i3 | ✅ Good Support | X11, uses xdotool |
 | Hyprland | ⚠️ Experimental | Wayland, may need wtype configuration |
 
+### Autostart Compatibility
+
+Vocalinux uses **XDG autostart desktop entries** for "Start on Login".
+
+- Desktop-session autostart file location:
+  - `$XDG_CONFIG_HOME/autostart/vocalinux.desktop`, or
+  - `~/.config/autostart/vocalinux.desktop` (fallback)
+- This launches Vocalinux as a user GUI app after login.
+- Vocalinux does **not** create a `systemd` service/unit for this feature.
+
+Practical caveat:
+
+- Mainstream desktop environments generally honor XDG autostart.
+- Minimal/custom WM sessions may need an explicit autostart manager or WM startup hook.
+
 ## Display Server
 
 | Display Server | Status | Notes |

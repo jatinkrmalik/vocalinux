@@ -76,6 +76,7 @@
 - 🤖 **whisper.cpp by default** - High-performance C++ speech recognition
 - 🎮 **Universal GPU support** - Vulkan acceleration for AMD, Intel, and NVIDIA
 - 🎨 **System tray integration** with visual status indicators
+- 🚀 **Start on login support** via XDG autostart (desktop-session startup)
 - 🔊 **Pleasant audio feedback** - smooth gliding tones, headphone-friendly
 - ⚙️ **Graphical settings** dialog for easy configuration
 - 📦 **3 engine choices** - whisper.cpp (default), OpenAI Whisper, or VOSK
@@ -239,7 +240,29 @@ vocalinux --engine whisper        # Use OpenAI Whisper engine
 vocalinux --engine vosk           # Use VOSK engine
 vocalinux --model medium          # Use medium-sized model
 vocalinux --wayland               # Force Wayland mode
+vocalinux --start-minimized       # Start without first-run modal prompts
 ```
+
+### Autostart on Login
+
+Vocalinux uses the Linux desktop standard for autostart:
+
+- **Mechanism**: XDG autostart desktop entry (`vocalinux.desktop`)
+- **Path**: `$XDG_CONFIG_HOME/autostart/` or `~/.config/autostart/` (fallback)
+- **Launch mode**: Starts as a regular **user desktop app** in your graphical session
+- **Not used**: No `systemd` unit/service is created by Vocalinux for autostart
+
+How to enable/disable:
+
+- First-run welcome dialog
+- Tray menu: **Start on Login**
+- Settings dialog: **Start on Login**
+
+Compatibility notes:
+
+- Works on mainstream desktop environments (GNOME, KDE, Xfce, Cinnamon, MATE, LXQt)
+- On minimal/custom window-manager sessions, an autostart handler may be required
+  (for example DE-specific startup hooks or tools like `dex`)
 
 ## ⚙️ Configuration
 
@@ -301,6 +324,7 @@ vocalinux/
 - [Installation Guide](docs/INSTALL.md) - Detailed installation instructions
 - [Update Guide](docs/UPDATE.md) - How to update Vocalinux
 - [User Guide](docs/USER_GUIDE.md) - Complete user documentation
+- [Distribution Compatibility](docs/DISTRO_COMPATIBILITY.md) - Distro/session behavior and caveats
 - [Contributing](CONTRIBUTING.md) - Development setup and contribution guidelines
 
 ## 🔊 Sound Customization
