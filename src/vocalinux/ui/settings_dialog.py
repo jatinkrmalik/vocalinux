@@ -838,9 +838,9 @@ class SettingsDialog(Gtk.Dialog):
     def _on_autostart_toggled(self, widget, state):
         """Handle toggle of the autostart switch."""
         if self._initializing or self._applying_settings:
-            return
+            return False
 
-        enabled = widget.get_active()
+        enabled = bool(state)
         logger.info(f"Autostart toggled: {enabled}")
 
         from . import autostart_manager
@@ -849,19 +849,21 @@ class SettingsDialog(Gtk.Dialog):
             self.config_manager.set("general", "autostart", enabled)
             self.config_manager.save_settings()
             logger.info(f"Autostart {'enabled' if enabled else 'disabled'}")
-        else:
-            widget.set_active(not enabled)
+            return False
+
+        return True
 
     def _on_start_minimized_toggled(self, widget, state):
         """Handle toggle of the start minimized switch."""
         if self._initializing or self._applying_settings:
-            return
+            return False
 
-        enabled = widget.get_active()
+        enabled = bool(state)
         logger.info(f"Start minimized toggled: {enabled}")
         self.config_manager.set("ui", "start_minimized", enabled)
         self.config_manager.save_settings()
         logger.info(f"Start minimized {'enabled' if enabled else 'disabled'}")
+        return False
 
     def _build_engine_section(self):
         """Build the Speech Engine section."""
@@ -935,7 +937,11 @@ class SettingsDialog(Gtk.Dialog):
         legend_box.set_margin_top(4)
         legend_box.set_margin_bottom(4)
 
-        for symbol, text in [("✓", "Downloaded"), ("↓", "Will download"), ("★", "Recommended")]:
+        for symbol, text in [
+            ("✓", "Downloaded"),
+            ("↓", "Will download"),
+            ("★", "Recommended"),
+        ]:
             item = Gtk.Label(label=f"{symbol} {text}")
             item.get_style_context().add_class("status-info")
             legend_box.pack_start(item, False, False, 0)
@@ -1578,10 +1584,16 @@ class SettingsDialog(Gtk.Dialog):
                     except Exception as e:
                         error_msg = str(e)
                         if "cancelled" in error_msg.lower():
-                            GLib.idle_add(download_dialog.set_complete, False, "Download cancelled")
+                            GLib.idle_add(
+                                download_dialog.set_complete,
+                                False,
+                                "Download cancelled",
+                            )
                         elif engine == "whisper" and "no module named" in error_msg.lower():
                             GLib.idle_add(
-                                download_dialog.set_complete, False, "Whisper not installed"
+                                download_dialog.set_complete,
+                                False,
+                                "Whisper not installed",
                             )
                             GLib.idle_add(self._show_whisper_install_dialog)
                         else:

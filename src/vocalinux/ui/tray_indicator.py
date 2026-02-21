@@ -28,7 +28,11 @@ except (ImportError, ValueError):
 from gi.repository import GdkPixbuf, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
-from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
+from ..common_types import (
+    RecognitionState,
+    SpeechRecognitionManagerProtocol,
+    TextInjectorProtocol,
+)
 
 # Import necessary components
 from .config_manager import ConfigManager  # noqa: E402
@@ -77,6 +81,7 @@ class TrayIndicator:
         self.speech_engine = speech_engine
         self.text_injector = text_injector
         self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
+        self._syncing_autostart_menu = False
 
         # Get configured shortcut from config
         shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
@@ -236,11 +241,23 @@ class TrayIndicator:
 
     def _update_autostart_checkbox(self):
         """Update the autostart checkbox state based on current config."""
-        autostart_enabled = self.config_manager.get("general", "autostart", False)
+        from . import autostart_manager
+
+        autostart_enabled = autostart_manager.is_autostart_enabled()
+        config_enabled = self.config_manager.get("general", "autostart", False)
+        if config_enabled != autostart_enabled:
+            self.config_manager.set("general", "autostart", autostart_enabled)
+            self.config_manager.save_settings()
+
+        self._syncing_autostart_menu = True
         self._autostart_menu_item.set_active(autostart_enabled)
+        self._syncing_autostart_menu = False
 
     def _on_autostart_toggled(self, widget):
         """Handle toggle of the Start on Login menu item."""
+        if self._syncing_autostart_menu:
+            return
+
         enabled = widget.get_active()
         logger.info(f"Autostart toggled: {enabled}")
 
@@ -252,7 +269,9 @@ class TrayIndicator:
             status = "enabled" if enabled else "disabled"
             logger.info(f"Autostart {status}")
         else:
+            self._syncing_autostart_menu = True
             widget.set_active(not enabled)
+            self._syncing_autostart_menu = False
 
     def _on_recognition_state_changed(self, state: RecognitionState):
         """

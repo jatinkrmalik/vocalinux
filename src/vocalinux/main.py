@@ -166,21 +166,28 @@ def main():
 
     general_settings = config_manager.get_settings().get("general", {})
     first_run = general_settings.get("first_run", True)
+    should_prompt_first_run = first_run and not args.start_minimized
 
-    if first_run:
+    if should_prompt_first_run:
         from .ui.first_run_dialog import show_first_run_dialog
 
         result = show_first_run_dialog()
         if result == "yes":
             from .ui import autostart_manager
 
-            if autostart_manager.enable_autostart():
+            if autostart_manager.set_autostart(True):
                 config_manager.set("general", "autostart", True)
+            else:
+                config_manager.set("general", "autostart", False)
         elif result == "no":
+            from .ui import autostart_manager
+
+            autostart_manager.set_autostart(False)
             config_manager.set("general", "autostart", False)
 
-        config_manager.set("general", "first_run", False)
-        config_manager.save_settings()
+        if result in {"yes", "no"}:
+            config_manager.set("general", "first_run", False)
+            config_manager.save_settings()
 
     # CLI arguments take precedence over saved config
     # We need to check if the user explicitly provided arguments
