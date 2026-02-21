@@ -24,7 +24,7 @@ class FirstRunDialog(Gtk.Dialog):
             transient_for=parent,
             flags=Gtk.DialogFlags.MODAL,
         )
-        self.set_default_size(400, 200)
+        self.set_default_size(440, 280)
 
         box = self.get_content_area()
         box.set_spacing(16)
@@ -38,14 +38,27 @@ class FirstRunDialog(Gtk.Dialog):
         box.pack_start(title_label, False, False, 0)
 
         description_label = Gtk.Label(
-            label="Would you like Vocalinux to start automatically when you log in?",
+            label="Vocalinux runs from your system tray so you can start and stop voice typing anytime.",
             wrap=True,
             justify=Gtk.Justification.CENTER,
         )
         box.pack_start(description_label, False, False, 8)
 
+        quick_guide_label = Gtk.Label(
+            label=(
+                "<b>Quick start</b>\n"
+                "1. Open the tray icon and choose Start Voice Typing\n"
+                "2. Open Settings from the tray menu to configure shortcuts, model, and audio"
+            ),
+            use_markup=True,
+            wrap=True,
+            justify=Gtk.Justification.LEFT,
+            xalign=0,
+        )
+        box.pack_start(quick_guide_label, False, False, 0)
+
         subtitle_label = Gtk.Label(
-            label="This will add Vocalinux to your system's autostart applications.",
+            label="Would you like Vocalinux to start automatically when you log in?",
             wrap=True,
             justify=Gtk.Justification.CENTER,
         )
