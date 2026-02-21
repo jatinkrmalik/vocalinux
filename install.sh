@@ -986,7 +986,7 @@ install_system_dependencies() {
 
             if [ -n "$MISSING_PACKAGES" ]; then
                 print_info "Installing missing packages:$MISSING_PACKAGES"
-                $UPDATE_CMD
+                $UPDATE_CMD || true  # dnf check-update returns 100 if updates available
                 $INSTALL_CMD $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
             else
                 print_info "All required packages are already installed."
