@@ -28,6 +28,7 @@ class TestMainModule(unittest.TestCase):
             self.assertIsNone(args.engine)
             self.assertIsNone(args.language)
             self.assertFalse(args.wayland)
+            self.assertFalse(args.start_minimized)
 
     def test_parse_arguments_custom(self):
         """Test argument parsing with custom values."""
@@ -44,6 +45,7 @@ class TestMainModule(unittest.TestCase):
                 "--language",
                 "fr",
                 "--wayland",
+                "--start-minimized",
             ],
         ):
             args = parse_arguments()
@@ -52,6 +54,7 @@ class TestMainModule(unittest.TestCase):
             self.assertEqual(args.engine, "whisper")
             self.assertEqual(args.language, "fr")
             self.assertTrue(args.wayland)
+            self.assertTrue(args.start_minimized)
 
     def test_parse_arguments_model_choices(self):
         """Test that model only accepts valid choices."""
@@ -139,7 +142,9 @@ class TestMainModule(unittest.TestCase):
 
         # Mock config
         mock_config_instance = MagicMock()
-        mock_config_instance.get_settings.return_value = {}
+        mock_config_instance.get_settings.return_value = {
+            "general": {"first_run": False},
+        }
         mock_config.return_value = mock_config_instance
 
         # Make SpeechRecognitionManager raise an exception
@@ -176,7 +181,10 @@ class TestMainModule(unittest.TestCase):
 
         # Mock ConfigManager to return empty settings (use command-line defaults)
         mock_config_instance = MagicMock()
-        mock_config_instance.get_settings.return_value = {"speech_recognition": {}}
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
         mock_config_manager.return_value = mock_config_instance
 
         # Mock objects
@@ -254,7 +262,10 @@ class TestMainModule(unittest.TestCase):
 
         # Mock ConfigManager
         mock_config_instance = MagicMock()
-        mock_config_instance.get_settings.return_value = {"speech_recognition": {}}
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
         mock_config_manager.return_value = mock_config_instance
 
         # Mock objects
@@ -287,6 +298,116 @@ class TestMainModule(unittest.TestCase):
 
             # Verify root logger had setLevel called with DEBUG
             root_logger.setLevel.assert_called()
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.ui.action_handler.ActionHandler")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.first_run_dialog.show_first_run_dialog")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_main_first_run_later_keeps_prompt_enabled(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_first_run_dialog,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_action_handler,
+        mock_check_deps,
+    ):
+        """Selecting later on first-run does not disable future prompt."""
+        mock_check_deps.return_value = True
+        mock_first_run_dialog.return_value = "later"
+
+        mock_config_instance = MagicMock()
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": True},
+        }
+        mock_config_manager.return_value = mock_config_instance
+
+        mock_speech.return_value = MagicMock()
+        mock_text.return_value = MagicMock()
+        mock_tray.return_value = MagicMock()
+        mock_action_instance = MagicMock()
+        mock_action_handler.return_value = mock_action_instance
+
+        with patch("vocalinux.main.parse_arguments") as mock_parse:
+            mock_args = MagicMock()
+            mock_args.debug = False
+            mock_args.model = "small"
+            mock_args.engine = "vosk"
+            mock_args.language = "en-us"
+            mock_args.wayland = False
+            mock_parse.return_value = mock_args
+
+            with patch("vocalinux.main.logger"):
+                main()
+
+        self.assertFalse(
+            any(
+                call.args == ("general", "first_run", False)
+                for call in mock_config_instance.set.call_args_list
+            )
+        )
+        mock_config_instance.save_settings.assert_not_called()
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.ui.action_handler.ActionHandler")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.first_run_dialog.show_first_run_dialog")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_main_start_minimized_skips_first_run_prompt(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_first_run_dialog,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_action_handler,
+        mock_check_deps,
+    ):
+        mock_check_deps.return_value = True
+
+        mock_config_instance = MagicMock()
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": True},
+        }
+        mock_config_manager.return_value = mock_config_instance
+
+        mock_speech.return_value = MagicMock()
+        mock_text.return_value = MagicMock()
+        mock_tray.return_value = MagicMock()
+        mock_action_handler.return_value = MagicMock()
+
+        with patch("vocalinux.main.parse_arguments") as mock_parse:
+            mock_args = MagicMock()
+            mock_args.debug = False
+            mock_args.model = "small"
+            mock_args.engine = "vosk"
+            mock_args.language = "en-us"
+            mock_args.wayland = False
+            mock_args.start_minimized = True
+            mock_parse.return_value = mock_args
+
+            with patch("vocalinux.main.logger"):
+                main()
+
+        mock_first_run_dialog.assert_not_called()
+        self.assertFalse(
+            any(
+                call.args[0:2] == ("general", "first_run")
+                for call in mock_config_instance.set.call_args_list
+            )
+        )
 
 
 class TestCheckDependencies(unittest.TestCase):
@@ -429,7 +550,8 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 "engine": "vosk",
                 "model_size": "small",
                 "language": "en-us",
-            }
+            },
+            "general": {"first_run": False},
         }
         mock_config_manager.return_value = mock_config_instance
 
@@ -445,7 +567,16 @@ class TestMainConfigPrecedence(unittest.TestCase):
 
         # Simulate CLI args being set
         with patch(
-            "sys.argv", ["vocalinux", "--engine", "whisper", "--model", "large", "--language", "fr"]
+            "sys.argv",
+            [
+                "vocalinux",
+                "--engine",
+                "whisper",
+                "--model",
+                "large",
+                "--language",
+                "fr",
+            ],
         ):
             with patch("vocalinux.main.logger"):
                 main()
@@ -488,6 +619,7 @@ class TestMainConfigPrecedence(unittest.TestCase):
             "audio": {
                 "device_index": 2,
             },
+            "general": {"first_run": False},
         }
         mock_config_manager.return_value = mock_config_instance
 

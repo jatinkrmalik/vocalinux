@@ -4,7 +4,27 @@ This guide explains how to use Vocalinux effectively.
 
 ## Getting Started
 
-After installing Vocalinux (see the [Installation Guide](INSTALL.md)), you can start the application from the terminal or add it to your startup applications.
+After installing Vocalinux (see the [Installation Guide](INSTALL.md)), you can start the application from the terminal and optionally enable start-on-login.
+
+## Start on Login (Autostart)
+
+Vocalinux supports login autostart using the standard Linux desktop-session mechanism.
+
+- **Where to enable it**:
+  - First-run welcome dialog
+  - Tray menu: **Start on Login**
+  - Settings dialog: **Start on Login**
+- **What Vocalinux creates**:
+  - `vocalinux.desktop` in `$XDG_CONFIG_HOME/autostart/` or `~/.config/autostart/`
+- **How it starts**:
+  - As a regular user GUI app in your desktop session (`--start-minimized`)
+- **What it does not do**:
+  - It does not create a `systemd` service/unit for autostart
+
+### Desktop Compatibility Notes
+
+- Works on most mainstream desktop environments (GNOME, KDE, Xfce, Cinnamon, MATE, LXQt)
+- On minimal/custom window managers, autostart may require an autostart manager or desktop-specific startup hook
 
 ## Basic Usage
 

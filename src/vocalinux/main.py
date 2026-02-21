@@ -61,6 +61,11 @@ def parse_arguments():
         help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
     )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
+    parser.add_argument(
+        "--start-minimized",
+        action="store_true",
+        help="Start minimized to system tray",
+    )
     return parser.parse_args()
 
 
@@ -158,6 +163,31 @@ def main():
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
     audio_settings = config_manager.get_settings().get("audio", {})
+
+    general_settings = config_manager.get_settings().get("general", {})
+    first_run = general_settings.get("first_run", True)
+    should_prompt_first_run = first_run and not args.start_minimized
+
+    if should_prompt_first_run:
+        from .ui.first_run_dialog import show_first_run_dialog
+
+        result = show_first_run_dialog()
+        if result == "yes":
+            from .ui import autostart_manager
+
+            if autostart_manager.set_autostart(True):
+                config_manager.set("general", "autostart", True)
+            else:
+                config_manager.set("general", "autostart", False)
+        elif result == "no":
+            from .ui import autostart_manager
+
+            autostart_manager.set_autostart(False)
+            config_manager.set("general", "autostart", False)
+
+        if result in {"yes", "no"}:
+            config_manager.set("general", "first_run", False)
+            config_manager.save_settings()
 
     # CLI arguments take precedence over saved config
     # We need to check if the user explicitly provided arguments

@@ -722,6 +722,7 @@ class SettingsDialog(Gtk.Dialog):
         self.get_content_area().pack_start(scrolled, True, True, 0)
 
         # Build UI sections
+        self._build_general_section()
         self._build_audio_section()
         self._build_engine_section()
         self._build_recognition_section()
@@ -807,6 +808,63 @@ class SettingsDialog(Gtk.Dialog):
         self._populate_audio_devices()
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
 
+    def _build_general_section(self):
+        """Build the General section with autostart and UI settings."""
+        group = PreferencesGroup(title="General")
+
+        self.autostart_switch = Gtk.Switch()
+        self.autostart_switch.set_tooltip_text("Start Vocalinux automatically when you log in")
+        autostart_row = PreferenceRow(
+            title="Start on Login",
+            subtitle="Automatically start Vocalinux when you log in",
+            widget=self.autostart_switch,
+        )
+        group.add_row(autostart_row)
+
+        self.start_minimized_switch = Gtk.Switch()
+        self.start_minimized_switch.set_tooltip_text("Start minimized to system tray")
+        start_minimized_row = PreferenceRow(
+            title="Start Minimized",
+            subtitle="Start minimized to system tray instead of showing window",
+            widget=self.start_minimized_switch,
+        )
+        group.add_row(start_minimized_row)
+
+        self.content_box.pack_start(group, False, False, 0)
+
+        self.autostart_switch.connect("state-set", self._on_autostart_toggled)
+        self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
+
+    def _on_autostart_toggled(self, widget, state):
+        """Handle toggle of the autostart switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Autostart toggled: {enabled}")
+
+        from . import autostart_manager
+
+        if autostart_manager.set_autostart(enabled):
+            self.config_manager.set("general", "autostart", enabled)
+            self.config_manager.save_settings()
+            logger.info(f"Autostart {'enabled' if enabled else 'disabled'}")
+            return False
+
+        return True
+
+    def _on_start_minimized_toggled(self, widget, state):
+        """Handle toggle of the start minimized switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Start minimized toggled: {enabled}")
+        self.config_manager.set("ui", "start_minimized", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Start minimized {'enabled' if enabled else 'disabled'}")
+        return False
+
     def _build_engine_section(self):
         """Build the Speech Engine section."""
         group = PreferencesGroup(title="Speech Engine")
@@ -879,7 +937,11 @@ class SettingsDialog(Gtk.Dialog):
         legend_box.set_margin_top(4)
         legend_box.set_margin_bottom(4)
 
-        for symbol, text in [("✓", "Downloaded"), ("↓", "Will download"), ("★", "Recommended")]:
+        for symbol, text in [
+            ("✓", "Downloaded"),
+            ("↓", "Will download"),
+            ("★", "Recommended"),
+        ]:
             item = Gtk.Label(label=f"{symbol} {text}")
             item.get_style_context().add_class("status-info")
             legend_box.pack_start(item, False, False, 0)
@@ -1108,6 +1170,15 @@ class SettingsDialog(Gtk.Dialog):
         logger.info(
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
         )
+
+        general_settings = self.config_manager.get_settings().get("general", {})
+        ui_settings = self.config_manager.get_settings().get("ui", {})
+
+        autostart_enabled = general_settings.get("autostart", False)
+        start_minimized = ui_settings.get("start_minimized", False)
+
+        self.autostart_switch.set_active(autostart_enabled)
+        self.start_minimized_switch.set_active(start_minimized)
 
         # Populate engine combo with only available engines
         available_engines = get_available_engines()
@@ -1513,10 +1584,16 @@ class SettingsDialog(Gtk.Dialog):
                     except Exception as e:
                         error_msg = str(e)
                         if "cancelled" in error_msg.lower():
-                            GLib.idle_add(download_dialog.set_complete, False, "Download cancelled")
+                            GLib.idle_add(
+                                download_dialog.set_complete,
+                                False,
+                                "Download cancelled",
+                            )
                         elif engine == "whisper" and "no module named" in error_msg.lower():
                             GLib.idle_add(
-                                download_dialog.set_complete, False, "Whisper not installed"
+                                download_dialog.set_complete,
+                                False,
+                                "Whisper not installed",
                             )
                             GLib.idle_add(self._show_whisper_install_dialog)
                         else:

@@ -40,6 +40,10 @@ DEFAULT_CONFIG = {
         "start_minimized": False,
         "show_notifications": True,
     },
+    "general": {
+        "autostart": False,
+        "first_run": True,
+    },
     "advanced": {
         "debug_logging": False,
         "wayland_mode": False,
