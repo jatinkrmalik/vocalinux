@@ -145,6 +145,7 @@ done
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vocalinux"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux"
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 
 # Directories created by curl-based installation
@@ -233,6 +234,8 @@ remove_application_files() {
     
     # Remove desktop entry
     safe_remove "$DESKTOP_DIR/vocalinux.desktop" "desktop entry"
+
+    safe_remove "$AUTOSTART_DIR/vocalinux.desktop" "autostart desktop entry"
     
     # Remove icons
     print_info "Removing application icons..."
@@ -335,6 +338,11 @@ verify_uninstallation() {
     # Check if desktop entry still exists
     if [ -f "$DESKTOP_DIR/vocalinux.desktop" ]; then
         print_warning "Desktop entry still exists: $DESKTOP_DIR/vocalinux.desktop"
+        ((ISSUES++))
+    fi
+
+    if [ -f "$AUTOSTART_DIR/vocalinux.desktop" ]; then
+        print_warning "Autostart desktop entry still exists: $AUTOSTART_DIR/vocalinux.desktop"
         ((ISSUES++))
     fi
     
