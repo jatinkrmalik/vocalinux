@@ -4,6 +4,7 @@ Main entry point for Vocalinux application.
 """
 
 import argparse
+import atexit
 import logging
 import sys
 
@@ -136,6 +137,16 @@ def check_dependencies():
 
 def main():
     """Main entry point for the application."""
+    # Check for single instance BEFORE any initialization
+    from . import single_instance
+
+    if not single_instance.acquire_lock():
+        # Another instance is already running
+        sys.exit(1)
+
+    # Register cleanup to release lock on exit
+    atexit.register(single_instance.release_lock)
+
     args = parse_arguments()
 
     # Configure debug logging if requested
