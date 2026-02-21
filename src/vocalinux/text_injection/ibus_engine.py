@@ -27,6 +27,19 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+class IBusSetupError(RuntimeError):
+    """
+    Exception raised when IBus engine setup fails.
+
+    This exception is raised when the IBus text injector cannot be properly
+    initialized, allowing the caller to fall back to alternative text
+    injection methods.
+    """
+
+    pass
+
+
 # Check if IBus is available
 try:
     import gi
@@ -576,13 +589,14 @@ class IBusTextInjector:
 
         # Check again after installation
         if not is_engine_registered():
-            logger.error("Failed to register IBus engine")
-            return
+            raise IBusSetupError(
+                "Failed to register IBus engine. "
+                "Try running 'ibus list-engine' to verify installation."
+            )
 
         # Start the engine process (Vocalinux starts it, not IBus)
         if not start_engine_process():
-            logger.error("Failed to start IBus engine process")
-            return
+            raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
         # Save current engine and switch to Vocalinux
         if not is_engine_active():
@@ -594,7 +608,10 @@ class IBusTextInjector:
             if switch_engine(ENGINE_NAME):
                 logger.info("Vocalinux IBus engine activated")
             else:
-                logger.error("Failed to activate Vocalinux IBus engine")
+                raise IBusSetupError(
+                    "Failed to activate Vocalinux IBus engine. "
+                    "Try manually: ibus engine vocalinux"
+                )
 
     def stop(self) -> None:
         """

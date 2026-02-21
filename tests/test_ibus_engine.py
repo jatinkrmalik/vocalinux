@@ -31,6 +31,102 @@ sys.modules["gi.repository"].GLib = mock_glib
 sys.modules["gi.repository"].GObject = mock_gobject
 
 
+class TestIBusSetupError(unittest.TestCase):
+    """Tests for IBusSetupError exception."""
+
+    def test_is_runtime_error_subclass(self):
+        """Test that IBusSetupError inherits from RuntimeError."""
+        from vocalinux.text_injection.ibus_engine import IBusSetupError
+
+        self.assertTrue(issubclass(IBusSetupError, RuntimeError))
+
+    def test_accepts_message(self):
+        """Test that IBusSetupError accepts a message."""
+        from vocalinux.text_injection.ibus_engine import IBusSetupError
+
+        error = IBusSetupError("Test message")
+        self.assertEqual(str(error), "Test message")
+
+
+class TestIBusTextInjectorSetupFailures(unittest.TestCase):
+    """Tests for IBusTextInjector raising IBusSetupError on setup failures."""
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.install_ibus_component")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
+    def test_raises_on_registration_failure(
+        self, mock_is_registered, mock_install, mock_ensure_dir
+    ):
+        """Test that IBusSetupError is raised when engine registration fails."""
+        mock_is_registered.return_value = False  # Registration fails
+        mock_install.return_value = True
+
+        from vocalinux.text_injection.ibus_engine import (
+            IBusSetupError,
+            IBusTextInjector,
+        )
+
+        with self.assertRaises(IBusSetupError) as context:
+            IBusTextInjector(auto_activate=True)
+
+        self.assertIn("Failed to register IBus engine", str(context.exception))
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
+    def test_raises_on_engine_process_failure(
+        self, mock_start_engine, mock_is_registered, mock_ensure_dir
+    ):
+        """Test that IBusSetupError is raised when engine process fails to start."""
+        mock_is_registered.return_value = True
+        mock_start_engine.return_value = False  # Process start fails
+
+        from vocalinux.text_injection.ibus_engine import (
+            IBusSetupError,
+            IBusTextInjector,
+        )
+
+        with self.assertRaises(IBusSetupError) as context:
+            IBusTextInjector(auto_activate=True)
+
+        self.assertIn("Failed to start IBus engine process", str(context.exception))
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    def test_raises_on_activation_failure(
+        self,
+        mock_switch,
+        mock_get_current,
+        mock_is_active,
+        mock_start_engine,
+        mock_is_registered,
+        mock_ensure_dir,
+    ):
+        """Test that IBusSetupError is raised when engine activation fails."""
+        mock_is_registered.return_value = True
+        mock_start_engine.return_value = True
+        mock_is_active.return_value = False
+        mock_get_current.return_value = "xkb:us::eng"
+        mock_switch.return_value = False  # Activation fails
+
+        from vocalinux.text_injection.ibus_engine import (
+            IBusSetupError,
+            IBusTextInjector,
+        )
+
+        with self.assertRaises(IBusSetupError) as context:
+            IBusTextInjector(auto_activate=True)
+
+        self.assertIn("Failed to activate Vocalinux IBus engine", str(context.exception))
+
+
 class TestIBusEngineHelpers(unittest.TestCase):
     """Tests for IBus engine helper functions."""
 
