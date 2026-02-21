@@ -27,6 +27,30 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+get_vocalinux_pids() {
+    pgrep -f "vocalinux" 2>/dev/null | while read -r pid; do
+        [ -z "$pid" ] && continue
+
+        if [ "$pid" = "$$" ] || [ "$pid" = "$PPID" ]; then
+            continue
+        fi
+
+        local stat
+        stat=$(ps -o stat= -p "$pid" 2>/dev/null | awk '{print $1}')
+        if [[ "$stat" == Z* ]]; then
+            continue
+        fi
+
+        local cmd
+        cmd=$(ps -o args= -p "$pid" 2>/dev/null)
+        if [[ "$cmd" == *"install.sh"* ]] || [[ "$cmd" == *"uninstall.sh"* ]]; then
+            continue
+        fi
+
+        echo "$pid"
+    done
+}
+
 # Function to safely remove a file or directory
 safe_remove() {
     local path="$1"
@@ -51,7 +75,8 @@ safe_remove() {
 kill_vocalinux_processes() {
     print_info "Checking for running Vocalinux processes..."
     
-    local PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+    local PIDS
+    PIDS=$(get_vocalinux_pids || true)
     
     if [ -n "$PIDS" ]; then
         print_warning "Found running Vocalinux process(es): $PIDS"
@@ -69,7 +94,8 @@ kill_vocalinux_processes() {
         echo "$PIDS" | xargs -r kill -TERM 2>/dev/null || true
         sleep 2
         
-        local REMAINING_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+        local REMAINING_PIDS
+        REMAINING_PIDS=$(get_vocalinux_pids || true)
         
         if [ -n "$REMAINING_PIDS" ]; then
             print_warning "Some processes still running, forcing termination..."
@@ -77,7 +103,8 @@ kill_vocalinux_processes() {
             sleep 1
         fi
         
-        local FINAL_PIDS=$(pgrep -f "vocalinux" 2>/dev/null || true)
+        local FINAL_PIDS
+        FINAL_PIDS=$(get_vocalinux_pids || true)
         if [ -n "$FINAL_PIDS" ]; then
             print_error "Warning: Could not terminate all Vocalinux processes: $FINAL_PIDS"
             print_error "You may need to manually kill these processes before continuing."
