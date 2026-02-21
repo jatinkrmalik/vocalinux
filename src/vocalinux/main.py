@@ -4,6 +4,7 @@ Main entry point for Vocalinux application.
 """
 
 import argparse
+import atexit
 import logging
 import sys
 
@@ -136,6 +137,33 @@ def check_dependencies():
 
 def main():
     """Main entry point for the application."""
+    # Check for single instance BEFORE any initialization
+    from . import single_instance
+
+    if not single_instance.acquire_lock():
+        # Another instance is already running - show notification and exit
+        try:
+            import time
+
+            from gi.repository import Notify
+
+            Notify.init("Vocalinux")
+            notification = Notify.Notification.new(
+                "Vocalinux",
+                "Another instance is already running. Only one instance is allowed at a time.",
+                "dialog-error",
+            )
+            notification.show()
+            # Give notification time to display before exiting
+            time.sleep(0.5)
+        except Exception:
+            # Fallback if notification fails (e.g., no display)
+            pass
+        sys.exit(1)
+
+    # Register cleanup to release lock on exit
+    atexit.register(single_instance.release_lock)
+
     args = parse_arguments()
 
     # Configure debug logging if requested
