@@ -759,12 +759,21 @@ class SettingsDialog(Gtk.Dialog):
         notebook.get_style_context().add_class("notebook")
 
         # Create tab content boxes
-        self.recognition_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.recognition_tab.set_margin_top(16)
-        self.recognition_tab.set_margin_bottom(16)
-        self.recognition_tab.set_margin_start(16)
-        self.recognition_tab.set_margin_end(16)
+        # Speech Engine tab (Engine, Model, Language)
+        self.speech_engine_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.speech_engine_tab.set_margin_top(16)
+        self.speech_engine_tab.set_margin_bottom(16)
+        self.speech_engine_tab.set_margin_start(16)
+        self.speech_engine_tab.set_margin_end(16)
 
+        # Recognition Settings tab (VAD, Silence, Test)
+        self.recognition_settings_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.recognition_settings_tab.set_margin_top(16)
+        self.recognition_settings_tab.set_margin_bottom(16)
+        self.recognition_settings_tab.set_margin_start(16)
+        self.recognition_settings_tab.set_margin_end(16)
+
+        # Audio tab
         self.audio_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.audio_tab.set_margin_top(16)
         self.audio_tab.set_margin_bottom(16)
@@ -783,13 +792,18 @@ class SettingsDialog(Gtk.Dialog):
         self.general_tab.set_margin_start(16)
         self.general_tab.set_margin_end(16)
 
-        # Add tabs to notebook
-        # Recognition tab
-        recognition_label = Gtk.Label(label="Recognition")
-        recognition_label.set_tooltip_text("Speech engine and recognition settings")
-        notebook.append_page(self.recognition_tab, recognition_label)
+        # Add tabs to notebook (ordered by importance)
+        # Speech Engine tab - most important (what model/language to use)
+        speech_engine_label = Gtk.Label(label="Speech Engine")
+        speech_engine_label.set_tooltip_text("Speech recognition engine and model settings")
+        notebook.append_page(self.speech_engine_tab, speech_engine_label)
 
-        # Audio tab
+        # Recognition Settings tab - second most important (how to recognize)
+        recognition_label = Gtk.Label(label="Recognition")
+        recognition_label.set_tooltip_text("Recognition behavior and test settings")
+        notebook.append_page(self.recognition_settings_tab, recognition_label)
+
+        # Audio tab - third (hardware configuration)
         audio_label = Gtk.Label(label="Audio")
         audio_label.set_tooltip_text("Microphone and audio settings")
         notebook.append_page(self.audio_tab, audio_label)
@@ -799,15 +813,15 @@ class SettingsDialog(Gtk.Dialog):
         shortcuts_label.set_tooltip_text("Keyboard shortcuts")
         notebook.append_page(self.shortcuts_tab, shortcuts_label)
 
-        # General tab
+        # General tab - least important (application behavior)
         general_label = Gtk.Label(label="General")
         general_label.set_tooltip_text("General settings")
         notebook.append_page(self.general_tab, general_label)
 
         self.get_content_area().pack_start(notebook, True, True, 0)
 
-        # Set content_box to recognition_tab for backward compatibility
-        self.content_box = self.recognition_tab
+        # Set content_box to speech_engine_tab for backward compatibility
+        self.content_box = self.speech_engine_tab
 
         # Build UI sections into appropriate tabs
         self._build_general_section()
@@ -1068,7 +1082,7 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(silence_row)
 
-        self.content_box.pack_start(group, False, False, 0)
+        self.recognition_settings_tab.pack_start(group, False, False, 0)
 
         # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)
@@ -1203,7 +1217,7 @@ class SettingsDialog(Gtk.Dialog):
         test_container.add(test_box)
         group.listbox.add(test_container)
 
-        self.content_box.pack_start(group, False, False, 0)
+        self.recognition_settings_tab.pack_start(group, False, False, 0)
 
         # Recognition Progress section
         progress_group = PreferencesGroup(title="Recognition Status")
@@ -1238,13 +1252,13 @@ class SettingsDialog(Gtk.Dialog):
         )
         progress_group.add_row(level_row)
 
-        self.content_box.pack_start(progress_group, False, False, 0)
+        self.recognition_settings_tab.pack_start(progress_group, False, False, 0)
 
         # Progress info label
         self.progress_info_label = Gtk.Label(label="", use_markup=True, xalign=0)
         self.progress_info_label.set_margin_start(16)
         self.progress_info_label.set_margin_bottom(8)
-        self.content_box.pack_start(self.progress_info_label, False, False, 0)
+        self.recognition_settings_tab.pack_start(self.progress_info_label, False, False, 0)
 
     def _load_and_apply_settings(self):
         """Load current settings and populate the UI."""
