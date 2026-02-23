@@ -483,8 +483,12 @@ detect_vulkan() {
 # These GPUs will fail with "device does not support 16-bit storage" error
 # Affected: Intel Gen7 and older (Ivy Bridge, Haswell, Sandy Bridge)
 # See: https://github.com/jatinkrmalik/vocalinux/issues/238
+#
+# IMPORTANT: This check filters out software renderers (llvmpipe, etc.) and only
+# evaluates real hardware GPUs. Modern AMD, Intel (Gen8+), and NVIDIA GPUs all
+# support VK_KHR_16bit_storage, so this mainly catches very old Intel Gen7 GPUs.
 check_vulkan_gpu_compatibility() {
-    # List of known incompatible GPU patterns
+    # List of known incompatible GPU patterns (old Intel Gen7 and older)
     local INCOMPATIBLE_PATTERNS=(
         "Ivy Bridge"
         "Haswell"
@@ -500,55 +504,95 @@ check_vulkan_gpu_compatibility() {
         "SNB"
     )
 
+    # Software renderers and virtual devices to skip (not real hardware GPUs)
+    # These are CPU-based implementations that shouldn't affect compatibility detection
+    local SOFTWARE_RENDERER_PATTERNS=(
+        "llvmpipe"
+        "swiftshader"
+        "lavapipe"
+        "zink"
+        "virtio"
+        "venus"
+    )
+
     # Check if vulkaninfo is available
     if ! command -v vulkaninfo >/dev/null 2>&1; then
         echo "unknown:vulkaninfo not available"
         return 1
     fi
 
+    # Get all device names from vulkaninfo
     local DEVICE_NAMES_RAW
     DEVICE_NAMES_RAW=$(vulkaninfo --summary 2>/dev/null | awk -F'=' '/deviceName/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 != "") print $2}')
 
-    local DEVICE_NAMES_LABEL=""
+    # Separate hardware GPUs from software renderers
+    local HARDWARE_GPUS=""
+    local HARDWARE_GPU_COUNT=0
     while IFS= read -r device_name; do
         [ -z "$device_name" ] && continue
-        if [ -n "$DEVICE_NAMES_LABEL" ]; then
-            DEVICE_NAMES_LABEL="${DEVICE_NAMES_LABEL}, ${device_name}"
-        else
-            DEVICE_NAMES_LABEL="$device_name"
+
+        local is_software=false
+        for pattern in "${SOFTWARE_RENDERER_PATTERNS[@]}"; do
+            if echo "$device_name" | grep -iq "$pattern"; then
+                is_software=true
+                break
+            fi
+        done
+
+        if [ "$is_software" = false ]; then
+            if [ -n "$HARDWARE_GPUS" ]; then
+                HARDWARE_GPUS="${HARDWARE_GPUS}, ${device_name}"
+            else
+                HARDWARE_GPUS="$device_name"
+            fi
+            ((HARDWARE_GPU_COUNT++))
         fi
     done <<< "$DEVICE_NAMES_RAW"
 
+    # If no hardware GPUs found, we can't determine compatibility
+    if [ -z "$HARDWARE_GPUS" ]; then
+        echo "unknown:No hardware GPU found (only software renderers)"
+        return 1
+    fi
+
+    # Get Vulkan features and check for VK_KHR_16bit_storage
+    # Modern GPUs (AMD, Intel Gen8+, NVIDIA) all support this extension
     local FEATURES_OUTPUT
     FEATURES_OUTPUT=$(vulkaninfo --features 2>/dev/null)
 
     if [ -n "$FEATURES_OUTPUT" ]; then
-        if echo "$FEATURES_OUTPUT" | grep -Eq "VK_KHR_16bit_storage|storageBuffer16BitAccess[[:space:]]*=[[:space:]]*true|uniformAndStorageBuffer16BitAccess[[:space:]]*=[[:space:]]*true|storagePushConstant16[[:space:]]*=[[:space:]]*true"; then
-            if [ -z "$DEVICE_NAMES_LABEL" ]; then
-                DEVICE_NAMES_LABEL="Vulkan GPU (VK_KHR_16bit_storage)"
-            fi
-            echo "compatible:${DEVICE_NAMES_LABEL}"
+        # Check for VK_KHR_16bit_storage extension or equivalent features
+        if echo "$FEATURES_OUTPUT" | grep -q "VK_KHR_16bit_storage"; then
+            echo "compatible:${HARDWARE_GPUS}"
             return 0
         fi
 
-        if [ -z "$DEVICE_NAMES_LABEL" ]; then
-            DEVICE_NAMES_LABEL="Vulkan GPU"
+        # Alternative: check for 16-bit storage features directly
+        if echo "$FEATURES_OUTPUT" | grep -Eq "storageBuffer16BitAccess[[:space:]]*=[[:space:]]*true|uniformAndStorageBuffer16BitAccess[[:space:]]*=[[:space:]]*true"; then
+            echo "compatible:${HARDWARE_GPUS}"
+            return 0
         fi
-        echo "incompatible:${DEVICE_NAMES_LABEL} (missing VK_KHR_16bit_storage)"
-        return 1
     fi
 
-    if [ -z "$DEVICE_NAMES_RAW" ]; then
-        echo "unknown:Could not detect GPU name"
-        return 1
-    fi
-
+    # If Vulkan features check didn't confirm support, check against known incompatible patterns
+    # This handles systems where vulkaninfo --features doesn't show the extension
+    local INCOMPATIBLE_GPUS=""
     local HAS_COMPATIBLE_GPU=false
-    local INCOMPATIBLE_LABEL=""
 
     while IFS= read -r device_name; do
         [ -z "$device_name" ] && continue
 
+        # Skip software renderers
+        local is_software=false
+        for pattern in "${SOFTWARE_RENDERER_PATTERNS[@]}"; do
+            if echo "$device_name" | grep -iq "$pattern"; then
+                is_software=true
+                break
+            fi
+        done
+        [ "$is_software" = true ] && continue
+
+        # Check against known incompatible patterns
         local is_incompatible=false
         for pattern in "${INCOMPATIBLE_PATTERNS[@]}"; do
             if echo "$device_name" | grep -iq "$pattern"; then
@@ -558,23 +602,24 @@ check_vulkan_gpu_compatibility() {
         done
 
         if [ "$is_incompatible" = true ]; then
-            if [ -n "$INCOMPATIBLE_LABEL" ]; then
-                INCOMPATIBLE_LABEL="${INCOMPATIBLE_LABEL}, ${device_name}"
+            if [ -n "$INCOMPATIBLE_GPUS" ]; then
+                INCOMPATIBLE_GPUS="${INCOMPATIBLE_GPUS}, ${device_name}"
             else
-                INCOMPATIBLE_LABEL="$device_name"
+                INCOMPATIBLE_GPUS="$device_name"
             fi
         else
+            # GPU doesn't match known incompatible patterns - assume compatible
             HAS_COMPATIBLE_GPU=true
         fi
     done <<< "$DEVICE_NAMES_RAW"
 
     if [ "$HAS_COMPATIBLE_GPU" = true ]; then
-        echo "compatible:${DEVICE_NAMES_LABEL}"
+        echo "compatible:${HARDWARE_GPUS}"
         return 0
     fi
 
-    if [ -n "$INCOMPATIBLE_LABEL" ]; then
-        echo "incompatible:${INCOMPATIBLE_LABEL}"
+    if [ -n "$INCOMPATIBLE_GPUS" ]; then
+        echo "incompatible:${INCOMPATIBLE_GPUS}"
         return 1
     fi
 
@@ -600,40 +645,49 @@ detect_whispercpp_backends() {
     fi
 
     # Check Vulkan GPU compatibility (Gen7 and older Intel GPUs lack 16-bit storage support)
+    # Skip this check for NVIDIA GPUs since they use CUDA, not Vulkan
     local VULKAN_COMPATIBLE="unknown"
     local VULKAN_COMPAT_REASON=""
-    if [[ "$HAS_VULKAN" == "yes" ]]; then
+    if [[ "$HAS_VULKAN" == "yes" && "$HAS_NVIDIA_GPU" != "yes" ]]; then
         local COMPAT_RESULT
         COMPAT_RESULT=$(check_vulkan_gpu_compatibility)
         VULKAN_COMPATIBLE=$(echo "$COMPAT_RESULT" | cut -d':' -f1)
         VULKAN_COMPAT_REASON=$(echo "$COMPAT_RESULT" | cut -d':' -f2-)
+    elif [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
+        # NVIDIA GPUs use CUDA, so Vulkan compatibility is irrelevant
+        VULKAN_COMPATIBLE="not_applicable"
+        VULKAN_COMPAT_REASON="NVIDIA GPU uses CUDA"
     fi
 
-    # Determine recommendation
+    # Determine recommendation (Priority: CUDA > Vulkan > CPU)
     local RECOMMENDED_BACKEND="cpu"
     local RECOMMENDED_REASON=""
     local CAN_BUILD_GPU=false
 
-    # Only recommend Vulkan if GPU is compatible
-    if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" && "$VULKAN_COMPATIBLE" == "compatible" ]]; then
-        RECOMMENDED_BACKEND="vulkan"
-        RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
-        CAN_BUILD_GPU=true
-    elif [[ "$HAS_NVIDIA_GPU" == "yes" && "$HAS_CUDA_DEV" == "true" ]]; then
+    # NVIDIA with CUDA is the best option
+    if [[ "$HAS_NVIDIA_GPU" == "yes" && "$HAS_CUDA_DEV" == "true" ]]; then
         RECOMMENDED_BACKEND="cuda"
         RECOMMENDED_REASON="NVIDIA GPU with CUDA toolkit"
         CAN_BUILD_GPU=true
+    # Vulkan is the second choice (AMD, Intel GPUs)
+    elif [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" && "$VULKAN_COMPATIBLE" == "compatible" ]]; then
+        RECOMMENDED_BACKEND="vulkan"
+        RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
+        CAN_BUILD_GPU=true
+    # Incompatible Vulkan GPU (old Intel Gen7)
     elif [[ "$VULKAN_COMPATIBLE" == "incompatible" ]]; then
         RECOMMENDED_BACKEND="cpu"
         RECOMMENDED_REASON="Incompatible GPU ($VULKAN_COMPAT_REASON) - CPU mode recommended"
         CAN_BUILD_GPU=false
-    elif [[ "$HAS_VULKAN" == "yes" || "$HAS_NVIDIA_GPU" == "yes" ]]; then
+    # NVIDIA without CUDA installed
+    elif [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
         RECOMMENDED_BACKEND="cpu"
-        if [[ "$HAS_VULKAN" == "yes" ]]; then
-            RECOMMENDED_REASON="GPU detected but dev libraries missing (will use CPU)"
-        else
-            RECOMMENDED_REASON="NVIDIA GPU detected but CUDA not installed (will use CPU)"
-        fi
+        RECOMMENDED_REASON="NVIDIA GPU detected but CUDA not installed (will use CPU)"
+        CAN_BUILD_GPU=false
+    # Vulkan without dev libraries
+    elif [[ "$HAS_VULKAN" == "yes" ]]; then
+        RECOMMENDED_BACKEND="cpu"
+        RECOMMENDED_REASON="GPU detected but dev libraries missing (will use CPU)"
         CAN_BUILD_GPU=false
     else
         RECOMMENDED_BACKEND="cpu"
