@@ -74,46 +74,36 @@ const navCategories = [
 
 function DropdownMenu({
   category,
-  isOpen,
-  onToggle,
 }: {
   category: (typeof navCategories)[0];
-  isOpen: boolean;
-  onToggle: () => void;
 }) {
   return (
-    <div className="relative">
+    <div className="group relative">
       <button
-        onClick={onToggle}
-        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-          isOpen
-            ? "bg-zinc-100 text-foreground dark:bg-zinc-800"
-            : "text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800"
-        }`}
+        type="button"
+        className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground focus:bg-zinc-100 focus:text-foreground focus:outline-none dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
       >
         {category.label}
         <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className="h-3.5 w-3.5 transition-transform group-hover:rotate-180 group-focus-within:rotate-180"
         />
       </button>
 
-      {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
-          {category.items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-700"
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      <div className="pointer-events-none invisible absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-zinc-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 dark:border-zinc-700 dark:bg-zinc-800">
+        {category.items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-700"
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -177,22 +167,9 @@ function Breadcrumbs() {
 
 export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-
-  const handleDropdownToggle = (label: string) => {
-    setOpenDropdown(openDropdown === label ? null : label);
-  };
-
-  // Close dropdowns when clicking outside
-  const handleClickOutside = () => {
-    setOpenDropdown(null);
-  };
 
   return (
-    <div
-      className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950"
-      onClick={handleClickOutside}
-    >
+    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
       <header className="sticky top-0 z-50 border-b border-zinc-200/80 bg-background/95 backdrop-blur-md dark:border-zinc-800/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <Link href="/" className="group flex items-center gap-2">
@@ -207,12 +184,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
           {/* Desktop nav with dropdowns */}
           <nav className="hidden items-center gap-1 md:flex">
             {navCategories.map((category) => (
-              <DropdownMenu
-                key={category.label}
-                category={category}
-                isOpen={openDropdown === category.label}
-                onToggle={() => handleDropdownToggle(category.label)}
-              />
+              <DropdownMenu key={category.label} category={category} />
             ))}
           </nav>
 
