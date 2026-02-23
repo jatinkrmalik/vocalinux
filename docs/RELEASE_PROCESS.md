@@ -19,8 +19,7 @@ Use this checklist for every release:
 
 ### Core Version Files
 - [ ] `src/vocalinux/version.py` - Update `__version__` and `__version_info__`
-- [ ] `pyproject.toml` - Update classifiers (Alpha→Beta→Stable)
-- [ ] `setup.py` - Update classifiers
+- [ ] `pyproject.toml` - Update classifiers (Alpha→Beta→Stable) - usually already correct
 
 ### Documentation
 - [ ] `README.md` - Update badges, install commands, and announcements
@@ -29,8 +28,9 @@ Use this checklist for every release:
 - [ ] `SECURITY.md` - Update supported versions table
 
 ### Website
-- [ ] `web/src/app/layout.tsx` - Update `softwareVersion` in schema
-- [ ] `web/src/app/page.tsx` - Update version badge (e.g., "v0.5.0 Beta")
+- [ ] `web/src/app/page.tsx` - Update `softwareVersion` in schema (around line 68)
+- [ ] `web/src/app/page.tsx` - Update version badge in header (around line 293)
+- [ ] `web/src/app/changelog/page.tsx` - Add new release entry to changelog
 - [ ] `web/package.json` - Update version field
 
 ### Testing & Verification
@@ -112,7 +112,7 @@ Change the Development Status classifier:
 **Install Commands:**
 Update all curl commands to use the new tag:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.1-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/vX.Y.Z-PHASE/install.sh | bash
 ```
 
 **Release Announcement (lines ~31-34):**
@@ -162,31 +162,23 @@ Update the supported versions table:
 
 ### Step 4: Update Website
 
-#### 4.1 Update `web/src/app/layout.tsx`
+#### 4.1 Update `web/src/app/page.tsx`
 
-Update the schema.org softwareVersion (around line 123):
+Update the schema.org softwareVersion (around line 68):
 
 ```typescript
-"softwareVersion": "0.5.0-beta",
+"softwareVersion": "vX.Y.Z-PHASE",
 ```
 
-#### 4.2 Update `web/src/app/page.tsx`
-
-Update the version badge in the header (around line 207):
+Update the version badge in the header (around line 293):
 
 ```tsx
-<span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
-  v0.5.0 Beta
-</span>
+vX.Y.Z Beta
 ```
 
-Update the hero badge (around line 310):
+#### 4.2 Update `web/src/app/changelog/page.tsx`
 
-```tsx
-<span className="text-sm font-medium text-primary">
-  Beta Release — Try it now!
-</span>
-```
+Add new release entry to the `releases` array at the top of the file.
 
 #### 4.3 Update `web/package.json`
 
@@ -329,6 +321,11 @@ git push origin v0.5.1-beta
 | 0.4.0-alpha | 2024 | Alpha | Multi-language support |
 | 0.4.1-alpha | 2024 | Alpha | Language selector UI |
 | 0.5.0-beta | 2025 | Beta | First beta release |
+| 0.6.0-beta | 2026-02-11 | Beta | Web SEO, mobile responsiveness, improved Fedora support |
+| 0.6.1-beta | 2026-02-12 | Beta | Device handling improvements |
+| 0.6.2-beta | 2026-02-17 | Beta | Bug fixes |
+| 0.6.3-beta | 2026-02-19 | Beta | GPU detection improvements |
+| 0.7.0-beta | 2026 | Beta | Autostart, tabbed settings, Intel GPU support, single instance |
 
 ## Questions?
 
