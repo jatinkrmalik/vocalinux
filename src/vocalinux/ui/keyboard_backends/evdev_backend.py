@@ -152,6 +152,8 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.double_tap_threshold = 0.3  # seconds
         self.key_pressed_devices: Set[int] = set()
 
+        self._devices_lock = threading.Lock()
+
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
 
@@ -317,14 +319,23 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
                     except (OSError, IOError) as e:
                         # Device was disconnected - remove it to avoid busy loop
-                        logger.debug(f"Device disconnected (fd={fd}): {e}")
+                        device_name = (
+                            device.name if device and hasattr(device, "name") else "unknown"
+                        )
+                        logger.info(f"Device disconnected: {device_name} (fd={fd})")
                         if device is not None:
                             try:
-                                self.devices.remove(device)
+                                device.close()
+                            except Exception:
+                                pass
+                            try:
+                                with self._devices_lock:
+                                    self.devices.remove(device)
                             except ValueError:
                                 pass
                         if fd in self.device_fds:
-                            self.device_fds.remove(fd)
+                            with self._devices_lock:
+                                self.device_fds.remove(fd)
                         continue
 
             except (OSError, ValueError) as e:
