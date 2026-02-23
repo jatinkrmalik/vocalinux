@@ -315,8 +315,16 @@ class EvdevKeyboardBackend(KeyboardBackend):
                             if event.type == ecodes.EV_KEY:
                                 self._handle_key_event(event, device)
 
-                    except (OSError, IOError):
-                        # Device was likely disconnected
+                    except (OSError, IOError) as e:
+                        # Device was disconnected - remove it to avoid busy loop
+                        logger.debug(f"Device disconnected (fd={fd}): {e}")
+                        if device is not None:
+                            try:
+                                self.devices.remove(device)
+                            except ValueError:
+                                pass
+                        if fd in self.device_fds:
+                            self.device_fds.remove(fd)
                         continue
 
             except (OSError, ValueError) as e:
