@@ -89,7 +89,7 @@ function DropdownMenu({
         />
       </button>
 
-      <div className="pointer-events-none invisible absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-zinc-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 dark:border-zinc-700 dark:bg-zinc-800">
+      <div className="pointer-events-none invisible absolute left-0 top-full z-50 mt-0 w-56 rounded-xl border border-zinc-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 dark:border-zinc-700 dark:bg-zinc-800">
         {category.items.map((item) => {
           const Icon = item.icon;
           return (
