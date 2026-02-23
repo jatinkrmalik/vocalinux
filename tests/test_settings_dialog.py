@@ -7,7 +7,7 @@ logic that the settings dialog is supposed to execute.
 
 UX Design Notes tested:
 - Instant-apply pattern: settings apply immediately when changed
-- Close-only button (no Apply/Cancel) consistent with GNOME Settings
+- No action buttons - uses title bar close (GNOME HIG)
 """
 
 import sys
@@ -238,7 +238,7 @@ class TestSettingsDialogClasses(unittest.TestCase):
 
 
 class TestSettingsDialogInstantApply(unittest.TestCase):
-    """Test cases for instant-apply behavior (Close-only button pattern)."""
+    """Test cases for instant-apply behavior (no action buttons)."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -262,8 +262,8 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
 
         self.assertIn("def _auto_apply_settings(self", source_code)
 
-    def test_settings_dialog_close_only_pattern(self):
-        """Test that SettingsDialog uses Close-only button pattern (no Apply/Cancel)."""
+    def test_settings_dialog_no_action_buttons(self):
+        """Test that SettingsDialog uses no action buttons (title bar close only)."""
         import os
 
         source_path = os.path.join(
@@ -277,17 +277,17 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         with open(source_path, "r") as f:
             source_code = f.read()
 
-        # Check for Close button
-        self.assertIn("_Close", source_code)
-        # Should NOT have Apply or Cancel buttons (instant-apply pattern)
+        # Should NOT have action buttons - uses title bar close (instant-apply pattern)
+        self.assertNotIn("_Close", source_code)
         self.assertNotIn("_Apply", source_code)
         self.assertNotIn("ResponseType.APPLY", source_code)
+        self.assertNotIn("ResponseType.CLOSE", source_code)
 
     def test_settings_dialog_no_revert_settings(self):
         """Test that SettingsDialog does NOT have _revert_settings (removed)."""
         from vocalinux.ui.settings_dialog import SettingsDialog
 
-        # _revert_settings was removed as part of Close-only button pattern
+        # _revert_settings was removed as part of no-action-buttons pattern
         self.assertFalse(hasattr(SettingsDialog, "_revert_settings"))
 
     def test_settings_dialog_no_show_applied_message(self):
