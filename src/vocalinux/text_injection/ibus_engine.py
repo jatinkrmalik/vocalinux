@@ -111,6 +111,28 @@ def is_ibus_available() -> bool:
     return IBUS_AVAILABLE
 
 
+def is_ibus_daemon_running() -> bool:
+    """
+    Check if the IBus daemon (ibus-daemon) is currently running.
+
+    This is important because on some desktop environments (e.g., Fedora KDE),
+    the IBus daemon is not started by default. Attempting to set up IBus
+    when the daemon isn't running will fail.
+
+    Returns:
+        True if ibus-daemon is running, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["pgrep", "-x", "ibus-daemon"],
+            capture_output=True,
+            timeout=2,
+        )
+        return result.returncode == 0
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return False
+
+
 def _get_expected_component_xml() -> str:
     """Generate the expected component XML content for the current installation."""
     engine_script = Path(__file__).resolve()
