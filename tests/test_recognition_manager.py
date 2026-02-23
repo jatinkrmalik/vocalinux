@@ -217,6 +217,70 @@ class TestSpeechRecognition(unittest.TestCase):
         mock_audio_feedback.play_stop_sound.assert_called_once()
         self.threadInstance.join.assert_called()
 
+    def test_session_timeout_triggers_auto_stop_after_inactivity(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.reconfigure(enable_session_timeout=True, session_timeout=10.0)
+        getattr(manager, "_set_last_speech_time")(100.0)
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.time.time", return_value=111.0
+        ):
+            self.assertTrue(
+                getattr(manager, "_session_timeout_reached")(speech_detected_in_session=True)
+            )
+
+    def test_session_timeout_enable_disable_toggle(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.reconfigure(session_timeout=5.0)
+        getattr(manager, "_set_last_speech_time")(100.0)
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.time.time", return_value=110.0
+        ):
+            manager.reconfigure(enable_session_timeout=False)
+            self.assertFalse(
+                getattr(manager, "_session_timeout_reached")(speech_detected_in_session=True)
+            )
+
+            manager.reconfigure(enable_session_timeout=True)
+            self.assertTrue(
+                getattr(manager, "_session_timeout_reached")(speech_detected_in_session=True)
+            )
+
+    def test_session_timeout_clamps_to_valid_range(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+
+        manager.reconfigure(session_timeout=0.25)
+        self.assertEqual(getattr(manager, "session_timeout"), 1.0)
+
+        manager.reconfigure(session_timeout=120.0)
+        self.assertEqual(getattr(manager, "session_timeout"), 60.0)
+
+    def test_session_timeout_timer_resets_on_new_speech(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.reconfigure(enable_session_timeout=True, session_timeout=10.0)
+        getattr(manager, "_set_last_speech_time")(100.0)
+        getattr(manager, "_set_last_speech_time")(106.0)
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.time.time", return_value=114.0
+        ):
+            self.assertFalse(
+                getattr(manager, "_session_timeout_reached")(speech_detected_in_session=True)
+            )
+
+    def test_session_timeout_does_not_trigger_without_speech_in_session(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.reconfigure(enable_session_timeout=True, session_timeout=1.0)
+        getattr(manager, "_set_last_speech_time")(100.0)
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.time.time", return_value=200.0
+        ):
+            self.assertFalse(
+                getattr(manager, "_session_timeout_reached")(speech_detected_in_session=False)
+            )
+
     def test_whisper_engine(self):
         """Test initialization and usage with Whisper engine."""
         # Setup Whisper and torch mocks

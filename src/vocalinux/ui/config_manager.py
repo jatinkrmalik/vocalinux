@@ -52,6 +52,9 @@ DEFAULT_CONFIG = {
     },
 }
 
+MIN_SESSION_TIMEOUT = 1.0
+MAX_SESSION_TIMEOUT = 60.0
+
 
 class ConfigManager:
     """
@@ -92,6 +95,7 @@ class ConfigManager:
 
             # Update the default config with user settings
             self._update_dict_recursive(self.config, user_config)
+            self._validate_session_timeout_config()
             logger.info(f"Loaded configuration from {CONFIG_FILE}")
 
             # Migrate old config format if needed
@@ -100,6 +104,29 @@ class ConfigManager:
 
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
+
+    def _validate_session_timeout_config(self):
+        sr_config = self.config.setdefault("speech_recognition", {})
+        raw_value = sr_config.get(
+            "session_timeout", DEFAULT_CONFIG["speech_recognition"]["session_timeout"]
+        )
+
+        try:
+            timeout_value = float(raw_value)
+        except (TypeError, ValueError):
+            timeout_value = DEFAULT_CONFIG["speech_recognition"]["session_timeout"]
+            logger.warning(
+                f"Invalid session_timeout value {raw_value!r} in config; using default {timeout_value:.1f}s"
+            )
+
+        clamped_value = max(MIN_SESSION_TIMEOUT, min(MAX_SESSION_TIMEOUT, timeout_value))
+        if clamped_value != timeout_value:
+            logger.warning(
+                f"session_timeout value {timeout_value:.1f}s is outside valid range "
+                f"[{MIN_SESSION_TIMEOUT:.1f}, {MAX_SESSION_TIMEOUT:.1f}]; clamped to {clamped_value:.1f}s"
+            )
+
+        sr_config["session_timeout"] = clamped_value
 
     def _check_needs_migration(self, user_config: Dict) -> bool:
         """Check if the user config needs migration to add per-engine model sizes."""

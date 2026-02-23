@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import unittest
+from typing import Any, cast
 from unittest.mock import patch
 
 # Update import path to use the new package structure
@@ -91,6 +92,45 @@ class TestConfigManager(unittest.TestCase):
         )  # From defaults
         self.assertEqual(config_manager.config["ui"]["start_minimized"], True)
         self.assertEqual(config_manager.config["ui"]["show_notifications"], True)  # From defaults
+
+    def test_load_config_clamps_session_timeout_below_min(self):
+        test_config = {"speech_recognition": {"session_timeout": 0.25}}
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+
+        self.assertEqual(config_manager.config["speech_recognition"]["session_timeout"], 1.0)
+        self.mock_logger.warning.assert_called_with(
+            "session_timeout value 0.2s is outside valid range [1.0, 60.0]; clamped to 1.0s"
+        )
+
+    def test_load_config_clamps_session_timeout_above_max(self):
+        test_config = {"speech_recognition": {"session_timeout": 99.0}}
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+
+        self.assertEqual(config_manager.config["speech_recognition"]["session_timeout"], 60.0)
+        self.mock_logger.warning.assert_called_with(
+            "session_timeout value 99.0s is outside valid range [1.0, 60.0]; clamped to 60.0s"
+        )
+
+    def test_load_config_uses_default_for_invalid_session_timeout(self):
+        test_config = {"speech_recognition": {"session_timeout": "invalid"}}
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+
+        self.assertEqual(config_manager.config["speech_recognition"]["session_timeout"], 10.0)
+        self.mock_logger.warning.assert_any_call(
+            "Invalid session_timeout value 'invalid' in config; using default 10.0s"
+        )
 
     def test_load_config_file_error(self):
         """Test handling of errors when loading config file."""
@@ -180,7 +220,7 @@ class TestConfigManager(unittest.TestCase):
     def test_set_error(self):
         """Test handling of errors when setting a value."""
         config_manager = ConfigManager()
-        config_manager.config = 1  # Not a dict, will cause error
+        config_manager.config = cast(Any, 1)  # Not a dict, will cause error
         result = config_manager.set("section", "key", "value")
         self.assertFalse(result)
         self.mock_logger.error.assert_called()

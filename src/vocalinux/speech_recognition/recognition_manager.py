@@ -389,6 +389,7 @@ class SpeechRecognitionManager:
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
         self.session_timeout = kwargs.get("session_timeout", 10.0)
         self.enable_session_timeout = kwargs.get("enable_session_timeout", True)
+        self._session_timeout_lock = threading.Lock()
         self._last_speech_time = None
 
         # Audio device selection (None means use system default)
@@ -1358,7 +1359,7 @@ class SpeechRecognitionManager:
         # Set recording flag
         self.should_record = True
         self.audio_buffer = []
-        self._last_speech_time = None  # Reset session timeout tracking
+        self._set_last_speech_time(None)  # Reset session timeout tracking
 
         # Start the audio recording thread
         self.audio_thread = threading.Thread(target=self._record_audio)
@@ -1574,28 +1575,26 @@ class SpeechRecognitionManager:
                             silence_counter = 0
 
                             # Check session timeout (auto-stop after inactivity)
-                            if (
-                                self.enable_session_timeout
-                                and self._last_speech_time is not None
-                                and speech_detected_in_session
-                            ):
-                                idle_time = time.time() - self._last_speech_time
-                                if idle_time >= self.session_timeout:
-                                    logger.info(
-                                        f"Session timeout reached ({idle_time:.1f}s idle). Auto-stopping recognition."
-                                    )
-                                    _show_notification(
-                                        "Voice Recognition Stopped",
-                                        "Microphone stopped due to inactivity",
-                                        "audio-input-microphone-symbolic",
-                                    )
-                                    play_stop_sound()
-                                    break  # Exit the recording loop
+                            if self._session_timeout_reached(speech_detected_in_session):
+                                last_speech_time = self._get_last_speech_time()
+                                if last_speech_time is not None:
+                                    idle_time = time.time() - last_speech_time
+                                    if idle_time >= self.session_timeout:
+                                        logger.info(
+                                            f"Session timeout reached ({idle_time:.1f}s idle). Auto-stopping recognition."
+                                        )
+                                        _show_notification(
+                                            "Voice Recognition Stopped",
+                                            "Microphone stopped due to inactivity",
+                                            "audio-input-microphone-symbolic",
+                                        )
+                                        play_stop_sound()
+                                        break  # Exit the recording loop
 
                             self._update_state(RecognitionState.LISTENING)
                     else:  # Speech
                         # Update last speech time for session timeout tracking
-                        self._last_speech_time = time.time()
+                        self._set_last_speech_time(time.time())
                         if not speech_detected_in_session:
                             logger.debug(
                                 f"Speech detected (level={normalized_level:.1f}%, "
@@ -1711,6 +1710,25 @@ class SpeechRecognitionManager:
         while self.should_record:
             # The real work is done in _record_audio and _process_final_buffer
             time.sleep(0.1)
+
+    def _set_last_speech_time(self, timestamp: Optional[float]) -> None:
+        with self._session_timeout_lock:
+            self._last_speech_time = timestamp
+
+    def _get_last_speech_time(self) -> Optional[float]:
+        with self._session_timeout_lock:
+            return self._last_speech_time
+
+    def _session_timeout_reached(self, speech_detected_in_session: bool) -> bool:
+        if not self.enable_session_timeout or not speech_detected_in_session:
+            return False
+
+        last_speech_time = self._get_last_speech_time()
+        if last_speech_time is None:
+            return False
+
+        idle_time = time.time() - last_speech_time
+        return idle_time >= self.session_timeout
 
     def reconfigure(
         self,
