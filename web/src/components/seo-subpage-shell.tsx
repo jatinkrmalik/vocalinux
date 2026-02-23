@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
+  ChevronDown,
   ChevronRight,
   Code2,
   Cpu,
@@ -71,14 +72,51 @@ const navCategories = [
   },
 ];
 
-// Quick nav for desktop header (most important pages)
-const quickNavItems = [
-  { href: "/install/", label: "Install", icon: BookOpen },
-  { href: "/compare/", label: "Engines", icon: Cpu },
-  { href: "/for-developers/", label: "Developers", icon: Code2 },
-  { href: "/offline/", label: "Offline", icon: Shield },
-  { href: "/faq/", label: "FAQ", icon: HelpCircle },
-];
+function DropdownMenu({
+  category,
+  isOpen,
+  onToggle,
+}: {
+  category: (typeof navCategories)[0];
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="relative">
+      <button
+        onClick={onToggle}
+        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+          isOpen
+            ? "bg-zinc-100 text-foreground dark:bg-zinc-800"
+            : "text-muted-foreground hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800"
+        }`}
+      >
+        {category.label}
+        <ChevronDown
+          className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+          {category.items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-700"
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Breadcrumbs() {
   const pathname = usePathname();
@@ -94,7 +132,6 @@ function Breadcrumbs() {
     return { href, label };
   });
 
-  // Find the page title from nav items
   const getPageTitle = (path: string): string => {
     for (const category of navCategories) {
       for (const item of category.items) {
@@ -103,7 +140,13 @@ function Breadcrumbs() {
         }
       }
     }
-    return path.split("/").pop()?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "";
+    return (
+      path
+        .split("/")
+        .pop()
+        ?.replace(/-/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase()) || ""
+    );
   };
 
   return (
@@ -134,9 +177,22 @@ function Breadcrumbs() {
 
 export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  const handleDropdownToggle = (label: string) => {
+    setOpenDropdown(openDropdown === label ? null : label);
+  };
+
+  // Close dropdowns when clicking outside
+  const handleClickOutside = () => {
+    setOpenDropdown(null);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
+    <div
+      className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950"
+      onClick={handleClickOutside}
+    >
       <header className="sticky top-0 z-50 border-b border-zinc-200/80 bg-background/95 backdrop-blur-md dark:border-zinc-800/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <Link href="/" className="group flex items-center gap-2">
@@ -148,26 +204,24 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
             <span className="text-base font-bold sm:text-lg">Vocalinux</span>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden items-center gap-1 lg:gap-2 md:flex">
-            {quickNavItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800"
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden lg:inline">{item.label}</span>
-                </Link>
-              );
-            })}
+          {/* Desktop nav with dropdowns */}
+          <nav className="hidden items-center gap-1 md:flex">
+            {navCategories.map((category) => (
+              <DropdownMenu
+                key={category.label}
+                category={category}
+                isOpen={openDropdown === category.label}
+                onToggle={() => handleDropdownToggle(category.label)}
+              />
+            ))}
           </nav>
 
           {/* Mobile menu button */}
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMobileMenuOpen(!mobileMenuOpen);
+            }}
             className="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800 md:hidden"
             aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           >
