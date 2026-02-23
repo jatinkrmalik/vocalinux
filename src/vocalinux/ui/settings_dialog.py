@@ -747,7 +747,7 @@ class SettingsDialog(Gtk.Dialog):
         else:
             screen_height = 1080  # Default fallback
             screen_width = 1920
-        dialog_height = int(screen_height * 0.75)
+        dialog_height = int(screen_height * 0.5)
         dialog_width = min(700, int(screen_width * 0.8))
         self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
