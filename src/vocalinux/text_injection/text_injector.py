@@ -16,6 +16,7 @@ from typing import Optional  # noqa: F401
 from .ibus_engine import (
     IBusTextInjector,
     is_ibus_available,
+    is_ibus_daemon_running,
 )
 
 logger = logging.getLogger(__name__)
@@ -134,18 +135,26 @@ class TextInjector:
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
         if is_ibus_available():
-            try:
-                self._ibus_injector = IBusTextInjector(auto_activate=True)
-                if self.environment == DesktopEnvironment.X11:
-                    self.environment = DesktopEnvironment.X11_IBUS
-                else:
-                    self.environment = DesktopEnvironment.WAYLAND_IBUS
+            # Check if ibus-daemon is running before attempting setup
+            if not is_ibus_daemon_running():
                 logger.info(
-                    f"Using IBus for {self.environment.value} text injection (best compatibility)"
+                    "IBus daemon not running. This is normal on some desktop environments "
+                    "(e.g., KDE Plasma). Using alternative text injection method. "
+                    "For IBus setup, see: https://github.com/jatinkrmalik/vocalinux/wiki/IBus-Setup"
                 )
-                return
-            except Exception as e:
-                logger.warning(f"IBus initialization failed: {e}, trying alternatives")
+            else:
+                try:
+                    self._ibus_injector = IBusTextInjector(auto_activate=True)
+                    if self.environment == DesktopEnvironment.X11:
+                        self.environment = DesktopEnvironment.X11_IBUS
+                    else:
+                        self.environment = DesktopEnvironment.WAYLAND_IBUS
+                    logger.info(
+                        f"Using IBus for {self.environment.value} text injection (best compatibility)"
+                    )
+                    return
+                except Exception as e:
+                    logger.warning(f"IBus initialization failed: {e}, trying alternatives")
 
         if self.environment == DesktopEnvironment.X11:
             # Check for xdotool
