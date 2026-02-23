@@ -660,34 +660,39 @@ detect_whispercpp_backends() {
     fi
 
     # Determine recommendation (Priority: CUDA > Vulkan > CPU)
+    # IMPORTANT: The installer WILL install dev libraries (libvulkan-dev, glslc, CUDA) later,
+    # so we recommend GPU if there's a compatible GPU regardless of current library status.
     local RECOMMENDED_BACKEND="cpu"
     local RECOMMENDED_REASON=""
     local CAN_BUILD_GPU=false
 
-    # NVIDIA with CUDA is the best option
-    if [[ "$HAS_NVIDIA_GPU" == "yes" && "$HAS_CUDA_DEV" == "true" ]]; then
+    # NVIDIA GPU - best option, uses CUDA
+    if [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
         RECOMMENDED_BACKEND="cuda"
-        RECOMMENDED_REASON="NVIDIA GPU with CUDA toolkit"
+        if [[ "$HAS_CUDA_DEV" == "true" ]]; then
+            RECOMMENDED_REASON="NVIDIA GPU with CUDA toolkit installed"
+        else
+            RECOMMENDED_REASON="NVIDIA GPU detected (CUDA toolkit will be installed)"
+        fi
         CAN_BUILD_GPU=true
-    # Vulkan is the second choice (AMD, Intel GPUs)
-    elif [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" && "$VULKAN_COMPATIBLE" == "compatible" ]]; then
+    # Vulkan-compatible GPU (AMD, Intel Gen8+) - second choice
+    elif [[ "$HAS_VULKAN" == "yes" && "$VULKAN_COMPATIBLE" == "compatible" ]]; then
         RECOMMENDED_BACKEND="vulkan"
-        RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
+        if [[ "$HAS_VULKAN_DEV" == "true" ]]; then
+            RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
+        else
+            RECOMMENDED_REASON="Vulkan GPU detected (dev libraries will be installed)"
+        fi
         CAN_BUILD_GPU=true
-    # Incompatible Vulkan GPU (old Intel Gen7)
+    # Vulkan GPU but compatibility unknown - allow GPU build as fallback
+    elif [[ "$HAS_VULKAN" == "yes" && "$VULKAN_COMPATIBLE" == "unknown" ]]; then
+        RECOMMENDED_BACKEND="vulkan"
+        RECOMMENDED_REASON="Possible Vulkan GPU (will verify during build)"
+        CAN_BUILD_GPU=true
+    # Incompatible Vulkan GPU (old Intel Gen7) - CPU only
     elif [[ "$VULKAN_COMPATIBLE" == "incompatible" ]]; then
         RECOMMENDED_BACKEND="cpu"
         RECOMMENDED_REASON="Incompatible GPU ($VULKAN_COMPAT_REASON) - CPU mode recommended"
-        CAN_BUILD_GPU=false
-    # NVIDIA without CUDA installed
-    elif [[ "$HAS_NVIDIA_GPU" == "yes" ]]; then
-        RECOMMENDED_BACKEND="cpu"
-        RECOMMENDED_REASON="NVIDIA GPU detected but CUDA not installed (will use CPU)"
-        CAN_BUILD_GPU=false
-    # Vulkan without dev libraries
-    elif [[ "$HAS_VULKAN" == "yes" ]]; then
-        RECOMMENDED_BACKEND="cpu"
-        RECOMMENDED_REASON="GPU detected but dev libraries missing (will use CPU)"
         CAN_BUILD_GPU=false
     else
         RECOMMENDED_BACKEND="cpu"
