@@ -28,42 +28,42 @@
 
 **A seamless free open-source private voice dictation system for Linux**, comparable to built-in solutions on macOS and Windows.
 
-## 📚 What's New in v0.6.3-beta
+## 📚 What's New in v0.7.0-beta
 
-> 🎉 **Beta Release with whisper.cpp!** — Fast, private, offline voice dictation for Linux.
+> 🎉 **Major Release: Autostart, Tabbed Settings & Intel GPU Support!** — The most feature-rich Vocalinux release yet.
 
-### 🚀 Highlights (v0.6.0 → v0.6.3)
+### 🚀 Highlights (v0.6.3 → v0.7.0)
 
 | Feature | Description |
 |---------|-------------|
-| **⚡ whisper.cpp Default** | 10x faster installation (~1-2 min), C++ optimized inference |
-| **🎮 Universal GPU Support** | Vulkan acceleration for AMD, Intel, and NVIDIA GPUs |
-| **📦 Interactive Installer** | Choose between 3 engines with hardware auto-detection |
-| **🔧 Multi-Distro Support** | Works on Ubuntu, Debian, Fedora, Arch, and more |
+| **🖥️ Autostart Support** | Launch Vocalinux automatically on desktop session startup |
+| **⚙️ Tabbed Settings** | Completely redesigned settings dialog with organized tabs |
+| **🎮 Intel GPU Detection** | Automatically detects incompatible Intel GPUs and falls back to CPU |
+| **🔒 Single Instance** | Prevents multiple Vocalinux instances from running simultaneously |
 
-### ✨ New Features (v0.6.3)
+### ✨ New Features (v0.7.0)
 
-- **IBus Text Injection Engine** — Full Wayland support via IBus input method
-- **X11 IBus Support** — Extended IBus support to X11 for non-US keyboard layouts
-- **Thread-Safe Model Access** — Improved stability with concurrent model operations
+- **Autostart on Login** — Added XDG autostart support via settings dialog and system tray
+- **Tabbed Settings Dialog** — reorganized settings into Speech Engine, Recognition, Text Injection, Audio Feedback, and General tabs
+- **Intel GPU Compatibility Detection** — Detects incompatible Intel GPUs and automatically falls back to CPU processing
+- **Multiple Instance Prevention** — Shows notification and exits if Vocalinux is already running
+- **Evdev Device Management** — Automatically removes disconnected input devices to prevent CPU spin
 
-### 🐛 Bug Fixes (v0.6.3)
+### 🐛 Bug Fixes (v0.7.0)
 
-- **#229**: Fixed `[BLANK_AUDIO]` token suppression in whisper.cpp output
-- **#228**: Removed premature pkg-config check in installer
-- **#227**: Fixed text injection for non-US keyboard layouts on X11
-- **#216**: Fixed thread safety crash when accessing speech models
-- **#221**: Fixed missing `psutil` dependency for fresh installs
-- **#219**: Suppressed `[BLANK_AUDIO]` tokens in whisper.cpp output
-- **#204**: Fixed PyAudio `paInt16` error on device reconnection
-- **#205**: Fixed whisper module installation with `--auto` flag
+- **#254**: Improved GPU detection to avoid false positives on systems without dev libraries
+- **#251**: Skip IBus setup when daemon is not running, enable fallback to other methods
+- **#243**: Prevent `dnf check-update` from exiting script on Fedora
+- **#240**: Raise exception on IBus setup failure to enable automatic fallback
+- **#234**: Removed leading space from first speech transcription
+- **#242/#253**: Removed disconnected evdev devices to prevent CPU spin
 
 ### 🔧 Recent Improvements
 
-- **Interactive Backend Selection** — Choose GPU (Vulkan/CUDA) or CPU backend
-- **Enhanced Welcome Message** — Clear post-install instructions
-- **Simplified Install Commands** — No more `--tag` parameter needed
-- **Better Vulkan Detection** — Improved shader package installation
+- **Web SEO Enhancements** — Added 7 new optimized pages for organic traffic
+- **Mobile Responsiveness** — Improved mobile and tablet layout for the website
+- **Better Fedora Support** — Fixed dnf check-update behavior
+- **Improved Device Handling** — More robust handling of input device connections/disconnections
 
 ---
 
@@ -121,7 +121,7 @@ Here are some screenshots showcasing Vocalinux in action:
 Our new interactive installer guides you through setup with intelligent hardware detection:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 
 **Choose your engine:**
@@ -135,25 +135,25 @@ The installer will:
 - **Download the appropriate model** (~39MB for whisper.cpp tiny)
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
-> **Note**: Installs v0.6.3-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.7.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 ### Installation Options
 
 **Default (whisper.cpp - recommended):**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 Fastest installation (~1-2 min), universal GPU support via Vulkan.
 
 **Whisper (OpenAI) - if you prefer PyTorch:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
 ```
 NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
 
 **VOSK only - for low-RAM systems:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
 ```
 Lightweight option (~40MB), works on systems with 4GB RAM.
 

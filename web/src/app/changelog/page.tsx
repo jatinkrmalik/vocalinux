@@ -6,6 +6,22 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.7.0-beta",
+    date: "2026-02-22",
+    type: "beta",
+    highlights: [
+      "Autostart on login support (XDG autostart)",
+      "Tabbed settings dialog (Speech Engine, Recognition, Text Injection, Audio Feedback, General)",
+      "Intel GPU compatibility detection - auto fallback to CPU for incompatible GPUs",
+      "Single instance prevention - prevents multiple Vocalinux running",
+      "Evdev device management - removes disconnected devices to prevent CPU spin",
+      "Improved GPU detection - avoids false positives on systems without dev libraries",
+      "IBus fallback - skip setup when daemon not running",
+      "Fedora dnf check-update fix",
+      "Web SEO - 7 new optimized pages",
+    ],
+  },
+  {
     version: "v0.6.3-beta",
     date: "2026-02-19",
     type: "beta",

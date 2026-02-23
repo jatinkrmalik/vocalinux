@@ -223,7 +223,7 @@ docs(readme): update installation instructions
 - `docs/` - Documentation updates
 - `refactor/` - Code refactoring
 - `test/` - Test additions/updates
-- `release/` - Release preparation (e.g., `release/v0.6.2-beta`)
+- `release/` - Release preparation (e.g., `release/v0.7.0-beta`)
 
 ## Important Rules
 
