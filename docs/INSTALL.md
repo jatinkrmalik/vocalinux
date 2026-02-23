@@ -7,10 +7,10 @@ This guide provides detailed instructions for installing Vocalinux on Linux syst
 ### One-liner Installation (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh | bash
 ```
 
-> **Note**: Installs v0.6.3-beta with **whisper.cpp** (our new default engine). For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.7.0-beta with **whisper.cpp** (our default engine). For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 That's it! The installer handles everything automatically:
 - ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
@@ -60,7 +60,7 @@ The new interactive installer guides you through engine selection:
 
 **Choose your engine:**
 1. **whisper.cpp** ⭐ (Recommended) - Fast, works with any GPU via Vulkan
-2. **Whisper** (OpenAI) - PyTorch-based, NVIDIA GPU only  
+2. **Whisper** (OpenAI) - PyTorch-based, NVIDIA GPU only
 3. **VOSK** - Lightweight, works on older systems
 
 The installer will auto-detect your hardware and recommend the best option!
@@ -508,7 +508,7 @@ Already have Vocalinux installed? See the [Update Guide](UPDATE.md) for instruct
 
 Quick update command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.6.3-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh | bash
 ```
 
 ## Getting Help
