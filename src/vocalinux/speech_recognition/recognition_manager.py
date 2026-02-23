@@ -17,11 +17,7 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import (
-    WHISPERCPP_MODEL_INFO,
-    get_model_path,
-    is_model_downloaded,
-)
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
 
 
@@ -693,6 +689,8 @@ class SpeechRecognitionManager:
 
             load_start_time = time.time()
 
+            loaded_backend = backend
+
             # Attempt to load model with automatic backend selection
             # If Vulkan GPU fails (e.g., incompatible Intel GPU), fallback to CPU
             try:
@@ -732,7 +730,7 @@ class SpeechRecognitionManager:
                         no_speech_thold=0.6,
                         entropy_thold=2.4,
                     )
-                    backend = ComputeBackend.CPU
+                    loaded_backend = ComputeBackend.CPU
                     backend_info = "CPU (fallback from incompatible Vulkan GPU)"
                     logger.info("Successfully loaded model with CPU backend")
                 else:
@@ -743,7 +741,9 @@ class SpeechRecognitionManager:
             logger.info(
                 f"whisper.cpp configured with n_threads={n_threads} (detected {cpu_count} CPUs)"
             )
-            logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({backend} backend)")
+            logger.info(
+                f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)"
+            )
 
             self._model_initialized = True
             logger.info("whisper.cpp engine initialized successfully.")

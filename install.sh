@@ -52,11 +52,11 @@ get_vocalinux_pids() {
 check_running_processes() {
     local PIDS
     PIDS=$(get_vocalinux_pids || true)
-    
+
     if [ -n "$PIDS" ]; then
         print_warning "Found running Vocalinux process(es): $PIDS"
         echo ""
-        
+
         if [[ "$NON_INTERACTIVE" == "yes" ]]; then
             print_info "Non-interactive mode: stopping Vocalinux automatically..."
         else
@@ -68,20 +68,20 @@ check_running_processes() {
                 exit 1
             fi
         fi
-        
+
         print_info "Stopping Vocalinux..."
         echo "$PIDS" | xargs -r kill -TERM 2>/dev/null || true
         sleep 2
-        
+
         local REMAINING_PIDS
         REMAINING_PIDS=$(get_vocalinux_pids || true)
-        
+
         if [ -n "$REMAINING_PIDS" ]; then
             print_warning "Some processes still running, forcing termination..."
             echo "$REMAINING_PIDS" | xargs -r kill -KILL 2>/dev/null || true
             sleep 1
         fi
-        
+
         local FINAL_PIDS
         FINAL_PIDS=$(get_vocalinux_pids || true)
         if [ -n "$FINAL_PIDS" ]; then
@@ -499,32 +499,87 @@ check_vulkan_gpu_compatibility() {
         "HSW"
         "SNB"
     )
-    
+
     # Check if vulkaninfo is available
     if ! command -v vulkaninfo >/dev/null 2>&1; then
         echo "unknown:vulkaninfo not available"
         return 1
     fi
-    
-    # Get GPU device name
-    local DEVICE_NAME
-    DEVICE_NAME=$(vulkaninfo --summary 2>/dev/null | grep -i "deviceName" | head -1 | cut -d'=' -f2 | xargs)
-    
-    if [ -z "$DEVICE_NAME" ]; then
+
+    local DEVICE_NAMES_RAW
+    DEVICE_NAMES_RAW=$(vulkaninfo --summary 2>/dev/null | awk -F'=' '/deviceName/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 != "") print $2}')
+
+    local DEVICE_NAMES_LABEL=""
+    while IFS= read -r device_name; do
+        [ -z "$device_name" ] && continue
+        if [ -n "$DEVICE_NAMES_LABEL" ]; then
+            DEVICE_NAMES_LABEL="${DEVICE_NAMES_LABEL}, ${device_name}"
+        else
+            DEVICE_NAMES_LABEL="$device_name"
+        fi
+    done <<< "$DEVICE_NAMES_RAW"
+
+    local FEATURES_OUTPUT
+    FEATURES_OUTPUT=$(vulkaninfo --features 2>/dev/null)
+
+    if [ -n "$FEATURES_OUTPUT" ]; then
+        if echo "$FEATURES_OUTPUT" | grep -Eq "VK_KHR_16bit_storage|storageBuffer16BitAccess[[:space:]]*=[[:space:]]*true|uniformAndStorageBuffer16BitAccess[[:space:]]*=[[:space:]]*true|storagePushConstant16[[:space:]]*=[[:space:]]*true"; then
+            if [ -z "$DEVICE_NAMES_LABEL" ]; then
+                DEVICE_NAMES_LABEL="Vulkan GPU (VK_KHR_16bit_storage)"
+            fi
+            echo "compatible:${DEVICE_NAMES_LABEL}"
+            return 0
+        fi
+
+        if [ -z "$DEVICE_NAMES_LABEL" ]; then
+            DEVICE_NAMES_LABEL="Vulkan GPU"
+        fi
+        echo "incompatible:${DEVICE_NAMES_LABEL} (missing VK_KHR_16bit_storage)"
+        return 1
+    fi
+
+    if [ -z "$DEVICE_NAMES_RAW" ]; then
         echo "unknown:Could not detect GPU name"
         return 1
     fi
-    
-    # Check against incompatible patterns
-    for pattern in "${INCOMPATIBLE_PATTERNS[@]}"; do
-        if echo "$DEVICE_NAME" | grep -iq "$pattern"; then
-            echo "incompatible:$DEVICE_NAME"
-            return 1
+
+    local HAS_COMPATIBLE_GPU=false
+    local INCOMPATIBLE_LABEL=""
+
+    while IFS= read -r device_name; do
+        [ -z "$device_name" ] && continue
+
+        local is_incompatible=false
+        for pattern in "${INCOMPATIBLE_PATTERNS[@]}"; do
+            if echo "$device_name" | grep -iq "$pattern"; then
+                is_incompatible=true
+                break
+            fi
+        done
+
+        if [ "$is_incompatible" = true ]; then
+            if [ -n "$INCOMPATIBLE_LABEL" ]; then
+                INCOMPATIBLE_LABEL="${INCOMPATIBLE_LABEL}, ${device_name}"
+            else
+                INCOMPATIBLE_LABEL="$device_name"
+            fi
+        else
+            HAS_COMPATIBLE_GPU=true
         fi
-    done
-    
-    echo "compatible:$DEVICE_NAME"
-    return 0
+    done <<< "$DEVICE_NAMES_RAW"
+
+    if [ "$HAS_COMPATIBLE_GPU" = true ]; then
+        echo "compatible:${DEVICE_NAMES_LABEL}"
+        return 0
+    fi
+
+    if [ -n "$INCOMPATIBLE_LABEL" ]; then
+        echo "incompatible:${INCOMPATIBLE_LABEL}"
+        return 1
+    fi
+
+    echo "unknown:Could not classify Vulkan GPU compatibility"
+    return 1
 }
 
 # Detect available GPU backends for whisper.cpp and recommend the best option
@@ -543,7 +598,7 @@ detect_whispercpp_backends() {
     if command -v nvcc >/dev/null 2>&1; then
         HAS_CUDA_DEV=true
     fi
-    
+
     # Check Vulkan GPU compatibility (Gen7 and older Intel GPUs lack 16-bit storage support)
     local VULKAN_COMPATIBLE="unknown"
     local VULKAN_COMPAT_REASON=""
