@@ -17,11 +17,7 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import (
-    WHISPERCPP_MODEL_INFO,
-    get_model_path,
-    is_model_downloaded,
-)
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
 
 
@@ -692,19 +688,62 @@ class SpeechRecognitionManager:
             cpu_count = multiprocessing.cpu_count()
 
             load_start_time = time.time()
-            self.model = Model(
-                model_path,
-                n_threads=n_threads,
-                suppress_blank=True,
-                no_speech_thold=0.6,
-                entropy_thold=2.4,
-            )
+
+            loaded_backend = backend
+
+            # Attempt to load model with automatic backend selection
+            # If Vulkan GPU fails (e.g., incompatible Intel GPU), fallback to CPU
+            try:
+                self.model = Model(
+                    model_path,
+                    n_threads=n_threads,
+                    suppress_blank=True,
+                    no_speech_thold=0.6,
+                    entropy_thold=2.4,
+                )
+            except RuntimeError as model_error:
+                error_str = str(model_error).lower()
+                # Check for Vulkan 16-bit storage incompatibility
+                if (
+                    "16-bit storage" in error_str
+                    or "unsupported device" in error_str
+                    or "incompatible driver" in error_str
+                ):
+                    logger.warning(
+                        f"Vulkan GPU initialization failed: {model_error}. "
+                        "Falling back to CPU backend."
+                    )
+                    _show_notification(
+                        "Vocalinux: GPU Fallback",
+                        "Your GPU doesn't support whisper.cpp Vulkan.\n"
+                        "Switched to CPU mode - still fast!",
+                        "dialog-information",
+                    )
+                    # Force CPU backend by disabling GPU backends
+                    os.environ["GGML_VULKAN"] = "0"
+                    os.environ["GGML_CUDA"] = "0"
+                    # Retry with CPU-only backend
+                    self.model = Model(
+                        model_path,
+                        n_threads=n_threads,
+                        suppress_blank=True,
+                        no_speech_thold=0.6,
+                        entropy_thold=2.4,
+                    )
+                    loaded_backend = ComputeBackend.CPU
+                    backend_info = "CPU (fallback from incompatible Vulkan GPU)"
+                    logger.info("Successfully loaded model with CPU backend")
+                else:
+                    raise
+
             load_duration = time.time() - load_start_time
 
             logger.info(
                 f"whisper.cpp configured with n_threads={n_threads} (detected {cpu_count} CPUs)"
             )
-            logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({backend} backend)")
+            logger.info(
+                f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)"
+            )
 
             self._model_initialized = True
             logger.info("whisper.cpp engine initialized successfully.")

@@ -2,7 +2,9 @@
 Tests for Whisper speech recognition support.
 """
 
+import os
 import sys
+import types
 from unittest.mock import MagicMock, patch  # noqa: F401
 
 # Mock GTK and other dependencies before importing vocalinux
@@ -103,3 +105,57 @@ class TestWhisperSupport:
             assert manager.engine == "whisper"
             assert manager.model_size == "base"
             whisper_mock.load_model.assert_called_once()
+
+    def test_whispercpp_falls_back_to_cpu_on_16bit_storage_error(self):
+        model_ctor = MagicMock(
+            side_effect=[
+                RuntimeError("device does not support 16-bit storage"),
+                MagicMock(),
+            ]
+        )
+
+        pywhispercpp_pkg = types.ModuleType("pywhispercpp")
+        pywhispercpp_model = types.ModuleType("pywhispercpp.model")
+        setattr(pywhispercpp_model, "Model", model_ctor)
+        setattr(pywhispercpp_pkg, "model", pywhispercpp_model)
+
+        psutil_mock = MagicMock()
+        psutil_mock.virtual_memory.return_value = MagicMock(total=8 * (1024**3))
+
+        with patch.dict(
+            sys.modules,
+            {
+                "pywhispercpp": pywhispercpp_pkg,
+                "pywhispercpp.model": pywhispercpp_model,
+                "psutil": psutil_mock,
+            },
+        ):
+            from vocalinux.speech_recognition import recognition_manager as rm
+
+            with patch("os.makedirs"), patch("os.path.exists", return_value=True), patch(
+                "os.path.getsize", return_value=40 * 1024 * 1024
+            ), patch("multiprocessing.cpu_count", return_value=4), patch(
+                "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
+                return_value=("vulkan", "Intel GPU"),
+            ), patch(
+                "vocalinux.utils.whispercpp_model_info.get_backend_display_name",
+                return_value="Vulkan",
+            ), patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value="/tmp/mock-ggml-tiny.bin",
+            ), patch(
+                "vocalinux.speech_recognition.recognition_manager._show_notification"
+            ) as notify_mock, patch.dict(
+                os.environ,
+                {"GGML_VULKAN": "1", "GGML_CUDA": "1"},
+                clear=False,
+            ):
+                manager = rm.SpeechRecognitionManager(
+                    engine="whisper_cpp", model_size="tiny", defer_download=False
+                )
+
+                assert manager.model is not None
+                assert model_ctor.call_count == 2
+                assert os.environ["GGML_VULKAN"] == "0"
+                assert os.environ["GGML_CUDA"] == "0"
+                notify_mock.assert_called_once()

@@ -52,11 +52,11 @@ get_vocalinux_pids() {
 check_running_processes() {
     local PIDS
     PIDS=$(get_vocalinux_pids || true)
-    
+
     if [ -n "$PIDS" ]; then
         print_warning "Found running Vocalinux process(es): $PIDS"
         echo ""
-        
+
         if [[ "$NON_INTERACTIVE" == "yes" ]]; then
             print_info "Non-interactive mode: stopping Vocalinux automatically..."
         else
@@ -68,20 +68,20 @@ check_running_processes() {
                 exit 1
             fi
         fi
-        
+
         print_info "Stopping Vocalinux..."
         echo "$PIDS" | xargs -r kill -TERM 2>/dev/null || true
         sleep 2
-        
+
         local REMAINING_PIDS
         REMAINING_PIDS=$(get_vocalinux_pids || true)
-        
+
         if [ -n "$REMAINING_PIDS" ]; then
             print_warning "Some processes still running, forcing termination..."
             echo "$REMAINING_PIDS" | xargs -r kill -KILL 2>/dev/null || true
             sleep 1
         fi
-        
+
         local FINAL_PIDS
         FINAL_PIDS=$(get_vocalinux_pids || true)
         if [ -n "$FINAL_PIDS" ]; then
@@ -479,6 +479,109 @@ detect_vulkan() {
     return 1
 }
 
+# Check for incompatible Intel GPUs that don't support VK_KHR_16bit_storage
+# These GPUs will fail with "device does not support 16-bit storage" error
+# Affected: Intel Gen7 and older (Ivy Bridge, Haswell, Sandy Bridge)
+# See: https://github.com/jatinkrmalik/vocalinux/issues/238
+check_vulkan_gpu_compatibility() {
+    # List of known incompatible GPU patterns
+    local INCOMPATIBLE_PATTERNS=(
+        "Ivy Bridge"
+        "Haswell"
+        "Sandy Bridge"
+        "HD Graphics 2500"
+        "HD Graphics 4000"
+        "HD Graphics 4400"
+        "HD Graphics 4600"
+        "HD Graphics P4600"
+        "HD Graphics P4700"
+        "IVB"
+        "HSW"
+        "SNB"
+    )
+
+    # Check if vulkaninfo is available
+    if ! command -v vulkaninfo >/dev/null 2>&1; then
+        echo "unknown:vulkaninfo not available"
+        return 1
+    fi
+
+    local DEVICE_NAMES_RAW
+    DEVICE_NAMES_RAW=$(vulkaninfo --summary 2>/dev/null | awk -F'=' '/deviceName/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 != "") print $2}')
+
+    local DEVICE_NAMES_LABEL=""
+    while IFS= read -r device_name; do
+        [ -z "$device_name" ] && continue
+        if [ -n "$DEVICE_NAMES_LABEL" ]; then
+            DEVICE_NAMES_LABEL="${DEVICE_NAMES_LABEL}, ${device_name}"
+        else
+            DEVICE_NAMES_LABEL="$device_name"
+        fi
+    done <<< "$DEVICE_NAMES_RAW"
+
+    local FEATURES_OUTPUT
+    FEATURES_OUTPUT=$(vulkaninfo --features 2>/dev/null)
+
+    if [ -n "$FEATURES_OUTPUT" ]; then
+        if echo "$FEATURES_OUTPUT" | grep -Eq "VK_KHR_16bit_storage|storageBuffer16BitAccess[[:space:]]*=[[:space:]]*true|uniformAndStorageBuffer16BitAccess[[:space:]]*=[[:space:]]*true|storagePushConstant16[[:space:]]*=[[:space:]]*true"; then
+            if [ -z "$DEVICE_NAMES_LABEL" ]; then
+                DEVICE_NAMES_LABEL="Vulkan GPU (VK_KHR_16bit_storage)"
+            fi
+            echo "compatible:${DEVICE_NAMES_LABEL}"
+            return 0
+        fi
+
+        if [ -z "$DEVICE_NAMES_LABEL" ]; then
+            DEVICE_NAMES_LABEL="Vulkan GPU"
+        fi
+        echo "incompatible:${DEVICE_NAMES_LABEL} (missing VK_KHR_16bit_storage)"
+        return 1
+    fi
+
+    if [ -z "$DEVICE_NAMES_RAW" ]; then
+        echo "unknown:Could not detect GPU name"
+        return 1
+    fi
+
+    local HAS_COMPATIBLE_GPU=false
+    local INCOMPATIBLE_LABEL=""
+
+    while IFS= read -r device_name; do
+        [ -z "$device_name" ] && continue
+
+        local is_incompatible=false
+        for pattern in "${INCOMPATIBLE_PATTERNS[@]}"; do
+            if echo "$device_name" | grep -iq "$pattern"; then
+                is_incompatible=true
+                break
+            fi
+        done
+
+        if [ "$is_incompatible" = true ]; then
+            if [ -n "$INCOMPATIBLE_LABEL" ]; then
+                INCOMPATIBLE_LABEL="${INCOMPATIBLE_LABEL}, ${device_name}"
+            else
+                INCOMPATIBLE_LABEL="$device_name"
+            fi
+        else
+            HAS_COMPATIBLE_GPU=true
+        fi
+    done <<< "$DEVICE_NAMES_RAW"
+
+    if [ "$HAS_COMPATIBLE_GPU" = true ]; then
+        echo "compatible:${DEVICE_NAMES_LABEL}"
+        return 0
+    fi
+
+    if [ -n "$INCOMPATIBLE_LABEL" ]; then
+        echo "incompatible:${INCOMPATIBLE_LABEL}"
+        return 1
+    fi
+
+    echo "unknown:Could not classify Vulkan GPU compatibility"
+    return 1
+}
+
 # Detect available GPU backends for whisper.cpp and recommend the best option
 detect_whispercpp_backends() {
     detect_nvidia_gpu || true
@@ -496,12 +599,23 @@ detect_whispercpp_backends() {
         HAS_CUDA_DEV=true
     fi
 
+    # Check Vulkan GPU compatibility (Gen7 and older Intel GPUs lack 16-bit storage support)
+    local VULKAN_COMPATIBLE="unknown"
+    local VULKAN_COMPAT_REASON=""
+    if [[ "$HAS_VULKAN" == "yes" ]]; then
+        local COMPAT_RESULT
+        COMPAT_RESULT=$(check_vulkan_gpu_compatibility)
+        VULKAN_COMPATIBLE=$(echo "$COMPAT_RESULT" | cut -d':' -f1)
+        VULKAN_COMPAT_REASON=$(echo "$COMPAT_RESULT" | cut -d':' -f2-)
+    fi
+
     # Determine recommendation
     local RECOMMENDED_BACKEND="cpu"
     local RECOMMENDED_REASON=""
     local CAN_BUILD_GPU=false
 
-    if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" ]]; then
+    # Only recommend Vulkan if GPU is compatible
+    if [[ "$HAS_VULKAN" == "yes" && "$HAS_VULKAN_DEV" == "true" && "$VULKAN_COMPATIBLE" == "compatible" ]]; then
         RECOMMENDED_BACKEND="vulkan"
         RECOMMENDED_REASON="Vulkan GPU detected with dev libraries"
         CAN_BUILD_GPU=true
@@ -509,6 +623,10 @@ detect_whispercpp_backends() {
         RECOMMENDED_BACKEND="cuda"
         RECOMMENDED_REASON="NVIDIA GPU with CUDA toolkit"
         CAN_BUILD_GPU=true
+    elif [[ "$VULKAN_COMPATIBLE" == "incompatible" ]]; then
+        RECOMMENDED_BACKEND="cpu"
+        RECOMMENDED_REASON="Incompatible GPU ($VULKAN_COMPAT_REASON) - CPU mode recommended"
+        CAN_BUILD_GPU=false
     elif [[ "$HAS_VULKAN" == "yes" || "$HAS_NVIDIA_GPU" == "yes" ]]; then
         RECOMMENDED_BACKEND="cpu"
         if [[ "$HAS_VULKAN" == "yes" ]]; then
@@ -523,7 +641,7 @@ detect_whispercpp_backends() {
         CAN_BUILD_GPU=false
     fi
 
-    echo "${RECOMMENDED_BACKEND}:${RECOMMENDED_REASON}:${CAN_BUILD_GPU}:${HAS_VULKAN}:${HAS_NVIDIA_GPU}:${HAS_VULKAN_DEV}:${HAS_CUDA_DEV}"
+    echo "${RECOMMENDED_BACKEND}:${RECOMMENDED_REASON}:${CAN_BUILD_GPU}:${HAS_VULKAN}:${HAS_NVIDIA_GPU}:${HAS_VULKAN_DEV}:${HAS_CUDA_DEV}:${VULKAN_COMPATIBLE}:${VULKAN_COMPAT_REASON}"
 }
 
 # Detect hardware and recommend best engine
@@ -711,6 +829,26 @@ EOF
         local HAS_NVIDIA=$(echo "$BACKEND_INFO" | cut -d':' -f5)
         local HAS_VULKAN_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f6)
         local HAS_CUDA_DEV=$(echo "$BACKEND_INFO" | cut -d':' -f7)
+        local VULKAN_COMPAT=$(echo "$BACKEND_INFO" | cut -d':' -f8)
+        local VULKAN_COMPAT_REASON=$(echo "$BACKEND_INFO" | cut -d':' -f9)
+
+        # Show warning for incompatible GPUs
+        if [[ "$VULKAN_COMPAT" == "incompatible" ]]; then
+            echo ""
+            print_warning "═══════════════════════════════════════════════════════════════"
+            print_warning "  ⚠️  INCOMPATIBLE GPU DETECTED"
+            print_warning "═══════════════════════════════════════════════════════════════"
+            print_warning ""
+            print_warning "  Your GPU: $VULKAN_COMPAT_REASON"
+            print_warning ""
+            print_warning "  This Intel GPU lacks VK_KHR_16bit_storage support, which is"
+            print_warning "  required for whisper.cpp Vulkan acceleration."
+            print_warning ""
+            print_warning "  The CPU backend will be used instead, which is still fast!"
+            print_warning ""
+            print_warning "═══════════════════════════════════════════════════════════════"
+            echo ""
+        fi
 
         echo "Whisper.cpp can use different backends for speech recognition:"
         echo ""
