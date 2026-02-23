@@ -7,8 +7,8 @@ and other relevant parameters.
 UX Design Notes:
 - Follows GNOME Human Interface Guidelines (HIG) for modern desktop look
 - Uses preference-page style layout with clearly grouped sections
-- Implements instant-apply pattern: settings apply immediately when changed
-- Close button only (no Apply/Cancel) - consistent with GNOME Settings app
+- Settings apply immediately when changed (instant-apply pattern)
+- No action buttons needed - use title bar close button
 - Provides real-time progress feedback for recognition state
 - Multi-modal feedback (text + icon + audio level) for accessibility
 - Modal dialog for model downloads (explicit confirmation for large downloads)
@@ -729,9 +729,8 @@ class SettingsDialog(Gtk.Dialog):
         # Setup CSS styling
         _setup_css()
 
-        # Dialog configuration - Close button only (instant-apply pattern)
-        self.add_button("_Close", Gtk.ResponseType.CLOSE)
-        # Calculate dialog size - 75% of screen height for better visibility
+        # Dialog configuration - no action buttons needed (use title bar close)
+        # Calculate dialog size
         display = Gdk.Display.get_default()
         if display:
             monitor = display.get_primary_monitor()
@@ -2072,14 +2071,6 @@ For now, the engine has been reverted to VOSK."""
             )
 
         return False
-
-    def do_response(self, response_id):
-        """Handle dialog button responses."""
-        if response_id == Gtk.ResponseType.CLOSE:
-            logger.info("Close button clicked")
-            self.destroy()
-
-        return True
 
     def update_recognition_progress(self, state: str, audio_level: float = 0.0, info: str = ""):
         """Update the recognition progress feedback UI."""
