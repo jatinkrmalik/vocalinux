@@ -10,4 +10,5 @@ from .ibus_engine import (  # noqa: F401
     is_engine_active,
     is_engine_registered,
     is_ibus_available,
+    start_ibus_daemon,
 )

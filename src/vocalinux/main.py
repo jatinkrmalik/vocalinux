@@ -188,6 +188,20 @@ def main():
     initialize_logging()
     logger.info("Logging system initialized")
 
+    # Try to start IBus daemon if not running (for text injection)
+    # This helps on desktop environments where IBus doesn't start automatically
+    try:
+        from .text_injection import start_ibus_daemon
+
+        if start_ibus_daemon():
+            logger.debug("IBus daemon started for text injection")
+    except Exception as e:
+        logger.debug(f"Could not start IBus daemon: {e}")
+
+    config_manager = ConfigManager()
+    initialize_logging()
+    logger.info("Logging system initialized")
+
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
     audio_settings = config_manager.get_settings().get("audio", {})
