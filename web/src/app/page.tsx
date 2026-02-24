@@ -371,7 +371,7 @@ export default function HomePage() {
 
       {/* Hero Section */}
       <section className="relative pt-28 sm:pt-36 pb-16 sm:pb-24 px-4 sm:px-6 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-purple-500/5 dark:from-primary/10 dark:to-purple-500/10" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-cyan-500/5 dark:from-primary/10 dark:to-cyan-500/10" />
 
         {/* Animated background elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -399,7 +399,7 @@ export default function HomePage() {
 
               <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
                 Voice Dictation for Linux,{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-teal-500 to-cyan-600">
                   Finally Done Right
                 </span>
               </h1>
@@ -633,7 +633,7 @@ export default function HomePage() {
 
           {/* Comparison highlight */}
           <FadeInSection delay={0.2}>
-            <div className="mt-16 bg-gradient-to-r from-primary/10 via-purple-500/10 to-primary/10 rounded-2xl p-8 sm:p-12">
+            <div className="mt-16 bg-gradient-to-r from-primary/10 via-cyan-500/10 to-primary/10 rounded-2xl p-8 sm:p-12">
               <div className="grid md:grid-cols-2 gap-8 items-center">
                 <div>
                   <h3 className="text-2xl sm:text-3xl font-bold mb-4">
@@ -1111,7 +1111,7 @@ export default function HomePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-16 sm:py-24 px-4 sm:px-6 bg-gradient-to-br from-primary/10 via-purple-500/10 to-primary/10">
+      <section className="py-16 sm:py-24 px-4 sm:px-6 bg-gradient-to-br from-primary/10 via-cyan-500/10 to-primary/10">
         <div className="max-w-4xl mx-auto text-center">
           <FadeInSection>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6">
