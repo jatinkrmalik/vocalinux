@@ -117,6 +117,8 @@ def _get_supported_sample_rate(audio, device_index: int, channels: int = 1) -> i
     Returns:
         int: A supported sample rate, defaulting to 16000 if none work
     """
+    import pyaudio
+
     FORMAT = pyaudio.paInt16
     CHUNK = 1024
 
