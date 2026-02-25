@@ -2049,14 +2049,21 @@ For now, the engine has been reverted to VOSK."""
         if result.get("success"):
             max_level = result.get("max_amplitude", 0)
             has_signal = result.get("has_signal", False)
+            sample_rate = result.get("sample_rate", 16000)
 
             level_percent = min(100, (max_level / 327.68))
             self.audio_level_bar.set_value(level_percent)
 
+            # Build sample rate info string
+            if sample_rate == 16000:
+                rate_info = "(16kHz native)"
+            else:
+                rate_info = f"({sample_rate // 1000}kHz → 16kHz auto)"
+
             if has_signal:
                 self.audio_test_status.set_markup(
                     f"<span foreground='#26a269'>✓ Audio detected!</span> "
-                    f"Peak level: {level_percent:.0f}%"
+                    f"Peak: {level_percent:.0f}% {rate_info}"
                 )
             else:
                 self.audio_test_status.set_markup(
