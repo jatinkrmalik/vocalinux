@@ -1610,13 +1610,14 @@ class SpeechRecognitionManager:
                         # Resample to 16kHz if capturing at non-16kHz for Vosk/Whisper compatibility
                         if self._capture_sample_rate != 16000:
                             import numpy as np
+
                             audio_array = np.frombuffer(data, dtype=np.int16)
                             resample_ratio = 16000 / self._capture_sample_rate
                             resampled_length = int(len(audio_array) * resample_ratio)
                             resampled = np.interp(
                                 np.linspace(0, len(audio_array), resampled_length),
                                 np.arange(len(audio_array)),
-                                audio_array
+                                audio_array,
                             ).astype(np.int16)
                             data = resampled.tobytes()
 
