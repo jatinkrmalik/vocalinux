@@ -185,8 +185,8 @@ class TestSpeechRecognition(unittest.TestCase):
         # Setup command processor mock return values
         self.mock_cmd.process_text.return_value = ("processed text", ["action1"])
 
-        # Prepare audio buffer for processing
-        manager.audio_buffer = [b"audio_data"]
+        # Prepare audio buffer for processing (need >= 5 chunks to pass minimum buffer check)
+        manager.audio_buffer = [b"audio_data"] * 5
 
         # Process the buffer
         manager._process_final_buffer()
@@ -324,8 +324,14 @@ class TestSpeechRecognition(unittest.TestCase):
         manager.register_text_callback(text_callback)
         manager.register_action_callback(action_callback)
 
-        # Prepare audio buffer
-        manager.audio_buffer = [b"audio_data1", b"audio_data2"]
+        # Prepare audio buffer (need >= 5 chunks to pass minimum buffer check)
+        manager.audio_buffer = [
+            b"audio_data1",
+            b"audio_data2",
+            b"audio_data3",
+            b"audio_data4",
+            b"audio_data5",
+        ]
 
         # Process the buffer
         manager._process_final_buffer()
@@ -397,6 +403,67 @@ class TestSpeechRecognition(unittest.TestCase):
 
         # Verify command processor was not called
         self.mock_cmd.process_text.assert_not_called()
+
+    def test_process_final_buffer_whisper_real(self):
+        """Test _process_final_buffer with whisper engine executes the real code path.
+
+        This ensures the whisper-specific anti-hallucination code
+        (_check_audio_energy, _is_whisper_hallucination, _recent_transcriptions)
+        is actually exercised and won't cause NameError at runtime.
+        """
+        manager = SpeechRecognitionManager(engine="whisper")
+        manager.audio_buffer = [b"data"] * 10
+
+        # Mock energy check to return speech-level energy
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager._check_audio_energy",
+            return_value=1000.0,
+        ):
+            with patch.object(manager, "_transcribe_with_whisper", return_value="hello world"):
+                text_callback = MagicMock()
+                manager.register_text_callback(text_callback)
+
+                with patch.object(manager.command_processor, "process_text") as mock_process:
+                    mock_process.return_value = ("hello world", [])
+                    manager._process_final_buffer()
+
+                    text_callback.assert_called_once_with("hello world")
+
+    def test_process_final_buffer_whisper_low_energy_skipped(self):
+        """Test that whisper skips transcription on low-energy audio."""
+        manager = SpeechRecognitionManager(engine="whisper")
+        manager.audio_buffer = [b"data"] * 10
+
+        # Mock energy check to return near-silence
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager._check_audio_energy",
+            return_value=50.0,
+        ):
+            with patch.object(manager, "_transcribe_with_whisper") as mock_transcribe:
+                manager._process_final_buffer()
+
+                # Whisper should NOT be called — energy too low
+                mock_transcribe.assert_not_called()
+
+    def test_process_final_buffer_whisper_hallucination_filtered(self):
+        """Test that repetitive whisper hallucinations are filtered."""
+        manager = SpeechRecognitionManager(engine="whisper")
+        manager.audio_buffer = [b"data"] * 10
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager._check_audio_energy",
+            return_value=1000.0,
+        ):
+            with patch.object(
+                manager, "_transcribe_with_whisper", return_value="you you you you you"
+            ):
+                text_callback = MagicMock()
+                manager.register_text_callback(text_callback)
+
+                manager._process_final_buffer()
+
+                # Should be filtered as hallucination
+                text_callback.assert_not_called()
 
     def test_configure(self):
         """Test configuring recognition parameters."""

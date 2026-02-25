@@ -350,6 +350,79 @@ def _filter_non_speech(text: str) -> str:
     return text
 
 
+def _is_whisper_hallucination(text: str) -> bool:
+    """
+    Detect whisper hallucination patterns using language-agnostic heuristics.
+
+    When whisper processes silence or ambient noise, it often "hallucinates"
+    repetitive or nonsensical text. This function uses purely structural
+    detection that works for any language.
+
+    Args:
+        text: The transcribed text to check
+
+    Returns:
+        True if the text appears to be a hallucination
+    """
+    if not text or not text.strip():
+        return False
+
+    text = text.strip()
+    text_lower = text.lower()
+    words = text_lower.split()
+
+    # 1. Repetitive word pattern: one word dominates >60% of output (>= 4 words)
+    if len(words) >= 4:
+        from collections import Counter
+
+        word_counts = Counter(words)
+        most_common_word, most_common_count = word_counts.most_common(1)[0]
+        if most_common_count / len(words) > 0.6:
+            logger.info(
+                f"Filtered whisper hallucination (repetitive word '{most_common_word}'): '{text}'"
+            )
+            return True
+
+    # 2. Repeated substrings covering >60% of text (e.g., same phrase 3+ times)
+    if len(text) >= 20:
+        for substr_len in range(5, min(51, len(text) // 2 + 1)):
+            substr = text_lower[:substr_len]
+            count = text_lower.count(substr)
+            if count >= 3 and (count * substr_len) / len(text) > 0.6:
+                logger.info(
+                    f"Filtered whisper hallucination (repeated substring '{substr}'): '{text}'"
+                )
+                return True
+
+    return False
+
+
+def _check_audio_energy(audio_buffer: list) -> float:
+    """
+    Calculate the average RMS energy of an audio buffer.
+
+    Args:
+        audio_buffer: List of audio data chunks (16-bit PCM)
+
+    Returns:
+        Average RMS energy as a float (0.0 = silence)
+    """
+    try:
+        import numpy as np
+
+        if not audio_buffer:
+            return 0.0
+
+        audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+        if len(audio_data) == 0:
+            return 0.0
+
+        rms = np.sqrt(np.mean(audio_data.astype(np.float64) ** 2))
+        return float(rms)
+    except Exception:
+        return 0.0
+
+
 def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
     """Show a desktop notification."""
     try:
@@ -488,6 +561,10 @@ class SpeechRecognitionManager:
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue = queue.Queue(maxsize=32)
+
+        # Hallucination prevention - track recent transcriptions
+        self._recent_transcriptions: List[str] = []
+        self._max_recent_transcriptions = 5
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
@@ -1444,6 +1521,7 @@ class SpeechRecognitionManager:
         # Set recording flag
         self.should_record = True
         self.audio_buffer = []
+        self._recent_transcriptions = []  # Reset hallucination tracking
         self._segment_queue = queue.Queue(maxsize=32)
 
         # Start the audio recording thread
@@ -1595,6 +1673,7 @@ class SpeechRecognitionManager:
             # Record audio while should_record is True
             silence_counter = 0
             speech_detected_in_session = False
+            speech_detected_in_utterance = False  # Track speech per utterance
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
 
@@ -1667,11 +1746,23 @@ class SpeechRecognitionManager:
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
                         if silence_counter > self.silence_timeout:  # Use self.silence_timeout
                             if len(self.audio_buffer) > 0:
-                                logger.debug("Silence detected, queueing audio segment")
-                                self._enqueue_audio_segment(self.audio_buffer)
-                                self.audio_buffer = []
+                                if speech_detected_in_utterance:
+                                    logger.debug(
+                                        "Silence detected after speech, queueing audio segment"
+                                    )
+                                    self._enqueue_audio_segment(self.audio_buffer)
+                                else:
+                                    logger.debug(
+                                        "Silence detected but no speech in utterance, "
+                                        "discarding buffer to prevent hallucination"
+                                    )
+                                with self._buffer_lock:
+                                    self.audio_buffer = []
                             silence_counter = 0
+                            speech_detected_in_utterance = False  # Reset per utterance
                     else:  # Speech
+                        if not speech_detected_in_utterance:
+                            speech_detected_in_utterance = True
                         if not speech_detected_in_session:
                             logger.debug(
                                 f"Speech detected (level={normalized_level:.1f}%, "
@@ -1756,6 +1847,33 @@ class SpeechRecognitionManager:
         if not audio_buffer:
             return
 
+        # Anti-hallucination: check minimum buffer duration
+        # At 16kHz with 1024 chunk size, each chunk is ~64ms
+        # Require at least ~0.3 seconds of audio (5 chunks) to avoid noise bursts
+        min_chunks = 5
+        if len(audio_buffer) < min_chunks:
+            logger.debug(
+                f"Buffer too short ({len(audio_buffer)} chunks < {min_chunks}), "
+                "skipping transcription to prevent hallucination"
+            )
+            return
+
+        # Anti-hallucination: check audio energy for whisper engines
+        # VOSK handles silence well, but whisper hallucinates on low-energy audio
+        rms_energy = 0.0
+        if self.engine in ("whisper", "whisper_cpp"):
+            rms_energy = _check_audio_energy(audio_buffer)
+            # Minimum RMS energy threshold: ~150 for 16-bit audio
+            # Typical speech RMS is 500-5000, silence/noise is <100
+            min_energy = 150
+            if rms_energy < min_energy:
+                logger.debug(
+                    f"Audio energy too low (RMS={rms_energy:.0f} < {min_energy}), "
+                    "skipping transcription to prevent hallucination"
+                )
+                return
+            logger.debug(f"Audio energy check passed (RMS={rms_energy:.0f})")
+
         if self.engine == "vosk":
             # Lock recognizer access to prevent race condition with reconfigure
             with self._model_lock:
@@ -1781,6 +1899,21 @@ class SpeechRecognitionManager:
 
         # Process commands
         if text:
+            # Anti-hallucination: check for whisper hallucination patterns
+            if self.engine in ("whisper", "whisper_cpp"):
+                if _is_whisper_hallucination(text):
+                    return
+
+                # Check for repeated identical transcriptions (hallucination loop)
+                if text in self._recent_transcriptions:
+                    logger.info(f"Filtered repeated transcription (likely hallucination): '{text}'")
+                    return
+
+                # Track recent transcriptions
+                self._recent_transcriptions.append(text)
+                if len(self._recent_transcriptions) > self._max_recent_transcriptions:
+                    self._recent_transcriptions.pop(0)
+
             processed_text, actions = self.command_processor.process_text(text)
 
             # Call text callbacks with processed text

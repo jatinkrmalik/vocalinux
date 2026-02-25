@@ -166,8 +166,8 @@ class TestSpeechRecognition(unittest.TestCase):
         manager.register_text_callback(text_callback)
         manager.register_action_callback(action_callback)
 
-        # Setup audio buffer
-        manager.audio_buffer = [b"data1", b"data2"]
+        # Setup audio buffer (need >= 5 chunks to pass minimum buffer check)
+        manager.audio_buffer = [b"data1", b"data2", b"data3", b"data4", b"data5"]
 
         # Process buffer
         manager._process_final_buffer()
@@ -962,7 +962,7 @@ class TestProcessFinalBuffer(unittest.TestCase):
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"data1", b"data2"]
+        manager.audio_buffer = [b"data1", b"data2", b"data3", b"data4", b"data5"]
 
         # Mock recognizer result
         self.mock_recognizer.FinalResult.return_value = '{"text": "hello world"}'
@@ -986,7 +986,7 @@ class TestProcessFinalBuffer(unittest.TestCase):
 
         manager = SpeechRecognitionManager(engine="vosk")
         manager.engine = "unknown"
-        manager.audio_buffer = [b"data"]
+        manager.audio_buffer = [b"data"] * 5
 
         # Should log error but not crash
         manager._process_final_buffer()
@@ -996,7 +996,7 @@ class TestProcessFinalBuffer(unittest.TestCase):
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"data"]
+        manager.audio_buffer = [b"data"] * 5
 
         # Mock recognizer result
         self.mock_recognizer.FinalResult.return_value = '{"text": "delete that"}'
