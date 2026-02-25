@@ -101,6 +101,85 @@ def get_audio_input_devices() -> list:
     return devices
 
 
+def _get_supported_sample_rate(audio, device_index: int, channels: int = 1) -> int:
+    """
+    Get a supported sample rate for the audio device.
+
+    Some audio devices (like Vocaster One) only support specific sample rates
+    (e.g., 48kHz) and will fail with the default 16kHz. This function tests
+    common sample rates and returns the highest supported one.
+
+    Args:
+        audio: PyAudio instance
+        device_index: The device index to test
+        channels: Number of channels (default 1)
+
+    Returns:
+        int: A supported sample rate, defaulting to 16000 if none work
+    """
+    import pyaudio
+
+    FORMAT = pyaudio.paInt16
+    CHUNK = 1024
+
+    # Common sample rates to try, ordered from highest to lowest quality
+    COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
+
+    # First, try the device's default sample rate
+    try:
+        if device_index is not None:
+            device_info = audio.get_device_info_by_index(device_index)
+        else:
+            device_info = audio.get_default_input_device_info()
+
+        default_rate = int(device_info.get("defaultSampleRate", 0))
+        if default_rate > 0 and default_rate in COMMON_RATES:
+            # Test if the default rate actually works
+            try:
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": channels,
+                    "rate": default_rate,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
+                if device_index is not None:
+                    stream_kwargs["input_device_index"] = device_index
+
+                test_stream = audio.open(**stream_kwargs)
+                test_stream.close()
+                logger.debug(f"Using device default sample rate: {default_rate}Hz")
+                return default_rate
+            except (IOError, OSError):
+                logger.debug(f"Device default rate {default_rate}Hz failed, trying common rates")
+    except (IOError, OSError) as e:
+        logger.debug(f"Could not get device default rate: {e}")
+
+    # Try common sample rates in order of preference
+    for rate in COMMON_RATES:
+        try:
+            stream_kwargs = {
+                "format": FORMAT,
+                "channels": channels,
+                "rate": rate,
+                "input": True,
+                "frames_per_buffer": CHUNK,
+            }
+            if device_index is not None:
+                stream_kwargs["input_device_index"] = device_index
+
+            test_stream = audio.open(**stream_kwargs)
+            test_stream.close()
+            logger.debug(f"Found supported sample rate: {rate}Hz")
+            return rate
+        except (IOError, OSError):
+            continue
+
+    # Fallback to 16kHz if nothing works
+    logger.warning("Could not find supported sample rate, defaulting to 16000Hz")
+    return 16000
+
+
 def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
     """
     Test audio input from a device and return diagnostic information.
@@ -137,7 +216,6 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
         CHUNK = 1024
         FORMAT = pyaudio.paInt16
         CHANNELS = 1
-        RATE = 16000
 
         audio = pyaudio.PyAudio()
 
@@ -154,6 +232,10 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             result["error"] = f"Cannot get device info: {e}"
             audio.terminate()
             return result
+
+        # Detect supported sample rate for this device
+        RATE = _get_supported_sample_rate(audio, device_index, CHANNELS)
+        result["sample_rate"] = RATE
 
         # Open stream
         try:
@@ -409,6 +491,7 @@ class SpeechRecognitionManager:
         self._last_audio_error_time = 0
         self._audio_stream = None
         self._pyaudio_instance = None
+        self._capture_sample_rate = 16000  # Default, updated when device is opened
 
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
@@ -1435,7 +1518,6 @@ class SpeechRecognitionManager:
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
             CHANNELS = 1
-            RATE = 16000
 
             # Initialize PyAudio with reconnection support
             self._pyaudio_instance = pyaudio.PyAudio()
@@ -1452,6 +1534,11 @@ class SpeechRecognitionManager:
                         )
                 except (IOError, OSError):
                     continue
+
+            # Detect supported sample rate for the selected device
+            RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
+            self._capture_sample_rate = RATE
+            logger.info(f"Using sample rate: {RATE}Hz")
 
             # Open microphone stream with optional device selection and reconnection logic
             stream_kwargs = {
@@ -1519,6 +1606,19 @@ class SpeechRecognitionManager:
                             logger.info(f"Buffer trimmed by {remove_count} chunks")
 
                         data = stream.read(CHUNK, exception_on_overflow=False)
+
+                        # Resample to 16kHz if capturing at non-16kHz for Vosk/Whisper compatibility
+                        if self._capture_sample_rate != 16000:
+                            audio_array = np.frombuffer(data, dtype=np.int16)
+                            resample_ratio = 16000 / self._capture_sample_rate
+                            resampled_length = int(len(audio_array) * resample_ratio)
+                            resampled = np.interp(
+                                np.linspace(0, len(audio_array), resampled_length),
+                                np.arange(len(audio_array)),
+                                audio_array,
+                            ).astype(np.int16)
+                            data = resampled.tobytes()
+
                         self.audio_buffer.append(data)
 
                     # Simple Voice Activity Detection (VAD)
@@ -1817,7 +1917,11 @@ class SpeechRecognitionManager:
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
             CHANNELS = 1
-            RATE = 16000
+
+            # Detect supported sample rate for the device
+            RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
+            self._capture_sample_rate = RATE
+            logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
             stream_kwargs = {
                 "format": FORMAT,
