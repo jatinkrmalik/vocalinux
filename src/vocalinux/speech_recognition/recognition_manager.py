@@ -491,6 +491,7 @@ class SpeechRecognitionManager:
         self._last_audio_error_time = 0
         self._audio_stream = None
         self._pyaudio_instance = None
+        self._capture_sample_rate = 16000  # Default, updated when device is opened
 
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
@@ -1536,6 +1537,7 @@ class SpeechRecognitionManager:
 
             # Detect supported sample rate for the selected device
             RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
+            self._capture_sample_rate = RATE
             logger.info(f"Using sample rate: {RATE}Hz")
 
             # Open microphone stream with optional device selection and reconnection logic
@@ -1604,6 +1606,20 @@ class SpeechRecognitionManager:
                             logger.info(f"Buffer trimmed by {remove_count} chunks")
 
                         data = stream.read(CHUNK, exception_on_overflow=False)
+
+                        # Resample to 16kHz if capturing at non-16kHz for Vosk/Whisper compatibility
+                        if self._capture_sample_rate != 16000:
+                            import numpy as np
+                            audio_array = np.frombuffer(data, dtype=np.int16)
+                            resample_ratio = 16000 / self._capture_sample_rate
+                            resampled_length = int(len(audio_array) * resample_ratio)
+                            resampled = np.interp(
+                                np.linspace(0, len(audio_array), resampled_length),
+                                np.arange(len(audio_array)),
+                                audio_array
+                            ).astype(np.int16)
+                            data = resampled.tobytes()
+
                         self.audio_buffer.append(data)
 
                     # Simple Voice Activity Detection (VAD)
@@ -1905,6 +1921,7 @@ class SpeechRecognitionManager:
 
             # Detect supported sample rate for the device
             RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
+            self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
             stream_kwargs = {
