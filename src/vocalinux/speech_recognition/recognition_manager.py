@@ -9,6 +9,7 @@ import ctypes
 import json
 import logging
 import os
+import queue
 import sys
 import threading
 import time
@@ -17,7 +18,11 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
+from ..utils.whispercpp_model_info import (
+    WHISPERCPP_MODEL_INFO,
+    get_model_path,
+    is_model_downloaded,
+)
 from .command_processor import CommandProcessor
 
 
@@ -482,6 +487,7 @@ class SpeechRecognitionManager:
         self.audio_buffer = []
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
+        self._segment_queue = queue.Queue(maxsize=32)
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
@@ -1438,6 +1444,7 @@ class SpeechRecognitionManager:
         # Set recording flag
         self.should_record = True
         self.audio_buffer = []
+        self._segment_queue = queue.Queue(maxsize=32)
 
         # Start the audio recording thread
         self.audio_thread = threading.Thread(target=self._record_audio)
@@ -1478,6 +1485,10 @@ class SpeechRecognitionManager:
                 logger.debug(f"Clearing small audio buffer ({len(self.audio_buffer)} chunks)")
                 self.audio_buffer = []
 
+            if self.audio_buffer:
+                self._enqueue_audio_segment(self.audio_buffer)
+                self.audio_buffer = []
+
         # Now play the stop sound (after recording has stopped)
         play_stop_sound()
 
@@ -1485,16 +1496,11 @@ class SpeechRecognitionManager:
         if self.audio_thread and self.audio_thread.is_alive():
             self.audio_thread.join(timeout=1.0)
 
+        # Wake up recognition thread so it can drain queued segments and stop
+        self._signal_recognition_stop()
+
         if self.recognition_thread and self.recognition_thread.is_alive():
             self.recognition_thread.join(timeout=1.0)
-
-        # Process any remaining audio in the buffer before going idle
-        with self._buffer_lock:
-            if self.audio_buffer:
-                logger.debug("Processing remaining audio buffer before stopping")
-                self._update_state(RecognitionState.PROCESSING)
-                self._process_final_buffer()
-                self.audio_buffer = []
 
         self._update_state(RecognitionState.IDLE)
 
@@ -1661,14 +1667,10 @@ class SpeechRecognitionManager:
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
                         if silence_counter > self.silence_timeout:  # Use self.silence_timeout
                             if len(self.audio_buffer) > 0:
-                                logger.debug("Silence detected, processing buffer")
-                                self._update_state(RecognitionState.PROCESSING)
-                                # Process final buffer
-                                self._process_final_buffer()
-                                # Reset for next utterance
+                                logger.debug("Silence detected, queueing audio segment")
+                                self._enqueue_audio_segment(self.audio_buffer)
                                 self.audio_buffer = []
                             silence_counter = 0
-                            self._update_state(RecognitionState.LISTENING)
                     else:  # Speech
                         if not speech_detected_in_session:
                             logger.debug(
@@ -1740,7 +1742,18 @@ class SpeechRecognitionManager:
 
     def _process_final_buffer(self):
         """Process the final audio buffer after silence is detected."""
-        if not self.audio_buffer:
+        with self._buffer_lock:
+            if not self.audio_buffer:
+                return
+
+            audio_buffer = self.audio_buffer.copy()
+            self.audio_buffer = []
+
+        self._process_audio_buffer(audio_buffer)
+
+    def _process_audio_buffer(self, audio_buffer: List[bytes]):
+        """Process an immutable audio segment for transcription and commands."""
+        if not audio_buffer:
             return
 
         if self.engine == "vosk":
@@ -1750,17 +1763,17 @@ class SpeechRecognitionManager:
                 if self.recognizer is None:
                     logger.warning("Recognizer is None during processing, returning empty result")
                     return
-                for data in self.audio_buffer:
+                for data in audio_buffer:
                     self.recognizer.AcceptWaveform(data)
 
                 result = json.loads(self.recognizer.FinalResult())
                 text = result.get("text", "")
 
         elif self.engine == "whisper":
-            text = self._transcribe_with_whisper(self.audio_buffer)
+            text = self._transcribe_with_whisper(audio_buffer)
 
         elif self.engine == "whisper_cpp":
-            text = self._transcribe_with_whispercpp(self.audio_buffer)
+            text = self._transcribe_with_whispercpp(audio_buffer)
 
         else:
             logger.error(f"Unknown engine: {self.engine}")
@@ -1782,9 +1795,46 @@ class SpeechRecognitionManager:
 
     def _perform_recognition(self):
         """Perform speech recognition in real-time."""
-        while self.should_record:
-            # The real work is done in _record_audio and _process_final_buffer
-            time.sleep(0.1)
+        while self.should_record or not self._segment_queue.empty():
+            try:
+                segment = self._segment_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            if segment is None:
+                continue
+
+            self._update_state(RecognitionState.PROCESSING)
+            self._process_audio_buffer(segment)
+            if self.should_record:
+                self._update_state(RecognitionState.LISTENING)
+
+    def _enqueue_audio_segment(self, audio_buffer: List[bytes]):
+        """Queue an audio segment for asynchronous transcription."""
+        segment = audio_buffer.copy()
+        if not segment:
+            return
+
+        try:
+            self._segment_queue.put_nowait(segment)
+        except queue.Full:
+            logger.warning("Transcription queue is full, dropping oldest pending segment")
+            try:
+                self._segment_queue.get_nowait()
+                self._segment_queue.put_nowait(segment)
+            except queue.Empty:
+                logger.warning("Could not recover queue space for transcription segment")
+
+    def _signal_recognition_stop(self):
+        """Signal recognition thread to wake up and stop cleanly."""
+        try:
+            self._segment_queue.put_nowait(None)
+        except queue.Full:
+            try:
+                self._segment_queue.get_nowait()
+                self._segment_queue.put_nowait(None)
+            except queue.Empty:
+                logger.debug("Recognition queue emptied before stop signal")
 
     def reconfigure(
         self,
