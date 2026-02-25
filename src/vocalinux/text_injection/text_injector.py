@@ -239,6 +239,58 @@ class TextInjector:
         except Exception as e:
             logger.error(f"Failed to test XWayland fallback: {e}")
 
+    def _try_recover_from_fallback(self):
+        """
+        Try to recover from xdotool fallback mode by re-checking for better tools.
+
+        This allows switching to ydotool if the daemon was started after initial detection,
+        or to wtype if the compositor now supports virtual keyboard.
+
+        Returns:
+            True if a better tool was found and environment was updated, False otherwise
+        """
+        if self.environment != DesktopEnvironment.WAYLAND_XDOTOOL:
+            return False
+
+        logger.info("Checking for better Wayland text injection tools...")
+
+        # Check for ydotool with daemon running
+        if shutil.which("ydotool"):
+            try:
+                subprocess.run(
+                    ["ydotool", "type", ""],
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    timeout=2,
+                )
+                self.wayland_tool = "ydotool"
+                self.environment = DesktopEnvironment.WAYLAND
+                logger.info("Recovered to ydotool - ydotoold daemon is now running")
+                return True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+                logger.debug("ydotool available but daemon not running")
+
+        # Check for wtype with compositor support
+        if shutil.which("wtype"):
+            try:
+                result = subprocess.run(
+                    ["wtype", "test"],
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+                error_output = result.stderr.lower()
+                if "compositor does not support" not in error_output and result.returncode == 0:
+                    self.wayland_tool = "wtype"
+                    self.environment = DesktopEnvironment.WAYLAND
+                    logger.info("Recovered to wtype - compositor now supports virtual keyboard")
+                    return True
+            except Exception as e:
+                logger.debug(f"Error testing wtype: {e}")
+
+        logger.debug("No better tools available, continuing with xdotool fallback")
+        return False
+
     def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently focused application.
@@ -262,6 +314,11 @@ class TextInjector:
         # Note: No shell escaping needed - subprocess is called with list arguments,
         # which passes text directly without shell interpretation
         logger.debug(f"Text to inject: '{text}'")
+
+        # Re-check for available tools in Wayland fallback mode
+        # This allows switching to ydotool if the daemon was started after initial detection
+        if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+            self._try_recover_from_fallback()
 
         try:
             if (
@@ -289,7 +346,9 @@ class TextInjector:
                     if "compositor does not support" in str(
                         e
                     ).lower() + " " + stderr_msg.lower() and shutil.which("xdotool"):
-                        logger.info("Automatically switching to XWayland fallback permanently")
+                        logger.info(
+                            "Switching to XWayland fallback - will re-check for better tools"
+                        )
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         self._inject_with_xdotool(text)
                     else:

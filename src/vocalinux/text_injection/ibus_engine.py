@@ -22,6 +22,7 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -130,6 +131,43 @@ def is_ibus_daemon_running() -> bool:
         )
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError):
+        return False
+
+
+def start_ibus_daemon():
+    """
+    Start the IBus daemon if it's not already running.
+
+    This is useful for desktop environments where IBus doesn't start automatically,
+    such as some KDE Plasma installations or minimal window managers.
+
+    Returns:
+        True if daemon was started or already running, False on failure
+    """
+    if is_ibus_daemon_running():
+        return True
+
+    if not is_ibus_available():
+        return False
+
+    try:
+        # Start ibus-daemon in the background with XIM support
+        # -x: Enable XIM (X Input Method)
+        # -d: Run as daemon
+        # -r: Replace existing daemon
+        subprocess.Popen(
+            ["ibus-daemon", "-x", "-d", "-r"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        # Give daemon time to start
+        time.sleep(0.5)
+        return is_ibus_daemon_running()
+    except FileNotFoundError:
+        # ibus-daemon not found
+        return False
+    except Exception:
         return False
 
 
