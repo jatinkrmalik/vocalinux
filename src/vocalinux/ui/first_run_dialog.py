@@ -14,6 +14,11 @@ from gi.repository import Gtk
 
 logger = logging.getLogger(__name__)
 
+# Custom response IDs for dialog buttons
+RESPONSE_YES = 1
+RESPONSE_NO = 2
+RESPONSE_LATER = 3
+
 
 class FirstRunDialog(Gtk.Dialog):
     """Dialog shown on first run to configure autostart preference."""
@@ -25,6 +30,19 @@ class FirstRunDialog(Gtk.Dialog):
             flags=Gtk.DialogFlags.MODAL,
         )
         self.set_default_size(440, 280)
+
+        # Map response IDs to result strings
+        self._response_map = {
+            RESPONSE_YES: "yes",
+            RESPONSE_NO: "no",
+            RESPONSE_LATER: "later",
+            Gtk.ResponseType.DELETE_EVENT: None,
+        }
+        self.result = None
+
+        # Connect to response signal to handle button clicks properly
+        # This avoids race conditions when destroying the dialog from button handlers
+        self.connect("response", self._on_response)
 
         box = self.get_content_area()
         box.set_spacing(16)
@@ -69,38 +87,39 @@ class FirstRunDialog(Gtk.Dialog):
         button_box.set_halign(Gtk.Align.CENTER)
         button_box.set_margin_top(16)
 
-        yes_button = Gtk.Button(label="Yes, start on login")
+        # Use add_button with response IDs instead of custom click handlers
+        # This ensures proper dialog lifecycle management and avoids GTK widget
+        # access issues on Wayland (gtk_widget_get_scale_factor assertion failures)
+        yes_button = self.add_button("Yes, start on login", RESPONSE_YES)
         yes_button.get_style_context().add_class("suggested-action")
-        yes_button.connect("clicked", self._on_yes_clicked)
+
+        no_button = self.add_button("No, I'll start manually", RESPONSE_NO)
+        later_button = self.add_button("Ask me later", RESPONSE_LATER)
+
+        # Reparent buttons to our custom button box for proper layout
+        # First remove them from the dialog's action area
+        self.get_action_area().remove(yes_button)
+        self.get_action_area().remove(no_button)
+        self.get_action_area().remove(later_button)
+
+        # Add them to our custom button box
         button_box.pack_start(yes_button, False, False, 0)
-
-        no_button = Gtk.Button(label="No, I'll start manually")
-        no_button.connect("clicked", self._on_no_clicked)
         button_box.pack_start(no_button, False, False, 0)
-
-        later_button = Gtk.Button(label="Ask me later")
-        later_button.connect("clicked", self._on_later_clicked)
         button_box.pack_start(later_button, False, False, 0)
 
         box.pack_start(button_box, False, False, 0)
 
-        self.result = None
         self.show_all()
 
-    def _on_yes_clicked(self, widget):
-        """Handle Yes button click."""
-        self.result = "yes"
-        self.destroy()
+    def _on_response(self, dialog, response_id):
+        """Handle dialog response signals properly.
 
-    def _on_no_clicked(self, widget):
-        """Handle No button click."""
-        self.result = "no"
-        self.destroy()
-
-    def _on_later_clicked(self, widget):
-        """Handle Later button click."""
-        self.result = "later"
-        self.destroy()
+        Using the response signal instead of direct destroy() calls from button
+        handlers prevents race conditions on Wayland where GTK may try to access
+        widget properties (like scale_factor) after the widget is marked for
+        destruction but before the event processing completes.
+        """
+        self.result = self._response_map.get(response_id, None)
 
 
 def show_first_run_dialog(parent: Optional[Gtk.Window] = None) -> Optional[str]:
