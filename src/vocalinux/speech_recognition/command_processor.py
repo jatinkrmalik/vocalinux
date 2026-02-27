@@ -59,9 +59,6 @@ class CommandProcessor:
             "select line": "select_line",
             "select word": "select_word",
             "select paragraph": "select_paragraph",
-            "cut": "cut",
-            "copy": "copy",
-            "paste": "paste",
         }
 
         # Formatting commands that modify the next word
@@ -139,15 +136,6 @@ class CommandProcessor:
             return "here", ["select_word"]
         elif text.lower() == "select paragraph content":
             return "content", ["select_paragraph"]
-        elif text.lower() == "cut this selection":
-            return "this selection", ["cut"]
-        elif text.lower() == "copy this text":
-            return "this text", ["copy"]
-        elif text.lower() == "paste here":
-            return "here", ["paste"]
-        elif text.lower() == "select all then copy":
-            return "then", ["select_all", "copy"]
-
         # Text command test cases
         elif text.lower() == "new line":
             return "\n", []
