@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import time
 from enum import Enum
-from typing import Optional  # noqa: F401
+from typing import List, Optional, Tuple  # noqa: F401
 
 from .ibus_engine import (
     IBusTextInjector,
@@ -20,6 +20,59 @@ from .ibus_engine import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def split_text_by_ascii(text: str) -> List[Tuple[str, bool]]:
+    """
+    Split text into segments of ASCII and non-ASCII characters.
+
+    This is used to handle Unicode characters that can't be typed with
+    the current keyboard layout. Non-ASCII characters need to be typed
+    using Unicode input sequences (Ctrl+Shift+U + hex code).
+
+    Args:
+        text: The text to split
+
+    Returns:
+        A list of tuples (segment, is_ascii) where is_ascii indicates
+        whether the segment contains only ASCII characters
+    """
+    if not text:
+        return []
+
+    segments: List[Tuple[str, bool]] = []
+    current_segment = []
+    current_is_ascii = ord(text[0]) < 128
+
+    for char in text:
+        char_is_ascii = ord(char) < 128
+
+        if char_is_ascii == current_is_ascii:
+            current_segment.append(char)
+        else:
+            # Save the current segment and start a new one
+            segments.append((''.join(current_segment), current_is_ascii))
+            current_segment = [char]
+            current_is_ascii = char_is_ascii
+
+    # Don't forget the last segment
+    if current_segment:
+        segments.append((''.join(current_segment), current_is_ascii))
+
+    return segments
+
+
+def get_unicode_hex(char: str) -> str:
+    """
+    Get the Unicode hex code for a character (without U+ prefix).
+
+    Args:
+        char: A single Unicode character
+
+    Returns:
+        The hex code in lowercase (e.g., '00e4' for 'ä')
+    """
+    return format(ord(char), '04x')
 
 
 class DesktopEnvironment(Enum):
@@ -310,6 +363,11 @@ class TextInjector:
         """
         Inject text using xdotool for X11 environments.
 
+        This method handles both ASCII and Unicode characters. For Unicode
+        characters (like German umlauts), it uses the Ctrl+Shift+U Unicode
+        input sequence to type characters not available on the current
+        keyboard layout.
+
         Args:
             text: The text to inject
         """
@@ -363,33 +421,17 @@ class TextInjector:
 
             for retry in range(max_retries + 1):
                 try:
-                    # Inject in smaller chunks to avoid issues with very long text
-                    chunk_size = 20  # Reduced chunk size for better reliability
-                    total_chunks = (len(text) + chunk_size - 1) // chunk_size
-                    logger.debug(
-                        f"Splitting text into {total_chunks} chunks of max {chunk_size} chars"
-                    )
+                    # Split text into ASCII and non-ASCII segments for proper Unicode handling
+                    segments = split_text_by_ascii(text)
+                    logger.debug(f"Text split into {len(segments)} segments")
 
-                    for i in range(0, len(text), chunk_size):
-                        chunk = text[i : i + chunk_size]
-                        chunk_num = (i // chunk_size) + 1
-
-                        # First try with clearmodifiers
-                        cmd = ["xdotool", "type", "--clearmodifiers", chunk]
-                        logger.debug(f"Injecting chunk {chunk_num}/{total_chunks}: '{chunk}'")
-
-                        subprocess.run(
-                            cmd,
-                            env=env,
-                            check=True,
-                            stderr=subprocess.PIPE,
-                            text=True,
-                            timeout=5,
-                        )
-
-                        # Add a larger delay between chunks
-                        if i + chunk_size < len(text):
-                            time.sleep(0.1)
+                    for segment_idx, (segment, is_ascii) in enumerate(segments):
+                        if is_ascii:
+                            # ASCII text can be typed directly
+                            self._inject_ascii_with_xdotool(segment, env, segment_idx, len(segments))
+                        else:
+                            # Non-ASCII text needs Unicode input sequence
+                            self._inject_unicode_with_xdotool(segment, env, segment_idx, len(segments))
 
                     logger.info(
                         f"Text injected using xdotool: '{text[:20]}...' ({len(text)} chars)"
@@ -430,9 +472,123 @@ class TextInjector:
             logger.error(f"xdotool error: {e.stderr}")
             raise
 
+    def _inject_ascii_with_xdotool(self, text: str, env: dict, segment_idx: int, total_segments: int):
+        """
+        Inject ASCII text using xdotool type command.
+
+        Args:
+            text: ASCII text to inject
+            env: Environment variables for subprocess
+            segment_idx: Current segment index (for logging)
+            total_segments: Total number of segments (for logging)
+        """
+        # Inject in smaller chunks to avoid issues with very long text
+        chunk_size = 20  # Reduced chunk size for better reliability
+        total_chunks = (len(text) + chunk_size - 1) // chunk_size
+        logger.debug(
+            f"Injecting ASCII segment {segment_idx + 1}/{total_segments} "
+            f"in {total_chunks} chunks"
+        )
+
+        for i in range(0, len(text), chunk_size):
+            chunk = text[i : i + chunk_size]
+            chunk_num = (i // chunk_size) + 1
+
+            cmd = ["xdotool", "type", "--clearmodifiers", chunk]
+            logger.debug(f"Injecting ASCII chunk {chunk_num}/{total_chunks}: '{chunk}'")
+
+            subprocess.run(
+                cmd,
+                env=env,
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5,
+            )
+
+            # Add a small delay between chunks
+            if i + chunk_size < len(text):
+                time.sleep(0.05)
+
+    def _inject_unicode_with_xdotool(self, text: str, env: dict, segment_idx: int, total_segments: int):
+        """
+        Inject Unicode text using xdotool with Ctrl+Shift+U Unicode input sequence.
+
+        This method types Unicode characters by using the Linux Unicode input
+        sequence: Ctrl+Shift+U followed by the hex code, then Space.
+
+        Args:
+            text: Unicode text to inject (non-ASCII characters)
+            env: Environment variables for subprocess
+            segment_idx: Current segment index (for logging)
+            total_segments: Total number of segments (for logging)
+        """
+        logger.debug(
+            f"Injecting Unicode segment {segment_idx + 1}/{total_segments}: "
+            f"{len(text)} characters"
+        )
+
+        for char in text:
+            hex_code = get_unicode_hex(char)
+            logger.debug(f"Typing Unicode char '{char}' as U+{hex_code}")
+
+            # Use xdotool to type the Unicode sequence:
+            # 1. Press and hold Ctrl+Shift
+            # 2. Press and release U
+            # 3. Release Ctrl+Shift
+            # 4. Type the hex code
+            # 5. Press Space to commit the character
+            try:
+                # Type the Unicode sequence using keydown/keyup for modifiers
+                # Ctrl+Shift+U, then hex code, then space
+                subprocess.run(
+                    ["xdotool", "key", "--clearmodifiers",
+                     "Ctrl+Shift+u", "space"],  # Some systems need space after U
+                    env=env,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=2,
+                )
+
+                # Small delay to ensure the Unicode input mode is ready
+                time.sleep(0.02)
+
+                # Type the hex code
+                subprocess.run(
+                    ["xdotool", "type", "--clearmodifiers", hex_code],
+                    env=env,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=2,
+                )
+
+                # Press space to commit the character
+                subprocess.run(
+                    ["xdotool", "key", "--clearmodifiers", "space"],
+                    env=env,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=2,
+                )
+
+                # Small delay between characters for reliability
+                time.sleep(0.02)
+
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"Failed to type Unicode char '{char}': {e.stderr}")
+                raise
+
     def _inject_with_wayland_tool(self, text: str):
         """
         Inject text using a Wayland-compatible tool (wtype or ydotool).
+
+        For wtype: Unicode is supported natively - text is passed directly.
+        For ydotool: Non-ASCII characters require Unicode input sequences
+        (Ctrl+Shift+U + hex code) since ydotool simulates keypresses based
+        on the current keyboard layout.
 
         Args:
             text: The text to inject
@@ -441,21 +597,119 @@ class TextInjector:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
         if self.wayland_tool == "wtype":
+            # wtype supports Unicode natively - just pass the text
             cmd = ["wtype", text]
-        else:  # ydotool
-            cmd = ["ydotool", "type", text]
+            try:
+                subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+            except subprocess.CalledProcessError as e:
+                raise subprocess.CalledProcessError(
+                    e.returncode, e.cmd, output=e.output, stderr=e.stderr
+                ) from e
 
-        try:
-            subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
-        except subprocess.CalledProcessError as e:
-            # Re-raise with stderr preserved for better diagnostics
-            raise subprocess.CalledProcessError(
-                e.returncode, e.cmd, output=e.output, stderr=e.stderr
-            ) from e
+            logger.info(
+                f"Text injected using wtype: '{text[:20]}...' ({len(text)} chars)"
+            )
+        else:  # ydotool
+            # ydotool needs special handling for Unicode characters
+            self._inject_with_ydotool(text)
+
+    def _inject_with_ydotool(self, text: str):
+        """
+        Inject text using ydotool with proper Unicode handling.
+
+        For ASCII characters, uses ydotool type directly.
+        For non-ASCII characters (like German umlauts), uses Unicode input
+        sequence: Ctrl+Shift+U + hex code + Space.
+
+        Args:
+            text: The text to inject
+
+        Raises:
+            subprocess.CalledProcessError: If the tool fails
+        """
+        # Split text into ASCII and non-ASCII segments
+        segments = split_text_by_ascii(text)
+        logger.debug(f"ydotool: Text split into {len(segments)} segments")
+
+        for segment_idx, (segment, is_ascii) in enumerate(segments):
+            if is_ascii:
+                # ASCII text can be typed directly with ydotool
+                cmd = ["ydotool", "type", segment]
+                logger.debug(f"ydotool typing ASCII segment {segment_idx + 1}: '{segment}'")
+                try:
+                    subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
+                except subprocess.CalledProcessError as e:
+                    raise subprocess.CalledProcessError(
+                        e.returncode, e.cmd, output=e.output, stderr=e.stderr
+                    ) from e
+            else:
+                # Non-ASCII text needs Unicode input sequence
+                logger.debug(
+                    f"ydotool typing Unicode segment {segment_idx + 1}: "
+                    f"{len(segment)} characters"
+                )
+                for char in segment:
+                    self._inject_unicode_with_ydotool(char)
 
         logger.info(
-            f"Text injected using {self.wayland_tool}: '{text[:20]}...' ({len(text)} chars)"
+            f"Text injected using ydotool: '{text[:20]}...' ({len(text)} chars)"
         )
+
+    def _inject_unicode_with_ydotool(self, char: str):
+        """
+        Inject a single Unicode character using ydotool with Unicode input sequence.
+
+        Uses the Linux Unicode input sequence: Ctrl+Shift+U + hex code + Space.
+
+        Args:
+            char: A single Unicode character to inject
+
+        Raises:
+            subprocess.CalledProcessError: If the tool fails
+        """
+        hex_code = get_unicode_hex(char)
+        logger.debug(f"ydotool typing Unicode char '{char}' as U+{hex_code}")
+
+        try:
+            # Press Ctrl+Shift+U to initiate Unicode input
+            # ydotool uses key codes: 29=Ctrl, 42=Shift, 22=U
+            # Format: key_code:1 (press), key_code:0 (release)
+            subprocess.run(
+                ["ydotool", "key", "29:1", "42:1", "22:1", "22:0", "42:0", "29:0"],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=2,
+            )
+
+            # Small delay to ensure Unicode input mode is ready
+            time.sleep(0.02)
+
+            # Type the hex code
+            subprocess.run(
+                ["ydotool", "type", hex_code],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=2,
+            )
+
+            # Press Space to commit the character
+            # Space key code is 57
+            subprocess.run(
+                ["ydotool", "key", "57:1", "57:0"],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=2,
+            )
+
+            # Small delay between characters for reliability
+            time.sleep(0.02)
+
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Failed to type Unicode char '{char}' with ydotool: {e.stderr}")
+            raise
 
     def _inject_keyboard_shortcut(self, shortcut: str) -> bool:
         """

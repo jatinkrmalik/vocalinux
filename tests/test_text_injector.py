@@ -9,7 +9,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Update import path to use the new package structure
-from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+from vocalinux.text_injection.text_injector import (
+    DesktopEnvironment,
+    TextInjector,
+    get_unicode_hex,
+    split_text_by_ascii,
+)
 
 # Create a mock for audio feedback module
 mock_audio_feedback = MagicMock()
@@ -17,6 +22,86 @@ mock_audio_feedback.play_error_sound = MagicMock()
 
 # Add the mock to sys.modules
 sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
+
+
+class TestUnicodeHelpers(unittest.TestCase):
+    """Test cases for Unicode helper functions."""
+
+    def test_split_text_by_ascii_empty(self):
+        """Test splitting empty text."""
+        result = split_text_by_ascii("")
+        self.assertEqual(result, [])
+
+    def test_split_text_by_ascii_ascii_only(self):
+        """Test splitting ASCII-only text."""
+        result = split_text_by_ascii("Hello World")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], ("Hello World", True))
+
+    def test_split_text_by_ascii_unicode_only(self):
+        """Test splitting Unicode-only text."""
+        result = split_text_by_ascii("äöüß")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], ("äöüß", False))
+
+    def test_split_text_by_ascii_mixed(self):
+        """Test splitting mixed ASCII and Unicode text."""
+        # "Sprachänderung" = "Sprach" (ASCII) + "ä" (Unicode) + "nderung" (ASCII)
+        result = split_text_by_ascii("Sprachänderung")
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0], ("Sprach", True))
+        self.assertEqual(result[1], ("ä", False))
+        self.assertEqual(result[2], ("nderung", True))
+
+    def test_split_text_by_ascii_german_umlauts(self):
+        """Test splitting text with German umlauts."""
+        # "Größe" = "Gr" (ASCII) + "öß" (Unicode, both chars) + "e" (ASCII)
+        result = split_text_by_ascii("Größe")
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0], ("Gr", True))
+        self.assertEqual(result[1], ("öß", False))  # Both ö and ß are non-ASCII
+        self.assertEqual(result[2], ("e", True))
+
+    def test_split_text_by_ascii_multiple_unicode_segments(self):
+        """Test splitting text with multiple Unicode segments."""
+        # "Häusör" = "H" + "ä" + "us" + "ö" + "r"
+        result = split_text_by_ascii("Häusör")
+        self.assertEqual(len(result), 5)
+        self.assertEqual(result[0], ("H", True))
+        self.assertEqual(result[1], ("ä", False))
+        self.assertEqual(result[2], ("us", True))
+        self.assertEqual(result[3], ("ö", False))
+        self.assertEqual(result[4], ("r", True))
+
+    def test_get_unicode_hex_umlaut_a(self):
+        """Test getting hex code for ä."""
+        result = get_unicode_hex("ä")
+        self.assertEqual(result, "00e4")
+
+    def test_get_unicode_hex_umlaut_o(self):
+        """Test getting hex code for ö."""
+        result = get_unicode_hex("ö")
+        self.assertEqual(result, "00f6")
+
+    def test_get_unicode_hex_umlaut_u(self):
+        """Test getting hex code for ü."""
+        result = get_unicode_hex("ü")
+        self.assertEqual(result, "00fc")
+
+    def test_get_unicode_hex_sharp_s(self):
+        """Test getting hex code for ß."""
+        result = get_unicode_hex("ß")
+        self.assertEqual(result, "00df")
+
+    def test_get_unicode_hex_uppercase_umlaut(self):
+        """Test getting hex code for Ä."""
+        result = get_unicode_hex("Ä")
+        self.assertEqual(result, "00c4")
+
+    def test_get_unicode_hex_euro(self):
+        """Test getting hex code for €."""
+        result = get_unicode_hex("€")
+        self.assertEqual(result, "20ac")
 
 
 class TestTextInjector(unittest.TestCase):
