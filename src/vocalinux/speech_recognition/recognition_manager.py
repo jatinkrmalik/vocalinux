@@ -1855,6 +1855,9 @@ class SpeechRecognitionManager:
             return
 
         # Process text - either with voice commands or pass through directly
+        logger.info(
+            f"DEBUG: _process_audio_buffer got text='{text[:50] if text else '(empty)'}...'"
+        )
         if text:
             if self._voice_commands_enabled:
                 # Process with voice commands (original behavior)
@@ -1865,8 +1868,14 @@ class SpeechRecognitionManager:
                 actions = []
 
             # Call text callbacks with processed text
+            logger.info(
+                f"DEBUG: processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+            )
             if processed_text:
                 for callback in self.text_callbacks:
+                    logger.info(
+                        f"DEBUG: invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                    )
                     callback(processed_text)
 
             # Call action callbacks for each action
@@ -1894,10 +1903,14 @@ class SpeechRecognitionManager:
         """Queue an audio segment for asynchronous transcription."""
         segment = audio_buffer.copy()
         if not segment:
+            logger.warning("DEBUG: _enqueue_audio_segment called with empty buffer")
             return
+
+        logger.info(f"DEBUG: _enqueue_audio_segment called with {len(segment)} chunks")
 
         try:
             self._segment_queue.put_nowait(segment)
+            logger.info("DEBUG: Enqueued segment successfully")
         except queue.Full:
             logger.warning("Transcription queue is full, dropping oldest pending segment")
             try:
