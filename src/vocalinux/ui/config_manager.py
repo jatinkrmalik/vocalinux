@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
+        "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
@@ -229,6 +230,24 @@ class ConfigManager:
         # Also update the generic model_size for backward compatibility
         self.config["speech_recognition"]["model_size"] = model_size
         logger.info(f"Set {engine} model size to: {model_size}")
+
+    def is_voice_commands_enabled(self) -> bool:
+        """Check if voice commands should be enabled.
+
+        Returns:
+            True if voice commands should be enabled, False otherwise.
+            If voice_commands_enabled is None (auto), returns True for VOSK,
+            False for Whisper engines.
+        """
+        sr_config = self.config.get("speech_recognition", {})
+        enabled = sr_config.get("voice_commands_enabled")
+
+        if enabled is None:
+            # Auto mode: enabled for VOSK, disabled for Whisper engines
+            engine = sr_config.get("engine", "whisper_cpp")
+            return engine == "vosk"
+
+        return enabled
 
     def update_speech_recognition_settings(self, settings: Dict[str, Any]):
         """Update multiple speech recognition settings at once."""
