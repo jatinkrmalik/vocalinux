@@ -151,6 +151,31 @@ class TestSpeechRecognition(unittest.TestCase):
         with self.assertRaises(ValueError):
             SpeechRecognitionManager(engine="invalid")
 
+    def test_voice_commands_auto_mode_follows_engine(self):
+        vosk_manager = SpeechRecognitionManager(
+            engine="vosk", model_size="small", voice_commands_enabled=None
+        )
+        self.assertTrue(getattr(vosk_manager, "_voice_commands_enabled"))
+
+        whisper_manager = SpeechRecognitionManager(
+            engine="whisper", model_size="small", voice_commands_enabled=None
+        )
+        self.assertFalse(getattr(whisper_manager, "_voice_commands_enabled"))
+
+    def test_voice_commands_auto_mode_updates_on_engine_reconfigure(self):
+        manager = SpeechRecognitionManager(engine="whisper", voice_commands_enabled=None)
+        self.assertFalse(getattr(manager, "_voice_commands_enabled"))
+
+        manager.reconfigure(engine="vosk", force_download=False)
+        self.assertTrue(getattr(manager, "_voice_commands_enabled"))
+
+    def test_voice_commands_toggle_updates_on_reconfigure(self):
+        manager = SpeechRecognitionManager(engine="vosk", voice_commands_enabled=True)
+        self.assertTrue(getattr(manager, "_voice_commands_enabled"))
+
+        manager.reconfigure(voice_commands_enabled=False, force_download=False)
+        self.assertFalse(getattr(manager, "_voice_commands_enabled"))
+
     def test_callbacks(self):
         """Test registering and using callbacks."""
         manager = SpeechRecognitionManager(engine="vosk")

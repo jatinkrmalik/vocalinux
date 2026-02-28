@@ -1494,7 +1494,8 @@ class SettingsDialog(Gtk.Dialog):
         voice_commands_enabled = sr_config.get("voice_commands_enabled")
 
         if voice_commands_enabled is None:
-            engine = sr_config.get("engine", "whisper_cpp")
+            engine_text = self.engine_combo.get_active_text()
+            engine = engine_text.lower() if engine_text else sr_config.get("engine", "whisper_cpp")
             auto_enabled = engine == "vosk"
             self.voice_commands_switch.set_active(auto_enabled)
 
@@ -1524,6 +1525,10 @@ class SettingsDialog(Gtk.Dialog):
 
         self.config_manager.set("speech_recognition", "voice_commands_enabled", enabled)
         self.config_manager.save_settings()
+        try:
+            self.speech_engine.reconfigure(voice_commands_enabled=enabled, force_download=False)
+        except Exception as e:
+            logger.warning(f"Failed to apply voice commands toggle immediately: {e}")
         logger.info(f"Voice commands {'enabled' if enabled else 'disabled'}")
         return False
 

@@ -18,11 +18,7 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import (
-    WHISPERCPP_MODEL_INFO,
-    get_model_path,
-    is_model_downloaded,
-)
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
 
 
@@ -463,8 +459,8 @@ class SpeechRecognitionManager:
         self.command_processor = CommandProcessor()
 
         # Voice commands: None=auto (VOSK=yes, Whisper=no), True=always on, False=always off
-        voice_cmds = kwargs.get("voice_commands_enabled")
-        self._voice_commands_enabled = voice_cmds if voice_cmds is not None else (engine == "vosk")
+        self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         self.text_callbacks: List[Callable[[str], None]] = []
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
@@ -520,6 +516,12 @@ class SpeechRecognitionManager:
             self._init_whispercpp()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
+
+    def _resolve_voice_commands_enabled(self) -> bool:
+        """Resolve effective voice commands state from preference and engine."""
+        if self._voice_commands_preference is None:
+            return self.engine == "vosk"
+        return bool(self._voice_commands_preference)
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
@@ -1902,6 +1904,11 @@ class SpeechRecognitionManager:
                 self.audio_device_index = None
             else:
                 self.audio_device_index = audio_device_index
+
+        if "voice_commands_enabled" in kwargs:
+            self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:
             logger.info("Engine or model changed, re-initializing...")
