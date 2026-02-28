@@ -11,13 +11,9 @@ import shutil
 import subprocess
 import time
 from enum import Enum
-from typing import List, Optional, Tuple  # noqa: F401
+from typing import Dict, List, Optional, Tuple  # noqa: F401
 
-from .ibus_engine import (
-    IBusTextInjector,
-    is_ibus_available,
-    is_ibus_daemon_running,
-)
+from .ibus_engine import IBusTextInjector, is_ibus_available, is_ibus_daemon_running
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +47,13 @@ def split_text_by_ascii(text: str) -> List[Tuple[str, bool]]:
             current_segment.append(char)
         else:
             # Save the current segment and start a new one
-            segments.append((''.join(current_segment), current_is_ascii))
+            segments.append(("".join(current_segment), current_is_ascii))
             current_segment = [char]
             current_is_ascii = char_is_ascii
 
     # Don't forget the last segment
     if current_segment:
-        segments.append((''.join(current_segment), current_is_ascii))
+        segments.append(("".join(current_segment), current_is_ascii))
 
     return segments
 
@@ -72,7 +68,7 @@ def get_unicode_hex(char: str) -> str:
     Returns:
         The hex code in lowercase (e.g., '00e4' for 'ä')
     """
-    return format(ord(char), '04x')
+    return format(ord(char), "04x")
 
 
 class DesktopEnvironment(Enum):
@@ -428,10 +424,14 @@ class TextInjector:
                     for segment_idx, (segment, is_ascii) in enumerate(segments):
                         if is_ascii:
                             # ASCII text can be typed directly
-                            self._inject_ascii_with_xdotool(segment, env, segment_idx, len(segments))
+                            self._inject_ascii_with_xdotool(
+                                segment, env, segment_idx, len(segments)
+                            )
                         else:
                             # Non-ASCII text needs Unicode input sequence
-                            self._inject_unicode_with_xdotool(segment, env, segment_idx, len(segments))
+                            self._inject_unicode_with_xdotool(
+                                segment, env, segment_idx, len(segments)
+                            )
 
                     logger.info(
                         f"Text injected using xdotool: '{text[:20]}...' ({len(text)} chars)"
@@ -472,7 +472,9 @@ class TextInjector:
             logger.error(f"xdotool error: {e.stderr}")
             raise
 
-    def _inject_ascii_with_xdotool(self, text: str, env: dict, segment_idx: int, total_segments: int):
+    def _inject_ascii_with_xdotool(
+        self, text: str, env: Dict[str, str], segment_idx: int, total_segments: int
+    ):
         """
         Inject ASCII text using xdotool type command.
 
@@ -510,7 +512,9 @@ class TextInjector:
             if i + chunk_size < len(text):
                 time.sleep(0.05)
 
-    def _inject_unicode_with_xdotool(self, text: str, env: dict, segment_idx: int, total_segments: int):
+    def _inject_unicode_with_xdotool(
+        self, text: str, env: Dict[str, str], segment_idx: int, total_segments: int
+    ):
         """
         Inject Unicode text using xdotool with Ctrl+Shift+U Unicode input sequence.
 
@@ -542,8 +546,7 @@ class TextInjector:
                 # Type the Unicode sequence using keydown/keyup for modifiers
                 # Ctrl+Shift+U, then hex code, then space
                 subprocess.run(
-                    ["xdotool", "key", "--clearmodifiers",
-                     "Ctrl+Shift+u", "space"],  # Some systems need space after U
+                    ["xdotool", "key", "--clearmodifiers", "Ctrl+Shift+u"],
                     env=env,
                     check=True,
                     stderr=subprocess.PIPE,
@@ -606,9 +609,7 @@ class TextInjector:
                     e.returncode, e.cmd, output=e.output, stderr=e.stderr
                 ) from e
 
-            logger.info(
-                f"Text injected using wtype: '{text[:20]}...' ({len(text)} chars)"
-            )
+            logger.info(f"Text injected using wtype: '{text[:20]}...' ({len(text)} chars)")
         else:  # ydotool
             # ydotool needs special handling for Unicode characters
             self._inject_with_ydotool(text)
@@ -651,9 +652,7 @@ class TextInjector:
                 for char in segment:
                     self._inject_unicode_with_ydotool(char)
 
-        logger.info(
-            f"Text injected using ydotool: '{text[:20]}...' ({len(text)} chars)"
-        )
+        logger.info(f"Text injected using ydotool: '{text[:20]}...' ({len(text)} chars)")
 
     def _inject_unicode_with_ydotool(self, char: str):
         """
