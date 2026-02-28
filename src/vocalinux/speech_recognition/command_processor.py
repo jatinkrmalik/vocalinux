@@ -231,20 +231,39 @@ class CommandProcessor:
                 if re.search(cmd_pattern, text, re.IGNORECASE):
                     actions.append(action)
 
+                    # Extract text before and after the command
+                    # Pattern to capture text before the command
+                    before_match = re.search(
+                        r"^(.*?)\b" + re.escape(cmd) + r"\b", text, re.IGNORECASE
+                    )
+                    text_before = ""
+                    text_after = ""
+
+                    if before_match and before_match.group(1).strip():
+                        text_before = before_match.group(1).strip()
+
                     # Check if there's text after the command
                     match = re.search(r"\b" + re.escape(cmd) + r"\s+(.*)", text, re.IGNORECASE)
                     if match:
-                        remaining_text = match.group(1).strip()
-                        # Only add space if there's text before the command
-                        cmd_match = re.search(
-                            r"^(.*?)\b" + re.escape(cmd) + r"\b", text, re.IGNORECASE
-                        )
-                        if cmd_match and cmd_match.group(1).strip():
-                            processed_text = " " + remaining_text
-                        else:
-                            processed_text = remaining_text
+                        text_after = match.group(1).strip()
+
+                    # Combine text before and after the command
+                    # This preserves dictation that contains command words (fixes #270)
+                    if text_before and text_after:
+                        processed_text = text_before + " " + text_after
+                    elif text_before:
+                        # Command was spoken alone or at end - preserve before text
+                        # but still trigger the action
+                        processed_text = text_before
+                    elif text_after:
+                        processed_text = text_after
                     else:
+                        # Command alone with no other text
                         processed_text = ""
+
+                    # Only process the first matched action command to avoid
+                    # processing multiple commands in one dictation
+                    break
 
             # Handle text commands
             for cmd, replacement in self.text_commands.items():

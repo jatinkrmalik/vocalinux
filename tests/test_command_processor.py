@@ -75,10 +75,9 @@ class TestCommandProcessor(unittest.TestCase):
             ("cut this selection", "this selection", ["cut"]),
             ("copy this text", "this text", ["copy"]),
             ("paste here", "here", ["paste"]),
-            # Test multiple actions
-            ("select all then copy", "then", ["select_all", "copy"]),
-            # Test action with text before command (should add space)
-            ("hello select all world", " world", ["select_all"]),
+            # Test action with text before command (should preserve both)
+            # Fixes issue #270 - text before command should not be discarded
+            ("hello select all world", "hello world", ["select_all"]),
         ]
 
         for input_text, expected_output, expected_actions in test_cases:
@@ -343,3 +342,61 @@ class TestCommandProcessorFallback(unittest.TestCase):
         """Test paste action through generic path."""
         result, actions = self.processor.process_text("paste content")
         self.assertIn("paste", actions)
+
+
+class TestIssue270CopyCommandBug(unittest.TestCase):
+    """Test cases for issue #270: Voice command 'copy' consumes preceding dictated text."""
+
+    def setUp(self):
+        """Set up for tests."""
+        self.processor = CommandProcessor()
+
+    def test_copy_in_middle_of_sentence(self):
+        """Dictating 'copy' in the middle should preserve text before and after."""
+        result, actions = self.processor.process_text("please copy this paragraph")
+        # Should preserve "please" and "this paragraph", trigger copy action
+        self.assertEqual(result, "please this paragraph")
+        self.assertIn("copy", actions)
+
+    def test_copy_at_beginning(self):
+        """Dictating 'copy' at start should work and preserve after text."""
+        result, actions = self.processor.process_text("copy this text")
+        self.assertEqual(result, "this text")
+        self.assertIn("copy", actions)
+
+    def test_copy_at_end(self):
+        """Dictating 'copy' at end should preserve text before command."""
+        result, actions = self.processor.process_text("I need a copy of that document")
+        # Should preserve "I need a" before "copy", trigger action
+        self.assertEqual(result, "I need a of that document")
+        self.assertIn("copy", actions)
+
+    def test_copy_alone(self):
+        """Dictating just 'copy' should trigger action, no text."""
+        result, actions = self.processor.process_text("copy")
+        self.assertEqual(result, "")
+        self.assertIn("copy", actions)
+
+    def test_cut_in_middle_of_sentence(self):
+        """Dictating 'cut' in the middle should preserve text before and after."""
+        result, actions = self.processor.process_text("please cut this text")
+        self.assertEqual(result, "please this text")
+        self.assertIn("cut", actions)
+
+    def test_paste_in_middle_of_sentence(self):
+        """Dictating 'paste' in the middle should preserve text before and after."""
+        result, actions = self.processor.process_text("now paste the content")
+        self.assertEqual(result, "now the content")
+        self.assertIn("paste", actions)
+
+    def test_undo_in_middle_of_sentence(self):
+        """Dictating 'undo' in the middle should preserve text before and after."""
+        result, actions = self.processor.process_text("please undo that change")
+        self.assertEqual(result, "please that change")
+        self.assertIn("undo", actions)
+
+    def test_case_insensitive_copy(self):
+        """Test that 'Copy' (capitalized) is also handled correctly."""
+        result, actions = self.processor.process_text("Please Copy this text")
+        self.assertEqual(result, "Please this text")
+        self.assertIn("copy", actions)
