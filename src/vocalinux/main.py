@@ -262,6 +262,7 @@ def main():
 
     vad_sensitivity = saved_settings.get("vad_sensitivity", 3)
     silence_timeout = saved_settings.get("silence_timeout", 2.0)
+    voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto, True/False = explicit
     audio_device_index = audio_settings.get("device_index", None)
 
     logger.info(f"Final settings: engine={engine}, language={language}, model={model_size}")
@@ -279,6 +280,7 @@ def main():
             language=language,
             vad_sensitivity=vad_sensitivity,
             silence_timeout=silence_timeout,
+            voice_commands_enabled=voice_commands_enabled,
             audio_device_index=audio_device_index,
         )
 

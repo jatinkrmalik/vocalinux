@@ -461,6 +461,16 @@ class SpeechRecognitionManager:
         self.model = None
         self.recognizer = None  # Added for VOSK
         self.command_processor = CommandProcessor()
+
+        # Voice commands: None=auto (VOSK=yes, Whisper=no), True=always on, False=always off
+        voice_cmds = kwargs.get("voice_commands_enabled")
+        self._voice_commands_enabled = voice_cmds if voice_cmds is not None else (engine == "vosk")
+
+        self.text_callbacks: List[Callable[[str], None]] = []
+        
+                # Voice commands: None=auto (VOSK=yes, Whisper=no), True=always on, False=always off
+                voice_cmds = kwargs.get("voice_commands_enabled")
+                self._voice_commands_enabled = voice_cmds if voice_cmds is not None else (engine == "vosk")
         self.text_callbacks: List[Callable[[str], None]] = []
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
         self.action_callbacks: List[Callable[[str], None]] = []
@@ -1781,7 +1791,13 @@ class SpeechRecognitionManager:
 
         # Process commands
         if text:
-            processed_text, actions = self.command_processor.process_text(text)
+            if self._voice_commands_enabled:
+                            # Process with voice commands (original behavior)
+                            processed_text, actions = self.command_processor.process_text(text)
+                        else:
+                            # Voice commands disabled - pass text through directly (Whisper handles punctuation)
+                            processed_text = text.strip()
+                            actions = []
 
             # Call text callbacks with processed text
             if processed_text:
