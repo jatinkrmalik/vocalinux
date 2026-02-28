@@ -1580,15 +1580,7 @@ class SpeechRecognitionManager:
                                 if last_speech_time is not None:
                                     idle_time = time.time() - last_speech_time
                                     if idle_time >= self.session_timeout:
-                                        logger.info(
-                                            f"Session timeout reached ({idle_time:.1f}s idle). Auto-stopping recognition."
-                                        )
-                                        _show_notification(
-                                            "Voice Recognition Stopped",
-                                            "Microphone stopped due to inactivity",
-                                            "audio-input-microphone-symbolic",
-                                        )
-                                        play_stop_sound()
+                                        self._auto_stop_for_inactivity(idle_time)
                                         break  # Exit the recording loop
 
                             self._update_state(RecognitionState.LISTENING)
@@ -1729,6 +1721,17 @@ class SpeechRecognitionManager:
 
         idle_time = time.time() - last_speech_time
         return idle_time >= self.session_timeout
+
+    def _auto_stop_for_inactivity(self, idle_time: float) -> None:
+        logger.info(f"Session timeout reached ({idle_time:.1f}s idle). Auto-stopping recognition.")
+        self.should_record = False
+        _show_notification(
+            "Voice Recognition Stopped",
+            "Microphone stopped due to inactivity",
+            "audio-input-microphone-symbolic",
+        )
+        play_stop_sound()
+        self._update_state(RecognitionState.IDLE)
 
     def reconfigure(
         self,

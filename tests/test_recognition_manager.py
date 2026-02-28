@@ -281,6 +281,28 @@ class TestSpeechRecognition(unittest.TestCase):
                 getattr(manager, "_session_timeout_reached")(speech_detected_in_session=False)
             )
 
+    def test_auto_stop_for_inactivity_sets_idle_and_stops_recording(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.should_record = True
+        manager._update_state(RecognitionState.LISTENING)
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager._show_notification"
+        ) as mock_notify:
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.play_stop_sound"
+            ) as mock_stop_sound:
+                getattr(manager, "_auto_stop_for_inactivity")(12.5)
+
+        self.assertFalse(manager.should_record)
+        self.assertEqual(manager.state, RecognitionState.IDLE)
+        mock_notify.assert_called_once_with(
+            "Voice Recognition Stopped",
+            "Microphone stopped due to inactivity",
+            "audio-input-microphone-symbolic",
+        )
+        mock_stop_sound.assert_called_once()
+
     def test_whisper_engine(self):
         """Test initialization and usage with Whisper engine."""
         # Setup Whisper and torch mocks
