@@ -1529,9 +1529,11 @@ class SpeechRecognitionManager:
         # Stop recording FIRST to prevent capturing the stop sound
         self.should_record = False
 
-        # Wait briefly for audio thread to stop recording
+        # Wait for audio thread to finish recording and enqueue any pending audio
+        # This is critical to prevent race condition where recognition thread exits
+        # before the final audio segment is enqueued
         if self.audio_thread and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=0.1)
+            self.audio_thread.join(timeout=2.0)
 
         # Discard the last ~1 second of audio to avoid transcribing the stop sound
         # Audio is recorded in 1024-sample chunks at 16000 Hz = ~64ms per chunk
@@ -1549,15 +1551,12 @@ class SpeechRecognitionManager:
                 self.audio_buffer = []
 
             if self.audio_buffer:
+                logger.info(f"DEBUG: Enqueuing final buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
 
         # Now play the stop sound (after recording has stopped)
         play_stop_sound()
-
-        # Wait for threads to finish
-        if self.audio_thread and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=1.0)
 
         # Wake up recognition thread so it can drain queued segments and stop
         self._signal_recognition_stop()
@@ -1885,19 +1884,27 @@ class SpeechRecognitionManager:
 
     def _perform_recognition(self):
         """Perform speech recognition in real-time."""
+        logger.info("DEBUG: _perform_recognition thread started")
         while self.should_record or not self._segment_queue.empty():
+            logger.debug(
+                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
+            )
             try:
                 segment = self._segment_queue.get(timeout=0.1)
             except queue.Empty:
+                logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
                 continue
 
             if segment is None:
+                logger.info("DEBUG: Recognition loop - got None signal, continuing")
                 continue
 
+            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
             self._update_state(RecognitionState.PROCESSING)
             self._process_audio_buffer(segment)
             if self.should_record:
                 self._update_state(RecognitionState.LISTENING)
+        logger.info("DEBUG: _perform_recognition thread exiting")
 
     def _enqueue_audio_segment(self, audio_buffer: List[bytes]):
         """Queue an audio segment for asynchronous transcription."""
