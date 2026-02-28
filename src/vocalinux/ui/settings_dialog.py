@@ -1081,11 +1081,25 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(silence_row)
 
+        # Voice Commands Toggle
+        self.voice_commands_switch = Gtk.Switch()
+        self.voice_commands_switch.set_tooltip_text(
+            "Enable voice commands like 'new line', 'period', 'undo', etc.\n"
+            "Useful for VOSK engine. Whisper engines handle punctuation automatically."
+        )
+        voice_commands_row = PreferenceRow(
+            title="Voice Commands",
+            subtitle="Enable voice commands for punctuation and editing",
+            widget=self.voice_commands_switch,
+        )
+        group.add_row(voice_commands_row)
+
         self.recognition_settings_tab.pack_start(group, False, False, 0)
 
         # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
+        self.voice_commands_switch.connect("state-set", self._on_voice_commands_toggled)
 
     def _build_shortcuts_section(self):
         """Build the Keyboard Shortcuts section."""
@@ -1341,6 +1355,10 @@ class SettingsDialog(Gtk.Dialog):
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
 
+        # Set voice commands switch based on config
+        voice_commands_enabled = self.config_manager.is_voice_commands_enabled()
+        self.voice_commands_switch.set_active(voice_commands_enabled)
+
     def _get_current_settings(self):
         """Get current settings from config manager."""
         self.config_manager.load_config()
@@ -1468,6 +1486,18 @@ class SettingsDialog(Gtk.Dialog):
         self.language_combo.set_active_id(self.language)
         self._update_engine_specific_ui()
         self._update_model_info()
+        self._update_voice_commands_for_engine()
+
+    def _update_voice_commands_for_engine(self):
+        """Update voice commands switch based on current engine."""
+        sr_config = self.config_manager.get_settings().get("speech_recognition", {})
+        voice_commands_enabled = sr_config.get("voice_commands_enabled")
+
+        if voice_commands_enabled is None:
+            engine_text = self.engine_combo.get_active_text()
+            engine = engine_text.lower() if engine_text else sr_config.get("engine", "whisper_cpp")
+            auto_enabled = engine == "vosk"
+            self.voice_commands_switch.set_active(auto_enabled)
 
     def _on_model_changed(self, widget):
         """Handle changes in the selected model."""
@@ -1484,6 +1514,23 @@ class SettingsDialog(Gtk.Dialog):
     def _on_silence_changed(self, widget):
         """Handle changes in silence timeout."""
         self._auto_apply_settings()
+
+    def _on_voice_commands_toggled(self, widget, state):
+        """Handle toggle of the voice commands switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Voice commands toggled: {enabled}")
+
+        self.config_manager.set("speech_recognition", "voice_commands_enabled", enabled)
+        self.config_manager.save_settings()
+        try:
+            self.speech_engine.reconfigure(voice_commands_enabled=enabled, force_download=False)
+        except Exception as e:
+            logger.warning(f"Failed to apply voice commands toggle immediately: {e}")
+        logger.info(f"Voice commands {'enabled' if enabled else 'disabled'}")
+        return False
 
     def _populate_language_options(self):
         """Populate language dropdown with supported languages."""

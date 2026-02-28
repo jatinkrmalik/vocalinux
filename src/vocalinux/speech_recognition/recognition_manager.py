@@ -18,11 +18,7 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import (
-    WHISPERCPP_MODEL_INFO,
-    get_model_path,
-    is_model_downloaded,
-)
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
 
 
@@ -461,6 +457,11 @@ class SpeechRecognitionManager:
         self.model = None
         self.recognizer = None  # Added for VOSK
         self.command_processor = CommandProcessor()
+
+        # Voice commands: None=auto (VOSK=yes, Whisper=no), True=always on, False=always off
+        self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
+
         self.text_callbacks: List[Callable[[str], None]] = []
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
         self.action_callbacks: List[Callable[[str], None]] = []
@@ -515,6 +516,12 @@ class SpeechRecognitionManager:
             self._init_whispercpp()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
+
+    def _resolve_voice_commands_enabled(self) -> bool:
+        """Resolve effective voice commands state from preference and engine."""
+        if self._voice_commands_preference is None:
+            return self.engine == "vosk"
+        return bool(self._voice_commands_preference)
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
@@ -1779,9 +1786,15 @@ class SpeechRecognitionManager:
             logger.error(f"Unknown engine: {self.engine}")
             return
 
-        # Process commands
+        # Process text - either with voice commands or pass through directly
         if text:
-            processed_text, actions = self.command_processor.process_text(text)
+            if self._voice_commands_enabled:
+                # Process with voice commands (original behavior)
+                processed_text, actions = self.command_processor.process_text(text)
+            else:
+                # Voice commands disabled - pass text through directly (Whisper handles punctuation)
+                processed_text = text.strip()
+                actions = []
 
             # Call text callbacks with processed text
             if processed_text:
@@ -1891,6 +1904,11 @@ class SpeechRecognitionManager:
                 self.audio_device_index = None
             else:
                 self.audio_device_index = audio_device_index
+
+        if "voice_commands_enabled" in kwargs:
+            self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:
             logger.info("Engine or model changed, re-initializing...")
