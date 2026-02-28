@@ -1852,17 +1852,27 @@ class SettingsDialog(Gtk.Dialog):
 
         self.speech_engine.stop_recognition()
 
-        if hasattr(self, "_saved_text_callbacks"):
-            self.speech_engine.set_text_callbacks(self._saved_text_callbacks)
-            del self._saved_text_callbacks
+        # Wait a bit for any pending transcription to complete before restoring callbacks
+        # This ensures the test callback receives the transcription result
+        GLib.timeout_add(500, self._restore_callbacks_and_check_result)
 
         self._test_active = False
         self.test_button.set_sensitive(True)
         self.test_button.set_label("Start Test (3 seconds)")
 
         self.update_recognition_progress("Idle")
-        GLib.timeout_add(200, self._check_test_result)
 
+        return False
+
+    def _restore_callbacks_and_check_result(self):
+        """Restore callbacks and check test result after delay."""
+        # Restore original text callbacks
+        if hasattr(self, "_saved_text_callbacks"):
+            self.speech_engine.set_text_callbacks(self._saved_text_callbacks)
+            del self._saved_text_callbacks
+
+        # Check result after giving time for final callbacks to complete
+        GLib.timeout_add(300, self._check_test_result)
         return False
 
     def _check_test_result(self):
