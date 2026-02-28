@@ -205,7 +205,7 @@ class TestSpeechRecognition(unittest.TestCase):
         with patch.object(SpeechRecognitionManager, "_get_vosk_model_path") as mock_get_path:
             # Test small model size
             mock_get_path.return_value = "/path/to/vosk-model-small-en-us-0.15"
-            _ = SpeechRecognitionManager(engine="vosk", model_size="small")
+            _ = SpeechRecognitionManager(engine="vosk", model_size="small", voice_commands_enabled=True)
 
             # Verify the small model path is constructed correctly
             mock_get_path.assert_called_with()
