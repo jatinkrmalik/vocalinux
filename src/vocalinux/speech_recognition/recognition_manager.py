@@ -102,6 +102,59 @@ def get_audio_input_devices() -> list:
     return devices
 
 
+def _get_supported_channels(audio, device_index: int = None) -> int:
+    """
+    Detect the supported number of channels for the audio device.
+
+    Some audio devices (particularly professional audio interfaces and certain
+    onboard audio chips) only support specific channel configurations. This
+    function tests mono (1) and stereo (2) to find a working configuration.
+
+    Args:
+        audio: PyAudio instance
+        device_index: The device index to test (None for default)
+
+    Returns:
+        int: Number of channels supported (1 or 2), defaults to 1
+    """
+    import pyaudio
+
+    FORMAT = pyaudio.paInt16
+    CHUNK = 1024
+    RATE = 16000  # Use standard rate for channel testing
+
+    # Try mono first (preferred for speech recognition)
+    for channels in [1, 2]:
+        try:
+            stream_kwargs = {
+                "format": FORMAT,
+                "channels": channels,
+                "rate": RATE,
+                "input": True,
+                "frames_per_buffer": CHUNK,
+            }
+            if device_index is not None:
+                stream_kwargs["input_device_index"] = device_index
+
+            test_stream = audio.open(**stream_kwargs)
+            test_stream.close()
+            logger.debug(f"Device supports {channels} channel(s)")
+            return channels
+        except (IOError, OSError) as e:
+            error_str = str(e).lower()
+            if "invalid number of channels" in error_str or "-9998" in error_str:
+                logger.debug(f"Device does not support {channels} channel(s)")
+                continue
+            else:
+                # Different error, try next channel count anyway
+                logger.debug(f"Channel test failed for {channels} channel(s): {e}")
+                continue
+
+    # Default to mono if we couldn't determine
+    logger.warning("Could not determine supported channel count, defaulting to 1")
+    return 1
+
+
 def _get_supported_sample_rate(audio, device_index: int, channels: int = 1) -> int:
     """
     Get a supported sample rate for the audio device.
@@ -216,7 +269,6 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
 
         CHUNK = 1024
         FORMAT = pyaudio.paInt16
-        CHANNELS = 1
 
         audio = pyaudio.PyAudio()
 
@@ -233,6 +285,10 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             result["error"] = f"Cannot get device info: {e}"
             audio.terminate()
             return result
+
+        # Detect supported channel count first (some devices require stereo)
+        CHANNELS = _get_supported_channels(audio, device_index)
+        logger.info(f"Using {CHANNELS} channel(s) for audio test")
 
         # Detect supported sample rate for this device
         RATE = _get_supported_sample_rate(audio, device_index, CHANNELS)
@@ -1530,7 +1586,6 @@ class SpeechRecognitionManager:
             # PyAudio configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
-            CHANNELS = 1
 
             # Initialize PyAudio with reconnection support
             self._pyaudio_instance = pyaudio.PyAudio()
@@ -1547,6 +1602,10 @@ class SpeechRecognitionManager:
                         )
                 except (IOError, OSError):
                     continue
+
+            # Detect supported channel count first (some devices require stereo)
+            CHANNELS = _get_supported_channels(audio, self.audio_device_index)
+            logger.info(f"Using {CHANNELS} channel(s) for recording")
 
             # Detect supported sample rate for the selected device
             RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
@@ -1619,6 +1678,15 @@ class SpeechRecognitionManager:
                             logger.info(f"Buffer trimmed by {remove_count} chunks")
 
                         data = stream.read(CHUNK, exception_on_overflow=False)
+
+                        # Convert stereo to mono if necessary
+                        # Speech recognition engines expect mono (1 channel) audio
+                        if CHANNELS == 2:
+                            audio_array = np.frombuffer(data, dtype=np.int16)
+                            # Reshape to (n_samples, 2) and average channels
+                            stereo_samples = audio_array.reshape(-1, 2)
+                            mono_samples = stereo_samples.mean(axis=1).astype(np.int16)
+                            data = mono_samples.tobytes()
 
                         # Resample to 16kHz if capturing at non-16kHz for Vosk/Whisper compatibility
                         if self._capture_sample_rate != 16000:
@@ -1984,7 +2052,10 @@ class SpeechRecognitionManager:
             # Stream configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
-            CHANNELS = 1
+
+            # Detect supported channel count first (some devices require stereo)
+            CHANNELS = _get_supported_channels(audio_instance, self.audio_device_index)
+            logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
 
             # Detect supported sample rate for the device
             RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
