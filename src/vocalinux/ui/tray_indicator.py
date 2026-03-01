@@ -8,7 +8,7 @@ recognition process and displaying its status.
 import logging
 import os
 import signal
-from typing import Callable
+from typing import Callable, Optional
 
 import gi
 
@@ -400,7 +400,7 @@ class TrayIndicator:
             logger.info("Settings dialog closed.")
             dialog.destroy()
 
-    def update_shortcut(self, shortcut: str, mode: str = None) -> bool:
+    def update_shortcut(self, shortcut: str, mode: Optional[str] = None) -> bool:
         """
         Update the keyboard shortcut for toggling voice recognition.
 
@@ -413,20 +413,25 @@ class TrayIndicator:
         Returns:
             True if the shortcut was updated successfully, False otherwise
         """
-        current_mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        current_mode = self.shortcut_manager.mode
         mode_changed = mode is not None and mode != current_mode
         shortcut_changed = shortcut != self.shortcut_manager.shortcut
 
         if mode_changed:
             logger.info(f"Mode changing from {current_mode} to {mode}")
-            # Update config with new mode
-            self.config_manager.set("shortcuts", "mode", mode)
-            self.config_manager.save_settings()
+            assert mode is not None
+            if not self.shortcut_manager.set_mode(mode):
+                logger.error(f"Failed to set shortcut mode: {mode}")
+                return False
+
+        if shortcut_changed:
+            if not self.shortcut_manager.set_shortcut(shortcut):
+                logger.error(f"Failed to set shortcut: {shortcut}")
+                return False
 
         if mode_changed or shortcut_changed:
-            # Re-setup shortcuts with new configuration
-            # This will stop, clear callbacks, and restart with correct mode
-            return self.shortcut_manager.restart_with_shortcut(shortcut, mode)
+            self._setup_keyboard_shortcuts()
+            return self.shortcut_manager.active
 
         logger.debug("No changes needed - shortcut and mode unchanged")
         return True

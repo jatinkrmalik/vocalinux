@@ -10,7 +10,7 @@ Supports multiple backends:
 """
 
 import logging
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 # Import the backend system
 from .keyboard_backends import (
@@ -175,7 +175,7 @@ class KeyboardShortcutManager:
 
         return True
 
-    def restart_with_shortcut(self, shortcut: str, mode: str = None) -> bool:
+    def restart_with_shortcut(self, shortcut: str, mode: Optional[str] = None) -> bool:
         """
         Restart the keyboard listener with a new shortcut.
 
@@ -290,7 +290,7 @@ class KeyboardShortcutManager:
         self.backend_instance.stop()
         self.active = False
 
-    def register_toggle_callback(self, callback: Callable):
+    def register_toggle_callback(self, callback: Optional[Callable[[], None]]):
         """
         Register a callback for the toggle shortcut (double-tap).
 
@@ -302,9 +302,12 @@ class KeyboardShortcutManager:
             return
 
         self.backend_instance.register_toggle_callback(callback)
-        logger.info(f"Registered toggle callback for: {self.shortcut_display_name}")
+        if callback is None:
+            logger.debug("Cleared toggle callback")
+        else:
+            logger.info(f"Registered toggle callback for: {self.shortcut_display_name}")
 
-    def register_press_callback(self, callback: Callable):
+    def register_press_callback(self, callback: Optional[Callable[[], None]]):
         """
         Register a callback for key press events (push-to-talk mode).
 
@@ -316,9 +319,12 @@ class KeyboardShortcutManager:
             return
 
         self.backend_instance.register_press_callback(callback)
-        logger.info(f"Registered press callback for: {self.shortcut_display_name}")
+        if callback is None:
+            logger.debug("Cleared press callback")
+        else:
+            logger.info(f"Registered press callback for: {self.shortcut_display_name}")
 
-    def register_release_callback(self, callback: Callable):
+    def register_release_callback(self, callback: Optional[Callable[[], None]]):
         """
         Register a callback for key release events (push-to-talk mode).
 
@@ -330,7 +336,10 @@ class KeyboardShortcutManager:
             return
 
         self.backend_instance.register_release_callback(callback)
-        logger.info(f"Registered release callback for: {self.shortcut_display_name}")
+        if callback is None:
+            logger.debug("Cleared release callback")
+        else:
+            logger.info(f"Registered release callback for: {self.shortcut_display_name}")
 
     @property
     def listener(self):
@@ -339,8 +348,9 @@ class KeyboardShortcutManager:
 
         Returns the underlying backend object if using pynput backend.
         """
-        if self.backend_instance and hasattr(self.backend_instance, "listener"):
-            return self.backend_instance.listener
+        if self.backend_instance:
+            backend = cast(Any, self.backend_instance)
+            return getattr(backend, "listener", None)
         return None
 
 

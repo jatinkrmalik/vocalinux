@@ -8,6 +8,8 @@ the required methods.
 from abc import ABC, abstractmethod
 from typing import Callable, Optional
 
+Callback = Callable[[], None]
+
 # Supported double-tap shortcut keys
 SUPPORTED_SHORTCUTS = {
     "ctrl+ctrl": "ctrl",
@@ -55,7 +57,7 @@ SHORTCUT_MODES = {
 DEFAULT_SHORTCUT_MODE = "toggle"
 
 
-def get_shortcut_display_name(shortcut: str, mode: str = None) -> str:
+def get_shortcut_display_name(shortcut: str, mode: Optional[str] = None) -> str:
     """
     Get a human-readable display name for a shortcut.
 
@@ -112,9 +114,9 @@ class KeyboardBackend(ABC):
             mode: The shortcut mode ("toggle" or "push_to_talk")
         """
         self.active = False
-        self.double_tap_callback: Optional[Callable] = None
-        self.key_press_callback: Optional[Callable] = None
-        self.key_release_callback: Optional[Callable] = None
+        self.double_tap_callback: Optional[Callback] = None
+        self.key_press_callback: Optional[Callback] = None
+        self.key_release_callback: Optional[Callback] = None
         self._shortcut = shortcut
         self._mode = mode
         self._modifier_key = parse_shortcut(shortcut)
@@ -190,7 +192,7 @@ class KeyboardBackend(ABC):
         """
         pass
 
-    def register_toggle_callback(self, callback: Callable) -> None:
+    def register_toggle_callback(self, callback: Optional[Callback]) -> None:
         """
         Register a callback for the double-tap shortcut.
 
@@ -199,7 +201,7 @@ class KeyboardBackend(ABC):
         """
         self.double_tap_callback = callback
 
-    def register_press_callback(self, callback: Callable) -> None:
+    def register_press_callback(self, callback: Optional[Callback]) -> None:
         """
         Register a callback for key press events (push-to-talk mode).
 
@@ -208,7 +210,7 @@ class KeyboardBackend(ABC):
         """
         self.key_press_callback = callback
 
-    def register_release_callback(self, callback: Callable) -> None:
+    def register_release_callback(self, callback: Optional[Callback]) -> None:
         """
         Register a callback for key release events (push-to-talk mode).
 
