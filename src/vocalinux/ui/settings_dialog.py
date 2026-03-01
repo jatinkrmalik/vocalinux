@@ -564,13 +564,15 @@ class PreferenceRow(Gtk.ListBoxRow):
         title_label.get_style_context().add_class("preference-row-title")
         text_box.pack_start(title_label, False, False, 0)
 
+        # Store subtitle label reference for later updates
+        self.subtitle_label = None
         if subtitle:
-            subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
-            subtitle_label.get_style_context().add_class("preference-row-subtitle")
-            subtitle_label.set_max_width_chars(40)
-            subtitle_label.set_line_wrap(True)
-            subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            text_box.pack_start(subtitle_label, False, False, 0)
+            self.subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
+            self.subtitle_label.get_style_context().add_class("preference-row-subtitle")
+            self.subtitle_label.set_max_width_chars(40)
+            self.subtitle_label.set_line_wrap(True)
+            self.subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            text_box.pack_start(self.subtitle_label, False, False, 0)
 
         hbox.pack_start(text_box, True, True, 0)
 
@@ -580,6 +582,11 @@ class PreferenceRow(Gtk.ListBoxRow):
             hbox.pack_end(widget, False, False, 0)
 
         self.add(hbox)
+
+    def set_subtitle(self, subtitle: str):
+        """Update the subtitle text."""
+        if self.subtitle_label:
+            self.subtitle_label.set_text(subtitle)
 
 
 class ModelDownloadDialog(Gtk.Dialog):
