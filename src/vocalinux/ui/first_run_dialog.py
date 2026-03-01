@@ -40,10 +40,6 @@ class FirstRunDialog(Gtk.Dialog):
         }
         self.result = None
 
-        # Connect to response signal to handle button clicks properly
-        # This avoids race conditions when destroying the dialog from button handlers
-        self.connect("response", self._on_response)
-
         box = self.get_content_area()
         box.set_spacing(16)
         box.set_margin_start(24)
@@ -87,9 +83,7 @@ class FirstRunDialog(Gtk.Dialog):
         button_box.set_halign(Gtk.Align.CENTER)
         button_box.set_margin_top(16)
 
-        # Use add_button with response IDs instead of custom click handlers
-        # This ensures proper dialog lifecycle management and avoids GTK widget
-        # access issues on Wayland (gtk_widget_get_scale_factor assertion failures)
+        # Use add_button with response IDs - these will automatically emit response signals
         yes_button = self.add_button("Yes, start on login", RESPONSE_YES)
         yes_button.get_style_context().add_class("suggested-action")
 
@@ -111,15 +105,11 @@ class FirstRunDialog(Gtk.Dialog):
 
         self.show_all()
 
-    def _on_response(self, dialog, response_id):
-        """Handle dialog response signals properly.
-
-        Using the response signal instead of direct destroy() calls from button
-        handlers prevents race conditions on Wayland where GTK may try to access
-        widget properties (like scale_factor) after the widget is marked for
-        destruction but before the event processing completes.
-        """
+    def do_response(self, response_id):
+        """Handle dialog response - override default handler to set result."""
         self.result = self._response_map.get(response_id, None)
+        # Call parent to actually close the dialog
+        Gtk.Dialog.do_response(self, response_id)
 
 
 def show_first_run_dialog(parent: Optional[Gtk.Window] = None) -> Optional[str]:
@@ -137,4 +127,6 @@ def show_first_run_dialog(parent: Optional[Gtk.Window] = None) -> Optional[str]:
     """
     dialog = FirstRunDialog(parent)
     dialog.run()
-    return dialog.result
+    result = dialog.result
+    dialog.destroy()
+    return result

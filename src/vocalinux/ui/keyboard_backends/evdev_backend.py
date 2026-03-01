@@ -157,27 +157,6 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
-        """
-        Initialize the evdev keyboard backend.
-
-        Args:
-            shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl")
-        """
-        super().__init__(shortcut)
-        self.devices: List[InputDevice] = []
-        self.device_fds: List[int] = []
-        self.running = False
-        self.monitor_thread: Optional[threading.Thread] = None
-
-        self.last_trigger_time = 0
-        self.last_key_press_time = 0
-        self.double_tap_threshold = 0.3  # seconds
-        self.key_pressed_devices: Set[int] = set()
-
-        self._devices_lock = threading.Lock()
-
-        if not EVDEV_AVAILABLE:
-            logger.error("python-evdev not available")
 
     def _get_target_key_codes(self) -> Set[int]:
         """Get the evdev key codes for the configured modifier."""
@@ -227,7 +206,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                 except (OSError, IOError) as e:
                     if "Permission denied" in str(e) or e.errno == errno.EACCES:
                         return (
-                            "Add your user to the 'input' group and log out/in:\\n"
+                            "Add your user to the 'input' group and log out/in:\n"
                             "sudo usermod -a -G input $USER"
                         )
         except Exception:
@@ -256,7 +235,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
             return False
 
         logger.info(f"Found {len(device_paths)} keyboard device(s)")
-        logger.info(f"Listening for shortcut: {self._shortcut}")
+        logger.info(f"Listening for shortcut: {self._shortcut} (mode: {self._mode})")
 
         # Open devices
         self.devices = []
@@ -409,38 +388,6 @@ class EvdevKeyboardBackend(KeyboardBackend):
                         if self.key_release_callback is not None:
                             logger.debug(f"Key release {self._modifier_key} detected (evdev)")
                             threading.Thread(target=self.key_release_callback, daemon=True).start()
-
-        except Exception as e:
-            logger.error(f"Error handling key event: {e}")
-        """Handle a key event from evdev."""
-        try:
-            code = event.code
-            value = event.value  # 0 = release, 1 = press, 2 = repeat
-
-            target_codes = self._get_target_key_codes()
-
-            # Check if this is our target modifier key
-            if code in target_codes:
-                device_id = id(device)
-
-                if value == 1:  # Key press
-                    self.key_pressed_devices.add(device_id)
-                    current_time = time.time()
-
-                    # Check for double-tap
-                    if (
-                        current_time - self.last_key_press_time < self.double_tap_threshold
-                        and self.double_tap_callback is not None
-                        and current_time - self.last_trigger_time > 0.5
-                    ):
-                        logger.debug(f"Double-tap {self._modifier_key} detected (evdev)")
-                        self.last_trigger_time = current_time
-                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
-
-                    self.last_key_press_time = current_time
-
-                elif value == 0:  # Key release
-                    self.key_pressed_devices.discard(device_id)
 
         except Exception as e:
             logger.error(f"Error handling key event: {e}")

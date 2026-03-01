@@ -72,21 +72,6 @@ class PynputKeyboardBackend(KeyboardBackend):
 
         if not PYNPUT_AVAILABLE:
             logger.error("pynput library not available")
-        """
-        Initialize the pynput keyboard backend.
-
-        Args:
-            shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl")
-        """
-        super().__init__(shortcut)
-        self.listener = None
-        self.last_trigger_time = 0
-        self.last_key_press_time = 0
-        self.double_tap_threshold = 0.3  # seconds
-        self.current_keys = set()
-
-        if not PYNPUT_AVAILABLE:
-            logger.error("pynput library not available")
 
     def _get_target_key(self):
         """Get the pynput Key object for the configured modifier."""
@@ -119,7 +104,9 @@ class PynputKeyboardBackend(KeyboardBackend):
         if self.active:
             return True
 
-        logger.info(f"Starting pynput keyboard listener for shortcut: {self._shortcut}")
+        logger.info(
+            f"Starting pynput keyboard listener for shortcut: {self._shortcut} (mode: {self._mode})"
+        )
         self.current_keys = set()
 
         try:
@@ -189,29 +176,6 @@ class PynputKeyboardBackend(KeyboardBackend):
 
         except Exception as e:
             logger.error(f"Error in pynput key press handling: {e}")
-        """Handle key press events."""
-        try:
-            normalized_key = self._normalize_modifier_key(key)
-            target_key = self._get_target_key()
-
-            if normalized_key == target_key:
-                current_time = time.time()
-                if (
-                    current_time - self.last_key_press_time < self.double_tap_threshold
-                    and self.double_tap_callback is not None
-                    and current_time - self.last_trigger_time > 0.5
-                ):
-                    logger.debug(f"Double-tap {self._modifier_key} detected (pynput)")
-                    self.last_trigger_time = current_time
-                    threading.Thread(target=self.double_tap_callback, daemon=True).start()
-                self.last_key_press_time = current_time
-
-            # Track current keys (using target key for reference)
-            if target_key and key in self._get_key_variants(self._modifier_key):
-                self.current_keys.add(normalized_key)
-
-        except Exception as e:
-            logger.error(f"Error in pynput key press handling: {e}")
 
     def _on_release(self, key) -> None:
         """Handle key release events."""
@@ -228,12 +192,6 @@ class PynputKeyboardBackend(KeyboardBackend):
                     logger.debug(f"Key release {self._modifier_key} detected (pynput)")
                     threading.Thread(target=self.key_release_callback, daemon=True).start()
 
-        except Exception as e:
-            logger.error(f"Error in pynput key release handling: {e}")
-        """Handle key release events."""
-        try:
-            normalized_key = self._normalize_modifier_key(key)
-            self.current_keys.discard(normalized_key)
         except Exception as e:
             logger.error(f"Error in pynput key release handling: {e}")
 
