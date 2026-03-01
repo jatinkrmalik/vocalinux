@@ -124,6 +124,9 @@ jspm_packages/
 # Temporary folders
 tmp/
 temp/
+MagicMock/
+tmp/
+temp/
 
 # Editor directories and files
 .vscode/*
