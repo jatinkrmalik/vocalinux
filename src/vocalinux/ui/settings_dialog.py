@@ -36,7 +36,11 @@ from ..utils.whispercpp_model_info import (
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
-from .keyboard_backends import SHORTCUT_DISPLAY_NAMES, SUPPORTED_SHORTCUTS  # noqa: E402
+from .keyboard_backends import (  # noqa: E402
+    SHORTCUT_DISPLAY_NAMES,
+    SHORTCUT_MODES,
+    SUPPORTED_SHORTCUTS,
+)
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -560,13 +564,15 @@ class PreferenceRow(Gtk.ListBoxRow):
         title_label.get_style_context().add_class("preference-row-title")
         text_box.pack_start(title_label, False, False, 0)
 
+        # Store subtitle label reference for later updates
+        self.subtitle_label = None
         if subtitle:
-            subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
-            subtitle_label.get_style_context().add_class("preference-row-subtitle")
-            subtitle_label.set_max_width_chars(40)
-            subtitle_label.set_line_wrap(True)
-            subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            text_box.pack_start(subtitle_label, False, False, 0)
+            self.subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
+            self.subtitle_label.get_style_context().add_class("preference-row-subtitle")
+            self.subtitle_label.set_max_width_chars(40)
+            self.subtitle_label.set_line_wrap(True)
+            self.subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            text_box.pack_start(self.subtitle_label, False, False, 0)
 
         hbox.pack_start(text_box, True, True, 0)
 
@@ -576,6 +582,11 @@ class PreferenceRow(Gtk.ListBoxRow):
             hbox.pack_end(widget, False, False, 0)
 
         self.add(hbox)
+
+    def set_subtitle(self, subtitle: str):
+        """Update the subtitle text."""
+        if self.subtitle_label:
+            self.subtitle_label.set_text(subtitle)
 
 
 class ModelDownloadDialog(Gtk.Dialog):
@@ -1105,13 +1116,37 @@ class SettingsDialog(Gtk.Dialog):
         """Build the Keyboard Shortcuts section."""
         group = PreferencesGroup(
             title="Keyboard Shortcuts",
-            description="Configure the shortcut to toggle voice recognition",
+            description="Configure the shortcut to control voice recognition",
         )
+
+        # Mode selection (Toggle vs Push-to-Talk)
+        self.shortcut_mode_combo = Gtk.ComboBoxText()
+        self.shortcut_mode_combo.set_size_request(200, -1)
+        self.shortcut_mode_combo.set_tooltip_text(
+            "Choose between toggle (double-tap) or push-to-talk mode"
+        )
+        _prevent_scroll_on_hover(self.shortcut_mode_combo)
+
+        # Populate mode options
+        for mode_id, display_name in SHORTCUT_MODES.items():
+            self.shortcut_mode_combo.append(mode_id, display_name)
+
+        # Load current mode from config
+        current_mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        if not self.shortcut_mode_combo.set_active_id(current_mode):
+            self.shortcut_mode_combo.set_active_id("toggle")
+
+        mode_row = PreferenceRow(
+            title="Shortcut Mode",
+            subtitle="How the shortcut behaves",
+            widget=self.shortcut_mode_combo,
+        )
+        group.add_row(mode_row)
 
         # Shortcut selection combo
         self.shortcut_combo = Gtk.ComboBoxText()
         self.shortcut_combo.set_size_request(200, -1)
-        self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut to toggle voice typing")
+        self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut for voice typing")
         _prevent_scroll_on_hover(self.shortcut_combo)
 
         # Populate shortcut options
@@ -1123,12 +1158,12 @@ class SettingsDialog(Gtk.Dialog):
         if not self.shortcut_combo.set_active_id(current_shortcut):
             self.shortcut_combo.set_active_id("ctrl+ctrl")
 
-        shortcut_row = PreferenceRow(
-            title="Toggle Recognition",
-            subtitle="Press this shortcut twice quickly to start/stop",
+        self.shortcut_row = PreferenceRow(
+            title="Shortcut Key",
+            subtitle="Press this key to control voice typing",
             widget=self.shortcut_combo,
         )
-        group.add_row(shortcut_row)
+        group.add_row(self.shortcut_row)
 
         self.shortcuts_tab.pack_start(group, False, False, 0)
 
@@ -1143,7 +1178,7 @@ class SettingsDialog(Gtk.Dialog):
         info_box.pack_start(info_icon, False, False, 0)
 
         self.shortcut_info_label = Gtk.Label(
-            label="Changes take effect immediately. Double-tap the key to toggle voice typing.",
+            label="Changes take effect immediately.",
             xalign=0,
             wrap=True,
         )
@@ -1152,8 +1187,64 @@ class SettingsDialog(Gtk.Dialog):
 
         self.shortcuts_tab.pack_start(info_box, False, False, 0)
 
-        # Connect signal
+        # Connect signals
         self.shortcut_combo.connect("changed", self._on_shortcut_changed)
+        self.shortcut_mode_combo.connect("changed", self._on_shortcut_mode_changed)
+
+        # Update UI based on initial mode
+        self._update_shortcut_ui_for_mode(current_mode)
+
+    def _update_shortcut_ui_for_mode(self, mode: str):
+        """Update the shortcut UI based on the selected mode."""
+        if mode == "toggle":
+            self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+            self.shortcut_info_label.set_text(
+                "In Toggle mode: Double-tap the key to start voice typing, double-tap again to stop."
+            )
+        elif mode == "push_to_talk":
+            self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
+            self.shortcut_info_label.set_text(
+                "In Push-to-Talk mode: Hold the key down to speak, release to stop recording."
+            )
+
+    def _on_shortcut_mode_changed(self, widget):
+        """Handle shortcut mode selection change."""
+        if self._initializing:
+            return
+
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        if not mode_id:
+            return
+
+        # Save to config
+        self.config_manager.set("shortcuts", "mode", mode_id)
+        self.config_manager.save_settings()
+
+        mode_name = SHORTCUT_MODES.get(mode_id, mode_id)
+        logger.info(f"Keyboard shortcut mode changed to: {mode_name}")
+
+        # Update UI to reflect new mode
+        self._update_shortcut_ui_for_mode(mode_id)
+
+        # Try to apply the mode change live
+        if self.shortcut_update_callback:
+            shortcut_id = self.shortcut_combo.get_active_id()
+            success = self.shortcut_update_callback(shortcut_id, mode_id)
+            if success:
+                self.shortcut_info_label.set_markup(
+                    f"<span foreground='#26a269'>Mode updated to <b>{mode_name}</b>. "
+                    f"Active now!</span>"
+                )
+            else:
+                self.shortcut_info_label.set_markup(
+                    f"<i>Mode updated to <b>{mode_name}</b>. "
+                    f"Restart the app for the change to take full effect.</i>"
+                )
+        else:
+            self.shortcut_info_label.set_markup(
+                f"<i>Mode updated to <b>{mode_name}</b>. "
+                f"Restart the app for the change to take full effect.</i>"
+            )
 
     def _on_shortcut_changed(self, widget):
         """Handle shortcut selection change."""
@@ -1173,7 +1264,8 @@ class SettingsDialog(Gtk.Dialog):
 
         # Try to apply the shortcut change live
         if self.shortcut_update_callback:
-            success = self.shortcut_update_callback(shortcut_id)
+            mode_id = self.shortcut_mode_combo.get_active_id()
+            success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(
                     f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
@@ -1185,7 +1277,6 @@ class SettingsDialog(Gtk.Dialog):
                     f"Restart the app for the change to take full effect.</i>"
                 )
         else:
-            # No callback provided, fall back to restart message
             self.shortcut_info_label.set_markup(
                 f"<i>Shortcut updated to <b>{display_name}</b>. "
                 f"Restart the app for the change to take full effect.</i>"

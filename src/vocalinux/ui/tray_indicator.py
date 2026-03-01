@@ -8,7 +8,7 @@ recognition process and displaying its status.
 import logging
 import os
 import signal
-from typing import Callable
+from typing import Callable, Optional
 
 import gi
 
@@ -28,11 +28,7 @@ except (ImportError, ValueError):
 from gi.repository import GdkPixbuf, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
-from ..common_types import (
-    RecognitionState,
-    SpeechRecognitionManagerProtocol,
-    TextInjectorProtocol,
-)
+from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
 
 # Import necessary components
 from .config_manager import ConfigManager  # noqa: E402
@@ -109,8 +105,34 @@ class TrayIndicator:
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
 
-        # Set up keyboard shortcuts
-        self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
+        # Set up keyboard shortcuts with mode support
+        self._setup_keyboard_shortcuts()
+
+    def _setup_keyboard_shortcuts(self):
+        """Set up keyboard shortcuts based on configured mode."""
+        # Stop existing shortcut manager if running
+        if self.shortcut_manager.active:
+            logger.info("Stopping existing shortcut manager before reconfiguration")
+            self.shortcut_manager.stop()
+
+        # Clear any existing callbacks to prevent duplicate triggers
+        self.shortcut_manager.register_toggle_callback(None)
+        self.shortcut_manager.register_press_callback(None)
+        self.shortcut_manager.register_release_callback(None)
+
+        # Get configured mode from config
+        mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        logger.info(f"Setting up keyboard shortcuts with mode: {mode}")
+
+        if mode == "toggle":
+            # Register toggle callback for double-tap mode
+            self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
+        elif mode == "push_to_talk":
+            # Register press/release callbacks for push-to-talk mode
+            self.shortcut_manager.register_press_callback(self._start_recognition)
+            self.shortcut_manager.register_release_callback(self._stop_recognition)
+
+        # Start the keyboard shortcut manager
         self.shortcut_manager.start()
 
     def _init_icons(self):
@@ -203,6 +225,16 @@ class TrayIndicator:
         if self.speech_engine.state == RecognitionState.IDLE:
             self.speech_engine.start_recognition()
         else:
+            self.speech_engine.stop_recognition()
+
+    def _start_recognition(self):
+        """Start voice recognition (for push-to-talk mode)."""
+        if self.speech_engine.state == RecognitionState.IDLE:
+            self.speech_engine.start_recognition()
+
+    def _stop_recognition(self):
+        """Stop voice recognition (for push-to-talk mode)."""
+        if self.speech_engine.state != RecognitionState.IDLE:
             self.speech_engine.stop_recognition()
 
     def _add_menu_item(self, label: str, callback: Callable):
@@ -368,7 +400,7 @@ class TrayIndicator:
             logger.info("Settings dialog closed.")
             dialog.destroy()
 
-    def update_shortcut(self, shortcut: str) -> bool:
+    def update_shortcut(self, shortcut: str, mode: Optional[str] = None) -> bool:
         """
         Update the keyboard shortcut for toggling voice recognition.
 
@@ -376,11 +408,33 @@ class TrayIndicator:
 
         Args:
             shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+            mode: Optional new mode ("toggle" or "push_to_talk"). If None, keeps current mode.
 
         Returns:
             True if the shortcut was updated successfully, False otherwise
         """
-        return self.shortcut_manager.restart_with_shortcut(shortcut)
+        current_mode = self.shortcut_manager.mode
+        mode_changed = mode is not None and mode != current_mode
+        shortcut_changed = shortcut != self.shortcut_manager.shortcut
+
+        if mode_changed:
+            logger.info(f"Mode changing from {current_mode} to {mode}")
+            assert mode is not None
+            if not self.shortcut_manager.set_mode(mode):
+                logger.error(f"Failed to set shortcut mode: {mode}")
+                return False
+
+        if shortcut_changed:
+            if not self.shortcut_manager.set_shortcut(shortcut):
+                logger.error(f"Failed to set shortcut: {shortcut}")
+                return False
+
+        if mode_changed or shortcut_changed:
+            self._setup_keyboard_shortcuts()
+            return self.shortcut_manager.active
+
+        logger.debug("No changes needed - shortcut and mode unchanged")
+        return True
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""

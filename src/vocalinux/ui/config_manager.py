@@ -34,7 +34,8 @@ DEFAULT_CONFIG = {
     },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
-        # Supported values: "ctrl+ctrl", "alt+alt", "shift+shift", "super+super"
+        "mode": "toggle",  # "toggle" or "push_to_talk"
+        # Supported values: "ctrl+ctrl", "alt+alt", "shift+shift"
         # These represent double-tap shortcuts for the respective modifier keys
     },
     "ui": {
@@ -97,6 +98,8 @@ class ConfigManager:
             if needs_migration:
                 self._migrate_config(user_config)
 
+            self._migrate_shortcuts_config()
+
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
 
@@ -132,6 +135,15 @@ class ConfigManager:
 
         self.save_config()
         logger.info("Config migrated to new per-engine model format")
+
+    def _migrate_shortcuts_config(self):
+        shortcuts_config = self.config.get("shortcuts", {})
+        shortcut = shortcuts_config.get("toggle_recognition")
+
+        if shortcut == "super+super":
+            shortcuts_config["toggle_recognition"] = "ctrl+ctrl"
+            self.save_config()
+            logger.info("Migrated deprecated super+super shortcut to ctrl+ctrl")
 
     def save_config(self):
         """Save the current configuration to the config file."""

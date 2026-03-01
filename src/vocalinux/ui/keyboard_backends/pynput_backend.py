@@ -19,7 +19,7 @@ except ImportError:
     keyboard = None  # type: ignore
     PYNPUT_AVAILABLE = False
 
-from .base import DEFAULT_SHORTCUT, KeyboardBackend
+from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +55,15 @@ class PynputKeyboardBackend(KeyboardBackend):
     due to Wayland's security restrictions.
     """
 
-    def __init__(self, shortcut: str = DEFAULT_SHORTCUT):
+    def __init__(self, shortcut: str = DEFAULT_SHORTCUT, mode: str = DEFAULT_SHORTCUT_MODE):
         """
         Initialize the pynput keyboard backend.
 
         Args:
             shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl")
+            mode: The shortcut mode ("toggle" or "push_to_talk")
         """
-        super().__init__(shortcut)
+        super().__init__(shortcut, mode)
         self.listener = None
         self.last_trigger_time = 0
         self.last_key_press_time = 0
@@ -103,7 +104,9 @@ class PynputKeyboardBackend(KeyboardBackend):
         if self.active:
             return True
 
-        logger.info(f"Starting pynput keyboard listener for shortcut: {self._shortcut}")
+        logger.info(
+            f"Starting pynput keyboard listener for shortcut: {self._shortcut} (mode: {self._mode})"
+        )
         self.current_keys = set()
 
         try:
@@ -148,14 +151,23 @@ class PynputKeyboardBackend(KeyboardBackend):
 
             if normalized_key == target_key:
                 current_time = time.time()
-                if (
-                    current_time - self.last_key_press_time < self.double_tap_threshold
-                    and self.double_tap_callback is not None
-                    and current_time - self.last_trigger_time > 0.5
-                ):
-                    logger.debug(f"Double-tap {self._modifier_key} detected (pynput)")
-                    self.last_trigger_time = current_time
-                    threading.Thread(target=self.double_tap_callback, daemon=True).start()
+
+                if self._mode == "toggle":
+                    # Check for double-tap
+                    if (
+                        current_time - self.last_key_press_time < self.double_tap_threshold
+                        and self.double_tap_callback is not None
+                        and current_time - self.last_trigger_time > 0.5
+                    ):
+                        logger.debug(f"Double-tap {self._modifier_key} detected (pynput)")
+                        self.last_trigger_time = current_time
+                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                elif self._mode == "push_to_talk":
+                    # Trigger on press
+                    if self.key_press_callback is not None:
+                        logger.debug(f"Key press {self._modifier_key} detected (pynput)")
+                        threading.Thread(target=self.key_press_callback, daemon=True).start()
+
                 self.last_key_press_time = current_time
 
             # Track current keys (using target key for reference)
@@ -169,7 +181,17 @@ class PynputKeyboardBackend(KeyboardBackend):
         """Handle key release events."""
         try:
             normalized_key = self._normalize_modifier_key(key)
+            target_key = self._get_target_key()
+
+            # Track current keys
             self.current_keys.discard(normalized_key)
+
+            # Handle push-to-talk release
+            if self._mode == "push_to_talk" and normalized_key == target_key:
+                if self.key_release_callback is not None:
+                    logger.debug(f"Key release {self._modifier_key} detected (pynput)")
+                    threading.Thread(target=self.key_release_callback, daemon=True).start()
+
         except Exception as e:
             logger.error(f"Error in pynput key release handling: {e}")
 

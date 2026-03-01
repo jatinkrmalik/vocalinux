@@ -25,7 +25,7 @@ except ImportError:
     ecodes = None  # type: ignore
     EVDEV_AVAILABLE = False
 
-from .base import DEFAULT_SHORTCUT, KeyboardBackend
+from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend, parse_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -134,14 +134,15 @@ class EvdevKeyboardBackend(KeyboardBackend):
     to read from /dev/input/event* devices (member of 'input' group).
     """
 
-    def __init__(self, shortcut: str = DEFAULT_SHORTCUT):
+    def __init__(self, shortcut: str = DEFAULT_SHORTCUT, mode: str = DEFAULT_SHORTCUT_MODE):
         """
         Initialize the evdev keyboard backend.
 
         Args:
             shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl")
+            mode: The shortcut mode ("toggle" or "push_to_talk")
         """
-        super().__init__(shortcut)
+        super().__init__(shortcut, mode)
         self.devices: List[InputDevice] = []
         self.device_fds: List[int] = []
         self.running = False
@@ -205,7 +206,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                 except (OSError, IOError) as e:
                     if "Permission denied" in str(e) or e.errno == errno.EACCES:
                         return (
-                            "Add your user to the 'input' group and log out/in:\\n"
+                            "Add your user to the 'input' group and log out/in:\n"
                             "sudo usermod -a -G input $USER"
                         )
         except Exception:
@@ -234,7 +235,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
             return False
 
         logger.info(f"Found {len(device_paths)} keyboard device(s)")
-        logger.info(f"Listening for shortcut: {self._shortcut}")
+        logger.info(f"Listening for shortcut: {self._shortcut} (mode: {self._mode})")
 
         # Open devices
         self.devices = []
@@ -361,20 +362,32 @@ class EvdevKeyboardBackend(KeyboardBackend):
                     self.key_pressed_devices.add(device_id)
                     current_time = time.time()
 
-                    # Check for double-tap
-                    if (
-                        current_time - self.last_key_press_time < self.double_tap_threshold
-                        and self.double_tap_callback is not None
-                        and current_time - self.last_trigger_time > 0.5
-                    ):
-                        logger.debug(f"Double-tap {self._modifier_key} detected (evdev)")
-                        self.last_trigger_time = current_time
-                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                    if self._mode == "toggle":
+                        # Check for double-tap
+                        if (
+                            current_time - self.last_key_press_time < self.double_tap_threshold
+                            and self.double_tap_callback is not None
+                            and current_time - self.last_trigger_time > 0.5
+                        ):
+                            logger.debug(f"Double-tap {self._modifier_key} detected (evdev)")
+                            self.last_trigger_time = current_time
+                            threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                    elif self._mode == "push_to_talk":
+                        # Trigger on press
+                        if self.key_press_callback is not None:
+                            logger.debug(f"Key press {self._modifier_key} detected (evdev)")
+                            threading.Thread(target=self.key_press_callback, daemon=True).start()
 
                     self.last_key_press_time = current_time
 
                 elif value == 0:  # Key release
                     self.key_pressed_devices.discard(device_id)
+
+                    if self._mode == "push_to_talk":
+                        # Trigger on release
+                        if self.key_release_callback is not None:
+                            logger.debug(f"Key release {self._modifier_key} detected (evdev)")
+                            threading.Thread(target=self.key_release_callback, daemon=True).start()
 
         except Exception as e:
             logger.error(f"Error handling key event: {e}")

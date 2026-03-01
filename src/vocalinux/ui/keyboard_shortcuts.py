@@ -2,7 +2,7 @@
 Keyboard shortcut manager for Vocalinux.
 
 This module provides global keyboard shortcut functionality to
-start/stop speech recognition with configurable double-tap shortcuts.
+start/stop speech recognition with configurable shortcuts.
 
 Supports multiple backends:
 - pynput: Works on X11/XWayland
@@ -10,21 +10,22 @@ Supports multiple backends:
 """
 
 import logging
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 # Import the backend system
 from .keyboard_backends import (
     DEFAULT_SHORTCUT,
+    DEFAULT_SHORTCUT_MODE,
     EVDEV_AVAILABLE,
     PYNPUT_AVAILABLE,
     SHORTCUT_DISPLAY_NAMES,
+    SHORTCUT_MODES,
     SUPPORTED_SHORTCUTS,
     DesktopEnvironment,
     create_backend,
 )
 
 logger = logging.getLogger(__name__)
-
 
 # Keep legacy module-level attributes for backward compatibility
 KEYBOARD_AVAILABLE = PYNPUT_AVAILABLE or EVDEV_AVAILABLE
@@ -49,14 +50,20 @@ class KeyboardShortcutManager:
     """
     Manages global keyboard shortcuts for the application.
 
-    This class allows registering configurable double-tap shortcuts to
+    This class allows registering configurable shortcuts to
     toggle voice typing on and off across the desktop environment.
+    Supports both toggle (double-tap) and push-to-talk modes.
 
     Automatically selects the appropriate backend based on the
     desktop environment (X11, Wayland) and available dependencies.
     """
 
-    def __init__(self, backend: Optional[str] = None, shortcut: str = DEFAULT_SHORTCUT):
+    def __init__(
+        self,
+        backend: Optional[str] = None,
+        shortcut: str = DEFAULT_SHORTCUT,
+        mode: str = DEFAULT_SHORTCUT_MODE,
+    ):
         """
         Initialize the keyboard shortcut manager.
 
@@ -64,13 +71,17 @@ class KeyboardShortcutManager:
             backend: Optional backend name to force ('pynput' or 'evdev')
                     If not specified, auto-detects based on environment.
             shortcut: The shortcut to listen for (e.g., "ctrl+ctrl", "alt+alt")
+            mode: The shortcut mode ("toggle" or "push_to_talk")
         """
         self.backend_instance = None
         self.active = False
         self._shortcut = shortcut
+        self._mode = mode
 
         # Create the appropriate backend
-        self.backend_instance = create_backend(preferred_backend=backend, shortcut=shortcut)
+        self.backend_instance = create_backend(
+            preferred_backend=backend, shortcut=shortcut, mode=mode
+        )
 
         if self.backend_instance is None:
             logger.error("No keyboard backend available. Shortcuts will not work.")
@@ -99,6 +110,40 @@ class KeyboardShortcutManager:
     def shortcut(self) -> str:
         """Get the current shortcut string."""
         return self._shortcut
+
+    @property
+    def mode(self) -> str:
+        """Get the current shortcut mode."""
+        return self._mode
+
+    @property
+    def mode_display_name(self) -> str:
+        """Get the human-readable name for the current mode."""
+        return SHORTCUT_MODES.get(self._mode, self._mode)
+
+    def set_mode(self, mode: str) -> bool:
+        """
+        Update the shortcut mode.
+
+        Note: This requires restarting the listener to take effect.
+
+        Args:
+            mode: The new mode ("toggle" or "push_to_talk")
+
+        Returns:
+            True if successful, False if the mode is invalid
+        """
+        if mode not in SHORTCUT_MODES:
+            logger.error(f"Invalid mode: {mode}")
+            return False
+
+        self._mode = mode
+
+        if self.backend_instance:
+            self.backend_instance.set_mode(mode)
+            logger.info(f"Mode updated to: {SHORTCUT_MODES.get(mode, mode)}")
+
+        return True
 
     @property
     def shortcut_display_name(self) -> str:
@@ -130,7 +175,7 @@ class KeyboardShortcutManager:
 
         return True
 
-    def restart_with_shortcut(self, shortcut: str) -> bool:
+    def restart_with_shortcut(self, shortcut: str, mode: Optional[str] = None) -> bool:
         """
         Restart the keyboard listener with a new shortcut.
 
@@ -140,6 +185,7 @@ class KeyboardShortcutManager:
 
         Args:
             shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+            mode: Optional new mode ("toggle" or "push_to_talk"). If None, keeps current mode.
 
         Returns:
             True if the listener was successfully restarted with the new shortcut,
@@ -149,16 +195,21 @@ class KeyboardShortcutManager:
             logger.error(f"Invalid shortcut: {shortcut}")
             return False
 
-        if shortcut == self._shortcut:
+        if shortcut == self._shortcut and (mode is None or mode == self._mode):
             logger.debug(f"Shortcut already set to {shortcut}, no restart needed")
             return True
 
         was_active = self.active
-        callback = None
 
-        # Save the current callback before stopping
+        # Save all current callbacks before stopping
+        toggle_callback = None
+        press_callback = None
+        release_callback = None
+
         if self.backend_instance:
-            callback = self.backend_instance.double_tap_callback
+            toggle_callback = self.backend_instance.double_tap_callback
+            press_callback = self.backend_instance.key_press_callback
+            release_callback = self.backend_instance.key_release_callback
 
         # Stop the current listener
         if was_active:
@@ -168,21 +219,37 @@ class KeyboardShortcutManager:
         # Update the shortcut
         self._shortcut = shortcut
 
+        # Update mode if provided
+        if mode is not None:
+            self._mode = mode
+            if self.backend_instance:
+                self.backend_instance.set_mode(mode)
+
         # Update backend shortcut
         if self.backend_instance:
             self.backend_instance.set_shortcut(shortcut)
 
         # Restart if it was active
         if was_active:
-            # Re-register the callback
-            if callback:
-                self.register_toggle_callback(callback)
+            # Clear all callbacks first to prevent stale registrations
+            self.register_toggle_callback(None)
+            self.register_press_callback(None)
+            self.register_release_callback(None)
+
+            # Re-register callbacks based on current mode
+            if self._mode == "toggle" and toggle_callback:
+                self.register_toggle_callback(toggle_callback)
+            elif self._mode == "push_to_talk":
+                if press_callback:
+                    self.register_press_callback(press_callback)
+                if release_callback:
+                    self.register_release_callback(release_callback)
 
             success = self.start()
             if success:
                 logger.info(
                     f"Listener restarted with new shortcut: "
-                    f"{SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}"
+                    f"{SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)} (mode: {self._mode})"
                 )
             else:
                 logger.error(f"Failed to restart listener with shortcut: {shortcut}")
@@ -223,9 +290,9 @@ class KeyboardShortcutManager:
         self.backend_instance.stop()
         self.active = False
 
-    def register_toggle_callback(self, callback: Callable):
+    def register_toggle_callback(self, callback: Optional[Callable[[], None]]):
         """
-        Register a callback for the double-tap shortcut.
+        Register a callback for the toggle shortcut (double-tap).
 
         Args:
             callback: Function to call when the double-tap shortcut is pressed
@@ -235,7 +302,44 @@ class KeyboardShortcutManager:
             return
 
         self.backend_instance.register_toggle_callback(callback)
-        logger.info(f"Registered shortcut: {self.shortcut_display_name}")
+        if callback is None:
+            logger.debug("Cleared toggle callback")
+        else:
+            logger.info(f"Registered toggle callback for: {self.shortcut_display_name}")
+
+    def register_press_callback(self, callback: Optional[Callable[[], None]]):
+        """
+        Register a callback for key press events (push-to-talk mode).
+
+        Args:
+            callback: Function to call when the shortcut key is pressed
+        """
+        if self.backend_instance is None:
+            logger.warning("Cannot register press callback: no backend available")
+            return
+
+        self.backend_instance.register_press_callback(callback)
+        if callback is None:
+            logger.debug("Cleared press callback")
+        else:
+            logger.info(f"Registered press callback for: {self.shortcut_display_name}")
+
+    def register_release_callback(self, callback: Optional[Callable[[], None]]):
+        """
+        Register a callback for key release events (push-to-talk mode).
+
+        Args:
+            callback: Function to call when the shortcut key is released
+        """
+        if self.backend_instance is None:
+            logger.warning("Cannot register release callback: no backend available")
+            return
+
+        self.backend_instance.register_release_callback(callback)
+        if callback is None:
+            logger.debug("Cleared release callback")
+        else:
+            logger.info(f"Registered release callback for: {self.shortcut_display_name}")
 
     @property
     def listener(self):
@@ -244,8 +348,9 @@ class KeyboardShortcutManager:
 
         Returns the underlying backend object if using pynput backend.
         """
-        if self.backend_instance and hasattr(self.backend_instance, "listener"):
-            return self.backend_instance.listener
+        if self.backend_instance:
+            backend = cast(Any, self.backend_instance)
+            return getattr(backend, "listener", None)
         return None
 
 
@@ -281,5 +386,7 @@ __all__ = [
     "PYNPUT_AVAILABLE",
     "SUPPORTED_SHORTCUTS",
     "SHORTCUT_DISPLAY_NAMES",
+    "SHORTCUT_MODES",
     "DEFAULT_SHORTCUT",
+    "DEFAULT_SHORTCUT_MODE",
 ]
