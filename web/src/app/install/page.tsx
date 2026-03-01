@@ -110,7 +110,7 @@ export default function InstallGuidesPage() {
             Launch with
             <code className="ml-1.5 rounded bg-zinc-200 px-1.5 py-0.5 dark:bg-zinc-800">vocalinux</code>.
           </li>
-          <li>Double-tap Ctrl to start or stop dictation in any text field.</li>
+          <li>Use toggle mode (double-tap Ctrl) or push-to-talk mode to control dictation in any text field.</li>
           <li>
             Choose whisper.cpp for speed, Whisper for maximum model compatibility, or VOSK for
             low-RAM systems.

@@ -28,48 +28,44 @@
 
 **A seamless free open-source private voice dictation system for Linux**, comparable to built-in solutions on macOS and Windows.
 
-## 📚 What's New in v0.7.0-beta
+## 📚 What's New in v0.8.0-beta
 
-> 🎉 **Major Release: Autostart, Tabbed Settings & Intel GPU Support!** — The most feature-rich Vocalinux release yet.
+> 🎉 **Major Release: Push-to-Talk, command controls, and reliability upgrades.**
 
-### 🚀 Highlights (v0.6.3 → v0.7.0)
+### 🚀 Highlights (v0.7.0 → v0.8.0)
 
 | Feature | Description |
 |---------|-------------|
-| **🖥️ Autostart Support** | Launch Vocalinux automatically on desktop session startup |
-| **⚙️ Tabbed Settings** | Completely redesigned settings dialog with organized tabs |
-| **🎮 Intel GPU Detection** | Automatically detects incompatible Intel GPUs and falls back to CPU |
-| **🔒 Single Instance** | Prevents multiple Vocalinux instances from running simultaneously |
+| **🎤 Push-to-Talk Mode** | Hold the shortcut key to speak, release to stop |
+| **⚙️ Voice Commands Toggle** | Enable/disable command parsing with smart VOSK auto-enable |
+| **⌨️ Shortcut Reliability** | Improved live mode switching and callback lifecycle stability |
+| **🧠 Better Input Handling** | More robust IBus detection and text injection behavior |
 
-### ✨ New Features (v0.7.0)
+### ✨ New Features (v0.8.0)
 
-- **Autostart on Login** — Added XDG autostart support via settings dialog and system tray
-- **Tabbed Settings Dialog** — reorganized settings into Speech Engine, Recognition, Text Injection, Audio Feedback, and General tabs
-- **Intel GPU Compatibility Detection** — Detects incompatible Intel GPUs and automatically falls back to CPU processing
-- **Multiple Instance Prevention** — Shows notification and exits if Vocalinux is already running
-- **Evdev Device Management** — Automatically removes disconnected input devices to prevent CPU spin
+- **Push-to-Talk Shortcut Mode** — Added a second shortcut mode alongside double-tap toggle
+- **Mode-aware Shortcut UI** — Settings now clearly describe toggle vs push-to-talk behavior
+- **Voice Commands Optional Mode** — Commands can be disabled, with auto mode optimized for VOSK
 
-### 🐛 Bug Fixes (v0.7.0)
+### 🐛 Bug Fixes (v0.8.0)
 
-- **#254**: Improved GPU detection to avoid false positives on systems without dev libraries
-- **#251**: Skip IBus setup when daemon is not running, enable fallback to other methods
-- **#243**: Prevent `dnf check-update` from exiting script on Fedora
-- **#240**: Raise exception on IBus setup failure to enable automatic fallback
-- **#234**: Removed leading space from first speech transcription
-- **#242/#253**: Removed disconnected evdev devices to prevent CPU spin
+- **#277**: Detect active IBus input method before using IBus injection path
+- **#275**: Auto-detect supported audio channel count for better microphone compatibility
+- **#268**: Prevent GTK startup dialog crash on Fedora
+- **#261**: Resolve text injection reliability issues across desktop environments
+- **#259**: Prevent recognition-thread state flicker
+- **#262/#263**: Auto-detect device sample rate for broader audio hardware support
 
 ### 🔧 Recent Improvements
 
-- **Web SEO Enhancements** — Added 7 new optimized pages for organic traffic
-- **Mobile Responsiveness** — Improved mobile and tablet layout for the website
-- **Better Fedora Support** — Fixed dnf check-update behavior
-- **Improved Device Handling** — More robust handling of input device connections/disconnections
+- **Web SEO Expansion** — Added 8 additional optimized pages for discoverability
+- **Web Visual Refresh** — Updated homepage gradients and voice-brand styling
 
 ---
 
 ## ✨ Features
 
-- 🎤 **Double-tap Ctrl** to start/stop voice dictation
+- 🎤 **Toggle or Push-to-Talk** activation modes
 - ⚡ **Real-time transcription** with minimal latency
 - 🌎 **Universal compatibility** across all Linux applications
 - 🔒 **100% Offline operation** for privacy and reliability
@@ -121,7 +117,7 @@ Here are some screenshots showcasing Vocalinux in action:
 Our new interactive installer guides you through setup with intelligent hardware detection:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 
 **Choose your engine:**
@@ -135,25 +131,25 @@ The installer will:
 - **Download the appropriate model** (~39MB for whisper.cpp tiny)
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
-> **Note**: Installs v0.7.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.8.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 ### Installation Options
 
 **Default (whisper.cpp - recommended):**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 Fastest installation (~1-2 min), universal GPU support via Vulkan.
 
 **Whisper (OpenAI) - if you prefer PyTorch:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
 ```
 NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
 
 **VOSK only - for low-RAM systems:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
 ```
 Lightweight option (~40MB), works on systems with 4GB RAM.
 
@@ -214,9 +210,9 @@ Or launch it from your application menu!
 
 ### Voice Dictation
 
-1. **Double-tap Ctrl** to start recording
+1. **Toggle mode**: Double-tap the shortcut key (default Ctrl) to start recording
 2. Speak clearly into your microphone
-3. **Double-tap Ctrl** again (or pause speaking) to stop
+3. **Toggle mode**: Double-tap again (or pause speaking) to stop, or **Push-to-Talk mode**: release the key to stop
 
 ### Voice Commands
 

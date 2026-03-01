@@ -32,9 +32,9 @@ Vocalinux supports login autostart using the standard Linux desktop-session mech
 
 1. **Launch the application**: Run `vocalinux` in a terminal or launch it from your application menu
 2. **Find the tray icon**: Look for the microphone icon in your system tray
-3. **Start voice typing**: Click the tray icon and select "Start Voice Typing" from the menu, or use the double-tap Ctrl keyboard shortcut
+3. **Start voice typing**: Click the tray icon and select "Start Voice Typing", or use your configured shortcut mode (toggle or push-to-talk)
 4. **Speak clearly**: As you speak, your words will be transcribed into the currently focused application
-5. **Stop voice typing**: Click the tray icon and select "Stop Voice Typing" when you're done, or use the double-tap Ctrl keyboard shortcut again
+5. **Stop voice typing**: Click the tray icon and select "Stop Voice Typing" when you're done, double-tap again in toggle mode, or release the key in push-to-talk mode
 
 ### Understanding the Status Icons
 
@@ -67,7 +67,7 @@ Vocalinux supports several commands that you can speak to control formatting:
 4. **Quiet environment**: Minimize background noise when possible
 5. **Learn commands**: Familiarize yourself with voice commands for punctuation and formatting
 6. **Use GPU acceleration**: If you have a GPU (AMD, Intel, or NVIDIA), whisper.cpp will automatically use it for faster transcription
-7. **Choose the right model**: 
+7. **Choose the right model**:
    - For real-time dictation: Use `tiny` or `base` (fastest)
    - For better accuracy: Use `vocalinux --model medium` or `--model large`
 8. **Check debug logs**: Run `vocalinux --debug` to see which backend is being used (Vulkan, CUDA, or CPU)
@@ -76,10 +76,11 @@ Vocalinux supports several commands that you can speak to control formatting:
 
 ### Keyboard Shortcut
 
-Vocalinux uses a double-tap Ctrl keyboard shortcut for starting and stopping voice typing:
+Vocalinux supports two shortcut modes for controlling voice typing:
 
-- **Double-tap Ctrl**: Quickly press the Ctrl key twice to toggle voice typing on or off
-- The time between taps should be less than 0.3 seconds to be recognized as a double-tap
+- **Toggle mode (default)**: Double-tap the shortcut key (Ctrl by default) to start/stop voice typing
+- **Push-to-talk mode**: Hold the configured shortcut key to speak, then release to stop
+- Configure mode and key in **Settings -> Shortcuts**
 
 ### Model Settings
 
@@ -109,7 +110,7 @@ Vocalinux now offers **three speech recognition engines**:
 ### Changing Engine and Model
 
 1. Open settings from the tray icon menu (right-click)
-2. Go to the "Recognition" tab
+2. Go to the "Speech Engine" tab
 3. Select your **Speech Engine**:
    - whisper_cpp (recommended)
    - whisper

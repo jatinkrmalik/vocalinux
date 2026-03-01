@@ -56,7 +56,7 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     ],
     postInstallChecks: [
       "Run vocalinux and confirm the tray indicator appears.",
-      "Double-tap Ctrl in a text field and verify speech-to-text starts.",
+      "Use toggle mode (double-tap Ctrl) or push-to-talk mode and verify dictation starts.",
       "Set language and model size in the settings panel for your workload.",
     ],
   },
@@ -87,7 +87,7 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     ],
     postInstallChecks: [
       "Run vocalinux from terminal and test transcription in GNOME Text Editor or VS Code.",
-      "Verify push-to-dictate behavior with your preferred keyboard layout.",
+      "Verify toggle mode and push-to-talk behavior with your preferred keyboard layout.",
       "Confirm startup behavior and language settings persist after reboot.",
     ],
   },
@@ -119,7 +119,7 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     postInstallChecks: [
       "Run vocalinux and test dictation in multiple apps (terminal, browser, editor).",
       "Confirm your chosen speech engine model balances latency and accuracy.",
-      "Back up ~/.config/vocalinux/config.yaml after tuning preferences.",
+      "Back up ~/.config/vocalinux/config.json after tuning preferences.",
     ],
   },
 };
@@ -264,7 +264,7 @@ export default async function DistroInstallPage({
       {
         "@type": "HowToStep",
         name: "Start dictating",
-        text: "Launch vocalinux and double-tap Ctrl to begin dictation.",
+        text: "Launch vocalinux and use toggle mode or push-to-talk mode to begin dictation.",
         url: absoluteUrl(`/install/${distro}`),
       },
     ],

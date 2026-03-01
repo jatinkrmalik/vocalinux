@@ -6,6 +6,20 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.8.0-beta",
+    date: "2026-03-01",
+    type: "beta",
+    highlights: [
+      "Push-to-talk shortcut mode (hold to speak, release to stop)",
+      "Optional voice commands with VOSK auto-enable behavior",
+      "Improved shortcut mode switching and callback reliability",
+      "IBus active-method detection before text injection",
+      "Audio hardware compatibility fixes (sample rate and channel count)",
+      "Fedora startup dialog stability fix",
+      "Web SEO expansion and homepage visual refresh",
+    ],
+  },
+  {
     version: "v0.7.0-beta",
     date: "2026-02-22",
     type: "beta",
@@ -146,7 +160,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-02-19",
+    dateModified: "2026-03-01",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",

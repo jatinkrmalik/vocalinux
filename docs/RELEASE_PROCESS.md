@@ -326,6 +326,7 @@ git push origin v0.5.1-beta
 | 0.6.2-beta | 2026-02-17 | Beta | Bug fixes |
 | 0.6.3-beta | 2026-02-19 | Beta | GPU detection improvements |
 | 0.7.0-beta | 2026 | Beta | Autostart, tabbed settings, Intel GPU support, single instance |
+| 0.8.0-beta | 2026-03-01 | Beta | Push-to-talk mode, optional voice commands, input/audio compatibility fixes |
 
 ## Questions?
 
