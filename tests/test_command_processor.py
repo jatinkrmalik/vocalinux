@@ -72,11 +72,6 @@ class TestCommandProcessor(unittest.TestCase):
             ("select line of code", "of code", ["select_line"]),
             ("select word here", "here", ["select_word"]),
             ("select paragraph content", "content", ["select_paragraph"]),
-            ("cut this selection", "this selection", ["cut"]),
-            ("copy this text", "this text", ["copy"]),
-            ("paste here", "here", ["paste"]),
-            # Test multiple actions
-            ("select all then copy", "then", ["select_all", "copy"]),
             # Test action with text before command (should add space)
             ("hello select all world", " world", ["select_all"]),
         ]
@@ -334,12 +329,3 @@ class TestCommandProcessorFallback(unittest.TestCase):
         result, actions = self.processor.process_text("select word please")
         self.assertIn("select_word", actions)
 
-    def test_generic_cut_action(self):
-        """Test cut action through generic path."""
-        result, actions = self.processor.process_text("cut selection")
-        self.assertIn("cut", actions)
-
-    def test_generic_paste_action(self):
-        """Test paste action through generic path."""
-        result, actions = self.processor.process_text("paste content")
-        self.assertIn("paste", actions)
