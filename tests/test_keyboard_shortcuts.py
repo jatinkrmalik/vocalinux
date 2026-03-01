@@ -50,7 +50,10 @@ class TestKeyboardShortcuts(unittest.TestCase):
         ksm = KeyboardShortcutManager(shortcut="alt+alt")
 
         # Verify the shortcut was passed to create_backend
-        self.mock_create_backend.assert_called_with(preferred_backend=None, shortcut="alt+alt")
+        # Verify the shortcut was passed to create_backend
+        self.mock_create_backend.assert_called_with(
+            preferred_backend=None, shortcut="alt+alt", mode="toggle"
+        )
 
     def test_default_shortcut(self):
         """Test that default shortcut is ctrl+ctrl."""
@@ -531,7 +534,7 @@ class TestBackendFactory(unittest.TestCase):
                     result = create_backend(shortcut="alt+alt")
 
                     self.assertIsNotNone(result)
-                    MockPynput.assert_called_once_with(shortcut="alt+alt")
+                    MockPynput.assert_called_once_with(shortcut="alt+alt", mode="toggle")
 
 
 class TestShortcutParseFunction(unittest.TestCase):

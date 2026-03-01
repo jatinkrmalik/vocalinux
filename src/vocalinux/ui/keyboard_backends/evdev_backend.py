@@ -25,7 +25,7 @@ except ImportError:
     ecodes = None  # type: ignore
     EVDEV_AVAILABLE = False
 
-from .base import DEFAULT_SHORTCUT, KeyboardBackend
+from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend, parse_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,29 @@ class EvdevKeyboardBackend(KeyboardBackend):
     to read from /dev/input/event* devices (member of 'input' group).
     """
 
-    def __init__(self, shortcut: str = DEFAULT_SHORTCUT):
+    def __init__(self, shortcut: str = DEFAULT_SHORTCUT, mode: str = DEFAULT_SHORTCUT_MODE):
+        """
+        Initialize the evdev keyboard backend.
+
+        Args:
+            shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl")
+            mode: The shortcut mode ("toggle" or "push_to_talk")
+        """
+        super().__init__(shortcut, mode)
+        self.devices: List[InputDevice] = []
+        self.device_fds: List[int] = []
+        self.running = False
+        self.monitor_thread: Optional[threading.Thread] = None
+
+        self.last_trigger_time = 0
+        self.last_key_press_time = 0
+        self.double_tap_threshold = 0.3  # seconds
+        self.key_pressed_devices: Set[int] = set()
+
+        self._devices_lock = threading.Lock()
+
+        if not EVDEV_AVAILABLE:
+            logger.error("python-evdev not available")
         """
         Initialize the evdev keyboard backend.
 
@@ -346,6 +368,50 @@ class EvdevKeyboardBackend(KeyboardBackend):
         logger.debug("Device monitor thread stopped")
 
     def _handle_key_event(self, event, device) -> None:
+        """Handle a key event from evdev."""
+        try:
+            code = event.code
+            value = event.value  # 0 = release, 1 = press, 2 = repeat
+
+            target_codes = self._get_target_key_codes()
+
+            # Check if this is our target modifier key
+            if code in target_codes:
+                device_id = id(device)
+
+                if value == 1:  # Key press
+                    self.key_pressed_devices.add(device_id)
+                    current_time = time.time()
+
+                    if self._mode == "toggle":
+                        # Check for double-tap
+                        if (
+                            current_time - self.last_key_press_time < self.double_tap_threshold
+                            and self.double_tap_callback is not None
+                            and current_time - self.last_trigger_time > 0.5
+                        ):
+                            logger.debug(f"Double-tap {self._modifier_key} detected (evdev)")
+                            self.last_trigger_time = current_time
+                            threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                    elif self._mode == "push_to_talk":
+                        # Trigger on press
+                        if self.key_press_callback is not None:
+                            logger.debug(f"Key press {self._modifier_key} detected (evdev)")
+                            threading.Thread(target=self.key_press_callback, daemon=True).start()
+
+                    self.last_key_press_time = current_time
+
+                elif value == 0:  # Key release
+                    self.key_pressed_devices.discard(device_id)
+
+                    if self._mode == "push_to_talk":
+                        # Trigger on release
+                        if self.key_release_callback is not None:
+                            logger.debug(f"Key release {self._modifier_key} detected (evdev)")
+                            threading.Thread(target=self.key_release_callback, daemon=True).start()
+
+        except Exception as e:
+            logger.error(f"Error handling key event: {e}")
         """Handle a key event from evdev."""
         try:
             code = event.code

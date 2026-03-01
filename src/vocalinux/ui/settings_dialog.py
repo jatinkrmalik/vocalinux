@@ -36,7 +36,11 @@ from ..utils.whispercpp_model_info import (
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
-from .keyboard_backends import SHORTCUT_DISPLAY_NAMES, SUPPORTED_SHORTCUTS  # noqa: E402
+from .keyboard_backends import (  # noqa: E402
+    SHORTCUT_DISPLAY_NAMES,
+    SHORTCUT_MODES,
+    SUPPORTED_SHORTCUTS,
+)
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -1102,6 +1106,159 @@ class SettingsDialog(Gtk.Dialog):
         self.voice_commands_switch.connect("state-set", self._on_voice_commands_toggled)
 
     def _build_shortcuts_section(self):
+        """Build the Keyboard Shortcuts section."""
+        group = PreferencesGroup(
+            title="Keyboard Shortcuts",
+            description="Configure the shortcut to control voice recognition",
+        )
+
+        # Mode selection (Toggle vs Push-to-Talk)
+        self.shortcut_mode_combo = Gtk.ComboBoxText()
+        self.shortcut_mode_combo.set_size_request(200, -1)
+        self.shortcut_mode_combo.set_tooltip_text(
+            "Choose between toggle (double-tap) or push-to-talk mode"
+        )
+        _prevent_scroll_on_hover(self.shortcut_mode_combo)
+
+        # Populate mode options
+        for mode_id, display_name in SHORTCUT_MODES.items():
+            self.shortcut_mode_combo.append(mode_id, display_name)
+
+        # Load current mode from config
+        current_mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        if not self.shortcut_mode_combo.set_active_id(current_mode):
+            self.shortcut_mode_combo.set_active_id("toggle")
+
+        mode_row = PreferenceRow(
+            title="Shortcut Mode",
+            subtitle="How the shortcut behaves",
+            widget=self.shortcut_mode_combo,
+        )
+        group.add_row(mode_row)
+
+        # Shortcut selection combo
+        self.shortcut_combo = Gtk.ComboBoxText()
+        self.shortcut_combo.set_size_request(200, -1)
+        self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut for voice typing")
+        _prevent_scroll_on_hover(self.shortcut_combo)
+
+        # Populate shortcut options
+        for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items():
+            self.shortcut_combo.append(shortcut_id, display_name)
+
+        # Load current shortcut from config
+        current_shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        if not self.shortcut_combo.set_active_id(current_shortcut):
+            self.shortcut_combo.set_active_id("ctrl+ctrl")
+
+        self.shortcut_row = PreferenceRow(
+            title="Shortcut Key",
+            subtitle="Press this key to control voice typing",
+            widget=self.shortcut_combo,
+        )
+        group.add_row(self.shortcut_row)
+
+        self.shortcuts_tab.pack_start(group, False, False, 0)
+
+        # Info box about the shortcut
+        info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        info_box.get_style_context().add_class("info-box")
+        info_box.set_margin_start(4)
+        info_box.set_margin_end(4)
+        info_box.set_margin_top(4)
+
+        info_icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic", Gtk.IconSize.MENU)
+        info_box.pack_start(info_icon, False, False, 0)
+
+        self.shortcut_info_label = Gtk.Label(
+            label="Changes take effect immediately.",
+            xalign=0,
+            wrap=True,
+        )
+        self.shortcut_info_label.get_style_context().add_class("tip-label")
+        info_box.pack_start(self.shortcut_info_label, True, True, 0)
+
+        self.shortcuts_tab.pack_start(info_box, False, False, 0)
+
+        # Connect signals
+        self.shortcut_combo.connect("changed", self._on_shortcut_changed)
+        self.shortcut_mode_combo.connect("changed", self._on_shortcut_mode_changed)
+
+        # Update UI based on initial mode
+        self._update_shortcut_ui_for_mode(current_mode)
+
+    def _update_shortcut_ui_for_mode(self, mode: str):
+        """Update the shortcut UI based on the selected mode."""
+        if mode == "toggle":
+            self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+            self.shortcut_info_label.set_text(
+                "In Toggle mode: Double-tap the key to start voice typing, double-tap again to stop."
+            )
+        elif mode == "push_to_talk":
+            self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
+            self.shortcut_info_label.set_text(
+                "In Push-to-Talk mode: Hold the key down to speak, release to stop recording."
+            )
+
+    def _on_shortcut_mode_changed(self, widget):
+        """Handle shortcut mode selection change."""
+        if self._initializing:
+            return
+
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        if not mode_id:
+            return
+
+        # Save to config
+        self.config_manager.set("shortcuts", "mode", mode_id)
+        self.config_manager.save_settings()
+
+        mode_name = SHORTCUT_MODES.get(mode_id, mode_id)
+        logger.info(f"Keyboard shortcut mode changed to: {mode_name}")
+
+        # Update UI to reflect new mode
+        self._update_shortcut_ui_for_mode(mode_id)
+
+        # Try to apply the mode change live
+        if self.shortcut_update_callback:
+            shortcut_id = self.shortcut_combo.get_active_id()
+            success = self.shortcut_update_callback(shortcut_id, mode_id)
+            if success:
+                self.shortcut_info_label.set_markup(
+                    f"<span foreground='#26a269'>Mode updated to <b>{mode_name}</b>. "
+                    f"Active now!</span>"
+                )
+            else:
+                self.shortcut_info_label.set_markup(
+                    f"<i>Mode updated to <b>{mode_name}</b>. "
+                    f"Restart the app for the change to take full effect.</i>"
+                )
+        else:
+            self.shortcut_info_label.set_markup(
+                f"<i>Mode updated to <b>{mode_name}</b>. "
+                f"Restart the app for the change to take full effect.</i>"
+            )
+
+    def _on_shortcut_changed(self, widget):
+        """Handle shortcut selection change."""
+        if self._initializing:
+            return
+
+        shortcut_id = self.shortcut_combo.get_active_id()
+        if not shortcut_id:
+            return
+
+        # Save to config
+        self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
+        self.config_manager.save_settings()
+
+        display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut_id, shortcut_id)
+        logger.info(f"Keyboard shortcut changed to: {display_name}")
+
+        # Try to apply the shortcut change live
+        if self.shortcut_update_callback:
+            mode_id = self.shortcut_mode_combo.get_active_id()
+            success = self.shortcut_update_callback(shortcut_id, mode_id)
         """Build the Keyboard Shortcuts section."""
         group = PreferencesGroup(
             title="Keyboard Shortcuts",

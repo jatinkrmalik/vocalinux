@@ -26,6 +26,14 @@ SHORTCUT_DISPLAY_NAMES = {
 
 DEFAULT_SHORTCUT = "ctrl+ctrl"
 
+# Supported shortcut modes
+SHORTCUT_MODES = {
+    "toggle": "Toggle (double-tap to start/stop)",
+    "push_to_talk": "Push-to-Talk (hold to speak)",
+}
+
+DEFAULT_SHORTCUT_MODE = "toggle"
+
 
 def parse_shortcut(shortcut_string: str) -> str:
     """
@@ -57,22 +65,42 @@ class KeyboardBackend(ABC):
     event listening and registering callbacks for specific shortcuts.
     """
 
-    def __init__(self, shortcut: str = DEFAULT_SHORTCUT):
+    def __init__(self, shortcut: str = DEFAULT_SHORTCUT, mode: str = DEFAULT_SHORTCUT_MODE):
         """
         Initialize the keyboard backend.
 
         Args:
             shortcut: The shortcut string to listen for (e.g., "ctrl+ctrl")
+            mode: The shortcut mode ("toggle" or "push_to_talk")
         """
         self.active = False
         self.double_tap_callback: Optional[Callable] = None
+        self.key_press_callback: Optional[Callable] = None
+        self.key_release_callback: Optional[Callable] = None
         self._shortcut = shortcut
+        self._mode = mode
         self._modifier_key = parse_shortcut(shortcut)
 
     @property
     def shortcut(self) -> str:
         """Get the current shortcut string."""
         return self._shortcut
+
+    @property
+    def mode(self) -> str:
+        """Get the current shortcut mode."""
+        return self._mode
+
+    def set_mode(self, mode: str) -> None:
+        """
+        Update the shortcut mode.
+
+        Args:
+            mode: The new mode ("toggle" or "push_to_talk")
+        """
+        if mode not in SHORTCUT_MODES:
+            raise ValueError(f"Invalid mode: {mode}. Must be one of {list(SHORTCUT_MODES.keys())}")
+        self._mode = mode
 
     @property
     def modifier_key(self) -> str:
@@ -132,3 +160,21 @@ class KeyboardBackend(ABC):
             callback: Function to call when double-tap is detected
         """
         self.double_tap_callback = callback
+
+    def register_press_callback(self, callback: Callable) -> None:
+        """
+        Register a callback for key press events (push-to-talk mode).
+
+        Args:
+            callback: Function to call when the shortcut key is pressed
+        """
+        self.key_press_callback = callback
+
+    def register_release_callback(self, callback: Callable) -> None:
+        """
+        Register a callback for key release events (push-to-talk mode).
+
+        Args:
+            callback: Function to call when the shortcut key is released
+        """
+        self.key_release_callback = callback

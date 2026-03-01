@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
     },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
+        "mode": "toggle",  # "toggle" or "push_to_talk"
         # Supported values: "ctrl+ctrl", "alt+alt", "shift+shift", "super+super"
         # These represent double-tap shortcuts for the respective modifier keys
     },
