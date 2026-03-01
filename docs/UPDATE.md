@@ -2,42 +2,38 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
-## What's New in v0.7.0-beta
+## What's New in v0.8.0-beta
 
 ### 🚀 Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **🖥️ Autostart Support** | Launch Vocalinux automatically on desktop session startup |
-| **⚙️ Tabbed Settings** | Completely redesigned settings dialog with organized tabs |
-| **🎮 Intel GPU Detection** | Automatically detects incompatible Intel GPUs and falls back to CPU |
-| **🔒 Single Instance** | Prevents multiple Vocalinux instances from running simultaneously |
+| **🎤 Push-to-Talk Mode** | Hold the shortcut key to speak, release to stop |
+| **⚙️ Voice Commands Toggle** | Enable or disable voice commands, with VOSK auto-enable in auto mode |
+| **⌨️ Shortcut Reliability** | Improved callback lifecycle and mode switching stability |
+| **🧠 Input Compatibility** | Better IBus detection and audio device/channel compatibility |
 
 ### ✨ New Features
 
-- **Autostart on Login** — Added XDG autostart support via settings dialog and system tray
-- **Tabbed Settings Dialog** — Reorganized settings into Speech Engine, Recognition, Text Injection, Audio Feedback, and General tabs
-- **Intel GPU Compatibility Detection** — Detects incompatible Intel GPUs and automatically falls back to CPU processing
-- **Multiple Instance Prevention** — Shows notification and exits if Vocalinux is already running
-- **Evdev Device Management** — Automatically removes disconnected input devices to prevent CPU spin
+- **Push-to-Talk Shortcut Mode** — Added hold-to-speak mode alongside double-tap toggle mode
+- **Mode-aware Shortcut UI** — Updated settings text and behavior for toggle vs push-to-talk workflows
+- **Voice Commands Optional** — Voice commands can be disabled, with automatic enable behavior for VOSK
 
 ### 🐛 Bug Fixes
 
-- **#254**: Improved GPU detection to avoid false positives on systems without dev libraries
-- **#251**: Skip IBus setup when daemon is not running, enable fallback to other methods
-- **#243**: Prevent `dnf check-update` from exiting script on Fedora
-- **#240**: Raise exception on IBus setup failure to enable automatic fallback
-- **#234**: Removed leading space from first speech transcription
-- **#242/#253**: Removed disconnected evdev devices to prevent CPU spin
+- **#277**: Detect active IBus input method before using IBus injection
+- **#275**: Detect and use device-supported channel count
+- **#268**: Prevent GTK startup dialog crash on Fedora
+- **#261**: Resolve text injection issues for better reliability
+- **#259**: Prevent recognition thread state flicker
+- **#262/#263**: Auto-detect audio sample rate for better hardware compatibility
 
 ### 🔧 Improvements
 
-- **Web SEO Enhancements** — Added 7 new optimized pages for organic traffic
-- **Mobile Responsiveness** — Improved mobile and tablet layout for the website
-- **Better Fedora Support** — Fixed dnf check-update behavior
-- **Improved Device Handling** — More robust handling of input device connections/disconnections
+- **Web SEO Enhancements** — Added 8 additional optimized pages for discoverability
+- **Homepage Refresh** — Updated voice-themed visual polish on the web landing page
 
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.7.0-beta).
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.8.0-beta).
 
 ---
 
@@ -48,7 +44,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 Simply re-run the installation command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
 ```
 
 The installer will:
@@ -62,7 +58,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.7.0-beta
+git checkout v0.8.0-beta
 ./install.sh
 ```
 
@@ -98,7 +94,7 @@ If your update doesn't go smoothly, try a clean reinstall:
 ./uninstall.sh
 
 # Reinstall fresh
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
 ```
 
 ### Old Version Still Running

@@ -65,7 +65,7 @@ const homeJsonLd = [
     },
     description:
       "Offline voice dictation and speech-to-text for Linux with whisper.cpp and VOSK.",
-    "softwareVersion": "0.7.0-beta",
+    "softwareVersion": "0.8.0-beta",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -77,7 +77,7 @@ const homeJsonLd = [
     featureList: [
       "100% offline speech recognition",
       "Works with X11 and Wayland",
-      "Double-tap Ctrl activation",
+      "Toggle and push-to-talk shortcut modes",
       "whisper.cpp, Whisper, and VOSK support",
       "Linux desktop integration",
     ],
@@ -134,7 +134,7 @@ const homeJsonLd = [
       {
         "@type": "HowToStep",
         name: "Start dictating",
-        text: "Launch vocalinux and double-tap Ctrl to begin voice dictation.",
+        text: "Launch vocalinux and use toggle or push-to-talk shortcut mode to begin dictation.",
         url: "https://vocalinux.com/#install",
       },
     ],
@@ -290,7 +290,7 @@ export default function HomePage() {
             />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
             <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
-              v0.7.0 Beta
+              v0.8.0 Beta
             </span>
           </Link>
 

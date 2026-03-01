@@ -174,7 +174,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory"
             echo "  --skip-models    Skip downloading speech models during installation"
-            echo "  --tag=TAG        Install specific release tag (default: v0.7.0-beta)"
+            echo "  --tag=TAG        Install specific release tag (default: v0.8.0-beta)"
             echo "  --help           Show this help message"
             echo ""
             echo "Examples:"
@@ -215,7 +215,7 @@ echo ""
 
 check_running_processes
 
-INSTALL_TAG="${INSTALL_TAG:-v0.7.0-beta}"
+INSTALL_TAG="${INSTALL_TAG:-v0.8.0-beta}"
 
 # Check if running from within the vocalinux repo or remotely (via curl)
 REPO_URL="https://github.com/jatinkrmalik/vocalinux.git"
@@ -1073,7 +1073,7 @@ if [[ "$INTERACTIVE_MODE" == "yes" ]]; then
     if [ ! -t 0 ]; then
         print_error "Interactive mode requires a terminal (TTY)."
         print_error "Please run from a terminal, or use automatic mode:"
-        print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.7.0-beta/install.sh | bash"
+        print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash"
         exit 1
     fi
 
