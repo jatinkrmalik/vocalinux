@@ -429,6 +429,16 @@ export default function HomePage() {
                   <Play className="h-5 w-5" />
                   Watch Demo
                 </a>
+                <a
+                  href="https://github.com/jatinkrmalik/vocalinux"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View Vocalinux source code on GitHub (opens in a new tab)"
+                  className="inline-flex items-center justify-center gap-2 bg-zinc-900 text-white hover:bg-zinc-800 px-8 py-4 rounded-xl text-lg font-semibold transition-all"
+                >
+                  <Github className="h-5 w-5" />
+                  View Source
+                </a>
               </div>
             </motion.div>
 
