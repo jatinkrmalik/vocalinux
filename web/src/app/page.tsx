@@ -78,6 +78,8 @@ const homeJsonLd = [
       "100% offline speech recognition",
       "Works with X11 and Wayland",
       "Toggle and push-to-talk shortcut modes",
+      "Optional voice commands with VOSK-aware defaults",
+      "Adaptive audio and IBus-aware text injection",
       "whisper.cpp, Whisper, and VOSK support",
       "Linux desktop integration",
     ],
@@ -627,7 +629,7 @@ export default function HomePage() {
             <FeatureCard
               icon={<Settings className="h-6 w-6 text-primary" />}
               title="Fully Configurable"
-              description="Adjust model size, language, activation method, and more. GUI settings panel or config file — your choice."
+              description="Adjust model size, language, activation mode, and voice command behavior. GUI settings panel or config file — your choice."
             />
           </div>
 
@@ -1087,6 +1089,11 @@ export default function HomePage() {
                 question: "How do I customize the activation shortcut?",
                 answer:
                   "The default is toggle mode with double-tap Ctrl, and you can switch to push-to-talk in Settings. You can also customize this via the GUI settings dialog or by editing ~/.config/vocalinux/config.json.",
+              },
+              {
+                question: "Can I disable voice commands?",
+                answer:
+                  "Yes. Voice commands are optional and can be enabled or disabled in Settings. VOSK-focused setups can use auto behavior while keeping full control over command parsing.",
               },
               {
                 question: "Is Vocalinux free?",
