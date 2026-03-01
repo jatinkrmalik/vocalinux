@@ -125,7 +125,6 @@ class TestKeyboardBackendsBase(unittest.TestCase):
         self.assertIn("ctrl+ctrl", SUPPORTED_SHORTCUTS)
         self.assertIn("alt+alt", SUPPORTED_SHORTCUTS)
         self.assertIn("shift+shift", SUPPORTED_SHORTCUTS)
-        self.assertIn("super+super", SUPPORTED_SHORTCUTS)
 
     def test_shortcut_display_names_defined(self):
         """Test that SHORTCUT_DISPLAY_NAMES is defined."""
@@ -134,7 +133,7 @@ class TestKeyboardBackendsBase(unittest.TestCase):
         self.assertIsInstance(SHORTCUT_DISPLAY_NAMES, dict)
         self.assertEqual(
             set(SHORTCUT_DISPLAY_NAMES.keys()),
-            {"ctrl+ctrl", "alt+alt", "shift+shift", "super+super"},
+            {"ctrl+ctrl", "alt+alt", "shift+shift"},
         )
 
     def test_default_shortcut_defined(self):

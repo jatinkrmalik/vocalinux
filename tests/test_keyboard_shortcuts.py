@@ -63,7 +63,7 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
     def test_supported_shortcuts(self):
         """Test that all expected shortcuts are supported."""
-        expected_shortcuts = ["ctrl+ctrl", "alt+alt", "shift+shift", "super+super"]
+        expected_shortcuts = ["ctrl+ctrl", "alt+alt", "shift+shift"]
         for shortcut in expected_shortcuts:
             self.assertIn(shortcut, SUPPORTED_SHORTCUTS)
 
@@ -604,13 +604,6 @@ class TestShortcutParseFunction(unittest.TestCase):
 
         result = parse_shortcut("shift+shift")
         self.assertEqual(result, "shift")
-
-    def test_parse_shortcut_super(self):
-        """Test parsing super+super shortcut."""
-        from vocalinux.ui.keyboard_backends.base import parse_shortcut
-
-        result = parse_shortcut("super+super")
-        self.assertEqual(result, "super")
 
     def test_parse_shortcut_case_insensitive(self):
         """Test that shortcut parsing is case insensitive."""
