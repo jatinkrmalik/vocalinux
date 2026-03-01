@@ -893,6 +893,66 @@ class TestIsIbusActiveInputMethod(unittest.TestCase):
             result = is_ibus_active_input_method()
             self.assertFalse(result)
 
+    def test_empty_string_env_vars_return_false(self):
+        """Test returns False when env vars are empty strings."""
+        with patch.dict(
+            os.environ,
+            {"GTK_IM_MODULE": "", "QT_IM_MODULE": "", "XMODIFIERS": ""},
+            clear=True,
+        ):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertFalse(result)
+
+    def test_gtk_im_module_case_insensitive(self):
+        """Test detection is case-insensitive for GTK_IM_MODULE."""
+        with patch.dict(os.environ, {"GTK_IM_MODULE": "IBUS"}, clear=True):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertTrue(result)
+
+    def test_qt_im_module_case_insensitive(self):
+        """Test detection is case-insensitive for QT_IM_MODULE."""
+        with patch.dict(os.environ, {"QT_IM_MODULE": "IBUS"}, clear=True):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertTrue(result)
+
+    def test_xmodifiers_case_insensitive(self):
+        """Test detection is case-insensitive for XMODIFIERS."""
+        with patch.dict(os.environ, {"XMODIFIERS": "@IM=IBUS"}, clear=True):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertTrue(result)
+
+    def test_priority_order_gtk_over_qt(self):
+        """Test GTK_IM_MODULE takes priority over QT_IM_MODULE."""
+        with patch.dict(
+            os.environ,
+            {"GTK_IM_MODULE": "ibus", "QT_IM_MODULE": "fcitx"},
+            clear=True,
+        ):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertTrue(result)
+
+    def test_priority_order_qt_over_xmodifiers(self):
+        """Test QT_IM_MODULE takes priority over XMODIFIERS."""
+        with patch.dict(
+            os.environ,
+            {"QT_IM_MODULE": "ibus", "XMODIFIERS": "@im=fcitx"},
+            clear=True,
+        ):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertTrue(result)
+
 
 class TestTextInjectorWithIbusActiveInputMethod(unittest.TestCase):
     """Tests for TextInjector with is_ibus_active_input_method check."""
@@ -965,6 +1025,51 @@ class TestTextInjectorWithIbusActiveInputMethod(unittest.TestCase):
 
                 # Should use IBus
                 self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+                # Should use IBus
+                self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available")
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method")
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running")
+    def test_x11_falls_back_when_ibus_not_active_input_method(
+        self, mock_daemon_running, mock_is_active_im, mock_is_available, mock_which
+    ):
+        """Test that X11 falls back to xdotool when IBus is not the active input method."""
+        mock_is_available.return_value = True
+        mock_is_active_im.return_value = False  # IBus installed but not active
+        mock_daemon_running.return_value = True
+        mock_which.return_value = "/usr/bin/xdotool"  # xdotool is available
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+
+            injector = TextInjector()
+
+            # Should fall back to X11 (xdotool), not X11_IBUS
+            self.assertEqual(injector.environment, DesktopEnvironment.X11)
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available")
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method")
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running")
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    def test_ibus_setup_exception_falls_back(
+        self, mock_injector_class, mock_daemon_running, mock_is_active_im, mock_is_available
+    ):
+        """Test that exceptions during IBus setup fall back to alternative methods."""
+        mock_is_available.return_value = True
+        mock_is_active_im.return_value = True  # IBus is the active input method
+        mock_daemon_running.return_value = True
+        mock_injector_class.side_effect = Exception("IBus setup failed")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
+            from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+
+            injector = TextInjector()
+
+            # Should fall back to WAYLAND with ydotool after IBus setup fails
+            self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
+            self.assertEqual(injector.wayland_tool, "ydotool")
 
 
 if __name__ == "__main__":
