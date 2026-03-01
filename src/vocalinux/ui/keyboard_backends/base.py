@@ -15,7 +15,6 @@ SUPPORTED_SHORTCUTS = {
     "ctrl+ctrl": "ctrl",
     "alt+alt": "alt",
     "shift+shift": "shift",
-    "super+super": "super",
 }
 
 # Human-readable names for shortcuts (mode-agnostic base names)
@@ -23,7 +22,6 @@ SHORTCUT_DISPLAY_NAMES = {
     "ctrl+ctrl": "Ctrl",
     "alt+alt": "Alt",
     "shift+shift": "Shift",
-    "super+super": "Super (Windows key)",
 }
 
 # Mode-specific display names (format: {shortcut: {mode: display_name}})
@@ -39,10 +37,6 @@ SHORTCUT_MODE_DISPLAY_NAMES = {
     "shift+shift": {
         "toggle": "Double-tap Shift",
         "push_to_talk": "Hold Shift",
-    },
-    "super+super": {
-        "toggle": "Double-tap Super",
-        "push_to_talk": "Hold Super",
     },
 }
 
