@@ -126,37 +126,6 @@ class TrayIndicator:
         self.shortcut_manager.start()
 
     def _init_icons(self):
-        self.shortcut_manager.start()
-        shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
-
-        # Initialize keyboard shortcut manager with configured shortcut
-        self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut)
-
-        # Ensure icon directory exists
-        os.makedirs(ICON_DIR, exist_ok=True)
-
-        # Set up icon file paths using resource manager
-        self.icon_paths = {
-            "default": _resource_manager.get_icon_path(DEFAULT_ICON),
-            "active": _resource_manager.get_icon_path(ACTIVE_ICON),
-            "processing": _resource_manager.get_icon_path(PROCESSING_ICON),
-        }
-
-        # Register for speech recognition state changes
-        self.speech_engine.register_state_callback(self._on_recognition_state_changed)
-
-        # Initialize the icon files and validate resources
-        self._init_icons()
-        self._validate_resources()
-
-        # Initialize the indicator (in the GTK main thread)
-        GLib.idle_add(self._init_indicator)
-
-        # Set up keyboard shortcuts
-        self.shortcut_manager.register_toggle_callback(self._toggle_recognition)
-        self.shortcut_manager.start()
-
-    def _init_icons(self):
         """Initialize the icon files for the tray indicator."""
         # Ensure icon directory exists
         _resource_manager.ensure_directories_exist()
@@ -256,11 +225,6 @@ class TrayIndicator:
     def _stop_recognition(self):
         """Stop voice recognition (for push-to-talk mode)."""
         if self.speech_engine.state != RecognitionState.IDLE:
-            self.speech_engine.stop_recognition()
-        """Toggle the recognition state between IDLE and LISTENING."""
-        if self.speech_engine.state == RecognitionState.IDLE:
-            self.speech_engine.start_recognition()
-        else:
             self.speech_engine.stop_recognition()
 
     def _add_menu_item(self, label: str, callback: Callable):
@@ -446,18 +410,6 @@ class TrayIndicator:
             # Re-setup callbacks for new mode
             self._setup_keyboard_shortcuts()
 
-        return self.shortcut_manager.restart_with_shortcut(shortcut)
-        """
-        Update the keyboard shortcut for toggling voice recognition.
-
-        This performs a live shortcut switch without requiring an app restart.
-
-        Args:
-            shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
-
-        Returns:
-            True if the shortcut was updated successfully, False otherwise
-        """
         return self.shortcut_manager.restart_with_shortcut(shortcut)
 
     def _on_about_clicked(self, widget):
