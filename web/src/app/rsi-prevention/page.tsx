@@ -235,7 +235,7 @@ export default function RsiPreventionPage() {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="inline-flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
-                Double-tap Ctrl to start/stop—no mouse required
+                Toggle mode or push-to-talk control—no mouse required
               </li>
               <li className="inline-flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />

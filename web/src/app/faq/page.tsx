@@ -69,15 +69,15 @@ const faqCategories = [
     questions: [
       {
         q: "How do I start and stop dictation?",
-        a: "Double-tap the Ctrl key to toggle dictation on/off. You can customize this shortcut in the settings panel.",
+        a: "By default, toggle mode uses double-tap Ctrl to start/stop dictation. You can also switch to push-to-talk mode (hold key to speak, release to stop) in Settings.",
       },
       {
         q: "Does Vocalinux work with Wayland?",
-        a: "Yes! Vocalinux supports both X11 and Wayland through IBus text injection. The installer automatically configures the right backend for your system.",
+        a: "Yes. Vocalinux supports both X11 and Wayland, including IBus-based flows on Wayland with improved active-method detection for more reliable text injection.",
       },
       {
         q: "Can I use voice commands?",
-        a: "Yes. Vocalinux supports voice commands like 'new line', 'delete that', 'select all', and more. Commands are processed in real-time.",
+        a: "Yes. Vocalinux supports commands like 'new line', 'delete that', 'select all', and more. Voice commands are optional and can be enabled or disabled in Settings.",
       },
     ],
   },

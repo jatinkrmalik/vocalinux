@@ -72,7 +72,7 @@ const troubleshootingItems = [
   },
   {
     title: "Keyboard shortcut not working",
-    symptoms: ["Double-tap Ctrl doesn't start dictation", "Custom shortcuts ignored"],
+    symptoms: ["Shortcut mode doesn't start dictation", "Custom shortcuts ignored"],
     solutions: [
       "Check if another application is capturing the shortcut",
       "Verify Vocalinux is running (check system tray)",

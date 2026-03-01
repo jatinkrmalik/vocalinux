@@ -408,7 +408,7 @@ export default function HomePage() {
                 100% offline voice dictation for Linux.
               </p>
               <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto">
-                Just double-tap Ctrl and speak.
+                Use toggle mode or push-to-talk and start speaking.
               </p>
 
               {/* CTA Buttons */}
@@ -553,8 +553,8 @@ export default function HomePage() {
               {[
                 {
                   icon: <Keyboard className="h-6 w-6 text-primary" />,
-                  title: "Double-tap Ctrl",
-                  description: "In the real app, just double-tap Ctrl to start dictating anywhere",
+                  title: "Flexible Shortcut Modes",
+                  description: "Use toggle mode (double-tap) or push-to-talk mode to dictate anywhere",
                 },
                 {
                   icon: <Zap className="h-6 w-6 text-primary" />,
@@ -617,7 +617,7 @@ export default function HomePage() {
             <FeatureCard
               icon={<Keyboard className="h-6 w-6 text-primary" />}
               title="Simple Activation"
-              description="Double-tap Ctrl to start, double-tap again to stop. No complex keyboard shortcuts to memorize."
+              description="Choose toggle mode (double-tap) or push-to-talk mode (hold key). Simple, predictable control."
             />
             <FeatureCard
               icon={<Globe className="h-6 w-6 text-primary" />}
@@ -1086,7 +1086,7 @@ export default function HomePage() {
               {
                 question: "How do I customize the activation shortcut?",
                 answer:
-                  "The default is double-tap Ctrl. You can customize this via the GUI settings dialog or by editing ~/.config/vocalinux/config.yaml. Any key combination is supported.",
+                  "The default is toggle mode with double-tap Ctrl, and you can switch to push-to-talk in Settings. You can also customize this via the GUI settings dialog or by editing ~/.config/vocalinux/config.json.",
               },
               {
                 question: "Is Vocalinux free?",
