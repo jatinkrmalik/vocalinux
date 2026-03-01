@@ -110,6 +110,16 @@ class TrayIndicator:
 
     def _setup_keyboard_shortcuts(self):
         """Set up keyboard shortcuts based on configured mode."""
+        # Stop existing shortcut manager if running
+        if self.shortcut_manager.active:
+            logger.info("Stopping existing shortcut manager before reconfiguration")
+            self.shortcut_manager.stop()
+
+        # Clear any existing callbacks to prevent duplicate triggers
+        self.shortcut_manager.register_toggle_callback(None)
+        self.shortcut_manager.register_press_callback(None)
+        self.shortcut_manager.register_release_callback(None)
+
         # Get configured mode from config
         mode = self.config_manager.get("shortcuts", "mode", "toggle")
         logger.info(f"Setting up keyboard shortcuts with mode: {mode}")
@@ -403,14 +413,23 @@ class TrayIndicator:
         Returns:
             True if the shortcut was updated successfully, False otherwise
         """
-        # Update mode if provided
-        if mode is not None and mode != self.shortcut_manager.mode:
-            logger.info(f"Updating shortcut mode from {self.shortcut_manager.mode} to {mode}")
-            self.shortcut_manager.set_mode(mode)
-            # Re-setup callbacks for new mode
-            self._setup_keyboard_shortcuts()
+        current_mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        mode_changed = mode is not None and mode != current_mode
+        shortcut_changed = shortcut != self.shortcut_manager.shortcut
 
-        return self.shortcut_manager.restart_with_shortcut(shortcut)
+        if mode_changed:
+            logger.info(f"Mode changing from {current_mode} to {mode}")
+            # Update config with new mode
+            self.config_manager.set("shortcuts", "mode", mode)
+            self.config_manager.save_settings()
+
+        if mode_changed or shortcut_changed:
+            # Re-setup shortcuts with new configuration
+            # This will stop, clear callbacks, and restart with correct mode
+            return self.shortcut_manager.restart_with_shortcut(shortcut, mode)
+
+        logger.debug("No changes needed - shortcut and mode unchanged")
+        return True
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""

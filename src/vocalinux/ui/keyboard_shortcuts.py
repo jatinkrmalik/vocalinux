@@ -200,11 +200,16 @@ class KeyboardShortcutManager:
             return True
 
         was_active = self.active
-        callback = None
 
-        # Save the current callback before stopping
+        # Save all current callbacks before stopping
+        toggle_callback = None
+        press_callback = None
+        release_callback = None
+
         if self.backend_instance:
-            callback = self.backend_instance.double_tap_callback
+            toggle_callback = self.backend_instance.double_tap_callback
+            press_callback = self.backend_instance.key_press_callback
+            release_callback = self.backend_instance.key_release_callback
 
         # Stop the current listener
         if was_active:
@@ -226,15 +231,25 @@ class KeyboardShortcutManager:
 
         # Restart if it was active
         if was_active:
-            # Re-register the callback
-            if callback:
-                self.register_toggle_callback(callback)
+            # Clear all callbacks first to prevent stale registrations
+            self.register_toggle_callback(None)
+            self.register_press_callback(None)
+            self.register_release_callback(None)
+
+            # Re-register callbacks based on current mode
+            if self._mode == "toggle" and toggle_callback:
+                self.register_toggle_callback(toggle_callback)
+            elif self._mode == "push_to_talk":
+                if press_callback:
+                    self.register_press_callback(press_callback)
+                if release_callback:
+                    self.register_release_callback(release_callback)
 
             success = self.start()
             if success:
                 logger.info(
                     f"Listener restarted with new shortcut: "
-                    f"{SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}"
+                    f"{SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)} (mode: {self._mode})"
                 )
             else:
                 logger.error(f"Failed to restart listener with shortcut: {shortcut}")

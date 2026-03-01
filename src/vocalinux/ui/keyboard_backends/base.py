@@ -16,12 +16,32 @@ SUPPORTED_SHORTCUTS = {
     "super+super": "super",
 }
 
-# Human-readable names for shortcuts
+# Human-readable names for shortcuts (mode-agnostic base names)
 SHORTCUT_DISPLAY_NAMES = {
-    "ctrl+ctrl": "Double-tap Ctrl",
-    "alt+alt": "Double-tap Alt",
-    "shift+shift": "Double-tap Shift",
-    "super+super": "Double-tap Super (Windows key)",
+    "ctrl+ctrl": "Ctrl",
+    "alt+alt": "Alt",
+    "shift+shift": "Shift",
+    "super+super": "Super (Windows key)",
+}
+
+# Mode-specific display names (format: {shortcut: {mode: display_name}})
+SHORTCUT_MODE_DISPLAY_NAMES = {
+    "ctrl+ctrl": {
+        "toggle": "Double-tap Ctrl",
+        "push_to_talk": "Hold Ctrl",
+    },
+    "alt+alt": {
+        "toggle": "Double-tap Alt",
+        "push_to_talk": "Hold Alt",
+    },
+    "shift+shift": {
+        "toggle": "Double-tap Shift",
+        "push_to_talk": "Hold Shift",
+    },
+    "super+super": {
+        "toggle": "Double-tap Super",
+        "push_to_talk": "Hold Super",
+    },
 }
 
 DEFAULT_SHORTCUT = "ctrl+ctrl"
@@ -33,6 +53,24 @@ SHORTCUT_MODES = {
 }
 
 DEFAULT_SHORTCUT_MODE = "toggle"
+
+
+def get_shortcut_display_name(shortcut: str, mode: str = None) -> str:
+    """
+    Get a human-readable display name for a shortcut.
+
+    Args:
+        shortcut: The shortcut string (e.g., "ctrl+ctrl")
+        mode: Optional mode string. If provided, returns mode-specific name.
+
+    Returns:
+        A human-readable display name for the shortcut
+    """
+    if mode and shortcut in SHORTCUT_MODE_DISPLAY_NAMES:
+        return SHORTCUT_MODE_DISPLAY_NAMES[shortcut].get(
+            mode, SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
+        )
+    return SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
 
 
 def parse_shortcut(shortcut_string: str) -> str:
