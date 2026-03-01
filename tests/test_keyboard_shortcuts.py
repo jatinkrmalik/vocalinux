@@ -3,7 +3,7 @@ Tests for keyboard shortcut functionality.
 """
 
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 # Update import to use the new package structure
 from vocalinux.ui.keyboard_shortcuts import (
@@ -27,6 +27,8 @@ class TestKeyboardShortcuts(unittest.TestCase):
         self.mock_backend = MagicMock()
         self.mock_backend.active = False
         self.mock_backend.double_tap_callback = None
+        self.mock_backend.key_press_callback = None
+        self.mock_backend.key_release_callback = None
         self.mock_backend.start.return_value = True
         self.mock_backend.shortcut = "ctrl+ctrl"
         self.mock_create_backend.return_value = self.mock_backend
@@ -159,6 +161,48 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
         # Callback should have been re-registered
         self.mock_backend.register_toggle_callback.assert_called_with(callback)
+
+    def test_restart_with_shortcut_preserves_push_to_talk_callbacks(self):
+        """Push-to-talk callbacks are re-registered after restart."""
+        press_callback = MagicMock()
+        release_callback = MagicMock()
+
+        self.ksm.set_mode("push_to_talk")
+        self.mock_backend.key_press_callback = press_callback
+        self.mock_backend.key_release_callback = release_callback
+        self.ksm.start()
+
+        result = self.ksm.restart_with_shortcut("alt+alt", "push_to_talk")
+
+        self.assertTrue(result)
+        self.assertEqual(self.ksm.shortcut, "alt+alt")
+        self.mock_backend.register_press_callback.assert_any_call(press_callback)
+        self.mock_backend.register_release_callback.assert_any_call(release_callback)
+
+    def test_restart_with_shortcut_switch_mode_clears_old_callbacks(self):
+        """Switching modes does not keep old mode callbacks active."""
+        toggle_callback = MagicMock()
+        press_callback = MagicMock()
+        release_callback = MagicMock()
+
+        self.ksm.set_mode("push_to_talk")
+        self.mock_backend.double_tap_callback = toggle_callback
+        self.mock_backend.key_press_callback = press_callback
+        self.mock_backend.key_release_callback = release_callback
+        self.ksm.start()
+
+        result = self.ksm.restart_with_shortcut("shift+shift", "toggle")
+
+        self.assertTrue(result)
+        self.assertEqual(self.ksm.mode, "toggle")
+        self.mock_backend.register_toggle_callback.assert_any_call(toggle_callback)
+        self.assertNotIn(
+            call(press_callback), self.mock_backend.register_press_callback.call_args_list
+        )
+        self.assertNotIn(
+            call(release_callback),
+            self.mock_backend.register_release_callback.call_args_list,
+        )
 
     def test_restart_with_shortcut_handles_start_failure(self):
         """Test handling when restart fails to start."""
