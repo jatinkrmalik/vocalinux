@@ -424,7 +424,7 @@ export default function HomePage() {
                 </a>
                 <a
                   href="#demo"
-                  className="inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 px-8 py-4 rounded-xl text-lg font-semibold transition-all"
+                  className="inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:scale-105 hover:shadow-md px-8 py-4 rounded-xl text-lg font-semibold transition-all"
                 >
                   <Play className="h-5 w-5" />
                   Watch Demo
