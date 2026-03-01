@@ -15,6 +15,7 @@ from typing import Optional  # noqa: F401
 
 from .ibus_engine import (
     IBusTextInjector,
+    is_ibus_active_input_method,
     is_ibus_available,
     is_ibus_daemon_running,
 )
@@ -135,8 +136,16 @@ class TextInjector:
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
         if is_ibus_available():
+            # Check if IBus is the active input method (not just installed)
+            # This is important because IBus may be installed but not being used,
+            # e.g., when the user has configured ydotool or Fcitx instead
+            if not is_ibus_active_input_method():
+                logger.info(
+                    "IBus is installed but not the active input method. "
+                    "Falling back to alternative text injection method."
+                )
             # Check if ibus-daemon is running before attempting setup
-            if not is_ibus_daemon_running():
+            elif not is_ibus_daemon_running():
                 logger.info(
                     "IBus daemon not running. This is normal on some desktop environments "
                     "(e.g., KDE Plasma). Using alternative text injection method. "
@@ -155,7 +164,6 @@ class TextInjector:
                     return
                 except Exception as e:
                     logger.warning(f"IBus initialization failed: {e}, trying alternatives")
-
         if self.environment == DesktopEnvironment.X11:
             # Check for xdotool
             if not shutil.which("xdotool"):
