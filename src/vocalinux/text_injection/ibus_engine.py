@@ -134,6 +134,45 @@ def is_ibus_daemon_running() -> bool:
         return False
 
 
+def is_ibus_active_input_method() -> bool:
+    """
+    Check if IBus is the currently active input method.
+
+    This checks environment variables to determine if IBus is configured
+    as the active input method for GTK and Qt applications. On some systems,
+    IBus may be installed and the daemon running, but not be the active
+    input method (e.g., when using ydotool, Fcitx, or other input methods).
+
+    Returns:
+        True if IBus appears to be the active input method, False otherwise
+    """
+    # Check GTK_IM_MODULE for GTK applications
+    gtk_im = os.environ.get("GTK_IM_MODULE", "").lower()
+    if gtk_im and "ibus" in gtk_im:
+        logger.debug(f"IBus detected as active input method via GTK_IM_MODULE={gtk_im}")
+        return True
+
+    # Check QT_IM_MODULE for Qt applications
+    qt_im = os.environ.get("QT_IM_MODULE", "").lower()
+    if qt_im and "ibus" in qt_im:
+        logger.debug(f"IBus detected as active input method via QT_IM_MODULE={qt_im}")
+        return True
+
+    # On X11/XWayland, check XMODIFIERS for XIM compatibility
+    xmodifiers = os.environ.get("XMODIFIERS", "").lower()
+    if "@im=ibus" in xmodifiers:
+        logger.debug(f"IBus detected as active input method via XMODIFIERS={xmodifiers}")
+        return True
+
+    logger.debug(
+        "IBus does not appear to be the active input method "
+        f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
+        f"QT_IM_MODULE={qt_im or 'not set'}, "
+        f"XMODIFIERS={xmodifiers or 'not set'})"
+    )
+    return False
+
+
 def start_ibus_daemon():
     """
     Start the IBus daemon if it's not already running.
