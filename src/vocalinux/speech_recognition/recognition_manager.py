@@ -536,6 +536,10 @@ class SpeechRecognitionManager:
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
 
+        # Groq API key (passed via kwargs or env var)
+        self._groq_api_key = kwargs.get("groq_api_key", "") or ""
+        self._groq_client = None
+
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
         self._audio_level_callbacks: List[Callable[[float], None]] = []
@@ -1020,19 +1024,8 @@ class SpeechRecognitionManager:
                 )
                 self.model_size = DEFAULT_GROQ_MODEL
 
-            # Resolve API key: config first, then env var
-            api_key = None
-            try:
-                from ..ui.config_manager import ConfigManager
-
-                cfg = ConfigManager()
-                api_key = cfg.get("speech_recognition", "groq_api_key", "")
-            except Exception:
-                pass
-
-            env_key = os.environ.get("GROQ_API_KEY", "")
-            if env_key:
-                api_key = env_key  # Env var takes precedence
+            # Resolve API key: env var takes precedence over kwargs/config
+            api_key = os.environ.get("GROQ_API_KEY", "") or self._groq_api_key
 
             if not api_key:
                 logger.error(
@@ -1041,7 +1034,7 @@ class SpeechRecognitionManager:
                 self._model_initialized = False
                 return
 
-            self._groq_client = groq_module.Groq(api_key=api_key)
+            self._groq_client = groq_module.Groq(api_key=api_key, timeout=30.0)
             self._model_initialized = True
             logger.info(
                 f"Groq engine initialized with model '{self.model_size}' (API-based, no download needed)"
@@ -1104,7 +1097,8 @@ class SpeechRecognitionManager:
             transcribe_duration = time.time() - transcribe_start
 
             # The response is a string when response_format="text"
-            text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+            raw_text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+            text = _filter_non_speech(raw_text) if raw_text else ""
 
             rtf = transcribe_duration / duration if duration > 0 else 0
 
@@ -2177,6 +2171,14 @@ class SpeechRecognitionManager:
         if "voice_commands_enabled" in kwargs:
             self._voice_commands_preference = kwargs.get("voice_commands_enabled")
 
+        # Update Groq API key if provided
+        if "groq_api_key" in kwargs:
+            new_key = kwargs["groq_api_key"]
+            if new_key and new_key != self._groq_api_key:
+                self._groq_api_key = new_key
+                if self.engine == "groq":
+                    restart_needed = True
+
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:
@@ -2191,6 +2193,7 @@ class SpeechRecognitionManager:
                 # Release old resources explicitly if necessary (Python's GC might handle it)
                 self.model = None
                 self.recognizer = None
+                self._groq_client = None
                 try:
                     if self.engine == "vosk":
                         self._init_vosk()

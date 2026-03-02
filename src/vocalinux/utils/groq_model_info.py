@@ -6,7 +6,7 @@ No local model downloads are needed — inference runs on Groq's servers.
 """
 
 # Groq Whisper API models
-# Pricing: ~$0.03/hour of audio (as of 2025)
+# See https://groq.com/pricing/ for current pricing
 GROQ_MODEL_INFO = {
     "whisper-large-v3": {
         "desc": "Highest accuracy, hosted API",

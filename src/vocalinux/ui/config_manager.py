@@ -227,7 +227,8 @@ class ConfigManager:
             return sr_config[engine_key]
 
         # Fall back to generic model_size for backward compatibility
-        return sr_config.get("model_size", "small" if engine == "vosk" else "tiny")
+        default = {"vosk": "small", "groq": "whisper-large-v3-turbo"}.get(engine, "tiny")
+        return sr_config.get("model_size", default)
 
     def set_model_size_for_engine(self, engine: str, model_size: str):
         """Set the model size for a specific engine.
@@ -277,7 +278,9 @@ class ConfigManager:
         # Update all other keys present in the provided settings dict
         for key, value in settings.items():
             self.config["speech_recognition"][key] = value
-        logger.info(f"Updated speech recognition settings: {settings}")
+        # Redact sensitive keys before logging
+        safe_settings = {k: "***" if "key" in k.lower() else v for k, v in settings.items()}
+        logger.info(f"Updated speech recognition settings: {safe_settings}")
 
     def _update_dict_recursive(self, target: Dict, source: Dict):
         """

@@ -1062,8 +1062,8 @@ class SettingsDialog(Gtk.Dialog):
         if saved_key:
             self.groq_api_key_entry.set_text(saved_key)
 
-        # Connect API key change to auto-apply
-        self.groq_api_key_entry.connect("changed", self._on_groq_api_key_changed)
+        # Save API key on focus-out (not every keystroke) and trigger reconfigure
+        self.groq_api_key_entry.connect("focus-out-event", self._on_groq_api_key_focus_out)
 
         self.content_box.pack_start(group, False, False, 0)
 
@@ -1680,14 +1680,21 @@ class SettingsDialog(Gtk.Dialog):
         """Handle changes in silence timeout."""
         self._auto_apply_settings()
 
-    def _on_groq_api_key_changed(self, widget):
-        """Handle changes in Groq API key entry."""
+    def _on_groq_api_key_focus_out(self, widget, event):
+        """Save Groq API key and reconfigure engine when entry loses focus."""
         if self._initializing or self._applying_settings:
-            return
+            return False
         api_key = self.groq_api_key_entry.get_text().strip()
         self.config_manager.set("speech_recognition", "groq_api_key", api_key)
         self.config_manager.save_settings()
-        logger.info("Groq API key updated")
+        logger.info("Groq API key saved")
+        # Trigger engine re-init so the new key takes effect immediately
+        if api_key:
+            try:
+                self.speech_engine.reconfigure(groq_api_key=api_key, force_download=False)
+            except Exception as e:
+                logger.warning(f"Failed to reconfigure Groq with new API key: {e}")
+        return False
 
     def _on_voice_commands_toggled(self, widget, state):
         """Handle toggle of the voice commands switch."""
