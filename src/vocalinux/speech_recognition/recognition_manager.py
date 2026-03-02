@@ -1044,6 +1044,10 @@ class SpeechRecognitionManager:
             logger.error("Failed to import groq. Install with: pip install groq")
             self.state = RecognitionState.ERROR
             raise
+        except Exception as e:
+            logger.error(f"Failed to initialize Groq engine: {e}", exc_info=True)
+            self.state = RecognitionState.ERROR
+            raise
 
     def _transcribe_with_groq(self, audio_buffer: List[bytes]) -> str:
         """Transcribe audio buffer using the Groq Whisper API.
@@ -1114,7 +1118,24 @@ class SpeechRecognitionManager:
             return text
 
         except Exception as e:
-            logger.error(f"Error in Groq transcription: {e}", exc_info=True)
+            error_msg = str(e).lower()
+            if "authentication" in error_msg or "api_key" in error_msg or "401" in error_msg:
+                logger.error(
+                    f"Groq authentication failed: {e}. Check your API key in Settings or GROQ_API_KEY env var.",
+                    exc_info=True,
+                )
+            elif "rate" in error_msg or "429" in error_msg:
+                logger.error(
+                    f"Groq rate limit exceeded: {e}. Wait a moment and try again.",
+                    exc_info=True,
+                )
+            elif "timeout" in error_msg or "timed out" in error_msg:
+                logger.error(
+                    f"Groq API request timed out: {e}. Check your network connection.",
+                    exc_info=True,
+                )
+            else:
+                logger.error(f"Error in Groq transcription: {e}", exc_info=True)
             return ""
 
     def _download_whispercpp_model(self):

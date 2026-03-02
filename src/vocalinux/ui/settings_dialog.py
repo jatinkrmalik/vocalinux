@@ -1693,7 +1693,7 @@ class SettingsDialog(Gtk.Dialog):
             try:
                 self.speech_engine.reconfigure(groq_api_key=api_key, force_download=False)
             except Exception as e:
-                logger.warning(f"Failed to reconfigure Groq with new API key: {e}")
+                logger.error(f"Failed to reconfigure Groq with new API key: {e}", exc_info=True)
         return False
 
     def _on_voice_commands_toggled(self, widget, state):
