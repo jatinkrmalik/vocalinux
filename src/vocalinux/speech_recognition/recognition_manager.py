@@ -17,6 +17,7 @@ from typing import Callable, List, Optional
 
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
+from ..utils.groq_model_info import DEFAULT_GROQ_MODEL, GROQ_MODEL_INFO
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
@@ -570,11 +571,17 @@ class SpeechRecognitionManager:
             self._init_whisper()
         elif engine == "whisper_cpp":
             self._init_whispercpp()
+        elif engine == "groq":
+            self._init_groq()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
 
     def _resolve_voice_commands_enabled(self) -> bool:
-        """Resolve effective voice commands state from preference and engine."""
+        """Resolve effective voice commands state from preference and engine.
+
+        Voice commands are auto-enabled for VOSK only. Whisper, whisper.cpp, and
+        Groq handle punctuation natively so voice commands are off by default.
+        """
         if self._voice_commands_preference is None:
             return self.engine == "vosk"
         return bool(self._voice_commands_preference)
@@ -998,6 +1005,122 @@ class SpeechRecognitionManager:
                 else "empty audio buffer"
             )
             logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
+            return ""
+
+    def _init_groq(self):
+        """Initialize the Groq Whisper API engine."""
+        try:
+            import groq as groq_module
+
+            # Validate model
+            if self.model_size not in GROQ_MODEL_INFO:
+                logger.warning(
+                    f"Model '{self.model_size}' not valid for Groq. "
+                    f"Valid options: {list(GROQ_MODEL_INFO.keys())}. Using '{DEFAULT_GROQ_MODEL}'."
+                )
+                self.model_size = DEFAULT_GROQ_MODEL
+
+            # Resolve API key: config first, then env var
+            api_key = None
+            try:
+                from ..ui.config_manager import ConfigManager
+
+                cfg = ConfigManager()
+                api_key = cfg.get("speech_recognition", "groq_api_key", "")
+            except Exception:
+                pass
+
+            env_key = os.environ.get("GROQ_API_KEY", "")
+            if env_key:
+                api_key = env_key  # Env var takes precedence
+
+            if not api_key:
+                logger.error(
+                    "Groq API key not set. Set GROQ_API_KEY env var or enter it in Settings."
+                )
+                self._model_initialized = False
+                return
+
+            self._groq_client = groq_module.Groq(api_key=api_key)
+            self._model_initialized = True
+            logger.info(
+                f"Groq engine initialized with model '{self.model_size}' (API-based, no download needed)"
+            )
+
+        except ImportError:
+            logger.error("Failed to import groq. Install with: pip install groq")
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _transcribe_with_groq(self, audio_buffer: List[bytes]) -> str:
+        """Transcribe audio buffer using the Groq Whisper API.
+
+        Args:
+            audio_buffer: List of audio data chunks (16-bit PCM at 16kHz)
+
+        Returns:
+            Transcribed text
+        """
+        import io
+        import time
+        import wave
+
+        try:
+            if not audio_buffer:
+                return ""
+
+            raw_pcm = b"".join(audio_buffer)
+            duration = len(raw_pcm) / (2 * 16000)  # 16-bit = 2 bytes/sample at 16kHz
+            logger.debug(f"Groq: transcribing {duration:.2f}s of audio")
+
+            # Wrap raw PCM in a WAV container (Groq API requires a file-like object)
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(16000)
+                wf.writeframes(raw_pcm)
+            wav_buffer.seek(0)
+
+            # Determine language for the API
+            lang = self.language
+            if lang == "en-us":
+                lang = "en"
+            elif lang == "auto":
+                lang = None
+
+            transcribe_start = time.time()
+
+            # Call Groq Whisper API
+            kwargs = {
+                "file": ("audio.wav", wav_buffer),
+                "model": self.model_size,
+                "response_format": "text",
+            }
+            if lang:
+                kwargs["language"] = lang
+
+            transcription = self._groq_client.audio.transcriptions.create(**kwargs)
+            transcribe_duration = time.time() - transcribe_start
+
+            # The response is a string when response_format="text"
+            text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+
+            rtf = transcribe_duration / duration if duration > 0 else 0
+
+            if text:
+                logger.info(f"Groq transcribed: '{text}'")
+                logger.info(
+                    f"Groq transcription completed in {transcribe_duration:.3f}s "
+                    f"for {duration:.2f}s audio (RTF: {rtf:.2f}x)"
+                )
+            else:
+                logger.debug(f"Groq returned empty transcription ({transcribe_duration:.3f}s)")
+
+            return text
+
+        except Exception as e:
+            logger.error(f"Error in Groq transcription: {e}", exc_info=True)
             return ""
 
     def _download_whispercpp_model(self):
@@ -1477,6 +1600,8 @@ class SpeechRecognitionManager:
     @property
     def model_ready(self) -> bool:
         """Check if the model is initialized and ready for recognition."""
+        if self.engine == "groq":
+            return self._model_initialized and getattr(self, "_groq_client", None) is not None
         return self._model_initialized and self.model is not None
 
     def start_recognition(self):
@@ -1853,6 +1978,9 @@ class SpeechRecognitionManager:
         elif self.engine == "whisper_cpp":
             text = self._transcribe_with_whispercpp(audio_buffer)
 
+        elif self.engine == "groq":
+            text = self._transcribe_with_groq(audio_buffer)
+
         else:
             logger.error(f"Unknown engine: {self.engine}")
             return
@@ -2070,6 +2198,8 @@ class SpeechRecognitionManager:
                         self._init_whisper()
                     elif self.engine == "whisper_cpp":
                         self._init_whispercpp()
+                    elif self.engine == "groq":
+                        self._init_groq()
                     else:
                         raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                     logger.info("Speech engine re-initialized successfully.")

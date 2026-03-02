@@ -28,6 +28,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
+from ..utils.groq_model_info import GROQ_MODEL_INFO  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
@@ -70,6 +71,11 @@ ENGINE_MODELS = {
         "medium",
         "large",
     ],  # whisper.cpp models (ggml format)
+    "groq": [
+        "whisper-large-v3",
+        "whisper-large-v3-turbo",
+        "distil-whisper-large-v3-en",
+    ],  # Groq hosted Whisper API models
 }
 
 # Whisper model metadata for display
@@ -87,7 +93,7 @@ def get_available_engines():
     Detect which speech recognition engines are available/installed.
     Returns a dictionary of engine_name -> availability (bool).
     """
-    engines = {"vosk": False, "whisper": False, "whisper_cpp": False}
+    engines = {"vosk": False, "whisper": False, "whisper_cpp": False, "groq": False}
 
     # Check VOSK
     try:
@@ -110,6 +116,14 @@ def get_available_engines():
         from pywhispercpp.model import Model
 
         engines["whisper_cpp"] = True
+    except ImportError:
+        pass
+
+    # Check Groq (API-based, only needs the package installed)
+    try:
+        import groq  # noqa: F401
+
+        engines["groq"] = True
     except ImportError:
         pass
 
@@ -1015,6 +1029,42 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(language_row)
 
+        # Groq API key entry (shown only when Groq engine is selected)
+        api_key_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.groq_api_key_entry = Gtk.Entry()
+        self.groq_api_key_entry.set_visibility(False)  # Password-style
+        self.groq_api_key_entry.set_placeholder_text("gsk_...")
+        self.groq_api_key_entry.set_hexpand(True)
+        self.groq_api_key_entry.set_size_request(160, -1)
+        api_key_box.pack_start(self.groq_api_key_entry, True, True, 0)
+
+        # Visibility toggle button
+        self.api_key_visibility_btn = Gtk.ToggleButton()
+        self.api_key_visibility_btn.set_image(
+            Gtk.Image.new_from_icon_name("dialog-password-symbolic", Gtk.IconSize.BUTTON)
+        )
+        self.api_key_visibility_btn.set_tooltip_text("Show/hide API key")
+        self.api_key_visibility_btn.connect(
+            "toggled",
+            lambda btn: self.groq_api_key_entry.set_visibility(btn.get_active()),
+        )
+        api_key_box.pack_start(self.api_key_visibility_btn, False, False, 0)
+
+        self.groq_api_key_row = PreferenceRow(
+            title="Groq API Key",
+            subtitle="Get yours at console.groq.com",
+            widget=api_key_box,
+        )
+        group.add_row(self.groq_api_key_row)
+
+        # Load saved API key
+        saved_key = self.config_manager.get("speech_recognition", "groq_api_key", "")
+        if saved_key:
+            self.groq_api_key_entry.set_text(saved_key)
+
+        # Connect API key change to auto-apply
+        self.groq_api_key_entry.connect("changed", self._on_groq_api_key_changed)
+
         self.content_box.pack_start(group, False, False, 0)
 
         # Model info card (shown below the group)
@@ -1498,12 +1548,27 @@ class SettingsDialog(Gtk.Dialog):
                 recommended_model, _ = _get_recommended_whisper_model()
             elif engine == "whisper_cpp":
                 recommended_model, _ = get_recommended_whispercpp_model()
+            elif engine == "groq":
+                from ..utils.groq_model_info import DEFAULT_GROQ_MODEL
+
+                recommended_model = DEFAULT_GROQ_MODEL
             else:
                 recommended_model, _ = _get_recommended_vosk_model()
 
             if engine in ENGINE_MODELS:
                 for size in ENGINE_MODELS[engine]:
-                    if engine == "whisper" and size in WHISPER_MODEL_INFO:
+                    if engine == "groq" and size in GROQ_MODEL_INFO:
+                        info = GROQ_MODEL_INFO[size]
+                        # Groq models are API-based, always "available"
+                        is_downloaded = True
+                        star = " ★" if size == recommended_model else ""
+                        display_text = f"{size} ({info['speed']}) ✓{star}"
+                        downloaded_models.append(size)
+                        if smallest_model is None:
+                            smallest_model = size
+                        self.model_combo.append(size, display_text)
+                        continue
+                    elif engine == "whisper" and size in WHISPER_MODEL_INFO:
                         info = WHISPER_MODEL_INFO[size]
                         is_downloaded = _is_whisper_model_downloaded(size)
                     elif engine == "whisper_cpp" and size in WHISPERCPP_MODEL_INFO:
@@ -1531,12 +1596,21 @@ class SettingsDialog(Gtk.Dialog):
             saved_model = saved_model_for_engine.lower()
             valid_models = [m.lower() for m in ENGINE_MODELS.get(engine, [])]
 
-            if saved_model in valid_models:
-                model_to_set = saved_model.capitalize()
-            elif downloaded_models:
-                model_to_set = downloaded_models[0].capitalize()
+            if engine == "groq":
+                # Groq model IDs are used as-is (e.g. "whisper-large-v3-turbo")
+                if saved_model in valid_models:
+                    model_to_set = saved_model
+                elif downloaded_models:
+                    model_to_set = downloaded_models[0]
+                else:
+                    model_to_set = smallest_model if smallest_model else "whisper-large-v3-turbo"
             else:
-                model_to_set = smallest_model.capitalize() if smallest_model else "Small"
+                if saved_model in valid_models:
+                    model_to_set = saved_model.capitalize()
+                elif downloaded_models:
+                    model_to_set = downloaded_models[0].capitalize()
+                else:
+                    model_to_set = smallest_model.capitalize() if smallest_model else "Small"
 
             logger.info(f"Setting active model to: {model_to_set}")
 
@@ -1569,7 +1643,7 @@ class SettingsDialog(Gtk.Dialog):
                 current_lang == "auto" or not SUPPORTED_LANGUAGES.get(current_lang, {}).get("vosk")
             ):
                 self.language = "en-us"
-            elif engine in ["whisper", "whisper_cpp"] and not current_lang:
+            elif engine in ["whisper", "whisper_cpp", "groq"] and not current_lang:
                 self.language = "auto"
 
         self._populate_model_options()
@@ -1606,6 +1680,15 @@ class SettingsDialog(Gtk.Dialog):
         """Handle changes in silence timeout."""
         self._auto_apply_settings()
 
+    def _on_groq_api_key_changed(self, widget):
+        """Handle changes in Groq API key entry."""
+        if self._initializing or self._applying_settings:
+            return
+        api_key = self.groq_api_key_entry.get_text().strip()
+        self.config_manager.set("speech_recognition", "groq_api_key", api_key)
+        self.config_manager.save_settings()
+        logger.info("Groq API key updated")
+
     def _on_voice_commands_toggled(self, widget, state):
         """Handle toggle of the voice commands switch."""
         if self._initializing or self._applying_settings:
@@ -1641,8 +1724,8 @@ class SettingsDialog(Gtk.Dialog):
                     continue
                 is_downloaded = _is_vosk_model_downloaded("small", lang_code)
                 display_text += " ✓" if is_downloaded else " ↓"
-            elif engine in ["whisper", "whisper_cpp"]:
-                # Both Whisper and whisper.cpp support auto-detect
+            elif engine in ["whisper", "whisper_cpp", "groq"]:
+                # Whisper, whisper.cpp, and Groq all support auto-detect
                 if lang_code == "auto":
                     display_text += " ⚠"
             else:
@@ -1685,6 +1768,15 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
+        engine_text = self.engine_combo.get_active_text()
+        engine = engine_text.lower() if engine_text else ""
+
+        # Show/hide Groq API key row
+        if engine == "groq":
+            self.groq_api_key_row.show_all()
+        else:
+            self.groq_api_key_row.hide()
+
         self._update_model_info()
 
     def _update_model_info(self):
@@ -1721,6 +1813,17 @@ class SettingsDialog(Gtk.Dialog):
             extra_info = (
                 f"Parameters: {info['params']} • Backend: {get_backend_display_name(backend)}"
             )
+        elif engine == "groq":
+            if model_name not in GROQ_MODEL_INFO:
+                self.model_info_card.hide()
+                return
+            info = GROQ_MODEL_INFO[model_name]
+            is_downloaded = True  # API-based, always available
+            from ..utils.groq_model_info import DEFAULT_GROQ_MODEL
+
+            recommended = DEFAULT_GROQ_MODEL
+            reason = "best speed/quality balance"
+            extra_info = f"Speed: {info['speed']} • API-based (no download)"
         elif engine == "vosk":
             if model_name not in VOSK_MODEL_INFO:
                 self.model_info_card.hide()
@@ -1775,10 +1878,12 @@ class SettingsDialog(Gtk.Dialog):
             engine = settings.get("engine", "vosk")
             model_name = settings.get("model_size", "small")
 
-            # Check if model needs to be downloaded
+            # Check if model needs to be downloaded (Groq is API-based, never needs download)
             needs_download = False
             model_info = {"size_mb": 100}  # Default
-            if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
+            if engine == "groq":
+                pass  # API-based, no download needed
+            elif engine == "whisper" and not _is_whisper_model_downloaded(model_name):
                 needs_download = True
                 model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
             elif engine == "whisper_cpp" and not is_whispercpp_model_downloaded(model_name):
@@ -1861,19 +1966,26 @@ class SettingsDialog(Gtk.Dialog):
         language_id = self.language_combo.get_active_id()
 
         engine = engine_text.lower() if engine_text else "vosk"
+        # Groq model IDs are already lowercase with hyphens (e.g. "whisper-large-v3-turbo")
         model_size = model_id.lower() if model_id else "small"
         language = language_id if language_id else "auto"
 
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
 
-        return {
+        settings = {
             "engine": engine,
             "model_size": model_size,
             "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
         }
+
+        # Include Groq API key in settings when Groq engine is selected
+        if engine == "groq":
+            settings["groq_api_key"] = self.groq_api_key_entry.get_text().strip()
+
+        return settings
 
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""

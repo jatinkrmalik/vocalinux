@@ -18,12 +18,14 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 # Default configuration
 DEFAULT_CONFIG = {
     "speech_recognition": {  # Changed section name
-        "engine": "whisper_cpp",  # "vosk", "whisper", or "whisper_cpp" - whisper_cpp is default for best performance
+        "engine": "whisper_cpp",  # "vosk", "whisper", "whisper_cpp", or "groq"
         "language": "auto",  # Auto-detect language (Whisper/whisper.cpp only)
         "model_size": "tiny",  # Current model size (for backward compatibility)
         "vosk_model_size": "small",  # Default model for VOSK engine
         "whisper_model_size": "tiny",  # Default model for Whisper engine
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
+        "groq_model_size": "whisper-large-v3-turbo",  # Default model for Groq API
+        "groq_api_key": "",  # Groq API key (env var GROQ_API_KEY takes precedence)
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
