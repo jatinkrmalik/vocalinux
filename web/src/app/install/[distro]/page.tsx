@@ -33,7 +33,7 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     name: "Ubuntu",
     title: "Install Voice Dictation on Ubuntu",
     description:
-      "Step-by-step Ubuntu voice dictation setup for offline speech-to-text with whisper.cpp and VOSK. Works on Ubuntu 22.04+, GNOME, KDE, X11, and Wayland.",
+      "Step-by-step Ubuntu voice dictation setup for speech-to-text with whisper.cpp, VOSK, and Groq. Works on Ubuntu 22.04+, GNOME, KDE, X11, and Wayland.",
     intro:
       "This Ubuntu guide is tuned for practical desktop use: terminals, browsers, IDEs, office suites, and chat apps. Vocalinux runs locally so your voice data never leaves your machine.",
     prerequisites: [
@@ -379,7 +379,7 @@ export default async function DistroInstallPage({
         <p className="mt-6 text-sm text-muted-foreground">
           Need help selecting an engine? Read the
           <Link href="/compare/" className="ml-1 font-semibold text-primary hover:underline">
-            whisper.cpp vs Whisper vs VOSK comparison
+            whisper.cpp vs Whisper vs VOSK vs Groq comparison
           </Link>
           .
         </p>

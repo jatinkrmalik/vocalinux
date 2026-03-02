@@ -31,11 +31,11 @@ const faqCategories = [
     questions: [
       {
         q: "Is Vocalinux really 100% offline?",
-        a: "Yes. All speech recognition runs locally on your Linux machine. Your voice data never leaves your computer. No internet connection is required after installation.",
+        a: "Yes, when using the local engines (whisper.cpp, Whisper, or VOSK). All speech recognition runs locally on your Linux machine. Your voice data never leaves your computer. The optional Groq Whisper API engine requires an internet connection and sends audio to Groq servers for processing.",
       },
       {
         q: "Does Vocalinux send any data to external servers?",
-        a: "No. Vocalinux does not collect, transmit, or store any voice data externally. Everything is processed locally using open-source speech recognition engines.",
+        a: "Not with the default local engines. whisper.cpp, Whisper, and VOSK process everything locally. If you choose the optional Groq Whisper API engine, audio is sent to Groq servers for transcription.",
       },
       {
         q: "Is my voice data stored anywhere?",
@@ -50,7 +50,7 @@ const faqCategories = [
     questions: [
       {
         q: "Which speech recognition engines are available?",
-        a: "Vocalinux supports three engines: whisper.cpp (default, fastest), OpenAI Whisper (high accuracy), and VOSK (lightweight for older hardware).",
+        a: "Vocalinux supports four engines: whisper.cpp (default, fastest local), OpenAI Whisper (high accuracy, local), VOSK (lightweight for older hardware), and Groq Whisper API (cloud-based, sub-second latency, requires API key).",
       },
       {
         q: "How accurate is the transcription?",

@@ -43,7 +43,7 @@ const troubleshootingItems = [
     solutions: [
       "Use a smaller model (tiny or base instead of medium/large)",
       "Enable GPU acceleration if available (Vulkan for AMD/Intel, CUDA for NVIDIA)",
-      "Switch to VOSK engine for lower resource usage",
+      "Switch to VOSK engine for lower resource usage, or Groq Whisper API to offload processing to the cloud",
       "Reduce audio sample rate in settings",
     ],
   },
@@ -55,7 +55,7 @@ const troubleshootingItems = [
       "Ensure microphone is positioned correctly and not too far",
       "Reduce background noise",
       "Speak clearly and at a moderate pace",
-      "Try a different speech engine (whisper.cpp vs VOSK)",
+      "Try a different speech engine (whisper.cpp, VOSK, or Groq Whisper API)",
       "Set the correct language in settings",
     ],
   },

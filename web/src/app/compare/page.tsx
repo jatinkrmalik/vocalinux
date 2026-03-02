@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { CheckCircle2, Cpu, Sparkles, Zap } from "lucide-react";
+import { CheckCircle2, Cpu, Globe, Sparkles, Zap } from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
@@ -38,18 +38,30 @@ const engineTable = [
     iconColor: "text-cyan-500",
     iconBg: "bg-cyan-500/10",
   },
+  {
+    engine: "Groq Whisper API",
+    speed: "Sub-second latency (cloud)",
+    hardware: "API-based (requires internet)",
+    accuracy: "High (whisper-large-v3)",
+    footprint: "No local model needed",
+    bestFor: "Users who want top accuracy without local GPU resources",
+    icon: Globe,
+    iconColor: "text-green-500",
+    iconBg: "bg-green-500/10",
+  },
 ];
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "Whisper.cpp vs Whisper vs VOSK for Linux Voice Dictation",
+  title: "Whisper.cpp vs Whisper vs VOSK vs Groq for Linux Voice Dictation",
   description:
-    "Compare whisper.cpp, Whisper, and VOSK for Linux speech-to-text. See speed, hardware requirements, model size, and which engine is best for your workflow.",
+    "Compare whisper.cpp, Whisper, VOSK, and Groq Whisper API for Linux speech-to-text. See speed, hardware requirements, model size, and which engine is best for your workflow.",
   path: "/compare",
   keywords: [
     "whisper.cpp vs vosk",
     "linux speech recognition comparison",
     "best voice dictation engine linux",
     "whisper vs vosk linux",
+    "groq whisper api linux",
   ],
 });
 
@@ -57,9 +69,9 @@ export default function CompareEnginesPage() {
   const articleJsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
-    headline: "Whisper.cpp vs Whisper vs VOSK for Linux Voice Dictation",
+    headline: "Whisper.cpp vs Whisper vs VOSK vs Groq for Linux Voice Dictation",
     description:
-      "Technical comparison of speech recognition engines for offline Linux voice typing.",
+      "Technical comparison of speech recognition engines for Linux voice typing, including local and cloud options.",
     dateModified: "2026-02-12",
     author: {
       "@type": "Person",
@@ -90,7 +102,7 @@ export default function CompareEnginesPage() {
           Speech Engine Comparison
         </p>
         <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          whisper.cpp vs Whisper vs VOSK on Linux
+          whisper.cpp vs Whisper vs VOSK vs Groq on Linux
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           If you are choosing a Linux speech-to-text engine, this page gives a practical side-by-side
@@ -138,7 +150,7 @@ export default function CompareEnginesPage() {
         </table>
       </section>
 
-      <section className="mt-12 grid gap-6 md:grid-cols-3">
+      <section className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
           <h2 className="mb-3 text-2xl font-semibold">When to pick whisper.cpp</h2>
           <p className="text-sm text-muted-foreground">
@@ -160,6 +172,14 @@ export default function CompareEnginesPage() {
           <p className="text-sm text-muted-foreground">
             Choose VOSK on older laptops, low-RAM systems, or lightweight VMs where small model size and
             minimal overhead matter most.
+          </p>
+        </article>
+
+        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+          <h2 className="mb-3 text-2xl font-semibold">When to pick Groq</h2>
+          <p className="text-sm text-muted-foreground">
+            Choose Groq Whisper API when you want top-tier accuracy with sub-second latency and don&apos;t
+            need offline capability. Requires an internet connection and API key from console.groq.com.
           </p>
         </article>
       </section>

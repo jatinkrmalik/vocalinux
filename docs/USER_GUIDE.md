@@ -88,7 +88,7 @@ You can change the speech recognition engine and model for better accuracy or fa
 
 ### Choosing Your Engine
 
-Vocalinux now offers **three speech recognition engines**:
+Vocalinux now offers **four speech recognition engines**:
 
 1. **whisper.cpp** ⭐ (Default) - High-performance C++ engine
    - Fastest installation (~1-2 min)
@@ -107,6 +107,12 @@ Vocalinux now offers **three speech recognition engines**:
    - CPU only
    - Great for older systems or minimal resource usage
 
+4. **Groq** - Cloud Whisper API engine
+   - API-based, no local model download needed
+   - Sub-second latency with whisper-large-v3 quality
+   - Models: whisper-large-v3, whisper-large-v3-turbo (default), distil-whisper-large-v3-en (English only)
+   - Requires API key from [console.groq.com](https://console.groq.com) (set via Settings UI or `GROQ_API_KEY` env var)
+
 ### Changing Engine and Model
 
 1. Open settings from the tray icon menu (right-click)
@@ -115,6 +121,7 @@ Vocalinux now offers **three speech recognition engines**:
    - whisper_cpp (recommended)
    - whisper
    - vosk
+   - groq
 4. Select your **Model Size**:
    - **tiny** (~39MB) - Fastest, good for real-time dictation
    - **base** (~74MB) - Good balance

@@ -328,6 +328,31 @@ export default function GpuAccelerationPage() {
         </div>
       </section>
 
+      <section className="mb-12 rounded-2xl border border-green-200 bg-green-50 p-6 dark:border-green-800 dark:bg-green-900/20">
+        <div className="flex items-start gap-3">
+          <Zap className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600 dark:text-green-400" />
+          <div>
+            <h3 className="mb-2 font-semibold text-green-800 dark:text-green-300">
+              No GPU? Try the Groq Whisper API
+            </h3>
+            <p className="text-sm text-green-700 dark:text-green-400">
+              If you don&apos;t have a compatible GPU, the Groq Whisper API engine offloads all
+              processing to the cloud with sub-second latency and whisper-large-v3 accuracy. No
+              local GPU or model download required — just an API key from{" "}
+              <a
+                href="https://console.groq.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold hover:underline"
+              >
+                console.groq.com
+              </a>
+              . Requires an internet connection.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-4 text-2xl font-bold">Get Started with GPU Acceleration</h2>
         <p className="mb-6 text-muted-foreground">

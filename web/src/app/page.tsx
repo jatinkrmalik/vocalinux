@@ -45,6 +45,8 @@ const getInstallCommands = (latestRelease: string) => ({
 
   oneClickInstallVosk: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk`,
 
+  oneClickInstallGroq: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=groq`,
+
   uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
 });
 
@@ -64,7 +66,7 @@ const homeJsonLd = [
       priceCurrency: "USD",
     },
     description:
-      "Offline voice dictation and speech-to-text for Linux with whisper.cpp and VOSK.",
+      "Voice dictation and speech-to-text for Linux with whisper.cpp, VOSK, and Groq Whisper API.",
     "softwareVersion": "0.8.0-beta",
     author: {
       "@type": "Person",
@@ -80,7 +82,7 @@ const homeJsonLd = [
       "Toggle and push-to-talk shortcut modes",
       "Optional voice commands with VOSK-aware defaults",
       "Adaptive audio and IBus-aware text injection",
-      "whisper.cpp, Whisper, and VOSK support",
+      "whisper.cpp, Whisper, VOSK, and Groq Whisper API support",
       "Linux desktop integration",
     ],
   },
@@ -109,7 +111,7 @@ const homeJsonLd = [
         name: "How do I switch between speech engines?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Use the settings GUI or the CLI flags: vocalinux --engine whisper_cpp, vocalinux --engine whisper, or vocalinux --engine vosk.",
+          text: "Use the settings GUI or the CLI flags: vocalinux --engine whisper_cpp, vocalinux --engine whisper, vocalinux --engine vosk, or vocalinux --engine groq.",
         },
       },
     ],
@@ -271,7 +273,7 @@ export default function HomePage() {
 
   // Get install commands based on the latest release
   const installCommands = getInstallCommands(latestRelease);
-  const { interactiveInstallCommand, oneClickInstallCommand, oneClickInstallWhisper, oneClickInstallVosk, uninstallCommand } = installCommands;
+  const { interactiveInstallCommand, oneClickInstallCommand, oneClickInstallWhisper, oneClickInstallVosk, oneClickInstallGroq, uninstallCommand } = installCommands;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
@@ -785,6 +787,32 @@ export default function HomePage() {
                   </div>
                 </div>
 
+                {/* Alternative install - Groq Whisper API */}
+                <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-green-500/10 p-2 rounded-lg">
+                      <Globe className="h-5 w-5 text-green-500" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold">Groq Whisper API (Cloud)</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Sub-second latency, whisper-large-v3 accuracy, requires API key from console.groq.com
+                      </p>
+                    </div>
+                    <CopyButton text={oneClickInstallGroq} />
+                  </div>
+                  <div className="overflow-x-auto">
+                    <CodeBlock
+                      language="bash"
+                      className="rounded-lg text-sm"
+                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
+                      wrapLongLines={false}
+                    >
+                      {oneClickInstallGroq}
+                    </CodeBlock>
+                  </div>
+                </div>
+
                 {/* What the installer does */}
                 <div className="mt-8 p-4 bg-zinc-50 dark:bg-zinc-900 rounded-lg">
                   <h4 className="font-semibold mb-3">What the installer does:</h4>
@@ -921,7 +949,7 @@ export default function HomePage() {
             <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/5 p-6 sm:p-8">
               <h3 className="text-2xl font-bold mb-3">Need help choosing an engine?</h3>
               <p className="text-muted-foreground mb-4">
-                Compare whisper.cpp, Whisper, and VOSK for speed, hardware support, and model size.
+                Compare whisper.cpp, Whisper, VOSK, and Groq for speed, hardware support, and model size.
               </p>
               <Link
                 href="/compare/"
@@ -948,7 +976,7 @@ export default function HomePage() {
             </div>
           </FadeInSection>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             <FadeInSection delay={0.1}>
               <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border-2 border-primary h-full relative overflow-hidden">
                 <div className="absolute top-4 right-4">
@@ -1043,6 +1071,36 @@ export default function HomePage() {
                 </div>
               </div>
             </FadeInSection>
+
+            <FadeInSection delay={0.4}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-green-500/10 p-3 rounded-lg">
+                    <Globe className="h-6 w-6 text-green-500" />
+                  </div>
+                  <h3 className="text-xl font-bold">Groq Whisper API</h3>
+                </div>
+                <p className="text-muted-foreground mb-6">
+                  Cloud-based Whisper API with sub-second latency. No local model download needed.
+                </p>
+                <ul className="space-y-2 mb-6">
+                  {[
+                    "Sub-second transcription latency",
+                    "whisper-large-v3 accuracy",
+                    "No local model download",
+                    "Requires API key & internet",
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-sm text-muted-foreground">
+                  <strong>Models:</strong> whisper-large-v3-turbo (default) • whisper-large-v3 • distil-whisper-large-v3-en
+                </div>
+              </div>
+            </FadeInSection>
           </div>
         </div>
       </section>
@@ -1073,7 +1131,7 @@ export default function HomePage() {
               {
                 question: "How do I switch between speech engines?",
                 answer:
-                  'You can switch engines via the settings GUI or command line. Use "vocalinux --engine whisper_cpp" (default, recommended), "vocalinux --engine whisper" (OpenAI), or "vocalinux --engine vosk" (lightweight). whisper.cpp offers the best balance of speed and accuracy.',
+                  'You can switch engines via the settings GUI or command line. Use "vocalinux --engine whisper_cpp" (default, recommended), "vocalinux --engine whisper" (OpenAI), "vocalinux --engine vosk" (lightweight), or "vocalinux --engine groq" (cloud API). whisper.cpp offers the best balance of speed and accuracy for local use.',
               },
               {
                 question: "What are the system requirements?",

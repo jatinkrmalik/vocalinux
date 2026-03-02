@@ -112,8 +112,8 @@ export default function InstallGuidesPage() {
           </li>
           <li>Use toggle mode (double-tap Ctrl) or push-to-talk mode to control dictation in any text field.</li>
           <li>
-            Choose whisper.cpp for speed, Whisper for maximum model compatibility, or VOSK for
-            low-RAM systems.
+            Choose whisper.cpp for speed, Whisper for maximum model compatibility, VOSK for
+            low-RAM systems, or Groq Whisper API for cloud-based sub-second latency.
           </li>
         </ul>
         <p className="mt-6 text-sm text-muted-foreground">

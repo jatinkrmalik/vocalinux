@@ -75,7 +75,7 @@
 - 🚀 **Start on login support** via XDG autostart (desktop-session startup)
 - 🔊 **Pleasant audio feedback** - smooth gliding tones, headphone-friendly
 - ⚙️ **Graphical settings** dialog for easy configuration
-- 📦 **3 engine choices** - whisper.cpp (default), OpenAI Whisper, or VOSK
+- 📦 **4 engine choices** - whisper.cpp (default), OpenAI Whisper, VOSK, or Groq Whisper API
 
 ## 📸 Screenshots
 
@@ -124,6 +124,7 @@ curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.
 1. **whisper.cpp** ⭐ (Recommended) - Fast, works with any GPU via Vulkan
 2. **Whisper** (OpenAI) - PyTorch-based, NVIDIA GPU only
 3. **VOSK** - Lightweight, works on older systems
+4. **Groq** - Cloud API, sub-second latency, no local model needed
 
 The installer will:
 - **Auto-detect your hardware** (GPU, RAM, Vulkan support)
@@ -152,6 +153,12 @@ NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
 curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
 ```
 Lightweight option (~40MB), works on systems with 4GB RAM.
+
+**Groq - cloud API with sub-second latency:**
+```bash
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=groq
+```
+No local model download needed. Requires a Groq API key from [console.groq.com](https://console.groq.com).
 
 ### Alternative: Install from Source
 
@@ -234,6 +241,7 @@ vocalinux --debug                 # Enable debug logging
 vocalinux --engine whisper_cpp    # Use whisper.cpp engine (default)
 vocalinux --engine whisper        # Use OpenAI Whisper engine
 vocalinux --engine vosk           # Use VOSK engine
+vocalinux --engine groq           # Use Groq Whisper API engine
 vocalinux --model medium          # Use medium-sized model
 vocalinux --wayland               # Force Wayland mode
 vocalinux --start-minimized       # Start without first-run modal prompts
@@ -269,6 +277,7 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
   "speech_recognition": {
     "engine": "whisper_cpp",
     "model_size": "tiny",
+    "groq_model": "whisper-large-v3-turbo",
     "vad_sensitivity": 3,
     "silence_timeout": 2.0
   }
@@ -300,13 +309,14 @@ python -m vocalinux.main --debug
 ```
 vocalinux/
 ├── src/vocalinux/                 # Main application code
-│   ├── speech_recognition/        # Speech recognition engines (VOSK, Whisper, whisper.cpp)
+│   ├── speech_recognition/        # Speech recognition engines (VOSK, Whisper, whisper.cpp, Groq)
 │   │   └── recognition_manager.py # Unified engine interface
 │   ├── text_injection/            # Text injection (X11/Wayland)
 │   ├── ui/                        # GTK UI components
 │   └── utils/                     # Utility functions
 │       ├── whispercpp_model_info.py   # whisper.cpp model metadata & hardware detection
-│       └── vosk_model_info.py         # VOSK model metadata
+│       ├── vosk_model_info.py         # VOSK model metadata
+│       └── groq_model_info.py         # Groq Whisper API model metadata
 ├── tests/                         # Test suite
 ├── scripts/                       # Development utilities
 │   └── generate_sounds.py         # Sound generation script

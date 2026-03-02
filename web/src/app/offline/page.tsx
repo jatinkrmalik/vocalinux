@@ -145,7 +145,8 @@ export default function OfflinePage() {
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           Your voice never leaves your computer. All speech recognition happens locally using
           whisper.cpp, VOSK, or OpenAI Whisper models running on your hardware. No cloud. No
-          upload. No exceptions.
+          upload. No exceptions. (The optional Groq Whisper API engine is the one exception — it
+          uses a cloud API for users who prefer that tradeoff.)
         </p>
       </section>
 
@@ -243,6 +244,12 @@ export default function OfflinePage() {
         <p className="mt-4 text-sm text-emerald-700 dark:text-emerald-400">
           Models are downloaded once (39MB-1.5GB depending on size), then all processing happens
           locally. No network requests during dictation.
+        </p>
+        <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
+          <strong>Note:</strong> Vocalinux also offers an optional <strong>Groq Whisper API</strong> engine
+          for users who prefer cloud-based transcription with sub-second latency. This engine
+          requires an internet connection and a Groq API key — it is the only engine that sends
+          audio data over the network. All three engines listed above remain fully offline.
         </p>
       </section>
 

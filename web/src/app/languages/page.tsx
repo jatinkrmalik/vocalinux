@@ -10,8 +10,8 @@ const supportedLanguages = [
     name: "English",
     nativeName: "English",
     flag: "🇺🇸",
-    description: "Full support across all engines (whisper.cpp, Whisper, VOSK)",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    description: "Full support across all engines (whisper.cpp, Whisper, VOSK, Groq)",
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -20,7 +20,7 @@ const supportedLanguages = [
     nativeName: "Español",
     flag: "🇪🇸",
     description: "Complete Spanish language support for dictation",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -29,7 +29,7 @@ const supportedLanguages = [
     nativeName: "Français",
     flag: "🇫🇷",
     description: "French language voice typing and transcription",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -38,7 +38,7 @@ const supportedLanguages = [
     nativeName: "Deutsch",
     flag: "🇩🇪",
     description: "German dictation with high accuracy",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -47,7 +47,7 @@ const supportedLanguages = [
     nativeName: "Italiano",
     flag: "🇮🇹",
     description: "Italian voice recognition and text dictation",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -56,7 +56,7 @@ const supportedLanguages = [
     nativeName: "Português",
     flag: "🇧🇷",
     description: "Brazilian and European Portuguese support",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -65,7 +65,7 @@ const supportedLanguages = [
     nativeName: "Русский",
     flag: "🇷🇺",
     description: "Russian language speech-to-text transcription",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -74,7 +74,7 @@ const supportedLanguages = [
     nativeName: "中文",
     flag: "🇨🇳",
     description: "Mandarin Chinese voice dictation support",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
   {
@@ -83,7 +83,7 @@ const supportedLanguages = [
     nativeName: "हिन्दी",
     flag: "🇮🇳",
     description: "Hindi language voice typing and transcription",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
+    engines: ["whisper.cpp", "Whisper", "VOSK", "Groq"],
     modelSizes: ["tiny", "base", "small", "medium", "large"],
   },
 ];
@@ -98,7 +98,7 @@ const features = [
   {
     title: "Multi-Engine Support",
     description:
-      "All supported languages work across whisper.cpp, OpenAI Whisper, and VOSK engines.",
+      "All supported languages work across whisper.cpp, OpenAI Whisper, VOSK, and Groq Whisper API engines.",
     icon: Mic,
   },
   {

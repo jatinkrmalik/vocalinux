@@ -62,6 +62,7 @@ The new interactive installer guides you through engine selection:
 1. **whisper.cpp** ⭐ (Recommended) - Fast, works with any GPU via Vulkan
 2. **Whisper** (OpenAI) - PyTorch-based, NVIDIA GPU only
 3. **VOSK** - Lightweight, works on older systems
+4. **Groq** - Cloud API, sub-second latency, no local model needed
 
 The installer will auto-detect your hardware and recommend the best option!
 
@@ -73,6 +74,7 @@ Skip the interactive prompts with `--auto`:
 ./install.sh --auto                    # Default: whisper.cpp
 ./install.sh --auto --engine=whisper   # Use OpenAI Whisper
 ./install.sh --auto --engine=vosk      # Use VOSK only
+./install.sh --auto --engine=groq      # Use Groq Whisper API
 ```
 
 ### Development Installation
@@ -98,7 +100,7 @@ Installation Modes:
 Options:
   --interactive, -i  Force interactive mode (default)
   --auto           Non-interactive automatic installation
-  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk
+  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk, groq
   --dev            Install in development mode with all dev dependencies
   --test           Run tests after installation
   --venv-dir=PATH  Specify custom virtual environment directory
@@ -122,6 +124,7 @@ Examples:
    - **whisper.cpp** (default): High-performance C++ engine with Vulkan GPU support
    - **Whisper**: OpenAI's PyTorch-based engine (NVIDIA GPU only)
    - **VOSK**: Lightweight engine for older systems
+   - **Groq**: Cloud Whisper API with sub-second latency (requires API key)
 5. **Downloads speech recognition models**:
    - whisper.cpp: ~39MB tiny model (or larger if selected)
    - Whisper: ~75MB tiny model + PyTorch dependencies (~2.3GB with CUDA)
@@ -136,6 +139,7 @@ Examples:
 | **whisper.cpp** (default) | ~39-500MB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
 | Whisper (OpenAI) | ~2.3GB+ | ~5-10 min | NVIDIA only (CUDA) |
 | VOSK | ~40MB | ~30 sec | CPU only |
+| Groq | None (API) | ~10 sec | Cloud-based (API key required) |
 
 ## Running Vocalinux
 
@@ -161,6 +165,7 @@ vocalinux --debug                 # Enable debug logging
 vocalinux --engine whisper_cpp    # Use whisper.cpp engine (default)
 vocalinux --engine whisper        # Use OpenAI Whisper engine
 vocalinux --engine vosk           # Use VOSK engine
+vocalinux --engine groq           # Use Groq Whisper API engine
 vocalinux --model tiny            # Use tiny model (default, fastest)
 vocalinux --model small           # Use small model
 vocalinux --model medium          # Use medium model
@@ -373,7 +378,7 @@ Change the `engine` field:
 ```json
 {
   "speech_recognition": {
-    "engine": "whisper_cpp",  // Options: whisper_cpp, whisper, vosk
+    "engine": "whisper_cpp",  // Options: whisper_cpp, whisper, vosk, groq
     "model_size": "tiny"
   }
 }

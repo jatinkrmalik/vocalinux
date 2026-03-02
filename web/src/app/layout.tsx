@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s | Vocalinux",
   },
   description:
-    "Free and open-source voice dictation for Linux. Convert speech to text offline with whisper.cpp and VOSK on Ubuntu, Fedora, Arch, X11, and Wayland.",
+    "Free and open-source voice dictation for Linux. Convert speech to text with whisper.cpp, VOSK, and Groq Whisper API on Ubuntu, Fedora, Arch, X11, and Wayland.",
   applicationName: SITE_NAME,
   keywords: [
     "voice dictation linux",
@@ -92,7 +92,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Vocalinux: Offline Voice Dictation for Linux",
     description:
-      "Speech-to-text for Linux with whisper.cpp and VOSK. 100% offline, privacy-first, and open-source.",
+      "Speech-to-text for Linux with whisper.cpp, VOSK, and Groq Whisper API. Offline-first, privacy-focused, and open-source.",
     images: [DEFAULT_OG_IMAGE_PATH],
     creator: TWITTER_HANDLE,
     site: TWITTER_HANDLE,

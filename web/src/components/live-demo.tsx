@@ -518,7 +518,8 @@ export function LiveDemo() {
                         </p>
                         <p className="text-zinc-500 mt-1">
                             Vocalinux runs <strong>100% offline</strong> using Whisper AI — no cloud, no data sharing,
-                            complete privacy. <a href="#install" className="text-primary hover:underline">Install it</a> to
+                            complete privacy. Or choose the Groq Whisper API for cloud-powered sub-second latency.{" "}
+                            <a href="#install" className="text-primary hover:underline">Install it</a> to
                             experience the real deal!
                         </p>
                     </div>
