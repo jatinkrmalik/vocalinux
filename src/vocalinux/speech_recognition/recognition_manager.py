@@ -18,11 +18,7 @@ from typing import Callable, List, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import (
-    WHISPERCPP_MODEL_INFO,
-    get_model_path,
-    is_model_downloaded,
-)
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
 
 
@@ -104,6 +100,59 @@ def get_audio_input_devices() -> list:
         logger.error(f"Error enumerating audio devices: {e}")
 
     return devices
+
+
+def _get_supported_channels(audio, device_index: int = None) -> int:
+    """
+    Detect the supported number of channels for the audio device.
+
+    Some audio devices (particularly professional audio interfaces and certain
+    onboard audio chips) only support specific channel configurations. This
+    function tests mono (1) and stereo (2) to find a working configuration.
+
+    Args:
+        audio: PyAudio instance
+        device_index: The device index to test (None for default)
+
+    Returns:
+        int: Number of channels supported (1 or 2), defaults to 1
+    """
+    import pyaudio
+
+    FORMAT = pyaudio.paInt16
+    CHUNK = 1024
+    RATE = 16000  # Use standard rate for channel testing
+
+    # Try mono first (preferred for speech recognition)
+    for channels in [1, 2]:
+        try:
+            stream_kwargs = {
+                "format": FORMAT,
+                "channels": channels,
+                "rate": RATE,
+                "input": True,
+                "frames_per_buffer": CHUNK,
+            }
+            if device_index is not None:
+                stream_kwargs["input_device_index"] = device_index
+
+            test_stream = audio.open(**stream_kwargs)
+            test_stream.close()
+            logger.debug(f"Device supports {channels} channel(s)")
+            return channels
+        except (IOError, OSError) as e:
+            error_str = str(e).lower()
+            if "invalid number of channels" in error_str or "-9998" in error_str:
+                logger.debug(f"Device does not support {channels} channel(s)")
+                continue
+            else:
+                # Different error, try next channel count anyway
+                logger.debug(f"Channel test failed for {channels} channel(s): {e}")
+                continue
+
+    # Default to mono if we couldn't determine
+    logger.warning("Could not determine supported channel count, defaulting to 1")
+    return 1
 
 
 def _get_supported_sample_rate(audio, device_index: int, channels: int = 1) -> int:
@@ -220,7 +269,6 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
 
         CHUNK = 1024
         FORMAT = pyaudio.paInt16
-        CHANNELS = 1
 
         audio = pyaudio.PyAudio()
 
@@ -237,6 +285,10 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             result["error"] = f"Cannot get device info: {e}"
             audio.terminate()
             return result
+
+        # Detect supported channel count first (some devices require stereo)
+        CHANNELS = _get_supported_channels(audio, device_index)
+        logger.info(f"Using {CHANNELS} channel(s) for audio test")
 
         # Detect supported sample rate for this device
         RATE = _get_supported_sample_rate(audio, device_index, CHANNELS)
@@ -461,6 +513,11 @@ class SpeechRecognitionManager:
         self.model = None
         self.recognizer = None  # Added for VOSK
         self.command_processor = CommandProcessor()
+
+        # Voice commands: None=auto (VOSK=yes, Whisper=no), True=always on, False=always off
+        self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
+
         self.text_callbacks: List[Callable[[str], None]] = []
         self.state_callbacks: List[Callable[[RecognitionState], None]] = []
         self.action_callbacks: List[Callable[[str], None]] = []
@@ -515,6 +572,12 @@ class SpeechRecognitionManager:
             self._init_whispercpp()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
+
+    def _resolve_voice_commands_enabled(self) -> bool:
+        """Resolve effective voice commands state from preference and engine."""
+        if self._voice_commands_preference is None:
+            return self.engine == "vosk"
+        return bool(self._voice_commands_preference)
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
@@ -1466,9 +1529,11 @@ class SpeechRecognitionManager:
         # Stop recording FIRST to prevent capturing the stop sound
         self.should_record = False
 
-        # Wait briefly for audio thread to stop recording
+        # Wait for audio thread to finish recording and enqueue any pending audio
+        # This is critical to prevent race condition where recognition thread exits
+        # before the final audio segment is enqueued
         if self.audio_thread and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=0.1)
+            self.audio_thread.join(timeout=2.0)
 
         # Discard the last ~1 second of audio to avoid transcribing the stop sound
         # Audio is recorded in 1024-sample chunks at 16000 Hz = ~64ms per chunk
@@ -1486,17 +1551,18 @@ class SpeechRecognitionManager:
                 self.audio_buffer = []
 
             if self.audio_buffer:
+                logger.info(f"DEBUG: Enqueuing final buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
 
         # Now play the stop sound (after recording has stopped)
         play_stop_sound()
 
-        # Wait for threads to finish
-        if self.audio_thread and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=1.0)
-
         # Wake up recognition thread so it can drain queued segments and stop
+        self._signal_recognition_stop()
+
+        if self.recognition_thread and self.recognition_thread.is_alive():
+            self.recognition_thread.join(timeout=5.0)  # Increased timeout for transcription
         self._signal_recognition_stop()
 
         if self.recognition_thread and self.recognition_thread.is_alive():
@@ -1523,7 +1589,6 @@ class SpeechRecognitionManager:
             # PyAudio configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
-            CHANNELS = 1
 
             # Initialize PyAudio with reconnection support
             self._pyaudio_instance = pyaudio.PyAudio()
@@ -1540,6 +1605,10 @@ class SpeechRecognitionManager:
                         )
                 except (IOError, OSError):
                     continue
+
+            # Detect supported channel count first (some devices require stereo)
+            CHANNELS = _get_supported_channels(audio, self.audio_device_index)
+            logger.info(f"Using {CHANNELS} channel(s) for recording")
 
             # Detect supported sample rate for the selected device
             RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
@@ -1612,6 +1681,15 @@ class SpeechRecognitionManager:
                             logger.info(f"Buffer trimmed by {remove_count} chunks")
 
                         data = stream.read(CHUNK, exception_on_overflow=False)
+
+                        # Convert stereo to mono if necessary
+                        # Speech recognition engines expect mono (1 channel) audio
+                        if CHANNELS == 2:
+                            audio_array = np.frombuffer(data, dtype=np.int16)
+                            # Reshape to (n_samples, 2) and average channels
+                            stereo_samples = audio_array.reshape(-1, 2)
+                            mono_samples = stereo_samples.mean(axis=1).astype(np.int16)
+                            data = mono_samples.tobytes()
 
                         # Resample to 16kHz if capturing at non-16kHz for Vosk/Whisper compatibility
                         if self._capture_sample_rate != 16000:
@@ -1779,13 +1857,28 @@ class SpeechRecognitionManager:
             logger.error(f"Unknown engine: {self.engine}")
             return
 
-        # Process commands
+        # Process text - either with voice commands or pass through directly
+        logger.info(
+            f"DEBUG: _process_audio_buffer got text='{text[:50] if text else '(empty)'}...'"
+        )
         if text:
-            processed_text, actions = self.command_processor.process_text(text)
+            if self._voice_commands_enabled:
+                # Process with voice commands (original behavior)
+                processed_text, actions = self.command_processor.process_text(text)
+            else:
+                # Voice commands disabled - pass text through directly (Whisper handles punctuation)
+                processed_text = text.strip()
+                actions = []
 
             # Call text callbacks with processed text
+            logger.info(
+                f"DEBUG: processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+            )
             if processed_text:
                 for callback in self.text_callbacks:
+                    logger.info(
+                        f"DEBUG: invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                    )
                     callback(processed_text)
 
             # Call action callbacks for each action
@@ -1795,28 +1888,89 @@ class SpeechRecognitionManager:
 
     def _perform_recognition(self):
         """Perform speech recognition in real-time."""
-        while self.should_record or not self._segment_queue.empty():
+        logger.info("DEBUG: _perform_recognition thread started")
+        while True:
+            logger.debug(
+                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
+            )
             try:
                 segment = self._segment_queue.get(timeout=0.1)
             except queue.Empty:
-                continue
+                # Only exit if we're not recording AND queue is empty
+                if not self.should_record and self._segment_queue.empty():
+                    logger.info(
+                        "DEBUG: Recognition loop - not recording and queue empty, checking for final items..."
+                    )
+                    # Give a brief moment for any final items to be enqueued
+                    try:
+                        segment = self._segment_queue.get(timeout=0.5)
+                    except queue.Empty:
+                        logger.info("DEBUG: Recognition loop - no more items, exiting")
+                        break
+                else:
+                    logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
+                    continue
 
             if segment is None:
-                continue
+                logger.info(
+                    "DEBUG: Recognition loop - got None signal, draining remaining items..."
+                )
+                # Drain any remaining items before exiting
+                while not self._segment_queue.empty():
+                    try:
+                        remaining = self._segment_queue.get_nowait()
+                        if remaining is not None:
+                            logger.info(
+                                f"DEBUG: Recognition loop - processing remaining segment with {len(remaining)} chunks"
+                            )
+                            self._update_state(RecognitionState.PROCESSING)
+                            self._process_audio_buffer(remaining)
+                    except queue.Empty:
+                        break
+                logger.info("DEBUG: Recognition loop - exiting after None signal")
+                break
 
+            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
             self._update_state(RecognitionState.PROCESSING)
             self._process_audio_buffer(segment)
             if self.should_record:
                 self._update_state(RecognitionState.LISTENING)
+        logger.info("DEBUG: _perform_recognition thread exiting")
+        """Perform speech recognition in real-time."""
+        logger.info("DEBUG: _perform_recognition thread started")
+        while self.should_record or not self._segment_queue.empty():
+            logger.debug(
+                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
+            )
+            try:
+                segment = self._segment_queue.get(timeout=0.1)
+            except queue.Empty:
+                logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
+                continue
+
+            if segment is None:
+                logger.info("DEBUG: Recognition loop - got None signal, continuing")
+                continue
+
+            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
+            self._update_state(RecognitionState.PROCESSING)
+            self._process_audio_buffer(segment)
+            if self.should_record:
+                self._update_state(RecognitionState.LISTENING)
+        logger.info("DEBUG: _perform_recognition thread exiting")
 
     def _enqueue_audio_segment(self, audio_buffer: List[bytes]):
         """Queue an audio segment for asynchronous transcription."""
         segment = audio_buffer.copy()
         if not segment:
+            logger.warning("DEBUG: _enqueue_audio_segment called with empty buffer")
             return
+
+        logger.info(f"DEBUG: _enqueue_audio_segment called with {len(segment)} chunks")
 
         try:
             self._segment_queue.put_nowait(segment)
+            logger.info("DEBUG: Enqueued segment successfully")
         except queue.Full:
             logger.warning("Transcription queue is full, dropping oldest pending segment")
             try:
@@ -1892,6 +2046,11 @@ class SpeechRecognitionManager:
             else:
                 self.audio_device_index = audio_device_index
 
+        if "voice_commands_enabled" in kwargs:
+            self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
+
         if restart_needed:
             logger.info("Engine or model changed, re-initializing...")
             # When reconfiguring from UI, allow downloads
@@ -1966,7 +2125,10 @@ class SpeechRecognitionManager:
             # Stream configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
-            CHANNELS = 1
+
+            # Detect supported channel count first (some devices require stereo)
+            CHANNELS = _get_supported_channels(audio_instance, self.audio_device_index)
+            logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
 
             # Detect supported sample rate for the device
             RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)

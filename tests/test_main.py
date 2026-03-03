@@ -220,6 +220,7 @@ class TestMainModule(unittest.TestCase):
                 vad_sensitivity=3,
                 silence_timeout=2.0,
                 audio_device_index=None,
+                voice_commands_enabled=None,
             )
             mock_text.assert_called_once_with(wayland_mode=True)
             mock_action_handler.assert_called_once_with(mock_text_instance)

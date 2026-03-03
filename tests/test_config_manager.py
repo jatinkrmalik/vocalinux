@@ -378,3 +378,32 @@ class TestConfigManager(unittest.TestCase):
         self.assertIn("speech_recognition", config_manager.config)
         self.assertEqual(config_manager.config["speech_recognition"]["engine"], "whisper")
         self.assertEqual(config_manager.config["speech_recognition"]["vad_sensitivity"], 5)
+
+    def test_migrate_super_shortcut_to_ctrl(self):
+        test_config = {
+            "shortcuts": {
+                "toggle_recognition": "super+super",
+                "mode": "toggle",
+            }
+        }
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+        self.assertEqual(config_manager.config["shortcuts"]["toggle_recognition"], "ctrl+ctrl")
+
+    def test_non_super_shortcut_unchanged(self):
+        test_config = {
+            "shortcuts": {
+                "toggle_recognition": "alt+alt",
+                "mode": "push_to_talk",
+            }
+        }
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+        self.assertEqual(config_manager.config["shortcuts"]["toggle_recognition"], "alt+alt")
+        self.assertEqual(config_manager.config["shortcuts"]["mode"], "push_to_talk")

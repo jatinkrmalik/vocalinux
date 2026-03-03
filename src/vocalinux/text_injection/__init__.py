@@ -9,6 +9,7 @@ from .ibus_engine import (  # noqa: F401
     install_ibus_component,
     is_engine_active,
     is_engine_registered,
+    is_ibus_active_input_method,
     is_ibus_available,
     start_ibus_daemon,
 )

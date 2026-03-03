@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
+        "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
@@ -33,7 +34,8 @@ DEFAULT_CONFIG = {
     },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
-        # Supported values: "ctrl+ctrl", "alt+alt", "shift+shift", "super+super"
+        "mode": "toggle",  # "toggle" or "push_to_talk"
+        # Supported values: "ctrl+ctrl", "alt+alt", "shift+shift"
         # These represent double-tap shortcuts for the respective modifier keys
     },
     "ui": {
@@ -96,6 +98,8 @@ class ConfigManager:
             if needs_migration:
                 self._migrate_config(user_config)
 
+            self._migrate_shortcuts_config()
+
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
 
@@ -131,6 +135,15 @@ class ConfigManager:
 
         self.save_config()
         logger.info("Config migrated to new per-engine model format")
+
+    def _migrate_shortcuts_config(self):
+        shortcuts_config = self.config.get("shortcuts", {})
+        shortcut = shortcuts_config.get("toggle_recognition")
+
+        if shortcut == "super+super":
+            shortcuts_config["toggle_recognition"] = "ctrl+ctrl"
+            self.save_config()
+            logger.info("Migrated deprecated super+super shortcut to ctrl+ctrl")
 
     def save_config(self):
         """Save the current configuration to the config file."""
@@ -229,6 +242,24 @@ class ConfigManager:
         # Also update the generic model_size for backward compatibility
         self.config["speech_recognition"]["model_size"] = model_size
         logger.info(f"Set {engine} model size to: {model_size}")
+
+    def is_voice_commands_enabled(self) -> bool:
+        """Check if voice commands should be enabled.
+
+        Returns:
+            True if voice commands should be enabled, False otherwise.
+            If voice_commands_enabled is None (auto), returns True for VOSK,
+            False for Whisper engines.
+        """
+        sr_config = self.config.get("speech_recognition", {})
+        enabled = sr_config.get("voice_commands_enabled")
+
+        if enabled is None:
+            # Auto mode: enabled for VOSK, disabled for Whisper engines
+            engine = sr_config.get("engine", "whisper_cpp")
+            return engine == "vosk"
+
+        return enabled
 
     def update_speech_recognition_settings(self, settings: Dict[str, Any]):
         """Update multiple speech recognition settings at once."""

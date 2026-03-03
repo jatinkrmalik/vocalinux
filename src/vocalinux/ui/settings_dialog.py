@@ -36,7 +36,11 @@ from ..utils.whispercpp_model_info import (
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
-from .keyboard_backends import SHORTCUT_DISPLAY_NAMES, SUPPORTED_SHORTCUTS  # noqa: E402
+from .keyboard_backends import (  # noqa: E402
+    SHORTCUT_DISPLAY_NAMES,
+    SHORTCUT_MODES,
+    SUPPORTED_SHORTCUTS,
+)
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -560,13 +564,15 @@ class PreferenceRow(Gtk.ListBoxRow):
         title_label.get_style_context().add_class("preference-row-title")
         text_box.pack_start(title_label, False, False, 0)
 
+        # Store subtitle label reference for later updates
+        self.subtitle_label = None
         if subtitle:
-            subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
-            subtitle_label.get_style_context().add_class("preference-row-subtitle")
-            subtitle_label.set_max_width_chars(40)
-            subtitle_label.set_line_wrap(True)
-            subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            text_box.pack_start(subtitle_label, False, False, 0)
+            self.subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
+            self.subtitle_label.get_style_context().add_class("preference-row-subtitle")
+            self.subtitle_label.set_max_width_chars(40)
+            self.subtitle_label.set_line_wrap(True)
+            self.subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            text_box.pack_start(self.subtitle_label, False, False, 0)
 
         hbox.pack_start(text_box, True, True, 0)
 
@@ -576,6 +582,11 @@ class PreferenceRow(Gtk.ListBoxRow):
             hbox.pack_end(widget, False, False, 0)
 
         self.add(hbox)
+
+    def set_subtitle(self, subtitle: str):
+        """Update the subtitle text."""
+        if self.subtitle_label:
+            self.subtitle_label.set_text(subtitle)
 
 
 class ModelDownloadDialog(Gtk.Dialog):
@@ -1081,23 +1092,61 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(silence_row)
 
+        # Voice Commands Toggle
+        self.voice_commands_switch = Gtk.Switch()
+        self.voice_commands_switch.set_tooltip_text(
+            "Enable voice commands like 'new line', 'period', 'undo', etc.\n"
+            "Useful for VOSK engine. Whisper engines handle punctuation automatically."
+        )
+        voice_commands_row = PreferenceRow(
+            title="Voice Commands",
+            subtitle="Enable voice commands for punctuation and editing",
+            widget=self.voice_commands_switch,
+        )
+        group.add_row(voice_commands_row)
+
         self.recognition_settings_tab.pack_start(group, False, False, 0)
 
         # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
+        self.voice_commands_switch.connect("state-set", self._on_voice_commands_toggled)
 
     def _build_shortcuts_section(self):
         """Build the Keyboard Shortcuts section."""
         group = PreferencesGroup(
             title="Keyboard Shortcuts",
-            description="Configure the shortcut to toggle voice recognition",
+            description="Configure the shortcut to control voice recognition",
         )
+
+        # Mode selection (Toggle vs Push-to-Talk)
+        self.shortcut_mode_combo = Gtk.ComboBoxText()
+        self.shortcut_mode_combo.set_size_request(200, -1)
+        self.shortcut_mode_combo.set_tooltip_text(
+            "Choose between toggle (double-tap) or push-to-talk mode"
+        )
+        _prevent_scroll_on_hover(self.shortcut_mode_combo)
+
+        # Populate mode options
+        for mode_id, display_name in SHORTCUT_MODES.items():
+            self.shortcut_mode_combo.append(mode_id, display_name)
+
+        # Load current mode from config
+        current_mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        if not self.shortcut_mode_combo.set_active_id(current_mode):
+            self.shortcut_mode_combo.set_active_id("toggle")
+
+        mode_row = PreferenceRow(
+            title="Shortcut Mode",
+            subtitle="How the shortcut behaves",
+            widget=self.shortcut_mode_combo,
+        )
+        group.add_row(mode_row)
 
         # Shortcut selection combo
         self.shortcut_combo = Gtk.ComboBoxText()
         self.shortcut_combo.set_size_request(200, -1)
-        self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut to toggle voice typing")
+        self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut for voice typing")
         _prevent_scroll_on_hover(self.shortcut_combo)
 
         # Populate shortcut options
@@ -1109,12 +1158,12 @@ class SettingsDialog(Gtk.Dialog):
         if not self.shortcut_combo.set_active_id(current_shortcut):
             self.shortcut_combo.set_active_id("ctrl+ctrl")
 
-        shortcut_row = PreferenceRow(
-            title="Toggle Recognition",
-            subtitle="Press this shortcut twice quickly to start/stop",
+        self.shortcut_row = PreferenceRow(
+            title="Shortcut Key",
+            subtitle="Press this key to control voice typing",
             widget=self.shortcut_combo,
         )
-        group.add_row(shortcut_row)
+        group.add_row(self.shortcut_row)
 
         self.shortcuts_tab.pack_start(group, False, False, 0)
 
@@ -1129,7 +1178,7 @@ class SettingsDialog(Gtk.Dialog):
         info_box.pack_start(info_icon, False, False, 0)
 
         self.shortcut_info_label = Gtk.Label(
-            label="Changes take effect immediately. Double-tap the key to toggle voice typing.",
+            label="Changes take effect immediately.",
             xalign=0,
             wrap=True,
         )
@@ -1138,8 +1187,64 @@ class SettingsDialog(Gtk.Dialog):
 
         self.shortcuts_tab.pack_start(info_box, False, False, 0)
 
-        # Connect signal
+        # Connect signals
         self.shortcut_combo.connect("changed", self._on_shortcut_changed)
+        self.shortcut_mode_combo.connect("changed", self._on_shortcut_mode_changed)
+
+        # Update UI based on initial mode
+        self._update_shortcut_ui_for_mode(current_mode)
+
+    def _update_shortcut_ui_for_mode(self, mode: str):
+        """Update the shortcut UI based on the selected mode."""
+        if mode == "toggle":
+            self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+            self.shortcut_info_label.set_text(
+                "In Toggle mode: Double-tap the key to start voice typing, double-tap again to stop."
+            )
+        elif mode == "push_to_talk":
+            self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
+            self.shortcut_info_label.set_text(
+                "In Push-to-Talk mode: Hold the key down to speak, release to stop recording."
+            )
+
+    def _on_shortcut_mode_changed(self, widget):
+        """Handle shortcut mode selection change."""
+        if self._initializing:
+            return
+
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        if not mode_id:
+            return
+
+        # Save to config
+        self.config_manager.set("shortcuts", "mode", mode_id)
+        self.config_manager.save_settings()
+
+        mode_name = SHORTCUT_MODES.get(mode_id, mode_id)
+        logger.info(f"Keyboard shortcut mode changed to: {mode_name}")
+
+        # Update UI to reflect new mode
+        self._update_shortcut_ui_for_mode(mode_id)
+
+        # Try to apply the mode change live
+        if self.shortcut_update_callback:
+            shortcut_id = self.shortcut_combo.get_active_id()
+            success = self.shortcut_update_callback(shortcut_id, mode_id)
+            if success:
+                self.shortcut_info_label.set_markup(
+                    f"<span foreground='#26a269'>Mode updated to <b>{mode_name}</b>. "
+                    f"Active now!</span>"
+                )
+            else:
+                self.shortcut_info_label.set_markup(
+                    f"<i>Mode updated to <b>{mode_name}</b>. "
+                    f"Restart the app for the change to take full effect.</i>"
+                )
+        else:
+            self.shortcut_info_label.set_markup(
+                f"<i>Mode updated to <b>{mode_name}</b>. "
+                f"Restart the app for the change to take full effect.</i>"
+            )
 
     def _on_shortcut_changed(self, widget):
         """Handle shortcut selection change."""
@@ -1159,7 +1264,8 @@ class SettingsDialog(Gtk.Dialog):
 
         # Try to apply the shortcut change live
         if self.shortcut_update_callback:
-            success = self.shortcut_update_callback(shortcut_id)
+            mode_id = self.shortcut_mode_combo.get_active_id()
+            success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(
                     f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
@@ -1171,7 +1277,6 @@ class SettingsDialog(Gtk.Dialog):
                     f"Restart the app for the change to take full effect.</i>"
                 )
         else:
-            # No callback provided, fall back to restart message
             self.shortcut_info_label.set_markup(
                 f"<i>Shortcut updated to <b>{display_name}</b>. "
                 f"Restart the app for the change to take full effect.</i>"
@@ -1341,6 +1446,10 @@ class SettingsDialog(Gtk.Dialog):
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
 
+        # Set voice commands switch based on config
+        voice_commands_enabled = self.config_manager.is_voice_commands_enabled()
+        self.voice_commands_switch.set_active(voice_commands_enabled)
+
     def _get_current_settings(self):
         """Get current settings from config manager."""
         self.config_manager.load_config()
@@ -1468,6 +1577,18 @@ class SettingsDialog(Gtk.Dialog):
         self.language_combo.set_active_id(self.language)
         self._update_engine_specific_ui()
         self._update_model_info()
+        self._update_voice_commands_for_engine()
+
+    def _update_voice_commands_for_engine(self):
+        """Update voice commands switch based on current engine."""
+        sr_config = self.config_manager.get_settings().get("speech_recognition", {})
+        voice_commands_enabled = sr_config.get("voice_commands_enabled")
+
+        if voice_commands_enabled is None:
+            engine_text = self.engine_combo.get_active_text()
+            engine = engine_text.lower() if engine_text else sr_config.get("engine", "whisper_cpp")
+            auto_enabled = engine == "vosk"
+            self.voice_commands_switch.set_active(auto_enabled)
 
     def _on_model_changed(self, widget):
         """Handle changes in the selected model."""
@@ -1484,6 +1605,23 @@ class SettingsDialog(Gtk.Dialog):
     def _on_silence_changed(self, widget):
         """Handle changes in silence timeout."""
         self._auto_apply_settings()
+
+    def _on_voice_commands_toggled(self, widget, state):
+        """Handle toggle of the voice commands switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Voice commands toggled: {enabled}")
+
+        self.config_manager.set("speech_recognition", "voice_commands_enabled", enabled)
+        self.config_manager.save_settings()
+        try:
+            self.speech_engine.reconfigure(voice_commands_enabled=enabled, force_download=False)
+        except Exception as e:
+            logger.warning(f"Failed to apply voice commands toggle immediately: {e}")
+        logger.info(f"Voice commands {'enabled' if enabled else 'disabled'}")
+        return False
 
     def _populate_language_options(self):
         """Populate language dropdown with supported languages."""
@@ -1805,17 +1943,27 @@ class SettingsDialog(Gtk.Dialog):
 
         self.speech_engine.stop_recognition()
 
-        if hasattr(self, "_saved_text_callbacks"):
-            self.speech_engine.set_text_callbacks(self._saved_text_callbacks)
-            del self._saved_text_callbacks
+        # Wait a bit for any pending transcription to complete before restoring callbacks
+        # This ensures the test callback receives the transcription result
+        GLib.timeout_add(500, self._restore_callbacks_and_check_result)
 
         self._test_active = False
         self.test_button.set_sensitive(True)
         self.test_button.set_label("Start Test (3 seconds)")
 
         self.update_recognition_progress("Idle")
-        GLib.timeout_add(200, self._check_test_result)
 
+        return False
+
+    def _restore_callbacks_and_check_result(self):
+        """Restore callbacks and check test result after delay."""
+        # Restore original text callbacks
+        if hasattr(self, "_saved_text_callbacks"):
+            self.speech_engine.set_text_callbacks(self._saved_text_callbacks)
+            del self._saved_text_callbacks
+
+        # Check result after giving time for final callbacks to complete
+        GLib.timeout_add(300, self._check_test_result)
         return False
 
     def _check_test_result(self):

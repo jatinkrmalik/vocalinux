@@ -10,8 +10,8 @@ const shortcutCategories = [
     icon: Mic,
     iconColor: "text-blue-500",
     shortcuts: [
-      { keys: ["Ctrl", "Ctrl"], action: "Toggle dictation on/off (double-tap)", note: "Primary activation" },
-      { keys: ["Ctrl", "Ctrl"], action: "Start/stop recording", note: "Same as toggle" },
+      { keys: ["Ctrl", "Ctrl"], action: "Toggle mode: start/stop dictation", note: "Default mode" },
+      { keys: ["Hold Ctrl"], action: "Push-to-talk mode: speak while held", note: "Release to stop" },
     ],
   },
   {
@@ -27,6 +27,7 @@ const shortcutCategories = [
       { keys: ["\"paste here\""], action: "Paste clipboard", note: "Voice command" },
       { keys: ["\"undo\""], action: "Undo last action", note: "Voice command" },
       { keys: ["\"redo\""], action: "Redo last action", note: "Voice command" },
+      { keys: ["Settings Toggle"], action: "Enable/disable voice commands", note: "Optional in v0.8.0-beta" },
     ],
   },
   {
@@ -43,7 +44,7 @@ const shortcutCategories = [
     icon: Settings,
     iconColor: "text-violet-500",
     shortcuts: [
-      { keys: ["Config File"], action: "~/.config/vocalinux/config.yaml", note: "Manual editing" },
+      { keys: ["Config File"], action: "~/.config/vocalinux/config.json", note: "Manual editing" },
     ],
   },
 ];
@@ -61,7 +62,7 @@ function Mic(props: { className?: string }) {
 export const metadata: Metadata = buildPageMetadata({
   title: "Keyboard Shortcuts & Voice Commands - Vocalinux",
   description:
-    "Learn Vocalinux keyboard shortcuts and voice commands. Double-tap Ctrl to dictate, use voice commands for editing, and customize your workflow.",
+    "Learn Vocalinux keyboard shortcut modes and voice commands. Use toggle mode or push-to-talk, then customize activation and command behavior.",
   path: "/shortcuts",
   keywords: [
     "vocalinux shortcuts",
@@ -78,7 +79,7 @@ export default function ShortcutsPage() {
     headline: "Vocalinux Keyboard Shortcuts & Voice Commands",
     description:
       "Complete guide to Vocalinux keyboard shortcuts and voice commands for efficient Linux voice dictation.",
-    dateModified: "2026-02-19",
+    dateModified: "2026-03-01",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -111,8 +112,8 @@ export default function ShortcutsPage() {
           Keyboard Shortcuts & Voice Commands
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Master Vocalinux with keyboard shortcuts and voice commands. Double-tap Ctrl to start
-          dictating, then use voice commands to edit and format.
+          Master Vocalinux with keyboard shortcuts and voice commands. Use toggle mode (double-tap)
+          or push-to-talk mode, then apply voice commands for editing and formatting.
         </p>
       </section>
 
@@ -130,8 +131,15 @@ export default function ShortcutsPage() {
             </kbd>
           </div>
           <span className="text-muted-foreground">→</span>
-          <span className="font-medium">Start/Stop Dictation</span>
+          <span className="font-medium">Toggle Mode: Start/Stop Dictation</span>
         </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Push-to-talk mode is also available: hold your configured key to dictate, release to stop.
+          You can switch modes in Settings.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Voice commands can be enabled or disabled from Settings depending on your workflow.
+        </p>
       </section>
 
       {/* Shortcut Categories */}
@@ -188,7 +196,7 @@ export default function ShortcutsPage() {
           configuration file directly:
         </p>
         <div className="rounded-lg bg-zinc-950 p-4">
-          <code className="text-sm text-green-400">~/.config/vocalinux/config.yaml</code>
+          <code className="text-sm text-green-400">~/.config/vocalinux/config.json</code>
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
           Open Vocalinux and access Settings from the tray icon to change keyboard shortcuts

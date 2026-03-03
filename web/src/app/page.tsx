@@ -65,7 +65,7 @@ const homeJsonLd = [
     },
     description:
       "Offline voice dictation and speech-to-text for Linux with whisper.cpp and VOSK.",
-    "softwareVersion": "0.7.0-beta",
+    "softwareVersion": "0.8.0-beta",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -77,7 +77,9 @@ const homeJsonLd = [
     featureList: [
       "100% offline speech recognition",
       "Works with X11 and Wayland",
-      "Double-tap Ctrl activation",
+      "Toggle and push-to-talk shortcut modes",
+      "Optional voice commands with VOSK-aware defaults",
+      "Adaptive audio and IBus-aware text injection",
       "whisper.cpp, Whisper, and VOSK support",
       "Linux desktop integration",
     ],
@@ -134,7 +136,7 @@ const homeJsonLd = [
       {
         "@type": "HowToStep",
         name: "Start dictating",
-        text: "Launch vocalinux and double-tap Ctrl to begin voice dictation.",
+        text: "Launch vocalinux and use toggle or push-to-talk shortcut mode to begin dictation.",
         url: "https://vocalinux.com/#install",
       },
     ],
@@ -290,7 +292,7 @@ export default function HomePage() {
             />
             <span className="font-bold text-lg sm:text-xl">Vocalinux</span>
             <span className="hidden sm:inline-block text-xs bg-gradient-to-r from-primary/20 to-green-500/20 text-primary border border-primary/30 px-2.5 py-1 rounded-full font-semibold shadow-sm shadow-primary/20">
-              v0.7.0 Beta
+              v0.8.0 Beta
             </span>
           </Link>
 
@@ -408,7 +410,7 @@ export default function HomePage() {
                 100% offline voice dictation for Linux.
               </p>
               <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto">
-                Just double-tap Ctrl and speak.
+                Use toggle mode or push-to-talk and start speaking.
               </p>
 
               {/* CTA Buttons */}
@@ -422,10 +424,20 @@ export default function HomePage() {
                 </a>
                 <a
                   href="#demo"
-                  className="inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 px-8 py-4 rounded-xl text-lg font-semibold transition-all"
+                  className="inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:scale-105 hover:shadow-md px-8 py-4 rounded-xl text-lg font-semibold transition-all"
                 >
                   <Play className="h-5 w-5" />
                   Watch Demo
+                </a>
+                <a
+                  href="https://github.com/jatinkrmalik/vocalinux"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View Vocalinux source code on GitHub (opens in a new tab)"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-lg font-semibold transition-all border border-zinc-300 bg-white text-zinc-900 hover:border-primary/60 hover:text-primary hover:shadow-md dark:border-cyan-400/40 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-cyan-300 dark:hover:bg-zinc-800/90"
+                >
+                  <Github className="h-5 w-5" />
+                  View Source
                 </a>
               </div>
             </motion.div>
@@ -553,8 +565,8 @@ export default function HomePage() {
               {[
                 {
                   icon: <Keyboard className="h-6 w-6 text-primary" />,
-                  title: "Double-tap Ctrl",
-                  description: "In the real app, just double-tap Ctrl to start dictating anywhere",
+                  title: "Flexible Shortcut Modes",
+                  description: "Use toggle mode (double-tap) or push-to-talk mode to dictate anywhere",
                 },
                 {
                   icon: <Zap className="h-6 w-6 text-primary" />,
@@ -617,7 +629,7 @@ export default function HomePage() {
             <FeatureCard
               icon={<Keyboard className="h-6 w-6 text-primary" />}
               title="Simple Activation"
-              description="Double-tap Ctrl to start, double-tap again to stop. No complex keyboard shortcuts to memorize."
+              description="Choose toggle mode (double-tap) or push-to-talk mode (hold key). Simple, predictable control."
             />
             <FeatureCard
               icon={<Globe className="h-6 w-6 text-primary" />}
@@ -627,7 +639,7 @@ export default function HomePage() {
             <FeatureCard
               icon={<Settings className="h-6 w-6 text-primary" />}
               title="Fully Configurable"
-              description="Adjust model size, language, activation method, and more. GUI settings panel or config file — your choice."
+              description="Adjust model size, language, activation mode, and voice command behavior. GUI settings panel or config file — your choice."
             />
           </div>
 
@@ -1086,7 +1098,12 @@ export default function HomePage() {
               {
                 question: "How do I customize the activation shortcut?",
                 answer:
-                  "The default is double-tap Ctrl. You can customize this via the GUI settings dialog or by editing ~/.config/vocalinux/config.yaml. Any key combination is supported.",
+                  "The default is toggle mode with double-tap Ctrl, and you can switch to push-to-talk in Settings. You can also customize this via the GUI settings dialog or by editing ~/.config/vocalinux/config.json.",
+              },
+              {
+                question: "Can I disable voice commands?",
+                answer:
+                  "Yes. Voice commands are optional and can be enabled or disabled in Settings. VOSK-focused setups can use auto behavior while keeping full control over command parsing.",
               },
               {
                 question: "Is Vocalinux free?",
