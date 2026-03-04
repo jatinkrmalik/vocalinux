@@ -36,6 +36,7 @@ from ..utils.whispercpp_model_info import (
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
+from . import audio_feedback  # noqa: E402
 from .keyboard_backends import (  # noqa: E402
     SHORTCUT_DISPLAY_NAMES,
     SHORTCUT_MODES,
@@ -916,9 +917,175 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_tab.pack_start(group, False, False, 0)
         self.audio_tab.pack_start(self.audio_test_status, False, False, 0)
 
+        self._build_sound_feedback_section()
+
         # Populate devices
         self._populate_audio_devices()
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
+
+    def _build_sound_feedback_section(self):
+        sound_group = PreferencesGroup(
+            title="Sound Feedback",
+            description="Customize start, stop, and error sounds for voice typing",
+        )
+
+        self.sound_effects_switch = Gtk.Switch()
+        sound_enabled_row = PreferenceRow(
+            title="Enable Sound Effects",
+            subtitle="Play sounds when recording starts, stops, or errors occur",
+            widget=self.sound_effects_switch,
+        )
+        sound_group.add_row(sound_enabled_row)
+
+        self.start_sound_label = Gtk.Label(label="Default", xalign=0)
+        self.start_sound_label.set_max_width_chars(24)
+        self.start_sound_label.set_ellipsize(Pango.EllipsizeMode.END)
+        start_row = PreferenceRow(
+            title="Start Sound",
+            subtitle="Played when voice typing starts",
+            widget=self._create_sound_controls("start", self.start_sound_label),
+        )
+        sound_group.add_row(start_row)
+
+        self.stop_sound_label = Gtk.Label(label="Default", xalign=0)
+        self.stop_sound_label.set_max_width_chars(24)
+        self.stop_sound_label.set_ellipsize(Pango.EllipsizeMode.END)
+        stop_row = PreferenceRow(
+            title="Stop Sound",
+            subtitle="Played when voice typing stops",
+            widget=self._create_sound_controls("stop", self.stop_sound_label),
+        )
+        sound_group.add_row(stop_row)
+
+        self.error_sound_label = Gtk.Label(label="Default", xalign=0)
+        self.error_sound_label.set_max_width_chars(24)
+        self.error_sound_label.set_ellipsize(Pango.EllipsizeMode.END)
+        error_row = PreferenceRow(
+            title="Error Sound",
+            subtitle="Played when recording fails or an error occurs",
+            widget=self._create_sound_controls("error", self.error_sound_label),
+        )
+        sound_group.add_row(error_row)
+
+        self.sound_feedback_status = Gtk.Label(label="", use_markup=True, xalign=0)
+        self.sound_feedback_status.set_margin_start(16)
+        self.sound_feedback_status.set_margin_top(4)
+        self.sound_feedback_status.get_style_context().add_class("status-info")
+
+        self.audio_tab.pack_start(sound_group, False, False, 0)
+        self.audio_tab.pack_start(self.sound_feedback_status, False, False, 0)
+
+        self.sound_effects_switch.connect("state-set", self._on_sound_effects_toggled)
+
+    def _create_sound_controls(self, event: str, label: Gtk.Label) -> Gtk.Box:
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        controls.pack_start(label, False, False, 0)
+
+        choose_button = Gtk.Button(label="Choose")
+        choose_button.connect("clicked", lambda _widget: self._on_choose_sound(event))
+        controls.pack_start(choose_button, False, False, 0)
+
+        preview_button = Gtk.Button(label="Preview")
+        preview_button.connect("clicked", lambda _widget: self._on_preview_sound(event))
+        controls.pack_start(preview_button, False, False, 0)
+
+        reset_button = Gtk.Button(label="Reset")
+        reset_button.connect("clicked", lambda _widget: self._on_reset_sound(event))
+        controls.pack_start(reset_button, False, False, 0)
+
+        return controls
+
+    def _on_sound_effects_toggled(self, _widget, state):
+        if self._initializing or self._applying_settings:
+            return False
+
+        self.config_manager.set_sound_effect_enabled(bool(state))
+        self.config_manager.save_settings()
+        status = "enabled" if state else "disabled"
+        self.sound_feedback_status.set_markup(
+            f"<span foreground='#26a269'>Sound effects {status}</span>"
+        )
+        return False
+
+    def _show_sound_feedback_error(self, message: str):
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text="Invalid Sound File",
+        )
+        dialog.format_secondary_text(message)
+        dialog.run()
+        dialog.destroy()
+
+    def _on_choose_sound(self, event: str):
+        chooser = Gtk.FileChooserDialog(
+            title="Select Custom Sound",
+            transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        chooser.add_buttons(
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN,
+            Gtk.ResponseType.OK,
+        )
+
+        audio_filter = Gtk.FileFilter()
+        audio_filter.set_name("Supported audio files")
+        audio_filter.add_pattern("*.wav")
+        audio_filter.add_pattern("*.ogg")
+        audio_filter.add_pattern("*.oga")
+        chooser.add_filter(audio_filter)
+
+        response = chooser.run()
+        selected_path = chooser.get_filename() if response == Gtk.ResponseType.OK else None
+        chooser.destroy()
+
+        if not selected_path:
+            return
+
+        is_valid, error_message = audio_feedback.validate_custom_sound_file(selected_path)
+        if not is_valid:
+            self._show_sound_feedback_error(error_message)
+            return
+
+        self.config_manager.set_sound_effect_path(event, selected_path)
+        self.config_manager.save_settings()
+        self._update_sound_feedback_labels()
+        self.sound_feedback_status.set_markup(
+            "<span foreground='#26a269'>Custom sound saved</span>"
+        )
+
+    def _on_reset_sound(self, event: str):
+        self.config_manager.set_sound_effect_path(event, "")
+        self.config_manager.save_settings()
+        self._update_sound_feedback_labels()
+        self.sound_feedback_status.set_markup("<i>Sound reset to default</i>")
+
+    def _on_preview_sound(self, event: str):
+        sound_path = audio_feedback.get_sound_path_for_event(event)
+        if not sound_path:
+            self.sound_feedback_status.set_markup("<i>Sound effects are currently disabled</i>")
+            return
+
+        if audio_feedback.play_custom_sound(sound_path):
+            self.sound_feedback_status.set_markup("<i>Preview played</i>")
+        else:
+            self.sound_feedback_status.set_markup(
+                "<span foreground='#c01c28'>Could not play preview</span>"
+            )
+
+    def _update_sound_feedback_labels(self):
+        sound_settings = self.config_manager.get_sound_effects_settings()
+        for event, label in [
+            ("start", self.start_sound_label),
+            ("stop", self.stop_sound_label),
+            ("error", self.error_sound_label),
+        ]:
+            path_value = str(sound_settings.get(f"{event}_sound_path", "") or "").strip()
+            label.set_text(os.path.basename(path_value) if path_value else "Default")
 
     def _build_general_section(self):
         """Build the General section with autostart and UI settings."""
@@ -1385,6 +1552,10 @@ class SettingsDialog(Gtk.Dialog):
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
+
+        sound_settings = self.config_manager.get_sound_effects_settings()
+        self.sound_effects_switch.set_active(sound_settings.get("enabled", True))
+        self._update_sound_feedback_labels()
 
         # Populate engine combo with only available engines
         available_engines = get_available_engines()

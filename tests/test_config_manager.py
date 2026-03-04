@@ -49,6 +49,8 @@ class TestConfigManager(unittest.TestCase):
         """Test initialization with default configuration."""
         config_manager = ConfigManager()
         self.assertEqual(config_manager.config, DEFAULT_CONFIG)
+        self.assertIn("sound_effects", config_manager.config)
+        self.assertTrue(config_manager.config["sound_effects"]["enabled"])
         self.mock_logger.info.assert_called_with(
             f"Config file not found at {self.temp_config_file}. Using defaults."
         )
@@ -407,3 +409,30 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
         self.assertEqual(config_manager.config["shortcuts"]["toggle_recognition"], "alt+alt")
         self.assertEqual(config_manager.config["shortcuts"]["mode"], "push_to_talk")
+
+    def test_get_sound_effects_settings_defaults(self):
+        config_manager = ConfigManager()
+        sound_settings = config_manager.get_sound_effects_settings()
+
+        self.assertTrue(sound_settings["enabled"])
+        self.assertEqual(sound_settings["start_sound_path"], "")
+        self.assertEqual(sound_settings["stop_sound_path"], "")
+        self.assertEqual(sound_settings["error_sound_path"], "")
+
+    def test_set_sound_effect_enabled(self):
+        config_manager = ConfigManager()
+        config_manager.set_sound_effect_enabled(False)
+        self.assertFalse(config_manager.config["sound_effects"]["enabled"])
+
+    def test_set_sound_effect_path(self):
+        config_manager = ConfigManager()
+        config_manager.set_sound_effect_path("start", "/tmp/custom-start.wav")
+        self.assertEqual(
+            config_manager.config["sound_effects"]["start_sound_path"],
+            "/tmp/custom-start.wav",
+        )
+
+    def test_set_sound_effect_path_invalid_event(self):
+        config_manager = ConfigManager()
+        with self.assertRaises(ValueError):
+            config_manager.set_sound_effect_path("unknown", "/tmp/invalid.wav")

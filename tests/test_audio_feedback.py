@@ -71,7 +71,7 @@ class TestAudioFeedback(unittest.TestCase):
 
             # Verify the correct player was detected
             self.assertEqual(player, "paplay")
-            self.assertEqual(formats, ["wav"])
+            self.assertEqual(formats, ["wav", "ogg", "oga"])
 
     def test_get_audio_player_alsa(self):
         """Test detecting ALSA player."""
@@ -119,7 +119,7 @@ class TestAudioFeedback(unittest.TestCase):
 
             # Verify the correct player was detected
             self.assertEqual(player, "play")
-            self.assertEqual(formats, ["wav"])
+            self.assertEqual(formats, ["wav", "ogg", "oga"])
 
     def test_get_audio_player_mplayer(self):
         """Test detecting MPlayer."""
@@ -143,7 +143,7 @@ class TestAudioFeedback(unittest.TestCase):
 
             # Verify the correct player was detected
             self.assertEqual(player, "mplayer")
-            self.assertEqual(formats, ["wav"])
+            self.assertEqual(formats, ["wav", "ogg", "oga"])
 
     def test_get_audio_player_none(self):
         """Test behavior when no audio player is available."""
@@ -362,3 +362,100 @@ class TestAudioFeedback(unittest.TestCase):
                 mock_popen.assert_called_once()
                 args, _ = mock_popen.call_args
                 self.assertEqual(args[0][0], "ci_test_player")
+
+    def test_validate_custom_sound_file_success(self):
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback.os.path, "getsize", return_value=1024
+        ):
+            is_valid, error = audio_feedback.validate_custom_sound_file("/tmp/custom.wav")
+
+        self.assertTrue(is_valid)
+        self.assertEqual(error, "")
+
+    def test_validate_custom_sound_file_invalid_extension(self):
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback.os.path, "getsize", return_value=1024
+        ):
+            is_valid, error = audio_feedback.validate_custom_sound_file("/tmp/custom.mp3")
+
+        self.assertFalse(is_valid)
+        self.assertIn("Unsupported format", error)
+
+    def test_validate_custom_sound_file_too_large(self):
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
+            audio_feedback.os.path,
+            "getsize",
+            return_value=audio_feedback.MAX_CUSTOM_SOUND_SIZE_BYTES + 1,
+        ):
+            is_valid, error = audio_feedback.validate_custom_sound_file("/tmp/custom.wav")
+
+        self.assertFalse(is_valid)
+        self.assertIn("File too large", error)
+
+    def test_get_sound_path_for_event_defaults(self):
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(
+            audio_feedback,
+            "_get_sound_effects_settings",
+            return_value={
+                "enabled": True,
+                "start_sound_path": "",
+                "stop_sound_path": "",
+                "error_sound_path": "",
+            },
+        ):
+            self.assertEqual(
+                audio_feedback.get_sound_path_for_event("start"),
+                audio_feedback.START_SOUND,
+            )
+            self.assertEqual(
+                audio_feedback.get_sound_path_for_event("stop"),
+                audio_feedback.STOP_SOUND,
+            )
+            self.assertEqual(
+                audio_feedback.get_sound_path_for_event("error"),
+                audio_feedback.ERROR_SOUND,
+            )
+
+    def test_get_sound_path_for_event_custom_sound(self):
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(
+            audio_feedback,
+            "_get_sound_effects_settings",
+            return_value={
+                "enabled": True,
+                "start_sound_path": "/tmp/custom-start.wav",
+                "stop_sound_path": "",
+                "error_sound_path": "",
+            },
+        ), patch.object(
+            audio_feedback,
+            "validate_custom_sound_file",
+            return_value=(True, ""),
+        ), patch.object(
+            audio_feedback,
+            "_get_audio_player",
+            return_value=("paplay", ["wav", "ogg", "oga"]),
+        ):
+            self.assertEqual(
+                audio_feedback.get_sound_path_for_event("start"),
+                "/tmp/custom-start.wav",
+            )
+
+    def test_get_sound_path_for_event_when_disabled(self):
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(
+            audio_feedback,
+            "_get_sound_effects_settings",
+            return_value={"enabled": False},
+        ):
+            self.assertIsNone(audio_feedback.get_sound_path_for_event("start"))

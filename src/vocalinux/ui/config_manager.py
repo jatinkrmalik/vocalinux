@@ -32,6 +32,12 @@ DEFAULT_CONFIG = {
         "device_index": None,  # Audio input device index (None for system default)
         "device_name": None,  # Saved device name for display/reference
     },
+    "sound_effects": {
+        "enabled": True,
+        "start_sound_path": "",
+        "stop_sound_path": "",
+        "error_sound_path": "",
+    },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
         "mode": "toggle",  # "toggle" or "push_to_talk"
@@ -51,6 +57,8 @@ DEFAULT_CONFIG = {
         "wayland_mode": False,
     },
 }
+
+SOUND_EFFECT_EVENTS = {"start", "stop", "error"}
 
 
 class ConfigManager:
@@ -276,6 +284,30 @@ class ConfigManager:
         for key, value in settings.items():
             self.config["speech_recognition"][key] = value
         logger.info(f"Updated speech recognition settings: {settings}")
+
+    def get_sound_effects_settings(self) -> Dict[str, Any]:
+        sound_settings = self.config.get("sound_effects", {})
+        return {
+            "enabled": bool(sound_settings.get("enabled", True)),
+            "start_sound_path": sound_settings.get("start_sound_path", ""),
+            "stop_sound_path": sound_settings.get("stop_sound_path", ""),
+            "error_sound_path": sound_settings.get("error_sound_path", ""),
+        }
+
+    def set_sound_effect_enabled(self, enabled: bool):
+        if "sound_effects" not in self.config:
+            self.config["sound_effects"] = {}
+        self.config["sound_effects"]["enabled"] = bool(enabled)
+
+    def set_sound_effect_path(self, event: str, path: str):
+        if event not in SOUND_EFFECT_EVENTS:
+            raise ValueError(f"Unsupported sound event: {event}")
+
+        if "sound_effects" not in self.config:
+            self.config["sound_effects"] = {}
+
+        key = f"{event}_sound_path"
+        self.config["sound_effects"][key] = path or ""
 
     def _update_dict_recursive(self, target: Dict, source: Dict):
         """
