@@ -100,8 +100,7 @@ def check_dependencies():
             from gi.repository import AyatanaAppIndicator3  # noqa: F401
         except (ImportError, ValueError):
             missing_system_deps.append(
-                "AppIndicator3 (install with: sudo apt install gir1.2-appindicator3-0.1) "
-                "Note: On Debian 11+ use gir1.2-ayatanaappindicator3-0.1 instead"
+                "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
             )
 
     # pynput is used for keyboard detection but we check at module startup
@@ -123,10 +122,20 @@ def check_dependencies():
             logger.error(f"  - {dep}")
         if missing_system_deps:
             logger.error("")
-            logger.error("If you installed via pip/pipx, you also need system GTK packages:")
-            logger.error("  sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-appindicator3-0.1")
+            logger.error("System GTK packages are required. Install them first:")
             logger.error("")
-            logger.error("For the best experience, install using the recommended method:")
+            logger.error("  Ubuntu/Debian:")
+            logger.error("    sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1")
+            logger.error("")
+            logger.error("  Fedora:")
+            logger.error("    sudo dnf install python3-gobject gtk3 libappindicator-gtk3")
+            logger.error("")
+            logger.error("  Arch Linux:")
+            logger.error("    sudo pacman -S python-gobject gtk3 libappindicator")
+            logger.error("")
+            logger.error("For pipx users: Install system packages BEFORE running 'pipx install vocalinux'")
+            logger.error("")
+            logger.error("For the best experience, use the recommended installer:")
             logger.error(
                 "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash"
             )
