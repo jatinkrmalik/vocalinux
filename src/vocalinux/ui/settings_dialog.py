@@ -1300,7 +1300,7 @@ class SettingsDialog(Gtk.Dialog):
         self.shortcut_mode_combo = Gtk.ComboBoxText()
         self.shortcut_mode_combo.set_size_request(200, -1)
         self.shortcut_mode_combo.set_tooltip_text(
-            "Choose between toggle (double-tap) or push-to-talk mode"
+            "Choose between toggle (press to start/stop) or push-to-talk (hold to speak)"
         )
         _prevent_scroll_on_hover(self.shortcut_mode_combo)
 
@@ -1394,9 +1394,9 @@ class SettingsDialog(Gtk.Dialog):
     def _update_shortcut_ui_for_mode(self, mode: str):
         """Update the shortcut UI based on the selected mode."""
         if mode == "toggle":
-            self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+            self.shortcut_row.set_subtitle("Press this shortcut to start/stop voice typing")
             self.shortcut_info_label.set_text(
-                "In Toggle mode: Double-tap the key to start voice typing, double-tap again to stop."
+                "In Toggle mode: Press the shortcut to start voice typing, press again to stop."
             )
         elif mode == "push_to_talk":
             self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
