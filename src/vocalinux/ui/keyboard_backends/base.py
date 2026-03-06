@@ -6,18 +6,64 @@ the required methods.
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 Callback = Callable[[], None]
 
-# Supported double-tap shortcut keys
-SUPPORTED_SHORTCUTS = {
+# --- Key name validation sets ---
+
+MODIFIER_KEYS = {"ctrl", "alt", "shift", "super", "meta"}
+
+SPECIAL_KEYS = {
+    "escape",
+    "tab",
+    "space",
+    "backspace",
+    "delete",
+    "enter",
+    "return",
+    "insert",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "up",
+    "down",
+    "left",
+    "right",
+    "capslock",
+    "numlock",
+    "scrolllock",
+    "printscreen",
+    "pause",
+    "menu",
+    # Function keys
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11",
+    "f12",
+}
+
+# --- Preset shortcuts (backward-compatible) ---
+
+PRESET_SHORTCUTS = {
     "ctrl+ctrl": "ctrl",
     "alt+alt": "alt",
     "shift+shift": "shift",
 }
 
-# Human-readable names for shortcuts (mode-agnostic base names)
+# Backward-compatible alias
+SUPPORTED_SHORTCUTS = PRESET_SHORTCUTS
+
+# Human-readable names for preset shortcuts
 SHORTCUT_DISPLAY_NAMES = {
     "ctrl+ctrl": "Ctrl",
     "alt+alt": "Alt",
@@ -51,12 +97,136 @@ SHORTCUT_MODES = {
 DEFAULT_SHORTCUT_MODE = "toggle"
 
 
+# --- Flexible key parsing functions ---
+
+
+def is_valid_key_name(key: str) -> bool:
+    """
+    Check if a string is a valid key name.
+
+    Args:
+        key: The key name to validate (lowercase).
+
+    Returns:
+        True if the key is a recognized modifier, special key,
+        or a single alphanumeric character.
+    """
+    if key in MODIFIER_KEYS:
+        return True
+    if key in SPECIAL_KEYS:
+        return True
+    # Single alphanumeric characters (a-z, 0-9)
+    if len(key) == 1 and key.isalnum():
+        return True
+    return False
+
+
+def parse_keys(shortcut_string: str) -> List[str]:
+    """
+    Parse a shortcut string into a list of individual key names.
+
+    Splits on '+', lowercases, strips whitespace, and validates each key.
+
+    Args:
+        shortcut_string: The shortcut string (e.g., "ctrl+d", "super+ctrl", "f5")
+
+    Returns:
+        A list of lowercase key names (e.g., ["ctrl", "d"])
+
+    Raises:
+        ValueError: If the string is empty or contains invalid key names
+    """
+    if not shortcut_string or not shortcut_string.strip():
+        raise ValueError("Shortcut string cannot be empty")
+
+    parts = [part.strip().lower() for part in shortcut_string.split("+")]
+    parts = [p for p in parts if p]  # Remove empty parts from e.g. "ctrl+"
+
+    if not parts:
+        raise ValueError("Shortcut string cannot be empty")
+
+    for key in parts:
+        if not is_valid_key_name(key):
+            raise ValueError(
+                f"Invalid key name: '{key}'. "
+                f"Must be a modifier ({', '.join(sorted(MODIFIER_KEYS))}), "
+                f"a special key, or a single alphanumeric character."
+            )
+
+    return parts
+
+
+def is_preset_shortcut(shortcut: str) -> bool:
+    """
+    Check if a shortcut string is one of the 3 preset double-tap shortcuts.
+
+    Args:
+        shortcut: The shortcut string (e.g., "ctrl+ctrl")
+
+    Returns:
+        True if the shortcut is a preset (ctrl+ctrl, alt+alt, shift+shift)
+    """
+    return shortcut.lower().strip() in PRESET_SHORTCUTS
+
+
+def is_double_tap_shortcut(shortcut: str) -> bool:
+    """
+    Check if a shortcut string represents a double-tap of the same key.
+
+    Args:
+        shortcut: The shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+
+    Returns:
+        True if the shortcut is a double-tap (same key repeated with +)
+    """
+    parts = shortcut.lower().strip().split("+")
+    return len(parts) == 2 and parts[0] == parts[1] and parts[0] in MODIFIER_KEYS
+
+
+def is_combo_shortcut(shortcut: str) -> bool:
+    """
+    Check if a shortcut is a key combination (not a double-tap preset).
+
+    Args:
+        shortcut: The shortcut string
+
+    Returns:
+        True if the shortcut is a combo like "ctrl+d" or "super+ctrl"
+    """
+    return not is_double_tap_shortcut(shortcut)
+
+
+def format_shortcut_display(shortcut: str) -> str:
+    """
+    Format a shortcut string for human-readable display.
+
+    Capitalizes each key name and joins with " + ".
+
+    Args:
+        shortcut: The shortcut string (e.g., "ctrl+d", "super+ctrl")
+
+    Returns:
+        A formatted display string (e.g., "Ctrl + D", "Super + Ctrl")
+    """
+    parts = shortcut.lower().strip().split("+")
+    formatted = []
+    for part in parts:
+        part = part.strip()
+        if part:
+            # Capitalize: "ctrl" -> "Ctrl", "f5" -> "F5", "a" -> "A"
+            formatted.append(part.capitalize())
+    return " + ".join(formatted)
+
+
 def get_shortcut_display_name(shortcut: str, mode: Optional[str] = None) -> str:
     """
     Get a human-readable display name for a shortcut.
 
+    For preset shortcuts, returns mode-specific names when mode is provided.
+    For arbitrary shortcuts, falls back to format_shortcut_display().
+
     Args:
-        shortcut: The shortcut string (e.g., "ctrl+ctrl")
+        shortcut: The shortcut string (e.g., "ctrl+ctrl", "ctrl+d")
         mode: Optional mode string. If provided, returns mode-specific name.
 
     Returns:
@@ -64,31 +234,47 @@ def get_shortcut_display_name(shortcut: str, mode: Optional[str] = None) -> str:
     """
     if mode and shortcut in SHORTCUT_MODE_DISPLAY_NAMES:
         return SHORTCUT_MODE_DISPLAY_NAMES[shortcut].get(
-            mode, SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
+            mode, SHORTCUT_DISPLAY_NAMES.get(shortcut, format_shortcut_display(shortcut))
         )
-    return SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
+    if shortcut in SHORTCUT_DISPLAY_NAMES:
+        return SHORTCUT_DISPLAY_NAMES[shortcut]
+    return format_shortcut_display(shortcut)
 
 
 def parse_shortcut(shortcut_string: str) -> str:
     """
     Parse a shortcut string and return the modifier key name.
 
+    For preset double-tap shortcuts (e.g., "ctrl+ctrl"), returns the
+    modifier key. For arbitrary combos (e.g., "ctrl+d"), returns the
+    first key in the combo.
+
     Args:
-        shortcut_string: The shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+        shortcut_string: The shortcut string (e.g., "ctrl+ctrl", "ctrl+d")
 
     Returns:
-        The modifier key name (e.g., "ctrl", "alt")
+        The modifier/primary key name (e.g., "ctrl")
 
     Raises:
-        ValueError: If the shortcut string is not recognized
+        ValueError: If the shortcut string is not valid
     """
     shortcut_lower = shortcut_string.lower().strip()
-    if shortcut_lower not in SUPPORTED_SHORTCUTS:
+
+    if not shortcut_lower:
+        raise ValueError("Shortcut string cannot be empty")
+
+    # Preset double-tap shortcuts
+    if shortcut_lower in PRESET_SHORTCUTS:
+        return PRESET_SHORTCUTS[shortcut_lower]
+
+    # Arbitrary combos: validate via parse_keys, must have at least 2 keys
+    keys = parse_keys(shortcut_lower)
+    if len(keys) < 2:
         raise ValueError(
-            f"Unsupported shortcut: {shortcut_string}. "
-            f"Supported shortcuts: {', '.join(SUPPORTED_SHORTCUTS.keys())}"
+            f"Shortcut must contain at least two keys separated by '+': {shortcut_string}"
         )
-    return SUPPORTED_SHORTCUTS[shortcut_lower]
+
+    return keys[0]
 
 
 class KeyboardBackend(ABC):

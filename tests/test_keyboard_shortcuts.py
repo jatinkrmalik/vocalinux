@@ -627,5 +627,71 @@ class TestShortcutParseFunction(unittest.TestCase):
             parse_shortcut("")
 
 
+class TestFlexibleShortcuts(unittest.TestCase):
+    """Test cases for flexible shortcut system."""
+
+    def test_parse_keys_single_modifier(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        self.assertEqual(parse_keys("ctrl"), ["ctrl"])
+
+    def test_parse_keys_combo(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        self.assertEqual(parse_keys("super+ctrl"), ["super", "ctrl"])
+
+    def test_parse_keys_modifier_plus_regular(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        self.assertEqual(parse_keys("ctrl+d"), ["ctrl", "d"])
+
+    def test_parse_keys_three_keys(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        self.assertEqual(parse_keys("ctrl+shift+a"), ["ctrl", "shift", "a"])
+
+    def test_parse_keys_single_fkey(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        self.assertEqual(parse_keys("f5"), ["f5"])
+
+    def test_parse_keys_case_insensitive(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        self.assertEqual(parse_keys("Ctrl+D"), ["ctrl", "d"])
+
+    def test_parse_keys_empty_raises(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        with self.assertRaises(ValueError):
+            parse_keys("")
+
+    def test_is_preset_shortcut(self):
+        from vocalinux.ui.keyboard_backends.base import is_preset_shortcut
+
+        self.assertTrue(is_preset_shortcut("ctrl+ctrl"))
+        self.assertTrue(is_preset_shortcut("alt+alt"))
+        self.assertTrue(is_preset_shortcut("shift+shift"))
+        self.assertFalse(is_preset_shortcut("super+ctrl"))
+        self.assertFalse(is_preset_shortcut("ctrl+d"))
+
+    def test_format_shortcut_display(self):
+        from vocalinux.ui.keyboard_backends.base import format_shortcut_display
+
+        self.assertEqual(format_shortcut_display("ctrl+d"), "Ctrl + D")
+        self.assertEqual(format_shortcut_display("super+ctrl"), "Super + Ctrl")
+        self.assertEqual(format_shortcut_display("f5"), "F5")
+        self.assertEqual(format_shortcut_display("ctrl+shift+a"), "Ctrl + Shift + A")
+
+    def test_is_double_tap_shortcut(self):
+        from vocalinux.ui.keyboard_backends.base import is_double_tap_shortcut
+
+        self.assertTrue(is_double_tap_shortcut("ctrl+ctrl"))
+        self.assertTrue(is_double_tap_shortcut("alt+alt"))
+        self.assertFalse(is_double_tap_shortcut("ctrl+d"))
+        self.assertFalse(is_double_tap_shortcut("super+ctrl"))
+        self.assertFalse(is_double_tap_shortcut("f5"))
+
+
 if __name__ == "__main__":
     unittest.main()
