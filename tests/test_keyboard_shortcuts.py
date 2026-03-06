@@ -692,6 +692,30 @@ class TestFlexibleShortcuts(unittest.TestCase):
         self.assertFalse(is_double_tap_shortcut("super+ctrl"))
         self.assertFalse(is_double_tap_shortcut("f5"))
 
+    def test_is_valid_key_name(self):
+        from vocalinux.ui.keyboard_backends.base import is_valid_key_name
+
+        # Modifiers are valid
+        self.assertTrue(is_valid_key_name("ctrl"))
+        self.assertTrue(is_valid_key_name("alt"))
+        self.assertTrue(is_valid_key_name("shift"))
+        # Special keys are valid
+        self.assertTrue(is_valid_key_name("f5"))
+        # Single alpha character is valid
+        self.assertTrue(is_valid_key_name("d"))
+        # Single digit is valid
+        self.assertTrue(is_valid_key_name("1"))
+        # Invalid multi-char string
+        self.assertFalse(is_valid_key_name("invalidkey"))
+        # Empty string
+        self.assertFalse(is_valid_key_name(""))
+
+    def test_parse_keys_invalid_key_raises(self):
+        from vocalinux.ui.keyboard_backends.base import parse_keys
+
+        with self.assertRaises(ValueError):
+            parse_keys("ctrl+invalidkey")
+
 
 if __name__ == "__main__":
     unittest.main()
