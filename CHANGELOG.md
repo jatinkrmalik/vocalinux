@@ -20,9 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com).
 - Keyboard shortcuts manager now accepts any valid key combination, not just the three presets
 - evdev backend refactored to handle both double-tap presets and held-combo shortcuts
 - Settings dialog uses `PRESET_SHORTCUTS` for dropdown population with "Custom..." as fourth option
+- Shortcut info text now shows actual key names and adapts to shortcut type (double-tap vs combo) and mode
 
 ### Fixed
 
 - Escape shortcut display names in GTK markup calls (defense-in-depth against config tampering)
 - Validate minimum 2 keys for custom shortcuts in capture widget
 - Fix mode change not applied when using custom shortcut (dropdown ID "custom" was passed instead of actual shortcut string)
+- Fix push-to-talk mode not working at startup with custom shortcuts (backend mode not synced from config)

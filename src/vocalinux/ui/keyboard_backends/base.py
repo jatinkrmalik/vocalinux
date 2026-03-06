@@ -90,7 +90,7 @@ DEFAULT_SHORTCUT = "ctrl+ctrl"
 
 # Supported shortcut modes
 SHORTCUT_MODES = {
-    "toggle": "Toggle (press to start/stop)",
+    "toggle": "Toggle (start/stop)",
     "push_to_talk": "Push-to-Talk (hold to speak)",
 }
 

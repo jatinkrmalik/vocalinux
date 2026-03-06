@@ -1393,27 +1393,41 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_shortcut_ui_for_mode(self, mode: str):
         """Update the shortcut UI based on the selected mode and shortcut type."""
-        # Determine if current shortcut is a double-tap preset or a combo
+        # Resolve the actual shortcut string and display name
         shortcut_id = self.shortcut_combo.get_active_id()
-        is_combo = shortcut_id == "custom" or (shortcut_id and not is_preset_shortcut(shortcut_id))
+        if shortcut_id == "custom":
+            actual_shortcut = self.custom_capture.get_shortcut()
+        else:
+            actual_shortcut = shortcut_id
+        is_combo = actual_shortcut and not is_preset_shortcut(actual_shortcut)
+
+        if actual_shortcut:
+            display = format_shortcut_display(actual_shortcut)
+        else:
+            display = "..."
 
         if mode == "toggle":
             if is_combo:
-                self.shortcut_row.set_subtitle("Press this combo to start/stop voice typing")
+                self.shortcut_row.set_subtitle("Press combo to start/stop voice typing")
                 self.shortcut_info_label.set_text(
-                    "In Toggle mode: Press the key combination to start, press again to stop."
+                    f"Press {display} to start voice typing, press again to stop."
                 )
             else:
-                self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+                self.shortcut_row.set_subtitle("Double-tap to start/stop voice typing")
                 self.shortcut_info_label.set_text(
-                    "In Toggle mode: Double-tap the key to start voice typing,"
-                    " double-tap again to stop."
+                    f"Double-tap {display} to start voice typing, double-tap again to stop."
                 )
         elif mode == "push_to_talk":
-            self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
-            self.shortcut_info_label.set_text(
-                "In Push-to-Talk mode: Hold the key down to speak, release to stop recording."
-            )
+            if is_combo:
+                self.shortcut_row.set_subtitle("Hold both keys to speak, release to stop")
+                self.shortcut_info_label.set_text(
+                    f"Hold {display} to speak, release to stop recording."
+                )
+            else:
+                self.shortcut_row.set_subtitle("Hold key to speak, release to stop")
+                self.shortcut_info_label.set_text(
+                    f"Hold {display} to speak, release to stop recording."
+                )
 
     def _on_shortcut_mode_changed(self, widget):
         """Handle shortcut mode selection change."""
