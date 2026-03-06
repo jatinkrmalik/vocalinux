@@ -23,6 +23,9 @@ from .keyboard_backends import (
     SUPPORTED_SHORTCUTS,
     DesktopEnvironment,
     create_backend,
+    format_shortcut_display,
+    get_shortcut_display_name,
+    parse_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,7 +151,7 @@ class KeyboardShortcutManager:
     @property
     def shortcut_display_name(self) -> str:
         """Get the human-readable name for the current shortcut."""
-        return SHORTCUT_DISPLAY_NAMES.get(self._shortcut, self._shortcut)
+        return get_shortcut_display_name(self._shortcut)
 
     def set_shortcut(self, shortcut: str) -> bool:
         """
@@ -163,15 +166,17 @@ class KeyboardShortcutManager:
         Returns:
             True if successful, False if the shortcut is invalid
         """
-        if shortcut not in SUPPORTED_SHORTCUTS:
-            logger.error(f"Invalid shortcut: {shortcut}")
+        try:
+            parse_keys(shortcut)
+        except ValueError as e:
+            logger.error(f"Invalid shortcut: {shortcut} - {e}")
             return False
 
         self._shortcut = shortcut
 
         if self.backend_instance:
             self.backend_instance.set_shortcut(shortcut)
-            logger.info(f"Shortcut updated to: {SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}")
+            logger.info(f"Shortcut updated to: {format_shortcut_display(shortcut)}")
 
         return True
 
@@ -191,8 +196,10 @@ class KeyboardShortcutManager:
             True if the listener was successfully restarted with the new shortcut,
             False if the shortcut is invalid or restart failed
         """
-        if shortcut not in SUPPORTED_SHORTCUTS:
-            logger.error(f"Invalid shortcut: {shortcut}")
+        try:
+            parse_keys(shortcut)
+        except ValueError as e:
+            logger.error(f"Invalid shortcut: {shortcut} - {e}")
             return False
 
         if shortcut == self._shortcut and (mode is None or mode == self._mode):
@@ -249,13 +256,13 @@ class KeyboardShortcutManager:
             if success:
                 logger.info(
                     f"Listener restarted with new shortcut: "
-                    f"{SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)} (mode: {self._mode})"
+                    f"{format_shortcut_display(shortcut)} (mode: {self._mode})"
                 )
             else:
                 logger.error(f"Failed to restart listener with shortcut: {shortcut}")
             return success
 
-        logger.info(f"Shortcut updated to: {SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)}")
+        logger.info(f"Shortcut updated to: {format_shortcut_display(shortcut)}")
         return True
 
     def start(self) -> bool:
