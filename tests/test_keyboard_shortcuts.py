@@ -423,6 +423,20 @@ class TestPynputBackend(unittest.TestCase):
         self.assertEqual(backend.shortcut, "shift+shift")
         self.assertEqual(backend.modifier_key, "shift")
 
+    def test_pynput_backend_custom_combo_shortcut(self):
+        """Test pynput backend with custom combo shortcut."""
+        from vocalinux.ui.keyboard_backends.pynput_backend import PynputKeyboardBackend
+
+        backend = PynputKeyboardBackend(shortcut="super+ctrl")
+        self.assertEqual(backend.shortcut, "super+ctrl")
+
+    def test_pynput_backend_modifier_plus_regular_key(self):
+        """Test pynput backend with modifier + regular key."""
+        from vocalinux.ui.keyboard_backends.pynput_backend import PynputKeyboardBackend
+
+        backend = PynputKeyboardBackend(shortcut="ctrl+d")
+        self.assertEqual(backend.shortcut, "ctrl+d")
+
 
 class TestEvdevBackend(unittest.TestCase):
     """Test cases for the evdev backend."""
