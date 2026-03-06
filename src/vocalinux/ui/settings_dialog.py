@@ -1437,6 +1437,11 @@ class SettingsDialog(Gtk.Dialog):
         # Try to apply the mode change live
         if self.shortcut_update_callback:
             shortcut_id = self.shortcut_combo.get_active_id()
+            # Resolve "custom" dropdown ID to the actual shortcut string
+            if shortcut_id == "custom":
+                shortcut_id = self.custom_capture.get_shortcut()
+                if not shortcut_id:
+                    return
             success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(

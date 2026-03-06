@@ -25,3 +25,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com).
 
 - Escape shortcut display names in GTK markup calls (defense-in-depth against config tampering)
 - Validate minimum 2 keys for custom shortcuts in capture widget
+- Fix mode change not applied when using custom shortcut (dropdown ID "custom" was passed instead of actual shortcut string)
