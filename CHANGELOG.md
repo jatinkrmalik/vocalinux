@@ -12,3 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com).
 - `MODIFIER_KEYS` and `SPECIAL_KEYS` validation sets for key name validation
 - `PRESET_SHORTCUTS` dict (with backward-compatible `SUPPORTED_SHORTCUTS` alias)
 - Tests for flexible shortcut system (`TestFlexibleShortcuts`)
+- evdev backend: key code mappings for letters, F-keys, digits, and special keys (`LETTER_KEY_CODES`, `FKEY_CODES`, `DIGIT_KEY_CODES`, `SPECIAL_KEY_CODES`)
+- evdev backend: `resolve_evdev_codes()` to resolve key names to evdev key codes
+- evdev backend: `device_has_key()` generalized key capability check
+- evdev backend: combo shortcut support (all keys held simultaneously)
+
+### Changed
+
+- evdev backend: refactored `_handle_key_event` into `_handle_double_tap_event` and `_handle_combo_event`
+- evdev backend: `is_available()` now validates all keys in combo shortcuts across devices
+- evdev backend: `device_has_modifier_key()` now delegates to `device_has_key()`
