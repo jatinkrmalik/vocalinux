@@ -50,11 +50,13 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         self.assertIn("self.shortcut_combo.set_tooltip_text(", self.source_code)
 
     def test_shortcut_options_populated(self):
-        """Test that shortcut options are populated from SHORTCUT_DISPLAY_NAMES."""
+        """Test that shortcut options are populated from PRESET_SHORTCUTS."""
         self.assertIn(
-            "for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items()", self.source_code
+            "for shortcut_id, display_name in PRESET_SHORTCUTS.items()", self.source_code
         )
         self.assertIn("self.shortcut_combo.append(shortcut_id, display_name)", self.source_code)
+        # Custom option is also added
+        self.assertIn('self.shortcut_combo.append("custom", "Custom...")', self.source_code)
 
     def test_shortcut_config_read(self):
         """Test that shortcut is read from config."""
