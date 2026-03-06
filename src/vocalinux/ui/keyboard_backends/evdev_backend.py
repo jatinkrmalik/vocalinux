@@ -85,6 +85,17 @@ if EVDEV_AVAILABLE:
         "end": "KEY_END",
         "pageup": "KEY_PAGEUP",
         "pagedown": "KEY_PAGEDOWN",
+        "enter": "KEY_ENTER",
+        "return": "KEY_ENTER",
+        "escape": "KEY_ESC",
+        "backspace": "KEY_BACKSPACE",
+        "up": "KEY_UP",
+        "down": "KEY_DOWN",
+        "left": "KEY_LEFT",
+        "right": "KEY_RIGHT",
+        "capslock": "KEY_CAPSLOCK",
+        "numlock": "KEY_NUMLOCK",
+        "menu": "KEY_COMPOSE",
     }
     for _name, _ecode_name in _special_map.items():
         _code = getattr(ecodes, _ecode_name, None)
@@ -283,17 +294,8 @@ class EvdevKeyboardBackend(KeyboardBackend):
         """Check if the current shortcut is a double-tap shortcut."""
         return is_double_tap_shortcut(self._shortcut)
 
-    def _get_target_key_codes(self) -> Set[int]:
-        """Get the evdev key codes for the configured modifier."""
-        return MODIFIER_KEY_CODES.get(self._modifier_key, set())
-
     def set_shortcut(self, shortcut: str) -> None:
-        """
-        Update the shortcut to listen for.
-
-        Args:
-            shortcut: The new shortcut string (e.g., "ctrl+ctrl", "ctrl+d")
-        """
+        """Update the shortcut. Should be called while backend is stopped or during init."""
         super().set_shortcut(shortcut)
         self._update_target_keys()
         # Reset combo state
@@ -525,7 +527,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
     def _handle_double_tap_event(self, code: int, value: int, device) -> None:
         """Handle key events for double-tap shortcuts."""
-        target_codes = self._get_target_key_codes()
+        target_codes = self._all_target_codes
 
         if code not in target_codes:
             return
