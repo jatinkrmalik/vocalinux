@@ -749,7 +749,9 @@ class ShortcutCaptureWidget(Gtk.Box):
         """Set the displayed shortcut."""
         self._current_shortcut = shortcut
         if shortcut:
-            self.shortcut_label.set_markup(f"<b>{format_shortcut_display(shortcut)}</b>")
+            self.shortcut_label.set_markup(
+                f"<b>{GLib.markup_escape_text(format_shortcut_display(shortcut), -1)}</b>"
+            )
         else:
             self.shortcut_label.set_text("Not set")
 
@@ -844,7 +846,7 @@ class ShortcutCaptureWidget(Gtk.Box):
             self._pressed_keys.append(key_name)
 
         display = format_shortcut_display("+".join(self._pressed_keys))
-        self.shortcut_label.set_markup(f"<b>{display}</b>")
+        self.shortcut_label.set_markup(f"<b>{GLib.markup_escape_text(display, -1)}</b>")
 
         return True
 
@@ -865,10 +867,18 @@ class ShortcutCaptureWidget(Gtk.Box):
         self._capturing = False
         self.change_btn.set_sensitive(True)
 
+        if len(self._pressed_keys) < 2:
+            # Need at least 2 keys for a custom shortcut
+            self.shortcut_label.set_text("Need 2+ keys")
+            GLib.timeout_add(1500, lambda: self.set_shortcut(self._current_shortcut) or False)
+            return
+
         if self._pressed_keys:
             shortcut = "+".join(self._pressed_keys)
             self._current_shortcut = shortcut
-            self.shortcut_label.set_markup(f"<b>{format_shortcut_display(shortcut)}</b>")
+            self.shortcut_label.set_markup(
+                f"<b>{GLib.markup_escape_text(format_shortcut_display(shortcut), -1)}</b>"
+            )
             if self.on_shortcut_changed:
                 self.on_shortcut_changed(shortcut)
 
@@ -1466,6 +1476,7 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.save_settings()
 
         display_name = format_shortcut_display(shortcut_id)
+        escaped_name = GLib.markup_escape_text(display_name, -1)
         logger.info(f"Keyboard shortcut changed to: {display_name}")
 
         if self.shortcut_update_callback:
@@ -1474,16 +1485,16 @@ class SettingsDialog(Gtk.Dialog):
             if success:
                 self.shortcut_info_label.set_markup(
                     f"<span foreground='#26a269'>Shortcut updated to "
-                    f"<b>{display_name}</b>. Active now!</span>"
+                    f"<b>{escaped_name}</b>. Active now!</span>"
                 )
             else:
                 self.shortcut_info_label.set_markup(
-                    f"<i>Shortcut updated to <b>{display_name}</b>. "
+                    f"<i>Shortcut updated to <b>{escaped_name}</b>. "
                     f"Restart the app for the change to take full effect.</i>"
                 )
         else:
             self.shortcut_info_label.set_markup(
-                f"<i>Shortcut updated to <b>{display_name}</b>. "
+                f"<i>Shortcut updated to <b>{escaped_name}</b>. "
                 f"Restart the app for the change to take full effect.</i>"
             )
 
@@ -1493,6 +1504,7 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.save_settings()
 
         display_name = format_shortcut_display(shortcut)
+        escaped_name = GLib.markup_escape_text(display_name, -1)
         logger.info(f"Custom keyboard shortcut set to: {display_name}")
 
         if self.shortcut_update_callback:
@@ -1501,16 +1513,16 @@ class SettingsDialog(Gtk.Dialog):
             if success:
                 self.shortcut_info_label.set_markup(
                     f"<span foreground='#26a269'>Custom shortcut "
-                    f"<b>{display_name}</b> active!</span>"
+                    f"<b>{escaped_name}</b> active!</span>"
                 )
             else:
                 self.shortcut_info_label.set_markup(
-                    f"<i>Custom shortcut set to <b>{display_name}</b>. "
+                    f"<i>Custom shortcut set to <b>{escaped_name}</b>. "
                     f"Restart for full effect.</i>"
                 )
         else:
             self.shortcut_info_label.set_markup(
-                f"<i>Custom shortcut set to <b>{display_name}</b>. " f"Restart for full effect.</i>"
+                f"<i>Custom shortcut set to <b>{escaped_name}</b>. " f"Restart for full effect.</i>"
             )
 
     def _build_test_section(self):

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+- Minimum 2-key validation in `ShortcutCaptureWidget._finalize_capture()`
 - Custom keyboard shortcut capture widget in settings dialog
 - Flexible key parsing system in `base.py`: `parse_keys()`, `format_shortcut_display()`, `is_preset_shortcut()`, `is_double_tap_shortcut()`, `is_combo_shortcut()`, `is_valid_key_name()`
 - `MODIFIER_KEYS` and `SPECIAL_KEYS` validation sets for key name validation
@@ -17,6 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com).
 - evdev backend: `resolve_evdev_codes()` to resolve key names to evdev key codes
 - evdev backend: `device_has_key()` generalized key capability check
 - evdev backend: combo shortcut support (all keys held simultaneously)
+
+### Fixed
+
+- Escape `format_shortcut_display()` output with `GLib.markup_escape_text()` in all `set_markup()` calls in settings dialog (defense-in-depth against config tampering)
 
 ### Changed
 
