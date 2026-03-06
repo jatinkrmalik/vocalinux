@@ -1392,12 +1392,23 @@ class SettingsDialog(Gtk.Dialog):
         self._update_shortcut_ui_for_mode(current_mode)
 
     def _update_shortcut_ui_for_mode(self, mode: str):
-        """Update the shortcut UI based on the selected mode."""
+        """Update the shortcut UI based on the selected mode and shortcut type."""
+        # Determine if current shortcut is a double-tap preset or a combo
+        shortcut_id = self.shortcut_combo.get_active_id()
+        is_combo = shortcut_id == "custom" or (shortcut_id and not is_preset_shortcut(shortcut_id))
+
         if mode == "toggle":
-            self.shortcut_row.set_subtitle("Press this shortcut to start/stop voice typing")
-            self.shortcut_info_label.set_text(
-                "In Toggle mode: Press the shortcut to start voice typing, press again to stop."
-            )
+            if is_combo:
+                self.shortcut_row.set_subtitle("Press this combo to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    "In Toggle mode: Press the key combination to start, press again to stop."
+                )
+            else:
+                self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    "In Toggle mode: Double-tap the key to start voice typing,"
+                    " double-tap again to stop."
+                )
         elif mode == "push_to_talk":
             self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
             self.shortcut_info_label.set_text(
@@ -1475,12 +1486,15 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
         self.config_manager.save_settings()
 
+        # Update subtitle text for preset vs combo
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        self._update_shortcut_ui_for_mode(mode_id or "toggle")
+
         display_name = format_shortcut_display(shortcut_id)
         escaped_name = GLib.markup_escape_text(display_name, -1)
         logger.info(f"Keyboard shortcut changed to: {display_name}")
 
         if self.shortcut_update_callback:
-            mode_id = self.shortcut_mode_combo.get_active_id()
             success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(
@@ -1502,6 +1516,10 @@ class SettingsDialog(Gtk.Dialog):
         """Handle a new custom shortcut being captured."""
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut)
         self.config_manager.save_settings()
+
+        # Update subtitle text (custom = combo, not double-tap)
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        self._update_shortcut_ui_for_mode(mode_id or "toggle")
 
         display_name = format_shortcut_display(shortcut)
         escaped_name = GLib.markup_escape_text(display_name, -1)
