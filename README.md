@@ -66,6 +66,7 @@
 ## ✨ Features
 
 - 🎤 **Toggle or Push-to-Talk** activation modes
+- ⌨️ **Custom shortcut keys** — bind any key combination (e.g., Super+Ctrl, Ctrl+D, F5)
 - ⚡ **Real-time transcription** with minimal latency
 - 🌎 **Universal compatibility** across all Linux applications
 - 🔒 **100% Offline operation** for privacy and reliability
@@ -106,6 +107,12 @@ Here are some screenshots showcasing Vocalinux in action:
     <td colspan="2" align="center">
       <img src="resources/screenshots/04-features-overview.png" alt="Features Overview" width="500"><br>
       <em>Overview of key features and configuration options with annotations</em>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="resources/screenshots/06-custom-shortcut-settings.png" alt="Custom Shortcut Settings" width="500"><br>
+      <em>Custom keyboard shortcut capture — bind any key combination</em>
     </td>
   </tr>
 </table>
@@ -213,6 +220,8 @@ Or launch it from your application menu!
 1. **Toggle mode**: Double-tap the shortcut key (default Ctrl) to start recording
 2. Speak clearly into your microphone
 3. **Toggle mode**: Double-tap again (or pause speaking) to stop, or **Push-to-Talk mode**: release the key to stop
+
+> **Tip:** You can customize the shortcut key in Settings → Shortcuts. Choose from presets (Ctrl, Alt, Shift) or select "Custom..." to capture any key combination.
 
 ### Voice Commands
 
