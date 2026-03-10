@@ -211,9 +211,15 @@ class TextInjector:
                 logger.error(
                     "No text injection tools found. Please install one of:\n"
                     "- IBus (recommended, usually pre-installed)\n"
-                    "- wtype: sudo apt install wtype\n"
-                    "- ydotool: sudo apt install ydotool\n"
-                    "- xdotool: sudo apt install xdotool"
+                    "- wtype: sudo apt install wtype (GNOME/Sway)\n"
+                    "- ydotool: sudo apt install ydotool (works on all Wayland compositors)\n"
+                    "- xdotool: sudo apt install xdotool (X11/XWayland only)\n"
+                    "\n"
+                    "For KDE Plasma Wayland users: wtype is not supported. "
+                    "Install ydotool or wl-copy for clipboard fallback:\n"
+                    "  sudo apt install ydotool\n"
+                    "  sudo systemctl enable --now ydotoold\n"
+                    "Or for clipboard fallback: sudo apt install wl-copy"
                 )
                 raise RuntimeError("Missing required dependencies for text injection")
 
@@ -299,6 +305,74 @@ class TextInjector:
         logger.debug("No better tools available, continuing with xdotool fallback")
         return False
 
+    def _fallback_to_clipboard(self, text: str) -> bool:
+        """
+        Copy text to clipboard as a fallback when all injection methods fail.
+
+        This is useful on Wayland compositors that don't support virtual keyboard
+        protocols (like KDE Plasma) where wtype and xdotool both fail.
+
+        Args:
+            text: The text to copy to clipboard
+
+        Returns:
+            True if clipboard copy was successful, False otherwise
+        """
+        logger.info("Attempting clipboard fallback for text injection")
+        
+        # Try wl-copy first (Wayland native)
+        if shutil.which("wl-copy"):
+            try:
+                result = subprocess.run(
+                    ["wl-copy", text],
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                logger.info("Text copied to Wayland clipboard using wl-copy")
+                return True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"wl-copy failed: {e}")
+        
+        # Try xclip (X11 / XWayland)
+        if shutil.which("xclip"):
+            try:
+                result = subprocess.run(
+                    ["xclip", "-selection", "clipboard"],
+                    input=text,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                logger.info("Text copied to clipboard using xclip")
+                return True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"xclip failed: {e}")
+        
+        # Try xsel as last resort
+        if shutil.which("xsel"):
+            try:
+                result = subprocess.run(
+                    ["xsel", "--clipboard", "--input"],
+                    input=text,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                logger.info("Text copied to clipboard using xsel")
+                return True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"xsel failed: {e}")
+        
+        logger.error(
+            "Clipboard fallback failed. Install wl-copy (Wayland) or xclip/xsel "
+            "to enable clipboard fallback on unsupported compositors."
+        )
+        return False
+
     def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently focused application.
@@ -365,6 +439,18 @@ class TextInjector:
             return True
         except Exception as e:
             logger.error(f"Failed to inject text: {e}", exc_info=True)
+            
+            # Try clipboard fallback as last resort
+            if self._fallback_to_clipboard(text):
+                logger.info("Text copied to clipboard as fallback - user can paste manually")
+                try:
+                    # Play a different sound or show notification
+                    from ..ui.audio_feedback import play_success_sound
+                    play_success_sound()
+                except (ImportError, AttributeError):
+                    pass
+                return True  # Consider this success since text is recoverable
+            
             try:
                 from ..ui.audio_feedback import play_error_sound
 
