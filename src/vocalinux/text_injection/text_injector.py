@@ -441,16 +441,19 @@ class TextInjector:
             logger.error(f"Failed to inject text: {e}", exc_info=True)
 
             # Try clipboard fallback as last resort
-            if self._fallback_to_clipboard(text):
-                logger.info("Text copied to clipboard as fallback - user can paste manually")
-                try:
-                    # Play a different sound or show notification
-                    from ..ui.audio_feedback import play_success_sound
+            try:
+                if self._fallback_to_clipboard(text):
+                    logger.info("Text copied to clipboard as fallback - user can paste manually")
+                    try:
+                        # Play a different sound or show notification
+                        from ..ui.audio_feedback import play_success_sound
 
-                    play_success_sound()
-                except (ImportError, AttributeError):
-                    pass
-                return True  # Consider this success since text is recoverable
+                        play_success_sound()
+                    except (ImportError, AttributeError):
+                        pass
+                    return True  # Consider this success since text is recoverable
+            except Exception as clipboard_error:
+                logger.debug(f"Clipboard fallback also failed: {clipboard_error}")
 
             try:
                 from ..ui.audio_feedback import play_error_sound
