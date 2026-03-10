@@ -319,7 +319,7 @@ class TextInjector:
             True if clipboard copy was successful, False otherwise
         """
         logger.info("Attempting clipboard fallback for text injection")
-        
+
         # Try wl-copy first (Wayland native)
         if shutil.which("wl-copy"):
             try:
@@ -334,7 +334,7 @@ class TextInjector:
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 logger.warning(f"wl-copy failed: {e}")
-        
+
         # Try xclip (X11 / XWayland)
         if shutil.which("xclip"):
             try:
@@ -350,7 +350,7 @@ class TextInjector:
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 logger.warning(f"xclip failed: {e}")
-        
+
         # Try xsel as last resort
         if shutil.which("xsel"):
             try:
@@ -366,7 +366,7 @@ class TextInjector:
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 logger.warning(f"xsel failed: {e}")
-        
+
         logger.error(
             "Clipboard fallback failed. Install wl-copy (Wayland) or xclip/xsel "
             "to enable clipboard fallback on unsupported compositors."
@@ -439,18 +439,19 @@ class TextInjector:
             return True
         except Exception as e:
             logger.error(f"Failed to inject text: {e}", exc_info=True)
-            
+
             # Try clipboard fallback as last resort
             if self._fallback_to_clipboard(text):
                 logger.info("Text copied to clipboard as fallback - user can paste manually")
                 try:
                     # Play a different sound or show notification
                     from ..ui.audio_feedback import play_success_sound
+
                     play_success_sound()
                 except (ImportError, AttributeError):
                     pass
                 return True  # Consider this success since text is recoverable
-            
+
             try:
                 from ..ui.audio_feedback import play_error_sound
 
