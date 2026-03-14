@@ -113,11 +113,17 @@ HAS_VULKAN="no"
 VULKAN_DEVICE=""
 
 # Detect if running non-interactively (e.g., via curl | bash)
-# Interactive mode is now default, so only auto-detect non-interactive for curl pipes
+# If stdin is a pipe but /dev/tty exists, redirect stdin so user input works normally.
+# If no terminal is available at all (headless/CI), fall back to automatic mode.
 if [ ! -t 0 ]; then
-    # When piped via curl, we'll still try to be interactive if possible
-    # User can force non-interactive with --auto
-    INTERACTIVE_MODE="ask"
+    if [ -e /dev/tty ] && [ -r /dev/tty ]; then
+        exec < /dev/tty
+        INTERACTIVE_MODE="ask"
+    else
+        AUTO_MODE="yes"
+        INTERACTIVE_MODE="no"
+        NON_INTERACTIVE="yes"
+    fi
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -1089,8 +1095,8 @@ if [[ "$INTERACTIVE_MODE" == "yes" ]]; then
     # Check if we have a TTY (required for interactive mode)
     if [ ! -t 0 ]; then
         print_error "Interactive mode requires a terminal (TTY)."
-        print_error "Please run from a terminal, or use automatic mode:"
-        print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
+        print_error "Download and run the installer directly from a terminal:"
+        print_error "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh"
         exit 1
     fi
 
