@@ -917,6 +917,21 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_tab.pack_start(group, False, False, 0)
         self.audio_tab.pack_start(self.audio_test_status, False, False, 0)
 
+        # Sound Effects section
+        sound_group = PreferencesGroup(title="Sound Effects")
+        self.sound_effects_switch = Gtk.Switch()
+        self.sound_effects_switch.set_tooltip_text(
+            "Play sounds when recording starts, stops, or encounters errors"
+        )
+        sound_row = PreferenceRow(
+            title="Enable Sound Effects",
+            subtitle="Play audio feedback for recording events",
+            widget=self.sound_effects_switch,
+        )
+        sound_group.add_row(sound_row)
+        self.audio_tab.pack_start(sound_group, False, False, 0)
+        self.sound_effects_switch.connect("state-set", self._on_sound_effects_toggled)
+
         # Populate devices
         self._populate_audio_devices()
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
@@ -1001,6 +1016,17 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("text_injection", "copy_to_clipboard", enabled)
         self.config_manager.save_settings()
         logger.info(f"Copy to clipboard {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_sound_effects_toggled(self, widget, state):
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Sound effects toggled: {enabled}")
+        self.config_manager.set_sound_effects_enabled(enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Sound effects {'enabled' if enabled else 'disabled'}")
         return False
 
     def _build_engine_section(self):
@@ -1426,6 +1452,7 @@ class SettingsDialog(Gtk.Dialog):
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
+        self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
 
         # Populate engine combo with only available engines
         available_engines = get_available_engines()

@@ -362,3 +362,38 @@ class TestAudioFeedback(unittest.TestCase):
                 mock_popen.assert_called_once()
                 args, _ = mock_popen.call_args
                 self.assertEqual(args[0][0], "ci_test_player")
+
+    def test_play_start_sound_when_disabled(self):
+        """Test that start sound is not played when sound effects are disabled."""
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback, "_is_sound_effects_enabled", return_value=False):
+            result = audio_feedback.play_start_sound()
+            self.assertFalse(result)
+
+    def test_play_stop_sound_when_disabled(self):
+        """Test that stop sound is not played when sound effects are disabled."""
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback, "_is_sound_effects_enabled", return_value=False):
+            result = audio_feedback.play_stop_sound()
+            self.assertFalse(result)
+
+    def test_play_error_sound_when_disabled(self):
+        """Test that error sound is not played when sound effects are disabled."""
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch.object(audio_feedback, "_is_sound_effects_enabled", return_value=False):
+            result = audio_feedback.play_error_sound()
+            self.assertFalse(result)
+
+    def test_is_sound_effects_enabled_returns_true_on_error(self):
+        """Test that sound effects are enabled by default when config is unavailable."""
+        import vocalinux.ui.audio_feedback as audio_feedback
+
+        with patch(
+            "vocalinux.ui.config_manager.ConfigManager",
+            side_effect=Exception("No config"),
+        ):
+            result = audio_feedback._is_sound_effects_enabled()
+            self.assertTrue(result)

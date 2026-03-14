@@ -52,6 +52,15 @@ STOP_SOUND = _resource_manager.get_sound_path("stop_recording")
 ERROR_SOUND = _resource_manager.get_sound_path("error")
 
 
+def _is_sound_effects_enabled() -> bool:
+    try:
+        from .config_manager import ConfigManager
+
+        return ConfigManager().is_sound_effects_enabled()
+    except Exception:
+        return True
+
+
 def _get_audio_player():
     """
     Determine the best available audio player on the system.
@@ -157,30 +166,12 @@ def _play_sound_file(sound_path):
 
 
 def play_start_sound():
-    """
-    Play the sound for starting voice recognition.
-
-    Returns:
-        bool: True if sound was played successfully, False otherwise
-    """
-    return _play_sound_file(START_SOUND)
+    return _play_sound_file(START_SOUND) if _is_sound_effects_enabled() else False
 
 
 def play_stop_sound():
-    """
-    Play the sound for stopping voice recognition.
-
-    Returns:
-        bool: True if sound was played successfully, False otherwise
-    """
-    return _play_sound_file(STOP_SOUND)
+    return _play_sound_file(STOP_SOUND) if _is_sound_effects_enabled() else False
 
 
 def play_error_sound():
-    """
-    Play the sound for error notifications.
-
-    Returns:
-        bool: True if sound was played successfully, False otherwise
-    """
-    return _play_sound_file(ERROR_SOUND)
+    return _play_sound_file(ERROR_SOUND) if _is_sound_effects_enabled() else False
