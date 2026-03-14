@@ -35,18 +35,18 @@ import { CodeBlock } from "@/components/code-block";
 import { useInView } from "react-intersection-observer";
 
 // The one-liner install command (split into three lines for display)
-// Downloads install.sh from the specific release tag to ensure version consistency
-const getInstallCommands = (latestRelease: string) => ({
-  interactiveInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive`,
+// Always uses main/install.sh — the installer dynamically resolves the latest release tag via GitHub API
+const installCommands = {
+  interactiveInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive`,
 
-  oneClickInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh`,
+  oneClickInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh`,
 
-  oneClickInstallWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper`,
+  oneClickInstallWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper`,
 
-  oneClickInstallVosk: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk`,
+  oneClickInstallVosk: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk`,
 
-  uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${latestRelease}/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
-});
+  uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
+};
 
 const homeJsonLd = [
   {
@@ -233,11 +233,9 @@ const FadeInSection = ({
 
 export default function HomePage() {
   const [stars, setStars] = useState<number | null>(null);
-  const [latestRelease, setLatestRelease] = useState<string>("main"); // Default to main for safety
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Fetch actual GitHub stars and latest release
     fetch("https://api.github.com/repos/jatinkrmalik/vocalinux")
       .then((res) => res.json())
       .then((data) => {
@@ -249,19 +247,6 @@ export default function HomePage() {
         // Fallback if API fails
         setStars(null);
       });
-
-    // Fetch latest release tag for stable install commands
-    fetch("https://api.github.com/repos/jatinkrmalik/vocalinux/releases/latest")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.tag_name) {
-          setLatestRelease(data.tag_name);
-        }
-      })
-      .catch(() => {
-        // Fallback to main if API fails
-        setLatestRelease("main");
-      });
   }, []);
 
   const navLinks = [
@@ -272,8 +257,6 @@ export default function HomePage() {
     { href: "#faq", label: "FAQ" },
   ];
 
-  // Get install commands based on the latest release
-  const installCommands = getInstallCommands(latestRelease);
   const { interactiveInstallCommand, oneClickInstallCommand, oneClickInstallWhisper, oneClickInstallVosk, uninstallCommand } = installCommands;
 
   return (

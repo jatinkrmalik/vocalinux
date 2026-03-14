@@ -225,7 +225,7 @@ If `vocalinux-gui` fails to start:
 
 For the best experience with automatic dependency handling, use the official installer:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
 ```
 
 This installer automatically detects your distribution and installs all required system packages.
