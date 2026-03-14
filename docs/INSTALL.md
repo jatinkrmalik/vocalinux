@@ -7,10 +7,10 @@ This guide provides detailed instructions for installing Vocalinux on Linux syst
 ### One-liner Installation (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh | bash
 ```
 
-> **Note**: Installs v0.8.0-beta with **whisper.cpp** (our default engine). For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.9.0-beta with **whisper.cpp** (our default engine). For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 That's it! The installer handles everything automatically:
 - ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
@@ -508,7 +508,7 @@ Already have Vocalinux installed? See the [Update Guide](UPDATE.md) for instruct
 
 Quick update command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh | bash
 ```
 
 ## Getting Help
