@@ -388,6 +388,25 @@ class TextInjector:
             logger.debug(f"Could not read copy_to_clipboard setting: {e}")
         return True  # Default to enabled
 
+    def _show_clipboard_fallback_notification(self):
+        """Show a desktop notification when text is copied to clipboard as fallback."""
+        try:
+            subprocess.Popen(
+                [
+                    "notify-send",
+                    "-i",
+                    "edit-paste",
+                    "-a",
+                    "Vocalinux",
+                    "Text copied to clipboard",
+                    "Text injection failed - paste with Ctrl+V",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            logger.debug(f"Could not show clipboard notification: {e}")
+
     def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently focused application.
@@ -463,6 +482,7 @@ class TextInjector:
             try:
                 if self._copy_to_clipboard(text):
                     logger.info("Text copied to clipboard as fallback - user can paste manually")
+                    self._show_clipboard_fallback_notification()
                     return True
             except Exception as clipboard_error:
                 logger.debug(f"Clipboard fallback also failed: {clipboard_error}")
