@@ -407,3 +407,25 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
         self.assertEqual(config_manager.config["shortcuts"]["toggle_recognition"], "alt+alt")
         self.assertEqual(config_manager.config["shortcuts"]["mode"], "push_to_talk")
+
+    def test_sound_effects_enabled_by_default(self):
+        """Test that sound effects are enabled by default."""
+        config_manager = ConfigManager()
+        self.assertTrue(config_manager.is_sound_effects_enabled())
+
+    def test_set_sound_effects_enabled(self):
+        """Test setting sound effects enabled state."""
+        config_manager = ConfigManager()
+        config_manager.set_sound_effects_enabled(False)
+        self.assertFalse(config_manager.is_sound_effects_enabled())
+        config_manager.set_sound_effects_enabled(True)
+        self.assertTrue(config_manager.is_sound_effects_enabled())
+
+    def test_sound_effects_config_persistence(self):
+        """Test that sound effects setting persists across ConfigManager instances."""
+        config_manager = ConfigManager()
+        config_manager.set_sound_effects_enabled(False)
+        config_manager.save_config()
+
+        new_config_manager = ConfigManager()
+        self.assertFalse(new_config_manager.is_sound_effects_enabled())

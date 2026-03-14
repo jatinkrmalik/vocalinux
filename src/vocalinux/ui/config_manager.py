@@ -32,6 +32,9 @@ DEFAULT_CONFIG = {
         "device_index": None,  # Audio input device index (None for system default)
         "device_name": None,  # Saved device name for display/reference
     },
+    "sound_effects": {
+        "enabled": True,  # Play sounds for recording start/stop/error
+    },
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
         "mode": "toggle",  # "toggle" or "push_to_talk"
@@ -279,6 +282,16 @@ class ConfigManager:
         for key, value in settings.items():
             self.config["speech_recognition"][key] = value
         logger.info(f"Updated speech recognition settings: {settings}")
+
+    def is_sound_effects_enabled(self) -> bool:
+        """Check if sound effects are enabled."""
+        return bool(self.config.get("sound_effects", {}).get("enabled", True))
+
+    def set_sound_effects_enabled(self, enabled: bool):
+        """Enable or disable sound effects."""
+        if "sound_effects" not in self.config:
+            self.config["sound_effects"] = {}
+        self.config["sound_effects"]["enabled"] = enabled
 
     def _update_dict_recursive(self, target: Dict, source: Dict):
         """
