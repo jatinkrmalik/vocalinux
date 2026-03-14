@@ -36,10 +36,13 @@ from ..utils.whispercpp_model_info import (
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
+from .keyboard_backends import SHORTCUT_DISPLAY_NAMES  # noqa: F401 - kept for backward compat
+from .keyboard_backends import SUPPORTED_SHORTCUTS  # noqa: F401 - kept for backward compat
 from .keyboard_backends import (  # noqa: E402
-    SHORTCUT_DISPLAY_NAMES,
+    PRESET_SHORTCUTS,
     SHORTCUT_MODES,
-    SUPPORTED_SHORTCUTS,
+    format_shortcut_display,
+    is_preset_shortcut,
 )
 
 # Avoid circular imports for type checking
@@ -714,6 +717,180 @@ class ModelDownloadDialog(Gtk.Dialog):
         self.add_button("OK", Gtk.ResponseType.OK)
 
 
+class ShortcutCaptureWidget(Gtk.Box):
+    """Widget for capturing custom keyboard shortcuts."""
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._current_shortcut = ""
+        self._capturing = False
+        self._pressed_keys = []
+        self._pressed_keyvals = set()
+
+        self.shortcut_label = Gtk.Label(label="Not set")
+        self.shortcut_label.set_xalign(0)
+        self.shortcut_label.set_size_request(150, -1)
+        self.shortcut_label.get_style_context().add_class("shortcut-display")
+        self.pack_start(self.shortcut_label, True, True, 0)
+
+        self.change_btn = Gtk.Button(label="Change")
+        self.change_btn.set_tooltip_text("Click to record a new shortcut")
+        self.change_btn.connect("clicked", self._on_change_clicked)
+        self.pack_start(self.change_btn, False, False, 0)
+
+        self.set_can_focus(True)
+        self.connect("key-press-event", self._on_key_press)
+        self.connect("key-release-event", self._on_key_release)
+        self.connect("focus-out-event", self._on_focus_out)
+
+        self.on_shortcut_changed = None
+
+    def set_shortcut(self, shortcut: str):
+        """Set the displayed shortcut."""
+        self._current_shortcut = shortcut
+        if shortcut:
+            self.shortcut_label.set_markup(
+                f"<b>{GLib.markup_escape_text(format_shortcut_display(shortcut), -1)}</b>"
+            )
+        else:
+            self.shortcut_label.set_text("Not set")
+
+    def get_shortcut(self) -> str:
+        return self._current_shortcut
+
+    def _on_change_clicked(self, button):
+        """Start capturing keys."""
+        self._capturing = True
+        self._pressed_keys = []
+        self._pressed_keyvals = set()
+        self.shortcut_label.set_markup("<i>Press keys...</i>")
+        self.change_btn.set_sensitive(False)
+        self.grab_focus()
+
+    def _on_focus_out(self, widget, event):
+        """Cancel capture if focus is lost."""
+        if self._capturing:
+            self._cancel_capture()
+        return False
+
+    def _gdk_keyval_to_name(self, keyval: int) -> str:
+        """Convert a GDK keyval to our internal key name format."""
+        name = Gdk.keyval_name(keyval)
+        if not name:
+            return ""
+
+        gdk_to_internal = {
+            "Control_L": "ctrl",
+            "Control_R": "ctrl",
+            "Alt_L": "alt",
+            "Alt_R": "alt",
+            "Shift_L": "shift",
+            "Shift_R": "shift",
+            "Super_L": "super",
+            "Super_R": "super",
+            "Meta_L": "super",
+            "Meta_R": "super",
+            "space": "space",
+            "Tab": "tab",
+            "Pause": "pause",
+            "Scroll_Lock": "scrolllock",
+            "Print": "printscreen",
+            "Insert": "insert",
+            "Delete": "delete",
+            "Home": "home",
+            "End": "end",
+            "Page_Up": "pageup",
+            "Page_Down": "pagedown",
+            "Escape": "escape",
+            "Return": "enter",
+            "KP_Enter": "enter",
+            "BackSpace": "backspace",
+            "Up": "up",
+            "Down": "down",
+            "Left": "left",
+            "Right": "right",
+            "Caps_Lock": "capslock",
+            "Num_Lock": "numlock",
+            "Menu": "menu",
+        }
+
+        if name in gdk_to_internal:
+            return gdk_to_internal[name]
+
+        # F-keys
+        if name.startswith("F") and name[1:].isdigit():
+            return name.lower()
+
+        # Regular letters/digits
+        if len(name) == 1 and (name.isalpha() or name.isdigit()):
+            return name.lower()
+
+        return ""
+
+    def _on_key_press(self, widget, event):
+        """Handle key press during capture."""
+        if not self._capturing:
+            return False
+
+        if event.keyval == Gdk.KEY_Escape:
+            self._cancel_capture()
+            return True
+
+        key_name = self._gdk_keyval_to_name(event.keyval)
+        if not key_name:
+            return True
+
+        self._pressed_keyvals.add(event.keyval)
+
+        if key_name not in self._pressed_keys:
+            self._pressed_keys.append(key_name)
+
+        display = format_shortcut_display("+".join(self._pressed_keys))
+        self.shortcut_label.set_markup(f"<b>{GLib.markup_escape_text(display, -1)}</b>")
+
+        return True
+
+    def _on_key_release(self, widget, event):
+        """Handle key release during capture."""
+        if not self._capturing:
+            return False
+
+        self._pressed_keyvals.discard(event.keyval)
+
+        if not self._pressed_keyvals and self._pressed_keys:
+            self._finalize_capture()
+
+        return True
+
+    def _finalize_capture(self):
+        """Save the captured shortcut."""
+        self._capturing = False
+        self.change_btn.set_sensitive(True)
+
+        if len(self._pressed_keys) < 2:
+            # Need at least 2 keys for a custom shortcut
+            self.shortcut_label.set_text("Need 2+ keys")
+            GLib.timeout_add(1500, lambda: self.set_shortcut(self._current_shortcut) or False)
+            return
+
+        if self._pressed_keys:
+            shortcut = "+".join(self._pressed_keys)
+            self._current_shortcut = shortcut
+            self.shortcut_label.set_markup(
+                f"<b>{GLib.markup_escape_text(format_shortcut_display(shortcut), -1)}</b>"
+            )
+            if self.on_shortcut_changed:
+                self.on_shortcut_changed(shortcut)
+
+    def _cancel_capture(self):
+        """Cancel capture and restore previous shortcut."""
+        self._capturing = False
+        self._pressed_keys = []
+        self._pressed_keyvals = set()
+        self.change_btn.set_sensitive(True)
+        self.set_shortcut(self._current_shortcut)
+
+
 class SettingsDialog(Gtk.Dialog):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
@@ -1123,7 +1300,7 @@ class SettingsDialog(Gtk.Dialog):
         self.shortcut_mode_combo = Gtk.ComboBoxText()
         self.shortcut_mode_combo.set_size_request(200, -1)
         self.shortcut_mode_combo.set_tooltip_text(
-            "Choose between toggle (double-tap) or push-to-talk mode"
+            "Choose between toggle (press to start/stop) or push-to-talk (hold to speak)"
         )
         _prevent_scroll_on_hover(self.shortcut_mode_combo)
 
@@ -1150,13 +1327,12 @@ class SettingsDialog(Gtk.Dialog):
         _prevent_scroll_on_hover(self.shortcut_combo)
 
         # Populate shortcut options
-        for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items():
+        for shortcut_id, display_name in PRESET_SHORTCUTS.items():
             self.shortcut_combo.append(shortcut_id, display_name)
+        self.shortcut_combo.append("custom", "Custom...")
 
         # Load current shortcut from config
         current_shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
-        if not self.shortcut_combo.set_active_id(current_shortcut):
-            self.shortcut_combo.set_active_id("ctrl+ctrl")
 
         self.shortcut_row = PreferenceRow(
             title="Shortcut Key",
@@ -1164,6 +1340,27 @@ class SettingsDialog(Gtk.Dialog):
             widget=self.shortcut_combo,
         )
         group.add_row(self.shortcut_row)
+
+        # Custom shortcut capture widget (hidden by default)
+        self.custom_capture = ShortcutCaptureWidget()
+        self.custom_capture.on_shortcut_changed = self._on_custom_shortcut_captured
+        self.custom_capture_row = PreferenceRow(
+            title="Custom Shortcut",
+            subtitle="Click Change, then press your desired key combination",
+            widget=self.custom_capture,
+        )
+        group.add_row(self.custom_capture_row)
+
+        # Set initial state based on config
+        if is_preset_shortcut(current_shortcut):
+            self.shortcut_combo.set_active_id(current_shortcut)
+            self.custom_capture_row.set_visible(False)
+            self.custom_capture_row.set_no_show_all(True)
+        else:
+            self.shortcut_combo.set_active_id("custom")
+            self.custom_capture.set_shortcut(current_shortcut)
+            self.custom_capture_row.set_visible(True)
+            self.custom_capture_row.set_no_show_all(False)
 
         self.shortcuts_tab.pack_start(group, False, False, 0)
 
@@ -1195,17 +1392,42 @@ class SettingsDialog(Gtk.Dialog):
         self._update_shortcut_ui_for_mode(current_mode)
 
     def _update_shortcut_ui_for_mode(self, mode: str):
-        """Update the shortcut UI based on the selected mode."""
+        """Update the shortcut UI based on the selected mode and shortcut type."""
+        # Resolve the actual shortcut string and display name
+        shortcut_id = self.shortcut_combo.get_active_id()
+        if shortcut_id == "custom":
+            actual_shortcut = self.custom_capture.get_shortcut()
+        else:
+            actual_shortcut = shortcut_id
+        is_combo = actual_shortcut and not is_preset_shortcut(actual_shortcut)
+
+        if actual_shortcut:
+            display = format_shortcut_display(actual_shortcut)
+        else:
+            display = "..."
+
         if mode == "toggle":
-            self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
-            self.shortcut_info_label.set_text(
-                "In Toggle mode: Double-tap the key to start voice typing, double-tap again to stop."
-            )
+            if is_combo:
+                self.shortcut_row.set_subtitle("Press combo to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    f"Press {display} to start voice typing, press again to stop."
+                )
+            else:
+                self.shortcut_row.set_subtitle("Double-tap to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    f"Double-tap {display} to start voice typing, double-tap again to stop."
+                )
         elif mode == "push_to_talk":
-            self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
-            self.shortcut_info_label.set_text(
-                "In Push-to-Talk mode: Hold the key down to speak, release to stop recording."
-            )
+            if is_combo:
+                self.shortcut_row.set_subtitle("Hold both keys to speak, release to stop")
+                self.shortcut_info_label.set_text(
+                    f"Hold {display} to speak, release to stop recording."
+                )
+            else:
+                self.shortcut_row.set_subtitle("Hold key to speak, release to stop")
+                self.shortcut_info_label.set_text(
+                    f"Hold {display} to speak, release to stop recording."
+                )
 
     def _on_shortcut_mode_changed(self, widget):
         """Handle shortcut mode selection change."""
@@ -1229,6 +1451,11 @@ class SettingsDialog(Gtk.Dialog):
         # Try to apply the mode change live
         if self.shortcut_update_callback:
             shortcut_id = self.shortcut_combo.get_active_id()
+            # Resolve "custom" dropdown ID to the actual shortcut string
+            if shortcut_id == "custom":
+                shortcut_id = self.custom_capture.get_shortcut()
+                if not shortcut_id:
+                    return
             success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(
@@ -1255,31 +1482,84 @@ class SettingsDialog(Gtk.Dialog):
         if not shortcut_id:
             return
 
+        if shortcut_id == "custom":
+            # Show capture widget
+            self.custom_capture_row.set_no_show_all(False)
+            self.custom_capture_row.set_visible(True)
+            self.custom_capture_row.show_all()
+
+            custom = self.custom_capture.get_shortcut()
+            if not custom:
+                self.shortcut_info_label.set_text(
+                    "Click 'Change' and press your desired key combination."
+                )
+                return
+
+            shortcut_id = custom
+        else:
+            # Hide capture widget for presets
+            self.custom_capture_row.set_visible(False)
+            self.custom_capture_row.set_no_show_all(True)
+
         # Save to config
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
         self.config_manager.save_settings()
 
-        display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut_id, shortcut_id)
+        # Update subtitle text for preset vs combo
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        self._update_shortcut_ui_for_mode(mode_id or "toggle")
+
+        display_name = format_shortcut_display(shortcut_id)
+        escaped_name = GLib.markup_escape_text(display_name, -1)
         logger.info(f"Keyboard shortcut changed to: {display_name}")
 
-        # Try to apply the shortcut change live
         if self.shortcut_update_callback:
-            mode_id = self.shortcut_mode_combo.get_active_id()
             success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(
-                    f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
-                    f"Active now!</span>"
+                    f"<span foreground='#26a269'>Shortcut updated to "
+                    f"<b>{escaped_name}</b>. Active now!</span>"
                 )
             else:
                 self.shortcut_info_label.set_markup(
-                    f"<i>Shortcut updated to <b>{display_name}</b>. "
+                    f"<i>Shortcut updated to <b>{escaped_name}</b>. "
                     f"Restart the app for the change to take full effect.</i>"
                 )
         else:
             self.shortcut_info_label.set_markup(
-                f"<i>Shortcut updated to <b>{display_name}</b>. "
+                f"<i>Shortcut updated to <b>{escaped_name}</b>. "
                 f"Restart the app for the change to take full effect.</i>"
+            )
+
+    def _on_custom_shortcut_captured(self, shortcut: str):
+        """Handle a new custom shortcut being captured."""
+        self.config_manager.set("shortcuts", "toggle_recognition", shortcut)
+        self.config_manager.save_settings()
+
+        # Update subtitle text (custom = combo, not double-tap)
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        self._update_shortcut_ui_for_mode(mode_id or "toggle")
+
+        display_name = format_shortcut_display(shortcut)
+        escaped_name = GLib.markup_escape_text(display_name, -1)
+        logger.info(f"Custom keyboard shortcut set to: {display_name}")
+
+        if self.shortcut_update_callback:
+            mode_id = self.shortcut_mode_combo.get_active_id()
+            success = self.shortcut_update_callback(shortcut, mode_id)
+            if success:
+                self.shortcut_info_label.set_markup(
+                    f"<span foreground='#26a269'>Custom shortcut "
+                    f"<b>{escaped_name}</b> active!</span>"
+                )
+            else:
+                self.shortcut_info_label.set_markup(
+                    f"<i>Custom shortcut set to <b>{escaped_name}</b>. "
+                    f"Restart for full effect.</i>"
+                )
+        else:
+            self.shortcut_info_label.set_markup(
+                f"<i>Custom shortcut set to <b>{escaped_name}</b>. " f"Restart for full effect.</i>"
             )
 
     def _build_test_section(self):

@@ -25,7 +25,13 @@ except ImportError:
     ecodes = None  # type: ignore
     EVDEV_AVAILABLE = False
 
-from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend, parse_shortcut
+from .base import (
+    DEFAULT_SHORTCUT,
+    DEFAULT_SHORTCUT_MODE,
+    KeyboardBackend,
+    is_double_tap_shortcut,
+    parse_keys,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +53,89 @@ MODIFIER_KEY_CODES: Dict[str, Set[int]] = {
     "shift": {KEY_LEFTSHIFT, KEY_RIGHTSHIFT},
     "super": {KEY_LEFTMETA, KEY_RIGHTMETA},
 }
+
+# Regular key codes (letters)
+LETTER_KEY_CODES: Dict[str, Set[int]] = {}
+if EVDEV_AVAILABLE:
+    for _i, _letter in enumerate("abcdefghijklmnopqrstuvwxyz"):
+        _code = getattr(ecodes, f"KEY_{_letter.upper()}", None)
+        if _code is not None:
+            LETTER_KEY_CODES[_letter] = {_code}
+
+# F-key codes
+FKEY_CODES: Dict[str, Set[int]] = {}
+if EVDEV_AVAILABLE:
+    for _fi in range(1, 25):
+        _code = getattr(ecodes, f"KEY_F{_fi}", None)
+        if _code is not None:
+            FKEY_CODES[f"f{_fi}"] = {_code}
+
+# Special key codes
+SPECIAL_KEY_CODES: Dict[str, Set[int]] = {}
+if EVDEV_AVAILABLE:
+    _special_map = {
+        "space": "KEY_SPACE",
+        "tab": "KEY_TAB",
+        "pause": "KEY_PAUSE",
+        "scrolllock": "KEY_SCROLLLOCK",
+        "printscreen": "KEY_SYSRQ",
+        "insert": "KEY_INSERT",
+        "delete": "KEY_DELETE",
+        "home": "KEY_HOME",
+        "end": "KEY_END",
+        "pageup": "KEY_PAGEUP",
+        "pagedown": "KEY_PAGEDOWN",
+        "enter": "KEY_ENTER",
+        "return": "KEY_ENTER",
+        "escape": "KEY_ESC",
+        "backspace": "KEY_BACKSPACE",
+        "up": "KEY_UP",
+        "down": "KEY_DOWN",
+        "left": "KEY_LEFT",
+        "right": "KEY_RIGHT",
+        "capslock": "KEY_CAPSLOCK",
+        "numlock": "KEY_NUMLOCK",
+        "menu": "KEY_COMPOSE",
+    }
+    for _name, _ecode_name in _special_map.items():
+        _code = getattr(ecodes, _ecode_name, None)
+        if _code is not None:
+            SPECIAL_KEY_CODES[_name] = {_code}
+
+# Digit key codes
+DIGIT_KEY_CODES: Dict[str, Set[int]] = {}
+if EVDEV_AVAILABLE:
+    _digit_map = {
+        "0": "KEY_0",
+        "1": "KEY_1",
+        "2": "KEY_2",
+        "3": "KEY_3",
+        "4": "KEY_4",
+        "5": "KEY_5",
+        "6": "KEY_6",
+        "7": "KEY_7",
+        "8": "KEY_8",
+        "9": "KEY_9",
+    }
+    for _digit, _ecode_name in _digit_map.items():
+        _code = getattr(ecodes, _ecode_name, None)
+        if _code is not None:
+            DIGIT_KEY_CODES[_digit] = {_code}
+
+
+def resolve_evdev_codes(key_name: str) -> Set[int]:
+    """Resolve a key name to evdev key code(s). Returns set of codes (left/right variants)."""
+    if key_name in MODIFIER_KEY_CODES:
+        return MODIFIER_KEY_CODES[key_name]
+    if key_name in LETTER_KEY_CODES:
+        return LETTER_KEY_CODES[key_name]
+    if key_name in FKEY_CODES:
+        return FKEY_CODES[key_name]
+    if key_name in SPECIAL_KEY_CODES:
+        return SPECIAL_KEY_CODES[key_name]
+    if key_name in DIGIT_KEY_CODES:
+        return DIGIT_KEY_CODES[key_name]
+    return set()
 
 
 def find_keyboard_devices() -> List[str]:
@@ -89,6 +178,41 @@ def find_keyboard_devices() -> List[str]:
     return keyboard_devices
 
 
+def device_has_key(device_path: str, key_name: str) -> bool:
+    """
+    Check if a device has a specific key capability.
+
+    Args:
+        device_path: Path to the input device
+        key_name: The key name (e.g., "ctrl", "alt", "d", "f5")
+
+    Returns:
+        True if the device can send the specified key events
+    """
+    if not EVDEV_AVAILABLE:
+        return False
+
+    key_codes = resolve_evdev_codes(key_name)
+    if not key_codes:
+        return False
+
+    try:
+        device = InputDevice(device_path)
+        capabilities = device.capabilities()
+        device.close()
+
+        # Check if device has EV_KEY capability and supports the key
+        if ecodes.EV_KEY in capabilities:
+            key_caps = capabilities[ecodes.EV_KEY]
+            for key_code in key_codes:
+                if key_code in key_caps:
+                    return True
+    except (OSError, IOError):
+        pass
+
+    return False
+
+
 def device_has_modifier_key(device_path: str, modifier: str = "ctrl") -> bool:
     """
     Check if a device has a specific modifier key capability.
@@ -100,29 +224,7 @@ def device_has_modifier_key(device_path: str, modifier: str = "ctrl") -> bool:
     Returns:
         True if the device can send the specified modifier key events
     """
-    if not EVDEV_AVAILABLE:
-        return False
-
-    key_codes = MODIFIER_KEY_CODES.get(modifier, set())
-    if not key_codes:
-        return False
-
-    try:
-        device = InputDevice(device_path)
-        capabilities = device.capabilities()
-        device.close()
-
-        # Check if device has EV_KEY capability and supports the modifier keys
-        if ecodes.EV_KEY in capabilities:
-            key_caps = capabilities[ecodes.EV_KEY]
-            # Check for left or right variant of the modifier
-            for key_code in key_codes:
-                if key_code in key_caps:
-                    return True
-    except (OSError, IOError):
-        pass
-
-    return False
+    return device_has_key(device_path, modifier)
 
 
 class EvdevKeyboardBackend(KeyboardBackend):
@@ -155,30 +257,91 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
         self._devices_lock = threading.Lock()
 
+        # Combo tracking
+        self._pressed_key_codes: Set[int] = set()
+        self._combo_active: bool = False
+        self._target_code_groups: List[Set[int]] = []
+        self._all_target_codes: Set[int] = set()
+        self._update_target_keys()
+
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
 
-    def _get_target_key_codes(self) -> Set[int]:
-        """Get the evdev key codes for the configured modifier."""
-        return MODIFIER_KEY_CODES.get(self._modifier_key, set())
+    def _update_target_keys(self) -> None:
+        """Update the target key code groups from the current shortcut."""
+        if self._is_double_tap():
+            # For double-tap, we only need the single modifier codes
+            key_name = self._shortcut.lower().strip().split("+")[0]
+            codes = resolve_evdev_codes(key_name)
+            self._target_code_groups = [codes] if codes else []
+            self._all_target_codes = codes.copy() if codes else set()
+        else:
+            # For combo shortcuts, build a group per key
+            try:
+                keys = parse_keys(self._shortcut)
+                self._target_code_groups = []
+                self._all_target_codes = set()
+                for k in keys:
+                    codes = resolve_evdev_codes(k)
+                    if codes:
+                        self._target_code_groups.append(codes)
+                        self._all_target_codes |= codes
+            except ValueError:
+                self._target_code_groups = []
+                self._all_target_codes = set()
+
+    def _is_double_tap(self) -> bool:
+        """Check if the current shortcut is a double-tap shortcut."""
+        return is_double_tap_shortcut(self._shortcut)
+
+    def set_shortcut(self, shortcut: str) -> None:
+        """Update the shortcut. Should be called while backend is stopped or during init."""
+        super().set_shortcut(shortcut)
+        self._update_target_keys()
+        # Reset combo state
+        self._pressed_key_codes = set()
+        self._combo_active = False
+
+    def _combo_is_satisfied(self) -> bool:
+        """Check if all target code groups have at least one code pressed."""
+        for group in self._target_code_groups:
+            if not (group & self._pressed_key_codes):
+                return False
+        return len(self._target_code_groups) > 0
 
     def is_available(self) -> bool:
-        """Check if evdev is available and we can access a keyboard device with the modifier key."""
+        """Check if evdev is available and we can access a keyboard device with the needed keys."""
         if not EVDEV_AVAILABLE:
             return False
 
-        # Check if we can access at least one keyboard device with the modifier key capability
         try:
             devices = find_keyboard_devices()
             if not devices:
                 return False
 
-            # Try to find at least one device with the modifier key that we can open
-            for device_path in devices:
-                if device_has_modifier_key(device_path, self._modifier_key):
-                    return True
+            if self._is_double_tap():
+                # For double-tap, just check the modifier key
+                for device_path in devices:
+                    if device_has_key(device_path, self._modifier_key):
+                        return True
+            else:
+                # For combo shortcuts, check that all keys in the shortcut
+                # can be found across available devices
+                try:
+                    keys = parse_keys(self._shortcut)
+                except ValueError:
+                    return False
 
-            # Could not find any accessible device with the modifier key
+                for key_name in keys:
+                    found = False
+                    for device_path in devices:
+                        if device_has_key(device_path, key_name):
+                            found = True
+                            break
+                    if not found:
+                        return False
+                return True
+
             return False
         except Exception:
             return False
@@ -241,6 +404,8 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.devices = []
         self.device_fds = []
         self.key_pressed_devices = set()
+        self._pressed_key_codes = set()
+        self._combo_active = False
 
         for device_path in device_paths:
             try:
@@ -318,7 +483,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                             if event.type == ecodes.EV_KEY:
                                 self._handle_key_event(event, device)
 
-                    except (OSError, IOError) as e:
+                    except (OSError, IOError):
                         # Device was disconnected - remove it to avoid busy loop
                         device_name = (
                             device.name if device and hasattr(device, "name") else "unknown"
@@ -352,45 +517,83 @@ class EvdevKeyboardBackend(KeyboardBackend):
             code = event.code
             value = event.value  # 0 = release, 1 = press, 2 = repeat
 
-            target_codes = self._get_target_key_codes()
-
-            # Check if this is our target modifier key
-            if code in target_codes:
-                device_id = id(device)
-
-                if value == 1:  # Key press
-                    self.key_pressed_devices.add(device_id)
-                    current_time = time.time()
-
-                    if self._mode == "toggle":
-                        # Check for double-tap
-                        if (
-                            current_time - self.last_key_press_time < self.double_tap_threshold
-                            and self.double_tap_callback is not None
-                            and current_time - self.last_trigger_time > 0.5
-                        ):
-                            logger.debug(f"Double-tap {self._modifier_key} detected (evdev)")
-                            self.last_trigger_time = current_time
-                            threading.Thread(target=self.double_tap_callback, daemon=True).start()
-                    elif self._mode == "push_to_talk":
-                        # Trigger on press
-                        if self.key_press_callback is not None:
-                            logger.debug(f"Key press {self._modifier_key} detected (evdev)")
-                            threading.Thread(target=self.key_press_callback, daemon=True).start()
-
-                    self.last_key_press_time = current_time
-
-                elif value == 0:  # Key release
-                    self.key_pressed_devices.discard(device_id)
-
-                    if self._mode == "push_to_talk":
-                        # Trigger on release
-                        if self.key_release_callback is not None:
-                            logger.debug(f"Key release {self._modifier_key} detected (evdev)")
-                            threading.Thread(target=self.key_release_callback, daemon=True).start()
+            if self._is_double_tap():
+                self._handle_double_tap_event(code, value, device)
+            else:
+                self._handle_combo_event(code, value)
 
         except Exception as e:
             logger.error(f"Error handling key event: {e}")
+
+    def _handle_double_tap_event(self, code: int, value: int, device) -> None:
+        """Handle key events for double-tap shortcuts."""
+        target_codes = self._all_target_codes
+
+        if code not in target_codes:
+            return
+
+        device_id = id(device)
+
+        if value == 1:  # Key press
+            self.key_pressed_devices.add(device_id)
+            current_time = time.time()
+
+            if self._mode == "toggle":
+                # Check for double-tap
+                if (
+                    current_time - self.last_key_press_time < self.double_tap_threshold
+                    and self.double_tap_callback is not None
+                    and current_time - self.last_trigger_time > 0.5
+                ):
+                    logger.debug(f"Double-tap {self._modifier_key} detected (evdev)")
+                    self.last_trigger_time = current_time
+                    threading.Thread(target=self.double_tap_callback, daemon=True).start()
+            elif self._mode == "push_to_talk":
+                # Trigger on press
+                if self.key_press_callback is not None:
+                    logger.debug(f"Key press {self._modifier_key} detected (evdev)")
+                    threading.Thread(target=self.key_press_callback, daemon=True).start()
+
+            self.last_key_press_time = current_time
+
+        elif value == 0:  # Key release
+            self.key_pressed_devices.discard(device_id)
+
+            if self._mode == "push_to_talk":
+                # Trigger on release
+                if self.key_release_callback is not None:
+                    logger.debug(f"Key release {self._modifier_key} detected (evdev)")
+                    threading.Thread(target=self.key_release_callback, daemon=True).start()
+
+    def _handle_combo_event(self, code: int, value: int) -> None:
+        """Handle key events for combo shortcuts."""
+        # Only track keys that are part of our target combo
+        if code not in self._all_target_codes:
+            return
+
+        if value == 1:  # Key press
+            self._pressed_key_codes.add(code)
+
+            if self._combo_is_satisfied() and not self._combo_active:
+                self._combo_active = True
+                if self._mode == "toggle":
+                    if self.double_tap_callback is not None:
+                        logger.debug(f"Combo {self._shortcut} activated (evdev)")
+                        threading.Thread(target=self.double_tap_callback, daemon=True).start()
+                elif self._mode == "push_to_talk":
+                    if self.key_press_callback is not None:
+                        logger.debug(f"Combo press {self._shortcut} detected (evdev)")
+                        threading.Thread(target=self.key_press_callback, daemon=True).start()
+
+        elif value == 0:  # Key release
+            self._pressed_key_codes.discard(code)
+
+            if self._combo_active and not self._combo_is_satisfied():
+                self._combo_active = False
+                if self._mode == "push_to_talk":
+                    if self.key_release_callback is not None:
+                        logger.debug(f"Combo release {self._shortcut} detected (evdev)")
+                        threading.Thread(target=self.key_release_callback, daemon=True).start()
 
 
 # Export availability
@@ -399,4 +602,6 @@ __all__ = [
     "EVDEV_AVAILABLE",
     "find_keyboard_devices",
     "device_has_modifier_key",
+    "device_has_key",
+    "resolve_evdev_codes",
 ]

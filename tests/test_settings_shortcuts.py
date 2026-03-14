@@ -50,11 +50,11 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         self.assertIn("self.shortcut_combo.set_tooltip_text(", self.source_code)
 
     def test_shortcut_options_populated(self):
-        """Test that shortcut options are populated from SHORTCUT_DISPLAY_NAMES."""
-        self.assertIn(
-            "for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items()", self.source_code
-        )
+        """Test that shortcut options are populated from PRESET_SHORTCUTS."""
+        self.assertIn("for shortcut_id, display_name in PRESET_SHORTCUTS.items()", self.source_code)
         self.assertIn("self.shortcut_combo.append(shortcut_id, display_name)", self.source_code)
+        # Custom option is also added
+        self.assertIn('self.shortcut_combo.append("custom", "Custom...")', self.source_code)
 
     def test_shortcut_config_read(self):
         """Test that shortcut is read from config."""
@@ -84,15 +84,6 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         """Test that preference row has descriptive subtitle."""
         # The subtitle is now dynamic based on mode (toggle or push-to-talk)
         self.assertIn("set_subtitle", self.source_code)
-        """Test that preference row has correct title."""
-        self.assertIn('title="Shortcut Key"', self.source_code)
-        """Test that preference row has correct title."""
-        self.assertIn('title="Toggle Recognition"', self.source_code)
-
-    def test_shortcut_preference_row_subtitle(self):
-        """Test that preference row has descriptive subtitle."""
-        # The subtitle is now dynamic based on mode (toggle or push-to-talk)
-        self.assertIn("set_subtitle", self.source_code)
 
     def test_shortcut_info_label_exists(self):
         """Test that info label exists for user guidance."""
@@ -112,6 +103,30 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         self.assertIn("from .keyboard_backends import", self.source_code)
         self.assertIn("SHORTCUT_DISPLAY_NAMES", self.source_code)
         self.assertIn("SUPPORTED_SHORTCUTS", self.source_code)
+
+    def test_imports_preset_shortcuts(self):
+        """Test that PRESET_SHORTCUTS is imported."""
+        self.assertIn("PRESET_SHORTCUTS", self.source_code)
+
+    def test_custom_option_in_dropdown(self):
+        """Test that Custom... option is added to the shortcut dropdown."""
+        self.assertIn('self.shortcut_combo.append("custom", "Custom...")', self.source_code)
+
+    def test_capture_widget_class_exists(self):
+        """Test that ShortcutCaptureWidget class is defined."""
+        self.assertIn("class ShortcutCaptureWidget", self.source_code)
+
+    def test_capture_widget_has_change_button(self):
+        """Test that capture widget has a Change button."""
+        self.assertIn('Gtk.Button(label="Change")', self.source_code)
+
+    def test_capture_widget_key_press_handler(self):
+        """Test that capture widget has a key press handler."""
+        self.assertIn("_on_key_press", self.source_code)
+
+    def test_custom_shortcut_callback(self):
+        """Test that custom shortcut captured callback exists."""
+        self.assertIn("_on_custom_shortcut_captured", self.source_code)
 
 
 class TestKeyboardBackendsBase(unittest.TestCase):

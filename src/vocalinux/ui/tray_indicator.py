@@ -121,9 +121,10 @@ class TrayIndicator:
         self.shortcut_manager.register_press_callback(None)
         self.shortcut_manager.register_release_callback(None)
 
-        # Get configured mode from config
+        # Get configured mode from config and sync to backend
         mode = self.config_manager.get("shortcuts", "mode", "toggle")
         logger.info(f"Setting up keyboard shortcuts with mode: {mode}")
+        self.shortcut_manager.set_mode(mode)
 
         if mode == "toggle":
             # Register toggle callback for double-tap mode
