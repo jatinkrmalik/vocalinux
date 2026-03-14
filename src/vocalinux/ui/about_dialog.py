@@ -55,13 +55,7 @@ def show_about_dialog(parent: Gtk.Window = None):
 
     # Website
     about_dialog.set_website(__url__)
-    about_dialog.set_website_label("⭐ Star on GitHub")
-
-    changelog_button = Gtk.LinkButton.new_with_label(
-        "https://vocalinux.com/changelog/", "📋 Changelog"
-    )
-    about_dialog.get_action_area().pack_start(changelog_button, False, False, 0)
-    changelog_button.show()
+    about_dialog.set_website_label("Star on GitHub")
 
     # License
     about_dialog.set_license_type(Gtk.License.GPL_3_0)
@@ -308,19 +302,10 @@ class AboutDialog(Gtk.Dialog):
         links_box.get_style_context().add_class("about-links")
         links_box.set_margin_bottom(16)
 
-        github_button = Gtk.LinkButton.new_with_label(self.url, "⭐ Star on GitHub")
+        # GitHub button
+        github_button = Gtk.LinkButton.new_with_label(self.url, "Star on GitHub")
         github_button.get_style_context().add_class("about-link-button")
         links_box.pack_start(github_button, False, False, 0)
-
-        separator = Gtk.Label(label="|")
-        separator.get_style_context().add_class("about-credit-role")
-        links_box.pack_start(separator, False, False, 0)
-
-        changelog_button = Gtk.LinkButton.new_with_label(
-            "https://vocalinux.com/changelog/", "📋 Changelog"
-        )
-        changelog_button.get_style_context().add_class("about-link-button")
-        links_box.pack_start(changelog_button, False, False, 0)
 
         return links_box
 
