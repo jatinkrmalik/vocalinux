@@ -46,6 +46,9 @@ DEFAULT_CONFIG = {
         "autostart": False,
         "first_run": True,
     },
+    "text_injection": {
+        "copy_to_clipboard": True,  # Always copy recognized text to clipboard
+    },
     "advanced": {
         "debug_logging": False,
         "wayland_mode": False,

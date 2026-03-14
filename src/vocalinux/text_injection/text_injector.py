@@ -211,9 +211,15 @@ class TextInjector:
                 logger.error(
                     "No text injection tools found. Please install one of:\n"
                     "- IBus (recommended, usually pre-installed)\n"
-                    "- wtype: sudo apt install wtype\n"
-                    "- ydotool: sudo apt install ydotool\n"
-                    "- xdotool: sudo apt install xdotool"
+                    "- wtype: sudo apt install wtype (GNOME/Sway)\n"
+                    "- ydotool: sudo apt install ydotool (works on all Wayland compositors)\n"
+                    "- xdotool: sudo apt install xdotool (X11/XWayland only)\n"
+                    "\n"
+                    "For KDE Plasma Wayland users: wtype is not supported. "
+                    "Install ydotool or wl-copy for clipboard fallback:\n"
+                    "  sudo apt install ydotool\n"
+                    "  sudo systemctl enable --now ydotoold\n"
+                    "Or for clipboard fallback: sudo apt install wl-copy"
                 )
                 raise RuntimeError("Missing required dependencies for text injection")
 
@@ -299,6 +305,108 @@ class TextInjector:
         logger.debug("No better tools available, continuing with xdotool fallback")
         return False
 
+    def _copy_to_clipboard(self, text: str) -> bool:
+        """
+        Copy text to clipboard.
+
+        This is useful for:
+        - Fallback when injection fails on unsupported compositors (like KDE Plasma)
+        - Always-on clipboard copy so users can paste recognized text elsewhere
+
+        Args:
+            text: The text to copy to clipboard
+
+        Returns:
+            True if clipboard copy was successful, False otherwise
+        """
+        logger.info("Copying text to clipboard")
+
+        # Try wl-copy first (Wayland native)
+        if shutil.which("wl-copy"):
+            try:
+                subprocess.run(
+                    ["wl-copy", text],
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                logger.info("Text copied to Wayland clipboard using wl-copy")
+                return True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"wl-copy failed: {e}")
+
+        # Try xclip (X11 / XWayland)
+        if shutil.which("xclip"):
+            try:
+                subprocess.run(
+                    ["xclip", "-selection", "clipboard"],
+                    input=text,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                logger.info("Text copied to clipboard using xclip")
+                return True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"xclip failed: {e}")
+
+        # Try xsel as last resort
+        if shutil.which("xsel"):
+            try:
+                subprocess.run(
+                    ["xsel", "--clipboard", "--input"],
+                    input=text,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=5,
+                )
+                logger.info("Text copied to clipboard using xsel")
+                return True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"xsel failed: {e}")
+
+        logger.warning(
+            "Clipboard copy failed. Install wl-copy (Wayland) or xclip/xsel "
+            "to enable clipboard functionality."
+        )
+        return False
+
+    def _should_copy_to_clipboard(self) -> bool:
+        """Check if copy-to-clipboard setting is enabled."""
+        try:
+            import json
+
+            config_path = os.path.expanduser("~/.config/vocalinux/config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                return config.get("text_injection", {}).get("copy_to_clipboard", True)
+        except Exception as e:
+            logger.debug(f"Could not read copy_to_clipboard setting: {e}")
+        return True  # Default to enabled
+
+    def _show_clipboard_fallback_notification(self):
+        """Show a desktop notification when text is copied to clipboard as fallback."""
+        try:
+            subprocess.Popen(
+                [
+                    "notify-send",
+                    "-i",
+                    "edit-paste",
+                    "-a",
+                    "Vocalinux",
+                    "Text copied to clipboard",
+                    "Text injection failed - paste with Ctrl+V",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            logger.debug(f"Could not show clipboard notification: {e}")
+
     def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently focused application.
@@ -362,13 +470,27 @@ class TextInjector:
                     else:
                         raise
             logger.info("Text injection completed successfully")
+
+            if self._should_copy_to_clipboard():
+                self._copy_to_clipboard(text)
+                logger.debug("Text also copied to clipboard (setting enabled)")
+
             return True
         except Exception as e:
             logger.error(f"Failed to inject text: {e}", exc_info=True)
+
+            try:
+                if self._copy_to_clipboard(text):
+                    logger.info("Text copied to clipboard as fallback - user can paste manually")
+                    self._show_clipboard_fallback_notification()
+                    return True
+            except Exception as clipboard_error:
+                logger.debug(f"Clipboard fallback also failed: {clipboard_error}")
+
             try:
                 from ..ui.audio_feedback import play_error_sound
 
-                play_error_sound()  # Play error sound when text injection fails
+                play_error_sound()
             except ImportError:
                 logger.warning("Could not import audio feedback module")
             return False
