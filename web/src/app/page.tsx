@@ -1113,6 +1113,129 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* The Voca Family - Ecosystem Section */}
+      <section id="ecosystem" className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
+        <div className="max-w-4xl mx-auto">
+          <FadeInSection>
+            <div className="text-center mb-12">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+                The Voca Family
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Voice dictation, done right, on every platform.
+              </p>
+            </div>
+          </FadeInSection>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* VocaMac Card */}
+            <FadeInSection delay={0.1}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full relative">
+                <div className="absolute top-4 right-4">
+                  <span className="bg-primary text-primary-foreground text-xs font-semibold px-2 py-1 rounded">
+                    Beta
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-lg flex items-center justify-center">
+                    <img src="https://cdn.simpleicons.org/apple/000000" alt="macOS" width={24} height={24} className="dark:invert" />
+                  </div>
+                  <h3 className="text-xl font-bold">VocaMac</h3>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Native macOS menu bar app. 100% offline voice-to-text powered by WhisperKit and CoreML with Apple Silicon acceleration.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    WhisperKit
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    CoreML
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    Apple Silicon
+                  </span>
+                  <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-medium px-2 py-1 rounded-full">
+                    AGPL-3.0
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <a
+                    href="https://vocamac.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Website
+                  </a>
+                  <a
+                    href="https://github.com/jatinkrmalik/vocamac"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub
+                  </a>
+                </div>
+              </div>
+            </FadeInSection>
+
+            {/* VocaWin Card */}
+            <FadeInSection delay={0.2}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full relative">
+                <div className="absolute top-4 right-4">
+                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold px-2 py-1 rounded">
+                    Coming Soon
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-lg flex items-center justify-center">
+                    <svg viewBox="0 0 88 88" width={24} height={24} aria-label="Windows" className="dark:invert"><path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314.0v41.527l-47.318.376zm47.329 39.349-.011 41.34-47.318-6.678-.066-34.739z" fill="#00adef"/></svg>
+                  </div>
+                  <h3 className="text-xl font-bold">VocaWin</h3>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Voice dictation for Windows. Native system tray app with offline-first architecture. Currently in planning.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    whisper.cpp
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    Native Tray
+                  </span>
+                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium px-2 py-1 rounded-full">
+                    Planned
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <a
+                    href="https://vocawin.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Website
+                  </a>
+                  <a
+                    href="https://github.com/jatinkrmalik/vocawin"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub
+                  </a>
+                </div>
+              </div>
+            </FadeInSection>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-16 sm:py-24 px-4 sm:px-6 bg-gradient-to-br from-primary/10 via-cyan-500/10 to-primary/10">
         <div className="max-w-4xl mx-auto text-center">

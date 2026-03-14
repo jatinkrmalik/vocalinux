@@ -357,6 +357,18 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [x] ~~Wayland support via IBus~~ ✅
 - [ ] Voice command customization
 
+## 🌐 The Voca Ecosystem
+
+Vocalinux is part of a family of privacy-first, offline voice dictation tools. Same mission, every operating system.
+
+| Platform | Project | Website | GitHub | Status |
+|----------|---------|---------|--------|--------|
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.9.0 |
+| 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
+| 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
+
+> Each platform uses native technologies for the best possible integration, while sharing the same privacy-first philosophy and offline-only architecture.
+
 ## 🤝 Contributing
 
 We welcome contributions! Whether it's bug reports, feature requests, or code contributions, please check out our [Contributing Guide](CONTRIBUTING.md).
