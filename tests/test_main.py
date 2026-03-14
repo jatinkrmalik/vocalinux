@@ -233,6 +233,7 @@ class TestMainModule(unittest.TestCase):
             mock_speech_instance.register_action_callback.assert_called_once_with(
                 mock_action_instance.handle_action
             )
+            mock_speech_instance.register_state_callback.assert_called_once()
 
             # Verify the tray indicator was started
             mock_tray_instance.run.assert_called_once()
@@ -646,6 +647,75 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 self.assertEqual(call_kwargs["model_size"], "medium")
                 self.assertEqual(call_kwargs["language"], "de")
                 self.assertEqual(call_kwargs["audio_device_index"], 2)
+
+
+class TestTextCallbackSpacing(unittest.TestCase):
+    """Test spacing logic in text_callback_wrapper."""
+
+    def _make_callback(self):
+        """Build text_callback_wrapper with mocked dependencies."""
+        from vocalinux.ui.action_handler import ActionHandler
+
+        text_system = MagicMock()
+        text_system.inject_text.return_value = True
+        action_handler = ActionHandler(text_system)
+
+        def text_callback_wrapper(text: str):
+            text_to_inject = text.strip()
+            if not text_to_inject:
+                return
+            if action_handler.last_injected_text and action_handler.last_injected_text.strip():
+                text_to_inject = " " + text_to_inject
+            success = text_system.inject_text(text_to_inject)
+            if success:
+                action_handler.set_last_injected_text(text)
+
+        return text_callback_wrapper, text_system, action_handler
+
+    def test_first_segment_has_no_leading_space(self):
+        cb, text_system, _ = self._make_callback()
+        cb("Hello world")
+        text_system.inject_text.assert_called_once_with("Hello world")
+
+    def test_subsequent_segment_gets_space_separator(self):
+        cb, text_system, _ = self._make_callback()
+        cb("Hello")
+        cb("world")
+        calls = [c.args[0] for c in text_system.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello", " world"])
+
+    def test_reset_clears_leading_space(self):
+        cb, text_system, ah = self._make_callback()
+        cb("first session")
+        ah.set_last_injected_text("")
+        text_system.inject_text.reset_mock()
+        cb("second session")
+        text_system.inject_text.assert_called_once_with("second session")
+
+    def test_whitespace_only_input_is_skipped(self):
+        cb, text_system, _ = self._make_callback()
+        cb("   ")
+        text_system.inject_text.assert_not_called()
+
+    def test_input_with_leading_space_is_stripped(self):
+        cb, text_system, _ = self._make_callback()
+        cb(" Hello world")
+        text_system.inject_text.assert_called_once_with("Hello world")
+
+    def test_multiple_segments_all_get_separators(self):
+        cb, text_system, _ = self._make_callback()
+        cb("one")
+        cb("two")
+        cb("three")
+        calls = [c.args[0] for c in text_system.inject_text.call_args_list]
+        self.assertEqual(calls, ["one", " two", " three"])
+
+    def test_space_after_punctuation_segment(self):
+        cb, text_system, _ = self._make_callback()
+        cb("Hello.")
+        cb("World")
+        calls = [c.args[0] for c in text_system.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello.", " World"])
 
 
 if __name__ == "__main__":
