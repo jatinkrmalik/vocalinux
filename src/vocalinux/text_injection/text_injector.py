@@ -442,7 +442,13 @@ class TextInjector:
                 or self.environment == DesktopEnvironment.X11_IBUS
             ):
                 if self._ibus_injector is not None:
-                    return self._ibus_injector.inject_text(text)
+                    result = self._ibus_injector.inject_text(text)
+                    if result:
+                        logger.info("Text injection completed successfully")
+                        if self._should_copy_to_clipboard():
+                            self._copy_to_clipboard(text)
+                            logger.debug("Text also copied to clipboard (setting enabled)")
+                    return result
                 else:
                     logger.error("IBus injector not initialized")
                     return False
