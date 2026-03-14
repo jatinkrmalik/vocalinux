@@ -146,6 +146,90 @@ sudo urpmi -y python3-gobject gtk3-devel gobject-introspection-devel \
   portaudio-devel python3-devel python3-virtualenv pkg-config
 ```
 
+## pipx Installation
+
+pipx is a popular tool for installing Python CLI applications in isolated environments. However, **Vocalinux requires system GTK packages** that cannot be installed via pip/pipx.
+
+### Important: Install System Packages First
+
+Before running `pipx install vocalinux`, you **must** install the required system packages:
+
+#### Ubuntu/Debian
+```bash
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
+  portaudio19-dev python3-dev pkg-config
+```
+
+#### Fedora
+```bash
+sudo dnf install python3-gobject gtk3 libappindicator-gtk3 \
+  portaudio-devel python3-devel pkg-config
+```
+
+#### Arch Linux
+```bash
+sudo pacman -S python-gobject gtk3 libappindicator portaudio pkg-config
+```
+
+#### openSUSE
+```bash
+sudo zypper install python3-gobject gtk3 libappindicator \
+  portaudio-devel python3-devel pkg-config
+```
+
+### pipx Installation Steps
+
+1. **Install system packages** (see above for your distribution)
+
+2. **Install pipx** (if not already installed):
+   ```bash
+   # Ubuntu/Debian
+   sudo apt install pipx
+   pipx ensurepath
+
+   # Fedora
+   sudo dnf install pipx
+   pipx ensurepath
+
+   # Arch Linux
+   sudo pacman -S pipx
+   pipx ensurepath
+   ```
+
+3. **Install Vocalinux**:
+   ```bash
+   pipx install vocalinux
+   ```
+
+4. **Run Vocalinux**:
+   ```bash
+   vocalinux-gui
+   ```
+
+### Why System Packages Are Required
+
+Vocalinux uses GTK3 for its GUI and AppIndicator for the system tray icon. These are system libraries that use GObject Introspection (GI) bindings, which must be installed via your distribution's package manager. The Python packages in pip only provide the Python interface to these libraries - they don't include the actual GTK libraries.
+
+### Troubleshooting pipx Installation
+
+If `vocalinux-gui` fails to start:
+
+1. **Check for missing system packages** - The error message will indicate which packages are missing
+2. **Verify GI_TYPELIB_PATH** - In rare cases, you may need to set this environment variable:
+   ```bash
+   export GI_TYPELIB_PATH=/usr/lib/x86_64-linux-gnu/girepository-1.0
+   vocalinux-gui
+   ```
+
+### Recommended Alternative
+
+For the best experience with automatic dependency handling, use the official installer:
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
+```
+
+This installer automatically detects your distribution and installs all required system packages.
+
 ## Text Injection Tools
 
 Vocalinux requires text injection tools to work with X11 or Wayland:
