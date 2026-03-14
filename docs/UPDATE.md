@@ -2,6 +2,41 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.9.0-beta
+
+### 🚀 Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **⌨️ Left/Right Modifier Keys** | Choose Left Ctrl vs Right Ctrl (etc.) as your shortcut trigger |
+| **🔔 Sound Effects Toggle** | Enable or disable audio feedback from the Settings dialog |
+| **📋 Wayland Clipboard Fallback** | Automatic clipboard copy when virtual keyboard injection isn't available |
+| **🛠️ Installation Polish** | Better pipx/Debian guidance and headless display detection |
+
+### ✨ New Features
+
+- **Left/Right Modifier Key Distinction** — Shortcuts now support `Left Ctrl`, `Right Alt`, etc., with grouped UI in Settings
+- **Sound Effects Toggle** — New Audio Settings toggle to silence start/stop/error sounds
+- **Clipboard Fallback for Wayland** — Auto-copies text via `wl-copy`/`xclip` when injection unavailable (KDE Plasma etc.)
+- **Display Availability Check** — Graceful error message when running in headless environments
+
+### 🐛 Bug Fixes
+
+- **#308**: Distinguish left vs right modifier keys (evdev + pynput backends)
+- **#307**: Remove unwanted leading space when starting a new transcription session
+- **#305**: Pass configured shortcut mode to `KeyboardShortcutManager` on startup
+- **#299**: Add clipboard fallback for Wayland compositors without virtual keyboard support
+- **#289**: Improve Debian/pipx installation error messages and cross-distro dependency guidance
+
+### 🔧 Improvements
+
+- **Grouped shortcut selector** — Settings dropdown now organises shortcuts by Either/Left/Right side
+- **pipx documentation** — New `DISTRO_COMPATIBILITY.md` section for pipx users
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.9.0-beta).
+
+---
+
 ## What's New in v0.8.0-beta
 
 ### 🚀 Highlights
@@ -44,7 +79,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 Simply re-run the installation command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh | bash
 ```
 
 The installer will:
@@ -58,7 +93,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.8.0-beta
+git checkout v0.9.0-beta
 ./install.sh
 ```
 

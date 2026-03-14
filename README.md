@@ -28,38 +28,38 @@
 
 **A seamless free open-source private voice dictation system for Linux**, comparable to built-in solutions on macOS and Windows.
 
-## 📚 What's New in v0.8.0-beta
+## 📚 What's New in v0.9.0-beta
 
-> 🎉 **Major Release: Push-to-Talk, command controls, and reliability upgrades.**
+> 🎉 **Release: Left/Right modifier keys, sound effects toggle, Wayland clipboard fallback, and more.**
 
-### 🚀 Highlights (v0.7.0 → v0.8.0)
+### 🚀 Highlights (v0.8.0 → v0.9.0)
 
 | Feature | Description |
 |---------|-------------|
-| **🎤 Push-to-Talk Mode** | Hold the shortcut key to speak, release to stop |
-| **⚙️ Voice Commands Toggle** | Enable/disable command parsing with smart VOSK auto-enable |
-| **⌨️ Shortcut Reliability** | Improved live mode switching and callback lifecycle stability |
-| **🧠 Better Input Handling** | More robust IBus detection and text injection behavior |
+| **⌨️ Left/Right Modifier Keys** | Choose Left Ctrl vs Right Ctrl (etc.) as your shortcut trigger |
+| **🔔 Sound Effects Toggle** | Enable or disable audio feedback from the Settings dialog |
+| **📋 Wayland Clipboard Fallback** | Automatic clipboard copy when virtual keyboard injection isn't available |
+| **🛠️ Installation Polish** | Better pipx/Debian guidance and headless display detection |
 
-### ✨ New Features (v0.8.0)
+### ✨ New Features (v0.9.0)
 
-- **Push-to-Talk Shortcut Mode** — Added a second shortcut mode alongside double-tap toggle
-- **Mode-aware Shortcut UI** — Settings now clearly describe toggle vs push-to-talk behavior
-- **Voice Commands Optional Mode** — Commands can be disabled, with auto mode optimized for VOSK
+- **Left/Right Modifier Key Distinction** — Shortcuts now support `Left Ctrl`, `Right Alt`, etc., with grouped UI in Settings
+- **Sound Effects Toggle** — New Audio Settings toggle to silence start/stop/error sounds
+- **Clipboard Fallback for Wayland** — Auto-copies text via `wl-copy`/`xclip` when injection unavailable (KDE Plasma etc.)
+- **Display Availability Check** — Graceful error message when running in headless environments
 
-### 🐛 Bug Fixes (v0.8.0)
+### 🐛 Bug Fixes (v0.9.0)
 
-- **#277**: Detect active IBus input method before using IBus injection path
-- **#275**: Auto-detect supported audio channel count for better microphone compatibility
-- **#268**: Prevent GTK startup dialog crash on Fedora
-- **#261**: Resolve text injection reliability issues across desktop environments
-- **#259**: Prevent recognition-thread state flicker
-- **#262/#263**: Auto-detect device sample rate for broader audio hardware support
+- **#308**: Distinguish left vs right modifier keys (evdev + pynput backends)
+- **#307**: Remove unwanted leading space when starting a new transcription session
+- **#305**: Pass configured shortcut mode to `KeyboardShortcutManager` on startup
+- **#299**: Add clipboard fallback for Wayland compositors without virtual keyboard support
+- **#289**: Improve Debian/pipx installation error messages and cross-distro dependency guidance
 
-### 🔧 Recent Improvements
+### 🔧 Improvements
 
-- **Web SEO Expansion** — Added 8 additional optimized pages for discoverability
-- **Web Visual Refresh** — Updated homepage gradients and voice-brand styling
+- **Grouped shortcut selector** — Settings dropdown now organises shortcuts by Either/Left/Right side
+- **pipx documentation** — New `DISTRO_COMPATIBILITY.md` section for pipx users
 
 ---
 
@@ -117,7 +117,7 @@ Here are some screenshots showcasing Vocalinux in action:
 Our new interactive installer guides you through setup with intelligent hardware detection:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 
 **Choose your engine:**
@@ -131,25 +131,25 @@ The installer will:
 - **Download the appropriate model** (~39MB for whisper.cpp tiny)
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
-> **Note**: Installs v0.8.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+> **Note**: Installs v0.9.0-beta. For other versions, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
 ### Installation Options
 
 **Default (whisper.cpp - recommended):**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
 ```
 Fastest installation (~1-2 min), universal GPU support via Vulkan.
 
 **Whisper (OpenAI) - if you prefer PyTorch:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
 ```
 NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
 
 **VOSK only - for low-RAM systems:**
 ```bash
-curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
 ```
 Lightweight option (~40MB), works on systems with 4GB RAM.
 
@@ -360,6 +360,14 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 ## 🤝 Contributing
 
 We welcome contributions! Whether it's bug reports, feature requests, or code contributions, please check out our [Contributing Guide](CONTRIBUTING.md).
+
+### Contributors
+
+Thanks to everyone who has contributed to Vocalinux! 🙌
+
+<a href="https://github.com/jatinkrmalik/vocalinux/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=jatinkrmalik/vocalinux" />
+</a>
 
 ### Quick Links
 

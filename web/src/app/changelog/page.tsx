@@ -6,6 +6,21 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.9.0-beta",
+    date: "2026-03-14",
+    type: "beta",
+    highlights: [
+      "Left/right modifier key distinction — choose Left Ctrl vs Right Ctrl for your shortcut",
+      "Sound effects toggle — enable or disable audio feedback from Settings",
+      "Wayland clipboard fallback — auto-copies text when virtual keyboard injection isn't available",
+      "Display availability check — graceful error when running in headless environments",
+      "Fixed unwanted leading space at the start of each new transcription session",
+      "Fixed shortcut mode (toggle/push-to-talk) not applying on startup",
+      "Improved Debian/pipx installation guidance and cross-distro error messages",
+      "Grouped shortcut selector UI — shortcuts organised by Either/Left/Right side",
+    ],
+  },
+  {
     version: "v0.8.0-beta",
     date: "2026-03-01",
     type: "beta",
@@ -160,7 +175,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-03-01",
+    dateModified: "2026-03-14",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
