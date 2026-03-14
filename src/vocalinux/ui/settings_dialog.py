@@ -943,10 +943,23 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(start_minimized_row)
 
+        self.copy_to_clipboard_switch = Gtk.Switch()
+        self.copy_to_clipboard_switch.set_tooltip_text(
+            "Copy recognized text to clipboard after each transcription. "
+            "Useful if injection fails or you want to paste elsewhere."
+        )
+        copy_to_clipboard_row = PreferenceRow(
+            title="Copy to Clipboard",
+            subtitle="Always copy recognized text to clipboard for easy pasting",
+            widget=self.copy_to_clipboard_switch,
+        )
+        group.add_row(copy_to_clipboard_row)
+
         self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
+        self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
 
     def _on_autostart_toggled(self, widget, state):
         """Handle toggle of the autostart switch."""
@@ -976,6 +989,18 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("ui", "start_minimized", enabled)
         self.config_manager.save_settings()
         logger.info(f"Start minimized {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_copy_to_clipboard_toggled(self, widget, state):
+        """Handle toggle of the copy to clipboard switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Copy to clipboard toggled: {enabled}")
+        self.config_manager.set("text_injection", "copy_to_clipboard", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Copy to clipboard {'enabled' if enabled else 'disabled'}")
         return False
 
     def _build_engine_section(self):
@@ -1392,12 +1417,15 @@ class SettingsDialog(Gtk.Dialog):
 
         general_settings = self.config_manager.get_settings().get("general", {})
         ui_settings = self.config_manager.get_settings().get("ui", {})
+        text_injection_settings = self.config_manager.get_settings().get("text_injection", {})
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
+        copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", True)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
+        self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
 
         # Populate engine combo with only available engines
         available_engines = get_available_engines()

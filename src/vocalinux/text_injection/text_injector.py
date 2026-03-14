@@ -305,12 +305,13 @@ class TextInjector:
         logger.debug("No better tools available, continuing with xdotool fallback")
         return False
 
-    def _fallback_to_clipboard(self, text: str) -> bool:
+    def _copy_to_clipboard(self, text: str) -> bool:
         """
-        Copy text to clipboard as a fallback when all injection methods fail.
+        Copy text to clipboard.
 
-        This is useful on Wayland compositors that don't support virtual keyboard
-        protocols (like KDE Plasma) where wtype and xdotool both fail.
+        This is useful for:
+        - Fallback when injection fails on unsupported compositors (like KDE Plasma)
+        - Always-on clipboard copy so users can paste recognized text elsewhere
 
         Args:
             text: The text to copy to clipboard
@@ -318,12 +319,12 @@ class TextInjector:
         Returns:
             True if clipboard copy was successful, False otherwise
         """
-        logger.info("Attempting clipboard fallback for text injection")
+        logger.info("Copying text to clipboard")
 
         # Try wl-copy first (Wayland native)
         if shutil.which("wl-copy"):
             try:
-                result = subprocess.run(
+                subprocess.run(
                     ["wl-copy", text],
                     check=True,
                     stderr=subprocess.PIPE,
@@ -338,7 +339,7 @@ class TextInjector:
         # Try xclip (X11 / XWayland)
         if shutil.which("xclip"):
             try:
-                result = subprocess.run(
+                subprocess.run(
                     ["xclip", "-selection", "clipboard"],
                     input=text,
                     check=True,
@@ -354,7 +355,7 @@ class TextInjector:
         # Try xsel as last resort
         if shutil.which("xsel"):
             try:
-                result = subprocess.run(
+                subprocess.run(
                     ["xsel", "--clipboard", "--input"],
                     input=text,
                     check=True,
@@ -367,11 +368,25 @@ class TextInjector:
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 logger.warning(f"xsel failed: {e}")
 
-        logger.error(
-            "Clipboard fallback failed. Install wl-copy (Wayland) or xclip/xsel "
-            "to enable clipboard fallback on unsupported compositors."
+        logger.warning(
+            "Clipboard copy failed. Install wl-copy (Wayland) or xclip/xsel "
+            "to enable clipboard functionality."
         )
         return False
+
+    def _should_copy_to_clipboard(self) -> bool:
+        """Check if copy-to-clipboard setting is enabled."""
+        try:
+            import json
+
+            config_path = os.path.expanduser("~/.config/vocalinux/config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                return config.get("text_injection", {}).get("copy_to_clipboard", True)
+        except Exception as e:
+            logger.debug(f"Could not read copy_to_clipboard setting: {e}")
+        return True  # Default to enabled
 
     def inject_text(self, text: str) -> bool:
         """
@@ -436,29 +451,26 @@ class TextInjector:
                     else:
                         raise
             logger.info("Text injection completed successfully")
+
+            if self._should_copy_to_clipboard():
+                self._copy_to_clipboard(text)
+                logger.debug("Text also copied to clipboard (setting enabled)")
+
             return True
         except Exception as e:
             logger.error(f"Failed to inject text: {e}", exc_info=True)
 
-            # Try clipboard fallback as last resort
             try:
-                if self._fallback_to_clipboard(text):
+                if self._copy_to_clipboard(text):
                     logger.info("Text copied to clipboard as fallback - user can paste manually")
-                    try:
-                        # Play a different sound or show notification
-                        from ..ui.audio_feedback import play_success_sound
-
-                        play_success_sound()
-                    except (ImportError, AttributeError):
-                        pass
-                    return True  # Consider this success since text is recoverable
+                    return True
             except Exception as clipboard_error:
                 logger.debug(f"Clipboard fallback also failed: {clipboard_error}")
 
             try:
                 from ..ui.audio_feedback import play_error_sound
 
-                play_error_sound()  # Play error sound when text injection fails
+                play_error_sound()
             except ImportError:
                 logger.warning("Could not import audio feedback module")
             return False
