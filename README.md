@@ -361,6 +361,14 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 
 We welcome contributions! Whether it's bug reports, feature requests, or code contributions, please check out our [Contributing Guide](CONTRIBUTING.md).
 
+### Contributors
+
+Thanks to everyone who has contributed to Vocalinux! 🙌
+
+<a href="https://github.com/jatinkrmalik/vocalinux/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=jatinkrmalik/vocalinux" />
+</a>
+
 ### Quick Links
 
 - 🐛 [Report a Bug](https://github.com/jatinkrmalik/vocalinux/issues/new?template=bug_report.md)
