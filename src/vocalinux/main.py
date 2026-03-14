@@ -177,6 +177,7 @@ def main():
         sys.exit(1)
 
     # Now it's safe to import GTK-dependent modules
+    from .common_types import RecognitionState
     from .speech_recognition import recognition_manager
     from .text_injection import text_injector
     from .ui import tray_indicator
@@ -292,35 +293,19 @@ def main():
 
         # Create a wrapper function to track injected text for action handler
         def text_callback_wrapper(text: str):
-            """Wrapper to track injected text and handle it."""
-            # Check if we need to add a space before the new text
-            text_to_inject = text
+            """Wrapper to track injected text and handle spacing between segments."""
+            # Strip any leading/trailing whitespace from the incoming text as a
+            # safety net (whisper tokenizer sometimes prepends spaces to tokens)
+            text_to_inject = text.strip()
+            if not text_to_inject:
+                return
 
-            # Punctuation and characters that typically need a space after them
-            chars_needing_space = {
-                ".",
-                ",",
-                "!",
-                "?",
-                ";",
-                ":",
-                ")",
-                "]",
-                "}",
-                "-",
-                "_",
-                # Also quotes
-                '"',
-                "'",
-            }
-
-            # If last injected text exists and ends with a character that needs space,
-            # add a space before the new text
+            # Add a separating space between consecutive dictation segments,
+            # but never for the very first segment (avoids unwanted leading space
+            # when starting dictation in an empty text field).
             if action_handler.last_injected_text and action_handler.last_injected_text.strip():
-                last_char = action_handler.last_injected_text[-1]
-                if last_char in chars_needing_space:
-                    text_to_inject = " " + text_to_inject
-                    logger.debug(f"Added space before new text (last char: '{last_char}')")
+                text_to_inject = " " + text_to_inject
+                logger.debug("Added space separator before new segment")
 
             success = text_system.inject_text(text_to_inject)
             if success:
@@ -329,6 +314,12 @@ def main():
         # Connect speech recognition to text injection and action handling
         speech_engine.register_text_callback(text_callback_wrapper)
         speech_engine.register_action_callback(action_handler.handle_action)
+
+        def on_state_change(state: RecognitionState):
+            if state == RecognitionState.LISTENING:
+                action_handler.set_last_injected_text("")
+
+        speech_engine.register_state_callback(on_state_change)
 
         # Initialize and start the system tray indicator
         indicator = tray_indicator.TrayIndicator(
