@@ -24,17 +24,22 @@ from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend
 logger = logging.getLogger(__name__)
 
 
-# Map modifier key names to pynput Key objects
-MODIFIER_KEY_MAP = {
-    "ctrl": keyboard.Key.ctrl if PYNPUT_AVAILABLE else None,
-    "alt": keyboard.Key.alt if PYNPUT_AVAILABLE else None,
-    "shift": keyboard.Key.shift if PYNPUT_AVAILABLE else None,
-    "super": keyboard.Key.cmd if PYNPUT_AVAILABLE else None,  # cmd is Super/Windows key
-}
-
-# Map for normalizing left/right variants
+MODIFIER_KEY_MAP = {}
 MODIFIER_NORMALIZE_MAP = {}
 if PYNPUT_AVAILABLE:
+    MODIFIER_KEY_MAP = {
+        "ctrl": keyboard.Key.ctrl,
+        "alt": keyboard.Key.alt,
+        "shift": keyboard.Key.shift,
+        "super": keyboard.Key.cmd,
+        "left_ctrl": keyboard.Key.ctrl_l,
+        "left_alt": keyboard.Key.alt_l,
+        "left_shift": keyboard.Key.shift_l,
+        "right_ctrl": keyboard.Key.ctrl_r,
+        "right_alt": keyboard.Key.alt_r,
+        "right_shift": keyboard.Key.shift_r,
+    }
+
     MODIFIER_NORMALIZE_MAP = {
         keyboard.Key.ctrl_l: keyboard.Key.ctrl,
         keyboard.Key.ctrl_r: keyboard.Key.ctrl,
@@ -146,14 +151,19 @@ class PynputKeyboardBackend(KeyboardBackend):
     def _on_press(self, key) -> None:
         """Handle key press events."""
         try:
-            normalized_key = self._normalize_modifier_key(key)
             target_key = self._get_target_key()
+            is_side_specific = self._modifier_key.startswith(("left_", "right_"))
 
-            if normalized_key == target_key:
+            if is_side_specific:
+                matched = key == target_key
+            else:
+                normalized_key = self._normalize_modifier_key(key)
+                matched = normalized_key == target_key
+
+            if matched:
                 current_time = time.time()
 
                 if self._mode == "toggle":
-                    # Check for double-tap
                     if (
                         current_time - self.last_key_press_time < self.double_tap_threshold
                         and self.double_tap_callback is not None
@@ -163,15 +173,14 @@ class PynputKeyboardBackend(KeyboardBackend):
                         self.last_trigger_time = current_time
                         threading.Thread(target=self.double_tap_callback, daemon=True).start()
                 elif self._mode == "push_to_talk":
-                    # Trigger on press
                     if self.key_press_callback is not None:
                         logger.debug(f"Key press {self._modifier_key} detected (pynput)")
                         threading.Thread(target=self.key_press_callback, daemon=True).start()
 
                 self.last_key_press_time = current_time
 
-            # Track current keys (using target key for reference)
             if target_key and key in self._get_key_variants(self._modifier_key):
+                normalized_key = self._normalize_modifier_key(key)
                 self.current_keys.add(normalized_key)
 
         except Exception as e:
@@ -182,12 +191,16 @@ class PynputKeyboardBackend(KeyboardBackend):
         try:
             normalized_key = self._normalize_modifier_key(key)
             target_key = self._get_target_key()
+            is_side_specific = self._modifier_key.startswith(("left_", "right_"))
 
-            # Track current keys
             self.current_keys.discard(normalized_key)
 
-            # Handle push-to-talk release
-            if self._mode == "push_to_talk" and normalized_key == target_key:
+            if is_side_specific:
+                matched = key == target_key
+            else:
+                matched = normalized_key == target_key
+
+            if self._mode == "push_to_talk" and matched:
                 if self.key_release_callback is not None:
                     logger.debug(f"Key release {self._modifier_key} detected (pynput)")
                     threading.Thread(target=self.key_release_callback, daemon=True).start()
@@ -209,6 +222,12 @@ class PynputKeyboardBackend(KeyboardBackend):
             "alt": {keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r},
             "shift": {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r},
             "super": {keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r},
+            "left_ctrl": {keyboard.Key.ctrl_l},
+            "left_alt": {keyboard.Key.alt_l},
+            "left_shift": {keyboard.Key.shift_l},
+            "right_ctrl": {keyboard.Key.ctrl_r},
+            "right_alt": {keyboard.Key.alt_r},
+            "right_shift": {keyboard.Key.shift_r},
         }
         return variants.get(modifier_name, set())
 
