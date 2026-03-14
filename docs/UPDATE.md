@@ -79,7 +79,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 Simply re-run the installation command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.9.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
 ```
 
 The installer will:
@@ -129,7 +129,7 @@ If your update doesn't go smoothly, try a clean reinstall:
 ./uninstall.sh
 
 # Reinstall fresh
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/v0.8.0-beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
 ```
 
 ### Old Version Still Running
