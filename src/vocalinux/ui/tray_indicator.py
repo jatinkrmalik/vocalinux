@@ -79,11 +79,12 @@ class TrayIndicator:
         self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
         self._syncing_autostart_menu = False
 
-        # Get configured shortcut from config
+        # Get configured shortcut and mode from config
         shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        mode = self.config_manager.get("shortcuts", "mode", "toggle")
 
-        # Initialize keyboard shortcut manager with configured shortcut
-        self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut)
+        # Initialize keyboard shortcut manager with configured shortcut and mode
+        self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut, mode=mode)
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
