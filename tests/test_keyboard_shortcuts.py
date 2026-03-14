@@ -63,9 +63,37 @@ class TestKeyboardShortcuts(unittest.TestCase):
 
     def test_supported_shortcuts(self):
         """Test that all expected shortcuts are supported."""
-        expected_shortcuts = ["ctrl+ctrl", "alt+alt", "shift+shift"]
+        expected_shortcuts = [
+            "ctrl+ctrl",
+            "alt+alt",
+            "shift+shift",
+            "left_ctrl+left_ctrl",
+            "left_alt+left_alt",
+            "left_shift+left_shift",
+            "right_ctrl+right_ctrl",
+            "right_alt+right_alt",
+            "right_shift+right_shift",
+        ]
         for shortcut in expected_shortcuts:
             self.assertIn(shortcut, SUPPORTED_SHORTCUTS)
+
+    def test_pynput_backend_custom_shortcut_right_side(self):
+        """Test pynput backend with a right-side shortcut."""
+        from vocalinux.ui.keyboard_backends.pynput_backend import PynputKeyboardBackend
+
+        backend = PynputKeyboardBackend(shortcut="right_ctrl+right_ctrl")
+        self.assertEqual(backend.shortcut, "right_ctrl+right_ctrl")
+        self.assertEqual(backend.modifier_key, "right_ctrl")
+
+    def test_pynput_backend_set_shortcut_left_alt(self):
+        """Test changing to a left-side shortcut and verify modifier_key."""
+        from vocalinux.ui.keyboard_backends.pynput_backend import PynputKeyboardBackend
+
+        backend = PynputKeyboardBackend()
+        backend.set_shortcut("left_alt+left_alt")
+
+        self.assertEqual(backend.shortcut, "left_alt+left_alt")
+        self.assertEqual(backend.modifier_key, "left_alt")
 
     def test_shortcut_display_names(self):
         """Test that all shortcuts have display names."""
@@ -413,6 +441,14 @@ class TestPynputBackend(unittest.TestCase):
         self.assertEqual(backend.shortcut, "alt+alt")
         self.assertEqual(backend.modifier_key, "alt")
 
+    def test_pynput_backend_custom_shortcut_right_side(self):
+        """Test pynput backend with right-side specific shortcut."""
+        from vocalinux.ui.keyboard_backends.pynput_backend import PynputKeyboardBackend
+
+        backend = PynputKeyboardBackend(shortcut="right_ctrl+right_ctrl")
+        self.assertEqual(backend.shortcut, "right_ctrl+right_ctrl")
+        self.assertEqual(backend.modifier_key, "right_ctrl")
+
     def test_pynput_backend_set_shortcut(self):
         """Test changing shortcut on pynput backend."""
         from vocalinux.ui.keyboard_backends.pynput_backend import PynputKeyboardBackend
@@ -422,6 +458,16 @@ class TestPynputBackend(unittest.TestCase):
 
         self.assertEqual(backend.shortcut, "shift+shift")
         self.assertEqual(backend.modifier_key, "shift")
+
+    def test_pynput_backend_set_shortcut_left_alt(self):
+        """Test changing to a left-side specific shortcut."""
+        from vocalinux.ui.keyboard_backends.pynput_backend import PynputKeyboardBackend
+
+        backend = PynputKeyboardBackend()
+        backend.set_shortcut("left_alt+left_alt")
+
+        self.assertEqual(backend.shortcut, "left_alt+left_alt")
+        self.assertEqual(backend.modifier_key, "left_alt")
 
 
 class TestEvdevBackend(unittest.TestCase):
@@ -625,6 +671,27 @@ class TestShortcutParseFunction(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             parse_shortcut("")
+
+    def test_parse_shortcut_left_ctrl(self):
+        """Test parsing left_ctrl+left_ctrl shortcut."""
+        from vocalinux.ui.keyboard_backends.base import parse_shortcut
+
+        result = parse_shortcut("left_ctrl+left_ctrl")
+        self.assertEqual(result, "left_ctrl")
+
+    def test_parse_shortcut_right_alt(self):
+        """Test parsing right_alt+right_alt shortcut."""
+        from vocalinux.ui.keyboard_backends.base import parse_shortcut
+
+        result = parse_shortcut("right_alt+right_alt")
+        self.assertEqual(result, "right_alt")
+
+    def test_parse_shortcut_left_shift(self):
+        """Test parsing left_shift+left_shift shortcut."""
+        from vocalinux.ui.keyboard_backends.base import parse_shortcut
+
+        result = parse_shortcut("left_shift+left_shift")
+        self.assertEqual(result, "left_shift")
 
 
 if __name__ == "__main__":

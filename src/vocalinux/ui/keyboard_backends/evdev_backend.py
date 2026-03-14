@@ -46,6 +46,12 @@ MODIFIER_KEY_CODES: Dict[str, Set[int]] = {
     "alt": {KEY_LEFTALT, KEY_RIGHTALT},
     "shift": {KEY_LEFTSHIFT, KEY_RIGHTSHIFT},
     "super": {KEY_LEFTMETA, KEY_RIGHTMETA},
+    "left_ctrl": {KEY_LEFTCTRL},
+    "left_alt": {KEY_LEFTALT},
+    "left_shift": {KEY_LEFTSHIFT},
+    "right_ctrl": {KEY_RIGHTCTRL},
+    "right_alt": {KEY_RIGHTALT},
+    "right_shift": {KEY_RIGHTSHIFT},
 }
 
 

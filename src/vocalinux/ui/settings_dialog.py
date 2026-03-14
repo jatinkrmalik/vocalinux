@@ -38,6 +38,7 @@ from ..utils.whispercpp_model_info import get_recommended_model as get_recommend
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
 from .keyboard_backends import (  # noqa: E402
     SHORTCUT_DISPLAY_NAMES,
+    SHORTCUT_GROUPS,
     SHORTCUT_MODES,
     SUPPORTED_SHORTCUTS,
 )
@@ -1149,9 +1150,14 @@ class SettingsDialog(Gtk.Dialog):
         self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut for voice typing")
         _prevent_scroll_on_hover(self.shortcut_combo)
 
-        # Populate shortcut options
-        for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items():
-            self.shortcut_combo.append(shortcut_id, display_name)
+        # Populate shortcut options grouped by side
+        for group_label, shortcut_ids in SHORTCUT_GROUPS.items():
+            # Add group separator as a disabled label entry
+            separator_id = f"__separator_{group_label}__"
+            self.shortcut_combo.append(separator_id, f"── {group_label} ──")
+            for shortcut_id in shortcut_ids:
+                display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut_id, shortcut_id)
+                self.shortcut_combo.append(shortcut_id, display_name)
 
         # Load current shortcut from config
         current_shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
@@ -1253,6 +1259,13 @@ class SettingsDialog(Gtk.Dialog):
 
         shortcut_id = self.shortcut_combo.get_active_id()
         if not shortcut_id:
+            return
+
+        # Ignore separator entries (used for grouped display)
+        if shortcut_id.startswith("__separator_"):
+            # Revert to the previously saved shortcut
+            current = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+            self.shortcut_combo.set_active_id(current)
             return
 
         # Save to config

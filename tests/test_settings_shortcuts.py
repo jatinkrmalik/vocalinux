@@ -51,10 +51,11 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
 
     def test_shortcut_options_populated(self):
         """Test that shortcut options are populated from SHORTCUT_DISPLAY_NAMES."""
+        self.assertIn("for group_label, shortcut_ids in SHORTCUT_GROUPS.items()", self.source_code)
         self.assertIn(
-            "for shortcut_id, display_name in SHORTCUT_DISPLAY_NAMES.items()", self.source_code
+            'self.shortcut_combo.append(separator_id, f"── {group_label} ──")', self.source_code
         )
-        self.assertIn("self.shortcut_combo.append(shortcut_id, display_name)", self.source_code)
+        self.assertIn("for shortcut_id in shortcut_ids", self.source_code)
 
     def test_shortcut_config_read(self):
         """Test that shortcut is read from config."""
@@ -111,6 +112,7 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         # Check for imports (may be multi-line)
         self.assertIn("from .keyboard_backends import", self.source_code)
         self.assertIn("SHORTCUT_DISPLAY_NAMES", self.source_code)
+        self.assertIn("SHORTCUT_GROUPS", self.source_code)
         self.assertIn("SUPPORTED_SHORTCUTS", self.source_code)
 
 
@@ -133,7 +135,17 @@ class TestKeyboardBackendsBase(unittest.TestCase):
         self.assertIsInstance(SHORTCUT_DISPLAY_NAMES, dict)
         self.assertEqual(
             set(SHORTCUT_DISPLAY_NAMES.keys()),
-            {"ctrl+ctrl", "alt+alt", "shift+shift"},
+            {
+                "ctrl+ctrl",
+                "alt+alt",
+                "shift+shift",
+                "left_ctrl+left_ctrl",
+                "left_alt+left_alt",
+                "left_shift+left_shift",
+                "right_ctrl+right_ctrl",
+                "right_alt+right_alt",
+                "right_shift+right_shift",
+            },
         )
 
     def test_default_shortcut_defined(self):
@@ -150,6 +162,20 @@ class TestKeyboardBackendsBase(unittest.TestCase):
         self.assertTrue(hasattr(KeyboardBackend, "shortcut"))
         self.assertTrue(hasattr(KeyboardBackend, "modifier_key"))
         self.assertTrue(hasattr(KeyboardBackend, "set_shortcut"))
+
+    def test_shortcut_groups_defined(self):
+        """Test that SHORTCUT_GROUPS is defined with 3 groups and correct keys."""
+        from vocalinux.ui.keyboard_backends.base import SHORTCUT_GROUPS
+
+        self.assertIsInstance(SHORTCUT_GROUPS, dict)
+        self.assertIn("Either Side", SHORTCUT_GROUPS)
+        self.assertIn("Left Side", SHORTCUT_GROUPS)
+        self.assertIn("Right Side", SHORTCUT_GROUPS)
+        self.assertEqual(len(SHORTCUT_GROUPS.keys()), 3)
+        self.assertEqual(list(SHORTCUT_GROUPS.keys()), ["Either Side", "Left Side", "Right Side"])
+        self.assertEqual(len(SHORTCUT_GROUPS["Either Side"]), 3)
+        self.assertEqual(len(SHORTCUT_GROUPS["Left Side"]), 3)
+        self.assertEqual(len(SHORTCUT_GROUPS["Right Side"]), 3)
 
 
 class TestConfigManagerShortcuts(unittest.TestCase):

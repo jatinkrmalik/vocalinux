@@ -11,17 +11,41 @@ from typing import Callable, Optional
 Callback = Callable[[], None]
 
 # Supported double-tap shortcut keys
+# Maps shortcut string -> modifier key name used by backends
+# "ctrl" means either side; "left_ctrl"/"right_ctrl" means specific side
 SUPPORTED_SHORTCUTS = {
+    # Either side (backward-compatible)
     "ctrl+ctrl": "ctrl",
     "alt+alt": "alt",
     "shift+shift": "shift",
+    # Left side only
+    "left_ctrl+left_ctrl": "left_ctrl",
+    "left_alt+left_alt": "left_alt",
+    "left_shift+left_shift": "left_shift",
+    # Right side only
+    "right_ctrl+right_ctrl": "right_ctrl",
+    "right_alt+right_alt": "right_alt",
+    "right_shift+right_shift": "right_shift",
 }
 
 # Human-readable names for shortcuts (mode-agnostic base names)
 SHORTCUT_DISPLAY_NAMES = {
-    "ctrl+ctrl": "Ctrl",
-    "alt+alt": "Alt",
-    "shift+shift": "Shift",
+    "ctrl+ctrl": "Ctrl (either side)",
+    "alt+alt": "Alt (either side)",
+    "shift+shift": "Shift (either side)",
+    "left_ctrl+left_ctrl": "Left Ctrl",
+    "left_alt+left_alt": "Left Alt",
+    "left_shift+left_shift": "Left Shift",
+    "right_ctrl+right_ctrl": "Right Ctrl",
+    "right_alt+right_alt": "Right Alt",
+    "right_shift+right_shift": "Right Shift",
+}
+
+# Grouping for UI display: maps group label -> list of shortcut IDs
+SHORTCUT_GROUPS = {
+    "Either Side": ["ctrl+ctrl", "alt+alt", "shift+shift"],
+    "Left Side": ["left_ctrl+left_ctrl", "left_alt+left_alt", "left_shift+left_shift"],
+    "Right Side": ["right_ctrl+right_ctrl", "right_alt+right_alt", "right_shift+right_shift"],
 }
 
 # Mode-specific display names (format: {shortcut: {mode: display_name}})
@@ -37,6 +61,30 @@ SHORTCUT_MODE_DISPLAY_NAMES = {
     "shift+shift": {
         "toggle": "Double-tap Shift",
         "push_to_talk": "Hold Shift",
+    },
+    "left_ctrl+left_ctrl": {
+        "toggle": "Double-tap Left Ctrl",
+        "push_to_talk": "Hold Left Ctrl",
+    },
+    "left_alt+left_alt": {
+        "toggle": "Double-tap Left Alt",
+        "push_to_talk": "Hold Left Alt",
+    },
+    "left_shift+left_shift": {
+        "toggle": "Double-tap Left Shift",
+        "push_to_talk": "Hold Left Shift",
+    },
+    "right_ctrl+right_ctrl": {
+        "toggle": "Double-tap Right Ctrl",
+        "push_to_talk": "Hold Right Ctrl",
+    },
+    "right_alt+right_alt": {
+        "toggle": "Double-tap Right Alt",
+        "push_to_talk": "Hold Right Alt",
+    },
+    "right_shift+right_shift": {
+        "toggle": "Double-tap Right Shift",
+        "push_to_talk": "Hold Right Shift",
     },
 }
 
