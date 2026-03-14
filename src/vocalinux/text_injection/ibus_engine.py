@@ -219,7 +219,7 @@ def _get_expected_component_xml() -> str:
 <component>
     <name>{COMPONENT_NAME}</name>
     <description>{ENGINE_DESCRIPTION}</description>
-    <exec>{python_exec} {engine_script}</exec>
+    <exec>{python_exec} {engine_script} --ibus</exec>
     <version>1.0</version>
     <author>Vocalinux</author>
     <license>GPL-3.0</license>
@@ -612,22 +612,67 @@ class VocalinuxEngineApplication:
     This is used when the engine is launched by IBus as a separate process.
     """
 
-    def __init__(self):
-        """Initialize the engine application."""
+    def __init__(self, exec_by_ibus: bool = False):
+        """Initialize the engine application.
+
+        Args:
+            exec_by_ibus: True when IBus launched this process (via --ibus flag).
+                          False when Vocalinux launched it directly.
+        """
         if not IBUS_AVAILABLE:
             raise RuntimeError("IBus is not available")
 
         self.mainloop = GLib.MainLoop()
         self.bus = IBus.Bus()
+
+        if not self.bus.is_connected():
+            logger.error("IBus.Bus() is NOT connected — engine cannot register")
+            raise RuntimeError("IBus bus not connected")
+
         self.bus.connect("disconnected", self._on_disconnected)
 
-        self.factory = IBus.Factory.new(self.bus.get_connection())
+        conn = self.bus.get_connection()
+        if conn is None:
+            logger.error("bus.get_connection() returned None")
+            raise RuntimeError("IBus bus connection is None")
+        self.factory = IBus.Factory.new(conn)
         self.factory.add_engine(
             ENGINE_NAME,
             GObject.type_from_name("VocalinuxEngine"),
         )
 
-        self.bus.request_name(COMPONENT_NAME, 0)
+        if exec_by_ibus:
+            # IBus launched us — it already knows about our component,
+            # just claim the well-known D-Bus name.
+            self.bus.request_name(COMPONENT_NAME, 0)
+        else:
+            # Launched by Vocalinux directly — register the full component
+            # so IBus discovers our engine without having launched us.
+            component = IBus.Component(
+                name=COMPONENT_NAME,
+                description=ENGINE_DESCRIPTION,
+                version="1.0",
+                license="GPL-3.0",
+                author="Vocalinux",
+                homepage="https://github.com/jatinkrmalik/vocalinux",
+                textdomain="vocalinux",
+            )
+            engine_desc = IBus.EngineDesc(
+                name=ENGINE_NAME,
+                longname=ENGINE_LONGNAME,
+                description=ENGINE_DESCRIPTION,
+                language="other",
+                license="GPL-3.0",
+                author="Vocalinux",
+                icon="audio-input-microphone",
+                layout="default",
+            )
+            component.add_engine(engine_desc)
+            if not self.bus.register_component(component):
+                logger.error("bus.register_component() failed")
+                raise RuntimeError("Failed to register IBus component")
+            logger.info("Registered component with IBus (standalone mode)")
+
         logger.info("Vocalinux IBus engine started")
 
         # Start the socket server immediately so it's ready for connections
@@ -851,8 +896,39 @@ def install_ibus_component(system_wide: bool = False) -> bool:
         return False
 
 
+def _get_engines_xml() -> str:
+    """Return engine XML for IBus --xml discovery.
+
+    IBus invokes ``<exec> --xml`` during ``ibus write-cache`` and
+    ``ibus list-engine`` to discover available engines.  The expected
+    output is a bare ``<engines>`` block printed to stdout.
+    """
+    return f"""<engines>
+    <engine>
+        <name>{ENGINE_NAME}</name>
+        <longname>{ENGINE_LONGNAME}</longname>
+        <language>other</language>
+        <license>GPL-3.0</license>
+        <author>Vocalinux</author>
+        <icon>audio-input-microphone</icon>
+        <layout>default</layout>
+        <layout_variant />
+        <layout_option />
+        <description>{ENGINE_DESCRIPTION}</description>
+        <rank>50</rank>
+    </engine>
+</engines>"""
+
+
 def main():
     """Entry point when run as IBus engine process."""
+    # IBus calls the exec with --xml to discover engines during
+    # ibus write-cache and ibus list-engine.  Respond and exit
+    # immediately — do not enter the GLib main loop.
+    if "--xml" in sys.argv:
+        print(_get_engines_xml())
+        return 0
+
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -863,7 +939,8 @@ def main():
         return 1
 
     IBus.init()
-    app = VocalinuxEngineApplication()
+    exec_by_ibus = "--ibus" in sys.argv
+    app = VocalinuxEngineApplication(exec_by_ibus=exec_by_ibus)
     app.run()
     return 0
 
