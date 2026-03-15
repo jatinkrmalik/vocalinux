@@ -3,8 +3,24 @@ name: Distro Test Matrix
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'install.sh'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
+      - 'src/vocalinux/version.py'
+      - '.github/workflows/distro-test-matrix.yml'
   pull_request:
     branches: [ main, master ]
+    paths:
+      - 'install.sh'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
+      - 'src/vocalinux/version.py'
+      - '.github/workflows/distro-test-matrix.yml'
   workflow_dispatch:
 
 jobs:
