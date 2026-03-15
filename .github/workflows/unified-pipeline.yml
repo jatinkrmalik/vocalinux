@@ -32,7 +32,7 @@ jobs:
           filters: |
             web:
               - 'web/**'
-              - '.github/workflows/**'
+              - '.github/workflows/unified-pipeline.yml'
             python:
               - 'src/**'
               - 'tests/**'
@@ -42,7 +42,7 @@ jobs:
               - 'requirements*.txt'
               - 'Makefile'
               - '.pre-commit-config.yaml'
-              - '.github/workflows/**'
+              - '.github/workflows/unified-pipeline.yml'
       - name: Check if website should deploy
         id: deploy_check
         env:
