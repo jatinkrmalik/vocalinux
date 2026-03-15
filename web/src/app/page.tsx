@@ -31,7 +31,6 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { VocalinuxLogo } from "@/components/optimized-image";
-import { CodeBlock } from "@/components/code-block";
 import { useInView } from "react-intersection-observer";
 
 // The one-liner install command (split into three lines for display)
@@ -299,9 +298,9 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Github className="h-5 w-5" />
+              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
               {stars !== null && (
-                <span className="text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                <span className="text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-medium">
                   {stars.toLocaleString()}
                 </span>
               )}
@@ -406,14 +405,7 @@ export default function HomePage() {
                   className="inline-flex items-center justify-center gap-2 bg-primary text-white dark:text-zinc-900 hover:bg-primary/90 px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:scale-105 shadow-lg shadow-primary/25"
                 >
                   <Download className="h-5 w-5" />
-                  Install Now — It&apos;s Free
-                </a>
-                <a
-                  href="#demo"
-                  className="inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:scale-105 hover:shadow-md px-8 py-4 rounded-xl text-lg font-semibold transition-all"
-                >
-                  <Play className="h-5 w-5" />
-                  Watch Demo
+                  Install Now
                 </a>
                 <a
                   href="https://github.com/jatinkrmalik/vocalinux"
@@ -422,8 +414,15 @@ export default function HomePage() {
                   aria-label="View Vocalinux source code on GitHub (opens in a new tab)"
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-lg font-semibold transition-all border border-zinc-300 bg-white text-zinc-900 hover:border-primary/60 hover:text-primary hover:shadow-md dark:border-cyan-400/40 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-cyan-300 dark:hover:bg-zinc-800/90"
                 >
-                  <Github className="h-5 w-5" />
-                  View Source
+                  <Code className="h-5 w-5" />
+                  We&apos;re Open Source
+                </a>
+                <a
+                  href="#ecosystem"
+                  className="inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:scale-105 hover:shadow-md px-8 py-4 rounded-xl text-lg font-semibold transition-all"
+                >
+                  <Laptop className="h-5 w-5" />
+                  Use Windows or Mac?
                 </a>
               </div>
             </motion.div>
@@ -715,17 +714,21 @@ export default function HomePage() {
                         Fastest installation (~1-2 min), Vulkan GPU support for AMD/Intel/NVIDIA
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallCommand} />
                   </div>
-                  <div className="overflow-x-auto">
-                    <CodeBlock
-                      language="bash"
-                      className="rounded-lg text-sm sm:text-base"
-                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                      wrapLongLines={false}
-                    >
-                      {oneClickInstallCommand}
-                    </CodeBlock>
+                  <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                      </div>
+                      <CopyButton text={oneClickInstallCommand} />
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                        <span className="text-zinc-500 select-none">$ </span>{oneClickInstallCommand}
+                      </pre>
+                    </div>
                   </div>
                 </div>
 
@@ -741,17 +744,21 @@ export default function HomePage() {
                         PyTorch-based engine, NVIDIA GPU only (~5-10 min, ~2.3GB download)
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallWhisper} />
                   </div>
-                  <div className="overflow-x-auto">
-                    <CodeBlock
-                      language="bash"
-                      className="rounded-lg text-sm"
-                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                      wrapLongLines={false}
-                    >
-                      {oneClickInstallWhisper}
-                    </CodeBlock>
+                  <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                      </div>
+                      <CopyButton text={oneClickInstallWhisper} />
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                        <span className="text-zinc-500 select-none">$ </span>{oneClickInstallWhisper}
+                      </pre>
+                    </div>
                   </div>
                 </div>
 
@@ -767,17 +774,21 @@ export default function HomePage() {
                         For low-RAM systems (4GB or less) - minimal footprint (~40MB)
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallVosk} />
                   </div>
-                  <div className="overflow-x-auto">
-                    <CodeBlock
-                      language="bash"
-                      className="rounded-lg text-sm"
-                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                      wrapLongLines={false}
-                    >
-                      {oneClickInstallVosk}
-                    </CodeBlock>
+                  <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                      </div>
+                      <CopyButton text={oneClickInstallVosk} />
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                        <span className="text-zinc-500 select-none">$ </span>{oneClickInstallVosk}
+                      </pre>
+                    </div>
                   </div>
                 </div>
 
@@ -845,17 +856,21 @@ export default function HomePage() {
                       Clean removal in one command
                     </p>
                   </div>
-                  <CopyButton text={uninstallCommand} />
                 </div>
-                <div className="overflow-x-auto">
-                  <CodeBlock
-                    language="bash"
-                    className="rounded-lg text-sm"
-                    customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                    wrapLongLines={false}
-                  >
-                    {uninstallCommand}
-                  </CodeBlock>
+                <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                    </div>
+                    <CopyButton text={uninstallCommand} />
+                  </div>
+                  <div className="p-4 sm:p-5">
+                    <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                      <span className="text-zinc-500 select-none">$ </span>{uninstallCommand}
+                    </pre>
+                  </div>
                 </div>
               </div>
             </div>
@@ -932,7 +947,7 @@ export default function HomePage() {
 
       {/* Speech Engines Section */}
       <section className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
@@ -948,7 +963,7 @@ export default function HomePage() {
             <FadeInSection delay={0.1}>
               <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border-2 border-primary h-full relative overflow-hidden">
                 <div className="absolute top-4 right-4">
-                  <span className="bg-primary text-primary-foreground text-xs font-semibold px-2 py-1 rounded">
+                  <span className="bg-primary text-primary-foreground dark:text-black text-xs font-semibold px-2 py-1 rounded">
                     DEFAULT
                   </span>
                 </div>
@@ -1115,7 +1130,7 @@ export default function HomePage() {
 
       {/* The Voca Family - Ecosystem Section */}
       <section id="ecosystem" className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
@@ -1127,12 +1142,64 @@ export default function HomePage() {
             </div>
           </FadeInSection>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* VocaMac Card */}
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* VocaLinux Card (You are here) */}
             <FadeInSection delay={0.1}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border-2 border-primary h-full relative">
+                <div className="absolute top-4 right-4">
+                  <span className="bg-primary text-primary-foreground dark:text-black text-xs font-semibold px-2 py-1 rounded">
+                    You are here
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-lg flex items-center justify-center">
+                    <img src="https://cdn.simpleicons.org/linux/000000" alt="Linux" width={24} height={24} className="dark:invert" />
+                  </div>
+                  <h3 className="text-xl font-bold">VocaLinux</h3>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Voice dictation for Linux. System tray app with whisper.cpp, Vulkan GPU acceleration, and full offline support.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    whisper.cpp
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    Vulkan GPU
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    GTK
+                  </span>
+                  <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-medium px-2 py-1 rounded-full">
+                    GPL-3.0
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <a
+                    href="#install"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground dark:text-black hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Download className="h-4 w-4" />
+                    Install
+                  </a>
+                  <a
+                    href="https://github.com/jatinkrmalik/vocalinux"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub
+                  </a>
+                </div>
+              </div>
+            </FadeInSection>
+
+            {/* VocaMac Card */}
+            <FadeInSection delay={0.2}>
               <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full relative">
                 <div className="absolute top-4 right-4">
-                  <span className="bg-primary text-primary-foreground text-xs font-semibold px-2 py-1 rounded">
+                  <span className="bg-primary text-primary-foreground dark:text-black text-xs font-semibold px-2 py-1 rounded">
                     Beta
                   </span>
                 </div>
@@ -1164,7 +1231,7 @@ export default function HomePage() {
                     href="https://vocamac.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground dark:text-black hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
                   >
                     <Globe className="h-4 w-4" />
                     Website
@@ -1183,7 +1250,7 @@ export default function HomePage() {
             </FadeInSection>
 
             {/* VocaWin Card */}
-            <FadeInSection delay={0.2}>
+            <FadeInSection delay={0.3}>
               <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full relative">
                 <div className="absolute top-4 right-4">
                   <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold px-2 py-1 rounded">
@@ -1192,7 +1259,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-lg flex items-center justify-center">
-                    <svg viewBox="0 0 88 88" width={24} height={24} aria-label="Windows" className="dark:invert"><path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314.0v41.527l-47.318.376zm47.329 39.349-.011 41.34-47.318-6.678-.066-34.739z" fill="#00adef"/></svg>
+                    <svg viewBox="0 0 88 88" width={24} height={24} aria-label="Windows"><path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314.0v41.527l-47.318.376zm47.329 39.349-.011 41.34-47.318-6.678-.066-34.739z" fill="#0078D4"/></svg>
                   </div>
                   <h3 className="text-xl font-bold">VocaWin</h3>
                 </div>
@@ -1215,7 +1282,7 @@ export default function HomePage() {
                     href="https://vocawin.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground dark:text-black hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
                   >
                     <Globe className="h-4 w-4" />
                     Website
