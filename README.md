@@ -400,6 +400,10 @@ If you find Vocalinux useful, please consider:
 
 This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
 
+## Star Chart
+
+[![Star History Chart](https://api.star-history.com/svg?repos=jatinkrmalik/vocalinux&type=Date)](https://star-history.com/#jatinkrmalik/vocalinux&Date)
+
 ---
 
 <p align="center">
