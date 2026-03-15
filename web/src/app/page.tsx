@@ -31,11 +31,10 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { VocalinuxLogo } from "@/components/optimized-image";
-import { CodeBlock } from "@/components/code-block";
 import { useInView } from "react-intersection-observer";
 
 // The one-liner install command (split into three lines for display)
-// Always uses main/install.sh — the installer dynamically resolves the latest release tag via GitHub API
+// Always uses main/install.sh. The installer dynamically resolves the latest release tag via GitHub API
 const installCommands = {
   interactiveInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive`,
 
@@ -150,30 +149,43 @@ const FeatureCard = ({
   icon,
   title,
   description,
+  href,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
+  href?: string;
 }) => {
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
   });
-  return (
+
+  const card = (
     <motion.div
       ref={ref}
       initial={{ opacity: 0, y: 20 }}
       animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
       transition={{ duration: 0.5 }}
-      className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-md hover:shadow-xl transition-all h-full border border-zinc-100 dark:border-zinc-700"
+      className={`bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-md hover:shadow-xl transition-all h-full border border-zinc-100 dark:border-zinc-700 flex flex-col${href ? " group cursor-pointer" : ""}`}
     >
       <div className="flex items-center gap-4 mb-4">
         <div className="bg-primary/10 p-3 rounded-lg">{icon}</div>
         <h3 className="text-lg sm:text-xl font-semibold">{title}</h3>
       </div>
-      <p className="text-sm sm:text-base text-muted-foreground">{description}</p>
+      <p className="text-sm sm:text-base text-muted-foreground flex-1">{description}</p>
+      {href && (
+        <div className="mt-4 text-sm font-medium text-primary group-hover:underline flex items-center gap-1">
+          Learn more <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+        </div>
+      )}
     </motion.div>
   );
+
+  if (href) {
+    return <Link href={href}>{card}</Link>;
+  }
+  return card;
 };
 
 const CopyButton = ({ text, className = "" }: { text: string; className?: string }) => {
@@ -299,9 +311,9 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Github className="h-5 w-5" />
+              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
               {stars !== null && (
-                <span className="text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                <span className="text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-medium">
                   {stars.toLocaleString()}
                 </span>
               )}
@@ -381,7 +393,7 @@ export default function HomePage() {
               <div className="inline-flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full mb-6">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium text-primary">
-                  Beta Release — Try it now!
+                  Beta Release: Try it now!
                 </span>
               </div>
 
@@ -406,24 +418,24 @@ export default function HomePage() {
                   className="inline-flex items-center justify-center gap-2 bg-primary text-white dark:text-zinc-900 hover:bg-primary/90 px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:scale-105 shadow-lg shadow-primary/25"
                 >
                   <Download className="h-5 w-5" />
-                  Install Now — It&apos;s Free
-                </a>
-                <a
-                  href="#demo"
-                  className="inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:scale-105 hover:shadow-md px-8 py-4 rounded-xl text-lg font-semibold transition-all"
-                >
-                  <Play className="h-5 w-5" />
-                  Watch Demo
+                  Install Now
                 </a>
                 <a
                   href="https://github.com/jatinkrmalik/vocalinux"
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="View Vocalinux source code on GitHub (opens in a new tab)"
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-lg font-semibold transition-all border border-zinc-300 bg-white text-zinc-900 hover:border-primary/60 hover:text-primary hover:shadow-md dark:border-cyan-400/40 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-cyan-300 dark:hover:bg-zinc-800/90"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-lg font-semibold transition-all bg-zinc-900 text-white border border-zinc-700 hover:bg-zinc-800 hover:scale-105 hover:shadow-md dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-300 dark:hover:bg-white"
                 >
-                  <Github className="h-5 w-5" />
-                  View Source
+                  <Code className="h-5 w-5" />
+                  We&apos;re Open Source
+                </a>
+                <a
+                  href="#ecosystem"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-lg font-semibold transition-all border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:border-zinc-500 dark:hover:border-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:shadow-sm"
+                >
+                  <Laptop className="h-5 w-5" />
+                  Use Windows or Mac?
                 </a>
               </div>
             </motion.div>
@@ -590,7 +602,7 @@ export default function HomePage() {
                 Offline Voice Dictation Features for Linux
               </h2>
               <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-                Finally, Linux users get the voice dictation experience they deserve —
+                Finally, Linux users get the voice dictation experience they deserve.
                 no compromises on privacy, no cloud dependencies, just pure productivity.
               </p>
             </div>
@@ -600,32 +612,38 @@ export default function HomePage() {
             <FeatureCard
               icon={<Shield className="h-6 w-6 text-primary" />}
               title="100% Offline & Private"
-              description="All processing happens on your machine. Your voice data never leaves your computer — complete privacy guaranteed."
+              description="All processing happens on your machine. Your voice data never leaves your computer. Complete privacy guaranteed."
+              href="/offline/"
             />
             <FeatureCard
               icon={<Laptop className="h-6 w-6 text-primary" />}
               title="Universal App Support"
-              description="Works everywhere — terminals, browsers, IDEs, office apps, and any text input field on your Linux system."
+              description="Works everywhere: terminals, browsers, IDEs, office apps, and any text input field on your Linux system."
+              href="/use-cases/"
             />
             <FeatureCard
               icon={<Zap className="h-6 w-6 text-primary" />}
               title="Blazing Fast"
               description="whisper.cpp brings C++ optimized inference with Vulkan GPU support. Works with AMD, Intel, and NVIDIA GPUs!"
+              href="/gpu-acceleration/"
             />
             <FeatureCard
               icon={<Keyboard className="h-6 w-6 text-primary" />}
               title="Simple Activation"
               description="Choose toggle mode (double-tap) or push-to-talk mode (hold key). Simple, predictable control."
+              href="/shortcuts/"
             />
             <FeatureCard
               icon={<Globe className="h-6 w-6 text-primary" />}
               title="X11 & Wayland Support"
-              description="Works seamlessly with both display servers. Modern Wayland and traditional X11 — we've got you covered."
+              description="Works seamlessly with both display servers. Modern Wayland and traditional X11, fully supported."
+              href="/wayland/"
             />
             <FeatureCard
               icon={<Settings className="h-6 w-6 text-primary" />}
               title="Fully Configurable"
-              description="Adjust model size, language, activation mode, and voice command behavior. GUI settings panel or config file — your choice."
+              description="Adjust model size, language, activation mode, and voice command behavior. GUI settings panel or config file, your choice."
+              href="/for-developers/"
             />
           </div>
 
@@ -639,7 +657,7 @@ export default function HomePage() {
                   </h3>
                   <p className="text-muted-foreground mb-6">
                     While macOS and Windows have had built-in voice dictation for years,
-                    Linux users have been left behind — until now.
+                    Linux users have been left behind. Until now.
                   </p>
                   <ul className="space-y-3">
                     {[
@@ -715,17 +733,21 @@ export default function HomePage() {
                         Fastest installation (~1-2 min), Vulkan GPU support for AMD/Intel/NVIDIA
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallCommand} />
                   </div>
-                  <div className="overflow-x-auto">
-                    <CodeBlock
-                      language="bash"
-                      className="rounded-lg text-sm sm:text-base"
-                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                      wrapLongLines={false}
-                    >
-                      {oneClickInstallCommand}
-                    </CodeBlock>
+                  <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                      </div>
+                      <CopyButton text={oneClickInstallCommand} />
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                        <span className="text-zinc-500 select-none">$ </span>{oneClickInstallCommand}
+                      </pre>
+                    </div>
                   </div>
                 </div>
 
@@ -741,17 +763,21 @@ export default function HomePage() {
                         PyTorch-based engine, NVIDIA GPU only (~5-10 min, ~2.3GB download)
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallWhisper} />
                   </div>
-                  <div className="overflow-x-auto">
-                    <CodeBlock
-                      language="bash"
-                      className="rounded-lg text-sm"
-                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                      wrapLongLines={false}
-                    >
-                      {oneClickInstallWhisper}
-                    </CodeBlock>
+                  <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                      </div>
+                      <CopyButton text={oneClickInstallWhisper} />
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                        <span className="text-zinc-500 select-none">$ </span>{oneClickInstallWhisper}
+                      </pre>
+                    </div>
                   </div>
                 </div>
 
@@ -767,17 +793,21 @@ export default function HomePage() {
                         For low-RAM systems (4GB or less) - minimal footprint (~40MB)
                       </p>
                     </div>
-                    <CopyButton text={oneClickInstallVosk} />
                   </div>
-                  <div className="overflow-x-auto">
-                    <CodeBlock
-                      language="bash"
-                      className="rounded-lg text-sm"
-                      customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                      wrapLongLines={false}
-                    >
-                      {oneClickInstallVosk}
-                    </CodeBlock>
+                  <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                      </div>
+                      <CopyButton text={oneClickInstallVosk} />
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                        <span className="text-zinc-500 select-none">$ </span>{oneClickInstallVosk}
+                      </pre>
+                    </div>
                   </div>
                 </div>
 
@@ -845,17 +875,21 @@ export default function HomePage() {
                       Clean removal in one command
                     </p>
                   </div>
-                  <CopyButton text={uninstallCommand} />
                 </div>
-                <div className="overflow-x-auto">
-                  <CodeBlock
-                    language="bash"
-                    className="rounded-lg text-sm"
-                    customStyle={{ margin: 0, maxWidth: '100%', overflowX: 'auto' }}
-                    wrapLongLines={false}
-                  >
-                    {uninstallCommand}
-                  </CodeBlock>
+                <div className="bg-zinc-950/80 rounded-xl border border-zinc-800 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                    </div>
+                    <CopyButton text={uninstallCommand} />
+                  </div>
+                  <div className="p-4 sm:p-5">
+                    <pre className="font-mono text-sm sm:text-base text-green-400 text-left whitespace-pre-wrap break-all">
+                      <span className="text-zinc-500 select-none">$ </span>{uninstallCommand}
+                    </pre>
+                  </div>
                 </div>
               </div>
             </div>
@@ -932,7 +966,7 @@ export default function HomePage() {
 
       {/* Speech Engines Section */}
       <section className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
@@ -946,9 +980,39 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-3 gap-8">
             <FadeInSection delay={0.1}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-purple-500/10 p-3 rounded-lg">
+                    <Sparkles className="h-6 w-6 text-purple-500" />
+                  </div>
+                  <h3 className="text-xl font-bold">Whisper (OpenAI)</h3>
+                </div>
+                <p className="text-muted-foreground mb-6">
+                  OpenAI&apos;s original PyTorch-based Whisper model. NVIDIA GPU only.
+                </p>
+                <ul className="space-y-2 mb-6">
+                  {[
+                    "PyTorch-based implementation",
+                    "NVIDIA GPU support (CUDA)",
+                    "Same accuracy as whisper.cpp",
+                    "Larger download (~2.3GB)",
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-purple-500" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-sm text-muted-foreground">
+                  <strong>Install time:</strong> ~5-10 minutes with PyTorch
+                </div>
+              </div>
+            </FadeInSection>
+
+            <FadeInSection delay={0.2}>
               <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border-2 border-primary h-full relative overflow-hidden">
                 <div className="absolute top-4 right-4">
-                  <span className="bg-primary text-primary-foreground text-xs font-semibold px-2 py-1 rounded">
+                  <span className="bg-primary text-primary-foreground dark:text-black text-xs font-semibold px-2 py-1 rounded">
                     DEFAULT
                   </span>
                 </div>
@@ -977,35 +1041,10 @@ export default function HomePage() {
                 <div className="text-sm text-muted-foreground">
                   <strong>Model sizes:</strong> Tiny (39MB) • Base (74MB) • Small (244MB) • Medium (769MB) • Large (1.5GB)
                 </div>
-              </div>
-            </FadeInSection>
-
-            <FadeInSection delay={0.2}>
-              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="bg-purple-500/10 p-3 rounded-lg">
-                    <Sparkles className="h-6 w-6 text-purple-500" />
-                  </div>
-                  <h3 className="text-xl font-bold">Whisper (OpenAI)</h3>
-                </div>
-                <p className="text-muted-foreground mb-6">
-                  OpenAI&apos;s original PyTorch-based Whisper model. NVIDIA GPU only.
-                </p>
-                <ul className="space-y-2 mb-6">
-                  {[
-                    "PyTorch-based implementation",
-                    "NVIDIA GPU support (CUDA)",
-                    "Same accuracy as whisper.cpp",
-                    "Larger download (~2.3GB)",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-purple-500" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="text-sm text-muted-foreground">
-                  <strong>Install time:</strong> ~5-10 minutes with PyTorch
+                <div className="mt-4">
+                  <Link href="/gpu-acceleration/" className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
+                    GPU acceleration <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
                 </div>
               </div>
             </FadeInSection>
@@ -1040,6 +1079,14 @@ export default function HomePage() {
               </div>
             </FadeInSection>
           </div>
+
+          <FadeInSection delay={0.4}>
+            <div className="text-center mt-10">
+              <Link href="/compare/" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+                Compare all engines <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </FadeInSection>
         </div>
       </section>
 
@@ -1055,48 +1102,80 @@ export default function HomePage() {
           </FadeInSection>
 
           <div className="space-y-4">
-            {[
+            {([
               {
                 question: "Is Vocalinux really 100% offline?",
-                answer:
-                  "Yes! All speech recognition processing happens locally on your machine. Your voice data never leaves your computer. No internet connection is required after installation (models are downloaded during setup).",
+                answer: (
+                  <>
+                    Yes! All speech recognition processing happens locally on your machine. Your voice data never leaves your computer. No internet connection is required after installation (models are downloaded during setup).{" "}
+                    <Link href="/offline/" className="text-primary hover:underline">Read more about offline voice dictation</Link>.
+                  </>
+                ),
               },
               {
                 question: "Which Linux distributions are supported?",
-                answer:
-                  "Vocalinux works on most modern Linux distributions including Ubuntu 22.04+, Fedora, Debian, Arch Linux, Linux Mint, Pop!_OS, and more. It supports both X11 and Wayland display servers.",
+                answer: (
+                  <>
+                    Vocalinux works on most modern Linux distributions including Ubuntu 22.04+, Debian 11+, Fedora 39+, Arch Linux, and openSUSE Tumbleweed. Experimental support is available for Gentoo, Alpine, Void, Solus, and more. It supports both X11 and Wayland display servers.{" "}
+                    <Link href="/install/" className="text-primary hover:underline">See installation guides</Link>.
+                  </>
+                ),
               },
               {
                 question: "How do I switch between speech engines?",
-                answer:
-                  'You can switch engines via the settings GUI or command line. Use "vocalinux --engine whisper_cpp" (default, recommended), "vocalinux --engine whisper" (OpenAI), or "vocalinux --engine vosk" (lightweight). whisper.cpp offers the best balance of speed and accuracy.',
+                answer: (
+                  <>
+                    You can switch engines in the Settings dialog or via the command line. The three options are whisper.cpp (default, recommended for speed and GPU support), OpenAI Whisper (PyTorch-based, NVIDIA only), and VOSK (lightweight, CPU only). From the CLI: use &quot;--engine whisper_cpp&quot;, &quot;--engine whisper&quot;, or &quot;--engine vosk&quot;.{" "}
+                    <Link href="/compare/" className="text-primary hover:underline">Compare all engines</Link>.
+                  </>
+                ),
               },
               {
                 question: "What are the system requirements?",
-                answer:
-                  "Minimum: 4GB RAM, dual-core CPU, Python 3.8+. For Whisper large models: 8GB+ RAM recommended. The tiny/base Whisper models and VOSK work great on modest hardware.",
+                answer: (
+                  <>
+                    Minimum: 4GB RAM, Python 3.8+, ~200MB disk space. 8GB+ RAM recommended for larger Whisper models. The default whisper.cpp tiny model (~39MB) works great on modest hardware. GPU acceleration is available via Vulkan for AMD, Intel, and NVIDIA GPUs.{" "}
+                    <Link href="/install/" className="text-primary hover:underline">View full installation requirements</Link>.
+                  </>
+                ),
               },
               {
                 question: "Can I use it in languages other than English?",
-                answer:
-                  "Yes! Whisper supports 99+ languages with varying accuracy levels. VOSK has models for 20+ languages. Download additional language models as needed.",
+                answer: (
+                  <>
+                    Yes! whisper.cpp and OpenAI Whisper support 99+ languages with varying accuracy levels. VOSK includes models for 10 languages out of the box (English, Hindi, Spanish, French, German, Italian, Portuguese, Russian, Chinese, and more). Additional language models can be downloaded as needed.{" "}
+                    <Link href="/languages/" className="text-primary hover:underline">See supported languages</Link>.
+                  </>
+                ),
               },
               {
                 question: "How do I customize the activation shortcut?",
-                answer:
-                  "The default is toggle mode with double-tap Ctrl, and you can switch to push-to-talk in Settings. You can also customize this via the GUI settings dialog or by editing ~/.config/vocalinux/config.json.",
+                answer: (
+                  <>
+                    The default is toggle mode with double-tap Ctrl. You can switch to push-to-talk in Settings, and choose between Left Ctrl, Right Ctrl, Alt, Shift, and other modifier keys. Configuration is also available by editing ~/.config/vocalinux/config.json.{" "}
+                    <Link href="/shortcuts/" className="text-primary hover:underline">View shortcut options</Link>.
+                  </>
+                ),
               },
               {
                 question: "Can I disable voice commands?",
-                answer:
-                  "Yes. Voice commands are optional and can be enabled or disabled in Settings. VOSK-focused setups can use auto behavior while keeping full control over command parsing.",
+                answer: (
+                  <>
+                    Yes. Voice commands can be toggled on or off in the Settings dialog. By default, commands are automatically enabled for VOSK and disabled for Whisper/whisper.cpp, but you can override this at any time.{" "}
+                    <Link href="/shortcuts/" className="text-primary hover:underline">Learn about voice commands</Link>.
+                  </>
+                ),
               },
               {
                 question: "Is Vocalinux free?",
-                answer:
-                  "Yes, Vocalinux is completely free and open-source, licensed under GPL-3.0. No premium tiers, no subscriptions, no tracking — just free software.",
+                answer: (
+                  <>
+                    Yes, Vocalinux is completely free and open-source, licensed under GPL-3.0. No premium tiers, no subscriptions, no tracking. Just free software.{" "}
+                    <Link href="/open-source/" className="text-primary hover:underline">Learn about the project</Link>.
+                  </>
+                ),
               },
-            ].map((item, i) => (
+            ] as { question: string; answer: React.ReactNode }[]).map((item, i) => (
               <FadeInSection key={i} delay={i * 0.05}>
                 <details className="group bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700">
                   <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
@@ -1109,6 +1188,181 @@ export default function HomePage() {
                 </details>
               </FadeInSection>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* The Voca Family - Ecosystem Section */}
+      <section id="ecosystem" className="py-16 sm:py-24 px-4 sm:px-6 bg-zinc-50 dark:bg-zinc-900/50">
+        <div className="max-w-7xl mx-auto">
+          <FadeInSection>
+            <div className="text-center mb-12">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+                The Voca Family
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Voice dictation, done right, on every platform.
+              </p>
+            </div>
+          </FadeInSection>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* VocaMac Card */}
+            <FadeInSection delay={0.1}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full relative">
+                <div className="absolute top-4 right-4">
+                  <span className="bg-primary text-primary-foreground dark:text-black text-xs font-semibold px-2 py-1 rounded">
+                    Beta
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-lg flex items-center justify-center">
+                    <img src="https://cdn.simpleicons.org/apple/000000" alt="macOS" width={24} height={24} className="dark:invert" />
+                  </div>
+                  <h3 className="text-xl font-bold">VocaMac</h3>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Native macOS menu bar app. 100% offline voice-to-text powered by WhisperKit and CoreML with Apple Silicon acceleration.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    WhisperKit
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    CoreML
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    Apple Silicon
+                  </span>
+                  <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-medium px-2 py-1 rounded-full">
+                    AGPL-3.0
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <a
+                    href="https://vocamac.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground dark:text-black hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Website
+                  </a>
+                  <a
+                    href="https://github.com/jatinkrmalik/vocamac"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub
+                  </a>
+                </div>
+              </div>
+            </FadeInSection>
+
+            {/* VocaLinux Card (center) */}
+            <FadeInSection delay={0.2}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border-2 border-primary h-full relative">
+                <div className="absolute top-4 right-4">
+                  <span className="bg-primary text-primary-foreground dark:text-black text-xs font-semibold px-2 py-1 rounded">
+                    Beta
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-lg flex items-center justify-center">
+                    <img src="https://cdn.simpleicons.org/linux/000000" alt="Linux" width={24} height={24} className="dark:invert" />
+                  </div>
+                  <h3 className="text-xl font-bold">VocaLinux</h3>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Voice dictation for Linux. System tray app with whisper.cpp, Vulkan GPU acceleration, and full offline support.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    whisper.cpp
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    Vulkan GPU
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    GTK
+                  </span>
+                  <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-medium px-2 py-1 rounded-full">
+                    GPL-3.0
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <a
+                    href="#install"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground dark:text-black hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Download className="h-4 w-4" />
+                    Install
+                  </a>
+                  <a
+                    href="https://github.com/jatinkrmalik/vocalinux"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub
+                  </a>
+                </div>
+              </div>
+            </FadeInSection>
+
+            {/* VocaWin Card */}
+            <FadeInSection delay={0.3}>
+              <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 border border-zinc-200 dark:border-zinc-700 h-full relative">
+                <div className="absolute top-4 right-4">
+                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold px-2 py-1 rounded">
+                    Coming Soon
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-lg flex items-center justify-center">
+                    <svg viewBox="0 0 88 88" width={24} height={24} aria-label="Windows"><path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314.0v41.527l-47.318.376zm47.329 39.349-.011 41.34-47.318-6.678-.066-34.739z" fill="#0078D4"/></svg>
+                  </div>
+                  <h3 className="text-xl font-bold">VocaWin</h3>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Voice dictation for Windows. Native system tray app with offline-first architecture. Currently in planning.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    whisper.cpp
+                  </span>
+                  <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
+                    Native Tray
+                  </span>
+                  <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium px-2 py-1 rounded-full">
+                    Planned
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <a
+                    href="https://vocawin.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground dark:text-black hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Website
+                  </a>
+                  <a
+                    href="https://github.com/jatinkrmalik/vocawin"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub
+                  </a>
+                </div>
+              </div>
+            </FadeInSection>
           </div>
         </div>
       </section>
