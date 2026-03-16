@@ -26,9 +26,9 @@
 
 ![Vocalinux Users](https://github.com/user-attachments/assets/e3d8dd16-3d4f-408c-b899-93d85e98b107)
 
-Linux has always punched above its weight — except when it comes to voice typing. Vocalinux fixes that.
+Linux has always punched above its weight, except when it comes to voice typing. Vocalinux fixes that.
 
-It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* application, on X11 or Wayland, using fully offline speech recognition. Pick from three engines (whisper.cpp, OpenAI Whisper, or VOSK), get automatic GPU acceleration via Vulkan, and control it all with customizable keyboard shortcuts — toggle or push-to-talk.
+It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* application, on X11 or Wayland, using fully offline speech recognition. Pick from three engines (whisper.cpp, OpenAI Whisper, or VOSK), get automatic GPU acceleration via Vulkan, and control it all with customizable keyboard shortcuts: toggle or push-to-talk.
 
 No internet required. No data leaves your machine. Just speak and type.
 
@@ -47,10 +47,10 @@ No internet required. No data leaves your machine. Just speak and type.
 
 ### ✨ New Features (v0.9.0)
 
-- **Left/Right Modifier Key Distinction** — Shortcuts now support `Left Ctrl`, `Right Alt`, etc., with grouped UI in Settings
-- **Sound Effects Toggle** — New Audio Settings toggle to silence start/stop/error sounds
-- **Clipboard Fallback for Wayland** — Auto-copies text via `wl-copy`/`xclip` when injection unavailable (KDE Plasma etc.)
-- **Display Availability Check** — Graceful error message when running in headless environments
+- **Left/Right Modifier Key Distinction** - Shortcuts now support `Left Ctrl`, `Right Alt`, etc., with grouped UI in Settings
+- **Sound Effects Toggle** - New Audio Settings toggle to silence start/stop/error sounds
+- **Clipboard Fallback for Wayland** - Auto-copies text via `wl-copy`/`xclip` when injection unavailable (KDE Plasma etc.)
+- **Display Availability Check** - Graceful error message when running in headless environments
 
 ### 🐛 Bug Fixes (v0.9.0)
 
@@ -62,8 +62,8 @@ No internet required. No data leaves your machine. Just speak and type.
 
 ### 🔧 Improvements
 
-- **Grouped shortcut selector** — Settings dropdown now organises shortcuts by Either/Left/Right side
-- **pipx documentation** — New `DISTRO_COMPATIBILITY.md` section for pipx users
+- **Grouped shortcut selector** - Settings dropdown now organises shortcuts by Either/Left/Right side
+- **pipx documentation** - New `DISTRO_COMPATIBILITY.md` section for pipx users
 
 ---
 
@@ -182,8 +182,8 @@ For developers and early adopters who want to test the latest features, check ou
 Nightly builds are automatically generated from the `main` branch every day. They include all merged changes but haven't undergone the same testing as beta releases.
 
 **Release Channels:**
-- **Beta** (Recommended) — Tested pre-releases with known features
-- **Nightly** — Untested bleeding edge with latest commits
+- **Beta** (Recommended) - Tested pre-releases with known features
+- **Nightly** - Untested bleeding edge with latest commits
 
 ### After Installation
 
