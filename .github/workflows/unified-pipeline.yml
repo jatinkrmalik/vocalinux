@@ -37,8 +37,6 @@ jobs:
               - 'src/**'
               - 'tests/**'
               - 'pyproject.toml'
-              - 'setup.py'
-              - 'setup.cfg'
               - 'requirements*.txt'
               - 'Makefile'
               - '.pre-commit-config.yaml'
