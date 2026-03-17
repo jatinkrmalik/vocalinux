@@ -15,16 +15,21 @@ os.environ["PYTEST_RUNNING"] = "1"
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Mock GI/GTK modules before any test files are collected.
-# On CI, real gi (PyGObject) is installed and module-level imports in
-# vocalinux source files (ibus_engine, tray_indicator, settings_dialog, etc.)
-# will trigger GTK initialization or IBus daemon connections that hang
-# in headless environments.  Mocking here in conftest ensures protection
-# for ALL test files, not just those that remember to mock individually.
-if "gi" not in sys.modules:
-    sys.modules["gi"] = MagicMock()
-if "gi.repository" not in sys.modules:
-    sys.modules["gi.repository"] = MagicMock()
+# Always mock GI/GTK modules before any test files are collected.
+# On CI, real gi (PyGObject) is installed via "pip install PyGObject" and
+# module-level imports in vocalinux source files (ibus_engine, tray_indicator,
+# settings_dialog, etc.) will trigger GTK initialization or IBus daemon
+# connections that hang indefinitely in headless environments.
+# pytest-timeout cannot interrupt these C-level blocking calls.
+#
+# We unconditionally replace gi with a mock — even if the real package is
+# already imported — because the real gi causes hangs on headless CI runners.
+# The previous "if 'gi' not in sys.modules" guard was ineffective on CI
+# precisely because PyGObject was installed and already loaded.
+_mock_gi = MagicMock()
+_mock_gi_repository = MagicMock()
+sys.modules["gi"] = _mock_gi
+sys.modules["gi.repository"] = _mock_gi_repository
 
 # Create and export the mock_audio_feedback module for tests that need it
 # This mock is used by test_recognition_manager.py and test_speech_recognition.py
