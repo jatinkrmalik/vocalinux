@@ -125,7 +125,7 @@ skip = [".git", "venv", "node_modules", "build", "dist"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --strict-markers --timeout=30"
+addopts = "-ra -q --strict-markers --timeout=10 --timeout_method=thread"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
