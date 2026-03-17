@@ -9,7 +9,7 @@ import os
 import sys
 import threading
 import unittest
-from unittest.mock import MagicMock, Mock, patch, call
+from unittest.mock import MagicMock, Mock, call, patch
 
 # Mock modules before importing any modules that might use them
 sys.modules["vosk"] = MagicMock()
@@ -37,9 +37,9 @@ from vocalinux.common_types import RecognitionState  # noqa: E402
 from vocalinux.speech_recognition.command_processor import CommandProcessor  # noqa: E402
 from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
     SpeechRecognitionManager,
-    get_audio_input_devices,
     _get_supported_channels,
     _get_supported_sample_rate,
+    get_audio_input_devices,
 )
 
 
@@ -61,9 +61,7 @@ class TestGetAudioInputDevices(unittest.TestCase):
             mock_device_info,
             {"index": 1, "name": "USB Microphone", "maxInputChannels": 1},
         ]
-        mock_pyaudio_instance.get_default_input_device_info.return_value = {
-            "index": 0
-        }
+        mock_pyaudio_instance.get_default_input_device_info.return_value = {"index": 0}
 
         mock_pyaudio = MagicMock()
         mock_pyaudio.PyAudio.return_value = mock_pyaudio_instance
@@ -85,9 +83,7 @@ class TestGetAudioInputDevices(unittest.TestCase):
             "name": "Microphone",
             "maxInputChannels": 1,
         }
-        mock_pyaudio_instance.get_default_input_device_info.side_effect = IOError(
-            "No default"
-        )
+        mock_pyaudio_instance.get_default_input_device_info.side_effect = IOError("No default")
 
         mock_pyaudio = MagicMock()
         mock_pyaudio.PyAudio.return_value = mock_pyaudio_instance
@@ -105,9 +101,7 @@ class TestGetAudioInputDevices(unittest.TestCase):
             {"index": 0, "name": "Speaker", "maxInputChannels": 0},
             {"index": 1, "name": "Microphone", "maxInputChannels": 2},
         ]
-        mock_pyaudio_instance.get_default_input_device_info.return_value = {
-            "index": 1
-        }
+        mock_pyaudio_instance.get_default_input_device_info.return_value = {"index": 1}
 
         mock_pyaudio = MagicMock()
         mock_pyaudio.PyAudio.return_value = mock_pyaudio_instance
@@ -126,9 +120,7 @@ class TestGetAudioInputDevices(unittest.TestCase):
             OSError("Device error"),
             {"index": 1, "name": "Microphone", "maxInputChannels": 1},
         ]
-        mock_pyaudio_instance.get_default_input_device_info.return_value = {
-            "index": 1
-        }
+        mock_pyaudio_instance.get_default_input_device_info.return_value = {"index": 1}
 
         mock_pyaudio = MagicMock()
         mock_pyaudio.PyAudio.return_value = mock_pyaudio_instance
@@ -223,9 +215,7 @@ class TestGetSupportedSampleRate(unittest.TestCase):
         """Test getting default sample rate from device."""
         mock_stream = MagicMock()
         mock_audio = MagicMock()
-        mock_audio.get_device_info_by_index.return_value = {
-            "defaultSampleRate": 16000
-        }
+        mock_audio.get_device_info_by_index.return_value = {"defaultSampleRate": 16000}
         mock_audio.open.return_value = mock_stream
         mock_audio.paInt16 = 8
 
@@ -235,9 +225,7 @@ class TestGetSupportedSampleRate(unittest.TestCase):
     def test_get_supported_sample_rate_fallback(self):
         """Test fallback to common rates when default fails."""
         mock_audio = MagicMock()
-        mock_audio.get_device_info_by_index.return_value = {
-            "defaultSampleRate": 44100
-        }
+        mock_audio.get_device_info_by_index.return_value = {"defaultSampleRate": 44100}
         mock_audio.paInt16 = 8
 
         # Make default rate fail, but succeed on first common rate (48000)
@@ -258,9 +246,7 @@ class TestGetSupportedSampleRate(unittest.TestCase):
     def test_get_supported_sample_rate_default_fallback(self):
         """Test fallback to 16000Hz when nothing works."""
         mock_audio = MagicMock()
-        mock_audio.get_device_info_by_index.return_value = {
-            "defaultSampleRate": 48000
-        }
+        mock_audio.get_device_info_by_index.return_value = {"defaultSampleRate": 48000}
         mock_audio.paInt16 = 8
         mock_audio.open.side_effect = IOError("All rates failed")
 
@@ -429,7 +415,7 @@ class TestProcessPartialResult(unittest.TestCase):
         """Test handling when recognizer becomes None during processing."""
         manager = SpeechRecognitionManager(engine="vosk")
         manager.audio_buffer = [b"\x00" * 512]
-        
+
         # Set recognizer to None
         manager.recognizer = None
 
@@ -438,7 +424,7 @@ class TestProcessPartialResult(unittest.TestCase):
 
         # Should handle gracefully without crashing
         manager._process_final_buffer()
-        
+
         # Callback should not be called
         callback_mock.assert_not_called()
 
@@ -589,7 +575,9 @@ class TestWhisperInitialization(unittest.TestCase):
 
         with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}):
             # Should convert invalid model to "base"
-            manager = SpeechRecognitionManager(engine="whisper", model_size="invalid_size", defer_download=True)
+            manager = SpeechRecognitionManager(
+                engine="whisper", model_size="invalid_size", defer_download=True
+            )
             # The implementation converts invalid sizes to "base"
             self.assertEqual(manager.model_size, "base")
 
@@ -665,9 +653,18 @@ class TestWhispercppInitialization(unittest.TestCase):
         mock_backend = MagicMock()
         mock_backend.name = "CPU"
 
-        with patch.dict(sys.modules, {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model}):
-            with patch("vocalinux.speech_recognition.recognition_manager.get_model_path", return_value="/path/model.bin"):
-                with patch("vocalinux.utils.whispercpp_model_info.detect_compute_backend", return_value=(mock_backend, {})):
+        with patch.dict(
+            sys.modules,
+            {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model},
+        ):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value="/path/model.bin",
+            ):
+                with patch(
+                    "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
+                    return_value=(mock_backend, {}),
+                ):
                     with patch("os.path.exists", return_value=True):
                         with patch("os.stat") as mock_stat:
                             mock_stat.return_value.st_size = 1000000
@@ -683,9 +680,15 @@ class TestWhispercppInitialization(unittest.TestCase):
         mock_pywhispercpp = MagicMock()
         mock_pywhispercpp.model.Model = MagicMock()
 
-        with patch.dict(sys.modules, {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model}):
+        with patch.dict(
+            sys.modules,
+            {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model},
+        ):
             # Mock get_model_path to return a non-existent path
-            with patch("vocalinux.speech_recognition.recognition_manager.get_model_path", return_value="/nonexistent/model.bin"):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value="/nonexistent/model.bin",
+            ):
                 with patch("os.path.exists", return_value=False):
                     manager = SpeechRecognitionManager(
                         engine="whisper_cpp", model_size="tiny", defer_download=True
@@ -928,4 +931,3 @@ class TestDownloadModels(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

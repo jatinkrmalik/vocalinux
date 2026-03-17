@@ -1,11 +1,12 @@
 """Extra tests for text_injector.py to improve branch coverage."""
 
 import os
+import subprocess
 import sys
 import unittest
-import subprocess
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 if "gi" not in sys.modules:
     sys.modules["gi"] = MagicMock()
@@ -28,6 +29,7 @@ def _restore_sys_modules():
 class TestDesktopEnvironmentEnum(unittest.TestCase):
     def test_all_values(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         self.assertEqual(DesktopEnvironment.X11.value, "x11")
         self.assertEqual(DesktopEnvironment.WAYLAND.value, "wayland")
         self.assertEqual(DesktopEnvironment.X11_IBUS.value, "x11-ibus")
@@ -38,6 +40,7 @@ class TestDesktopEnvironmentEnum(unittest.TestCase):
 
 def _make_injector(env):
     from vocalinux.text_injection.text_injector import TextInjector
+
     obj = TextInjector.__new__(TextInjector)
     obj._ibus_injector = None
     obj.environment = env
@@ -47,20 +50,37 @@ def _make_injector(env):
 class TestDetectEnvironment(unittest.TestCase):
     def test_detect_wayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-0"}):
-            with patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False):
-                with patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=False):
+            with patch(
+                "vocalinux.text_injection.text_injector.is_ibus_available", return_value=False
+            ):
+                with patch(
+                    "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
+                    return_value=False,
+                ):
                     result = obj._detect_environment()
-                    self.assertIn(result, [DesktopEnvironment.WAYLAND, DesktopEnvironment.WAYLAND_IBUS])
+                    self.assertIn(
+                        result, [DesktopEnvironment.WAYLAND, DesktopEnvironment.WAYLAND_IBUS]
+                    )
 
     def test_detect_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}):
-            with patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False):
-                with patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=False):
-                    with patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False):
+            with patch(
+                "vocalinux.text_injection.text_injector.is_ibus_available", return_value=False
+            ):
+                with patch(
+                    "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
+                    return_value=False,
+                ):
+                    with patch(
+                        "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                        return_value=False,
+                    ):
                         result = obj._detect_environment()
                         self.assertIn(result, [DesktopEnvironment.X11, DesktopEnvironment.X11_IBUS])
 
@@ -70,18 +90,23 @@ class TestDetectEnvironment(unittest.TestCase):
 class TestCheckDependencies(unittest.TestCase):
     def test_x11_xdotool_available(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch("shutil.which", return_value="/usr/bin/xdotool"):
             obj._check_dependencies()
 
     def test_wayland_wtype_available(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
-        with patch("shutil.which", side_effect=lambda x: "/usr/bin/wtype" if x == "wtype" else None):
+        with patch(
+            "shutil.which", side_effect=lambda x: "/usr/bin/wtype" if x == "wtype" else None
+        ):
             obj._check_dependencies()
 
     def test_wayland_no_tools(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         with patch("shutil.which", return_value=None):
             with self.assertRaises(RuntimeError):
@@ -91,6 +116,7 @@ class TestCheckDependencies(unittest.TestCase):
 class TestInjectText(unittest.TestCase):
     def test_inject_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch("subprocess.run") as mock_run:
             result = obj.inject_text("hello")
@@ -100,6 +126,7 @@ class TestInjectText(unittest.TestCase):
 
     def test_inject_wayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         obj.wayland_tool = "wtype"
         with patch("subprocess.run") as mock_run:
@@ -110,6 +137,7 @@ class TestInjectText(unittest.TestCase):
 
     def test_inject_ibus(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11_IBUS)
         mock_ibus = MagicMock()
         mock_ibus.inject_text.return_value = True
@@ -119,6 +147,7 @@ class TestInjectText(unittest.TestCase):
 
     def test_inject_wayland_ibus(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND_IBUS)
         mock_ibus = MagicMock()
         mock_ibus.inject_text.return_value = True
@@ -128,6 +157,7 @@ class TestInjectText(unittest.TestCase):
 
     def test_inject_xwayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND_XDOTOOL)
         with patch("subprocess.run") as mock_run:
             result = obj.inject_text("hello")
@@ -139,6 +169,7 @@ class TestInjectText(unittest.TestCase):
 class TestLogWindowInfo(unittest.TestCase):
     def test_log_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch.object(obj, "_log_x11_window_info") as mock_log:
             obj._log_current_window_info()
@@ -147,6 +178,7 @@ class TestLogWindowInfo(unittest.TestCase):
 
     def test_log_wayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         # For pure Wayland, _log_current_window_info logs a debug message instead
         # Just verify it doesn't raise
@@ -154,6 +186,7 @@ class TestLogWindowInfo(unittest.TestCase):
 
     def test_log_xwayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND_XDOTOOL)
         with patch.object(obj, "_log_x11_window_info") as mock_log:
             obj._log_current_window_info()
@@ -162,6 +195,7 @@ class TestLogWindowInfo(unittest.TestCase):
 
     def test_log_exception(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch.object(obj, "_log_x11_window_info", side_effect=Exception("err")):
             obj._log_current_window_info()  # Should not raise
@@ -170,6 +204,7 @@ class TestLogWindowInfo(unittest.TestCase):
 class TestInjectKeyboardShortcut(unittest.TestCase):
     def test_inject_shortcut_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch.object(obj, "_inject_shortcut_with_xdotool", return_value=True):
             result = obj._inject_keyboard_shortcut("ctrl+a")
@@ -177,6 +212,7 @@ class TestInjectKeyboardShortcut(unittest.TestCase):
 
     def test_inject_shortcut_wayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         obj.wayland_tool = "wtype"
         with patch.object(obj, "_inject_shortcut_with_wayland_tool", return_value=True):
@@ -185,6 +221,7 @@ class TestInjectKeyboardShortcut(unittest.TestCase):
 
     def test_inject_shortcut_xwayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND_XDOTOOL)
         with patch.object(obj, "_inject_shortcut_with_xdotool", return_value=True):
             result = obj._inject_keyboard_shortcut("ctrl+a")
@@ -194,6 +231,7 @@ class TestInjectKeyboardShortcut(unittest.TestCase):
 class TestShortcutWithXdotool(unittest.TestCase):
     def test_success(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch("subprocess.run"):
             result = obj._inject_shortcut_with_xdotool("ctrl+a")
@@ -201,6 +239,7 @@ class TestShortcutWithXdotool(unittest.TestCase):
 
     def test_failure(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "xdotool")):
             result = obj._inject_shortcut_with_xdotool("ctrl+a")
@@ -210,6 +249,7 @@ class TestShortcutWithXdotool(unittest.TestCase):
 class TestShortcutWithWaylandTool(unittest.TestCase):
     def test_wtype_not_supported(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         obj.wayland_tool = "wtype"
         result = obj._inject_shortcut_with_wayland_tool("ctrl+a")
@@ -217,6 +257,7 @@ class TestShortcutWithWaylandTool(unittest.TestCase):
 
     def test_ydotool_success(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         obj.wayland_tool = "ydotool"
         with patch("subprocess.run"):
@@ -227,6 +268,7 @@ class TestShortcutWithWaylandTool(unittest.TestCase):
 class TestCopyToClipboard(unittest.TestCase):
     def test_copy_success(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch("subprocess.run") as mock_run:
             with patch("shutil.which", return_value="/usr/bin/xclip"):
@@ -237,6 +279,7 @@ class TestCopyToClipboard(unittest.TestCase):
 
     def test_copy_no_tools(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         with patch("shutil.which", return_value=None):
             result = obj._copy_to_clipboard("hello")
@@ -246,6 +289,7 @@ class TestCopyToClipboard(unittest.TestCase):
 class TestShouldCopyToClipboard(unittest.TestCase):
     def test_should_copy(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         result = obj._should_copy_to_clipboard()
         self.assertIsInstance(result, bool)
@@ -254,6 +298,7 @@ class TestShouldCopyToClipboard(unittest.TestCase):
 class TestStop(unittest.TestCase):
     def test_stop_with_ibus(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11_IBUS)
         mock_ibus = MagicMock()
         obj._ibus_injector = mock_ibus
@@ -262,6 +307,7 @@ class TestStop(unittest.TestCase):
 
     def test_stop_without_ibus(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
+
         obj = _make_injector(DesktopEnvironment.X11)
         obj.stop()  # Should not raise
 

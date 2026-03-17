@@ -4,11 +4,12 @@ Additional coverage tests for recognition_manager.py module.
 Tests for uncovered initialization paths, error handling, and edge cases.
 """
 
-import sys
 import os
+import sys
+from unittest.mock import MagicMock, Mock, mock_open, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, Mock
-from unittest.mock import mock_open
+
 
 # Autouse fixture to prevent sys.modules pollution
 @pytest.fixture(autouse=True)
@@ -23,18 +24,15 @@ def _restore_sys_modules():
             sys.modules[k] = v
 
 
-def _make_manager(engine='whisper_cpp', **kw):
+def _make_manager(engine="whisper_cpp", **kw):
     """Helper to create SpeechRecognitionManager with init methods patched."""
     from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
-    with patch.object(SpeechRecognitionManager, '_init_vosk'):
-        with patch.object(SpeechRecognitionManager, '_init_whisper'):
-            with patch.object(SpeechRecognitionManager, '_init_whispercpp'):
+
+    with patch.object(SpeechRecognitionManager, "_init_vosk"):
+        with patch.object(SpeechRecognitionManager, "_init_whisper"):
+            with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
                 return SpeechRecognitionManager(
-                    engine=engine,
-                    model_size='small',
-                    language='en-us',
-                    defer_download=True,
-                    **kw
+                    engine=engine, model_size="small", language="en-us", defer_download=True, **kw
                 )
 
 
@@ -43,20 +41,20 @@ class TestSpeechRecognitionManagerInit:
 
     def test_manager_init_whisper_cpp_engine(self):
         """Test manager initialization with whisper_cpp engine."""
-        manager = _make_manager(engine='whisper_cpp')
-        assert manager.engine == 'whisper_cpp'
-        assert manager.model_size == 'small'
-        assert manager.language == 'en-us'
+        manager = _make_manager(engine="whisper_cpp")
+        assert manager.engine == "whisper_cpp"
+        assert manager.model_size == "small"
+        assert manager.language == "en-us"
 
     def test_manager_init_vosk_engine(self):
         """Test manager initialization with vosk engine."""
-        manager = _make_manager(engine='vosk')
-        assert manager.engine == 'vosk'
+        manager = _make_manager(engine="vosk")
+        assert manager.engine == "vosk"
 
     def test_manager_init_whisper_engine(self):
         """Test manager initialization with whisper engine."""
-        manager = _make_manager(engine='whisper')
-        assert manager.engine == 'whisper'
+        manager = _make_manager(engine="whisper")
+        assert manager.engine == "whisper"
 
     def test_manager_init_with_audio_device_index(self):
         """Test manager initialization with audio device index."""
@@ -102,7 +100,9 @@ class TestGetAudioInputDevices:
             {"name": "Device 1", "maxInputChannels": 2, "index": 1},
         ]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules", {"pyaudio": MagicMock(PyAudio=MagicMock(return_value=mock_audio))}
+        ):
             devices = get_audio_input_devices()
             assert len(devices) == 2
             assert devices[0][0] == 0  # device index
@@ -122,7 +122,9 @@ class TestGetAudioInputDevices:
             "index": 0,
         }
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules", {"pyaudio": MagicMock(PyAudio=MagicMock(return_value=mock_audio))}
+        ):
             devices = get_audio_input_devices()
             assert len(devices) == 1
             assert devices[0][2] is False  # not default
@@ -136,10 +138,12 @@ class TestGetAudioInputDevices:
         mock_audio.get_default_input_device_info.return_value = {"index": 0}
         mock_audio.get_device_info_by_index.side_effect = [
             {"name": "Output Device", "maxInputChannels": 0, "index": 0},  # output only
-            {"name": "Input Device", "maxInputChannels": 2, "index": 1},   # input capable
+            {"name": "Input Device", "maxInputChannels": 2, "index": 1},  # input capable
         ]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules", {"pyaudio": MagicMock(PyAudio=MagicMock(return_value=mock_audio))}
+        ):
             devices = get_audio_input_devices()
             assert len(devices) == 1
             assert devices[0][1] == "Input Device"
@@ -156,7 +160,9 @@ class TestGetAudioInputDevices:
             {"name": "Device 1", "maxInputChannels": 2, "index": 1},
         ]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules", {"pyaudio": MagicMock(PyAudio=MagicMock(return_value=mock_audio))}
+        ):
             devices = get_audio_input_devices()
             assert len(devices) == 1
             assert devices[0][1] == "Device 1"
@@ -165,8 +171,8 @@ class TestGetAudioInputDevices:
         """Test handling when pyaudio is not installed."""
         from vocalinux.speech_recognition.recognition_manager import get_audio_input_devices
 
-        with patch.dict('sys.modules', {'pyaudio': None}):
-            with patch('builtins.__import__', side_effect=ImportError("No module named 'pyaudio'")):
+        with patch.dict("sys.modules", {"pyaudio": None}):
+            with patch("builtins.__import__", side_effect=ImportError("No module named 'pyaudio'")):
                 devices = get_audio_input_devices()
                 assert devices == []
 
@@ -174,8 +180,8 @@ class TestGetAudioInputDevices:
         """Test handling of generic exceptions during device enumeration."""
         from vocalinux.speech_recognition.recognition_manager import get_audio_input_devices
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock()}):
-            with patch('builtins.__import__', side_effect=RuntimeError("Unexpected error")):
+        with patch.dict("sys.modules", {"pyaudio": MagicMock()}):
+            with patch("builtins.__import__", side_effect=RuntimeError("Unexpected error")):
                 devices = get_audio_input_devices()
                 assert devices == []
 
@@ -194,7 +200,10 @@ class TestGetSupportedChannels:
         # First call (mono) succeeds
         mock_audio.open.side_effect = [mock_stream, IOError("2 channels not supported")]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules",
+            {"pyaudio": MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))},
+        ):
             channels = _get_supported_channels(mock_audio, None)
             assert channels == 1
 
@@ -211,7 +220,10 @@ class TestGetSupportedChannels:
             mock_stream,
         ]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules",
+            {"pyaudio": MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))},
+        ):
             channels = _get_supported_channels(mock_audio, None)
             assert channels == 2
 
@@ -227,7 +239,10 @@ class TestGetSupportedChannels:
             IOError("Stereo failed"),
         ]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules",
+            {"pyaudio": MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))},
+        ):
             channels = _get_supported_channels(mock_audio, None)
             assert channels == 1
 
@@ -244,7 +259,10 @@ class TestGetSupportedSampleRate:
         mock_audio.get_device_info_by_index.return_value = {"defaultSampleRate": 48000}
         mock_audio.open.return_value = mock_stream
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules",
+            {"pyaudio": MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))},
+        ):
             rate = _get_supported_sample_rate(mock_audio, 0, 1)
             assert rate == 48000
 
@@ -261,7 +279,10 @@ class TestGetSupportedSampleRate:
             mock_stream,  # 44100 works
         ]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules",
+            {"pyaudio": MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))},
+        ):
             rate = _get_supported_sample_rate(mock_audio, 0, 1)
             assert rate == 44100
 
@@ -274,7 +295,10 @@ class TestGetSupportedSampleRate:
         # All rates fail
         mock_audio.open.side_effect = IOError("All rates failed")
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules",
+            {"pyaudio": MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))},
+        ):
             rate = _get_supported_sample_rate(mock_audio, 0, 1)
             assert rate == 16000
 
@@ -289,7 +313,10 @@ class TestGetSupportedSampleRate:
             mock_stream,  # First common rate works
         ]
 
-        with patch.dict('sys.modules', {'pyaudio': MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))}):
+        with patch.dict(
+            "sys.modules",
+            {"pyaudio": MagicMock(paInt16=16, PyAudio=MagicMock(return_value=mock_audio))},
+        ):
             rate = _get_supported_sample_rate(mock_audio, 0, 1)
             # Should try common rates and return first working one
             assert rate in [48000, 44100, 32000, 22050, 16000, 8000]

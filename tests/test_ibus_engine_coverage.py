@@ -36,7 +36,7 @@ mock_ibus.Text.new_from_string = MagicMock(return_value=MagicMock())
 mock_glib.MainLoop = MagicMock
 
 # Mock socket.SO_PEERCRED (Linux-specific constant)
-if not hasattr(socket, 'SO_PEERCRED'):
+if not hasattr(socket, "SO_PEERCRED"):
     socket.SO_PEERCRED = 17
 
 sys.modules["gi"] = mock_gi
@@ -264,7 +264,9 @@ class TestIBusEngineModuleFunctions(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.is_ibus_available", return_value=False)
     def test_start_ibus_daemon_not_available(self, mock_available):
         """Test when IBus is not available."""
-        with patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=False):
+        with patch(
+            "vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=False
+        ):
             from vocalinux.text_injection.ibus_engine import start_ibus_daemon
 
             result = start_ibus_daemon()
@@ -321,6 +323,7 @@ class TestVocalinuxEngine(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures - force module reload to get fresh mocks."""
         import importlib
+
         # Ensure our mocks are in sys.modules
         sys.modules["gi"] = mock_gi
         sys.modules["gi.repository"] = MagicMock()
@@ -335,6 +338,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         """Clean up after tests."""
         # Reset class-level state
         from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
         VocalinuxEngine._active_instance = None
         VocalinuxEngine._socket_server = None
         VocalinuxEngine._server_socket = None
@@ -487,7 +491,9 @@ class TestIBusTextInjector(unittest.TestCase):
         injector = IBusTextInjector(auto_activate=False)
         self.assertIsNotNone(injector)
         # Verify auto_activate=False means _previous_engine is not set
-        self.assertFalse(hasattr(injector, '_previous_engine') and injector._previous_engine is not None)
+        self.assertFalse(
+            hasattr(injector, "_previous_engine") and injector._previous_engine is not None
+        )
         # Verify the auto_activate flag is properly False (no setup was called)
         self.assertIsNone(injector._previous_engine)
 
@@ -508,9 +514,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.switch_engine")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="other-engine")
-    def test_ibus_text_injector_stop(
-        self, mock_current_engine, mock_switch, mock_ensure_dir
-    ):
+    def test_ibus_text_injector_stop(self, mock_current_engine, mock_switch, mock_ensure_dir):
         """Test IBusTextInjector stop restores previous engine."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
@@ -554,7 +558,9 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
-    def test_ibus_text_injector_socket_not_found(self, mock_socket_path, mock_active, mock_ensure_dir):
+    def test_ibus_text_injector_socket_not_found(
+        self, mock_socket_path, mock_active, mock_ensure_dir
+    ):
         """Test text injection when socket is not found."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
@@ -592,6 +598,7 @@ class TestVocalinuxEngineApplication(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures - force module reload to get fresh mocks."""
         import importlib
+
         sys.modules["gi"] = mock_gi
         sys.modules["gi.repository"] = MagicMock()
         sys.modules["gi.repository"].IBus = mock_ibus
@@ -616,8 +623,8 @@ class TestVocalinuxEngineApplication(unittest.TestCase):
         # Verify mainloop attribute is properly initialized
         self.assertIsNotNone(app.mainloop)
         # Verify they are the correct types (mocked in test)
-        self.assertEqual(type(app.bus).__name__, 'MagicMock')
-        self.assertEqual(type(app.mainloop).__name__, 'MagicMock')
+        self.assertEqual(type(app.bus).__name__, "MagicMock")
+        self.assertEqual(type(app.mainloop).__name__, "MagicMock")
 
     @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
     def test_vocalinux_engine_application_on_disconnected(self, mock_start_server):

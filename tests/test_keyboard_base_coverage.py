@@ -7,8 +7,9 @@ This module tests the base.py module including:
 - KeyboardBackend abstract class
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from vocalinux.ui.keyboard_backends.base import (
     DEFAULT_SHORTCUT,

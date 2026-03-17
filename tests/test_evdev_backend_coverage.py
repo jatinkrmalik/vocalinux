@@ -11,19 +11,20 @@ This module tests:
 - _monitor_devices() thread
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, Mock, mock_open
-import os
 import errno
+import os
 import threading
 import time
+from unittest.mock import MagicMock, Mock, mock_open, patch
+
+import pytest
 
 from vocalinux.ui.keyboard_backends.evdev_backend import (
-    EvdevKeyboardBackend,
     EVDEV_AVAILABLE,
-    find_keyboard_devices,
-    device_has_modifier_key,
     MODIFIER_KEY_CODES,
+    EvdevKeyboardBackend,
+    device_has_modifier_key,
+    find_keyboard_devices,
 )
 
 
@@ -179,9 +180,7 @@ class TestDeviceHasModifierKey:
     def test_device_has_modifier_key_left_ctrl_specific(self, mock_input_device):
         """Test device with left_ctrl specifically."""
         mock_device = MagicMock()
-        mock_device.capabilities.return_value = {
-            1: [29]  # EV_KEY: [KEY_LEFTCTRL only]
-        }
+        mock_device.capabilities.return_value = {1: [29]}  # EV_KEY: [KEY_LEFTCTRL only]
         mock_input_device.return_value = mock_device
 
         with patch("vocalinux.ui.keyboard_backends.evdev_backend.ecodes") as mock_ecodes:

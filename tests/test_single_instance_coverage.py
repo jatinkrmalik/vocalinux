@@ -9,7 +9,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch, mock_open, call
+from unittest.mock import MagicMock, Mock, call, mock_open, patch
 
 import vocalinux.single_instance as single_instance_module
 
@@ -31,7 +31,9 @@ class TestAcquireLock(unittest.TestCase):
     @patch("os.lseek")
     @patch("fcntl.flock")
     @patch("os.getpid")
-    def test_acquire_lock_success(self, mock_getpid, mock_flock, mock_lseek, mock_write, mock_ftruncate, mock_get_fd):
+    def test_acquire_lock_success(
+        self, mock_getpid, mock_flock, mock_lseek, mock_write, mock_ftruncate, mock_get_fd
+    ):
         """Test successfully acquiring lock on first run."""
         mock_getpid.return_value = 12345
         mock_get_fd.return_value = 5

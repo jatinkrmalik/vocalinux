@@ -9,17 +9,18 @@ This module tests:
 """
 
 import os
-import pytest
-from unittest.mock import MagicMock, patch, Mock
 import sys
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Import the module under test
 import vocalinux.ui.keyboard_backends as kb_module
 from vocalinux.ui.keyboard_backends import (
-    DesktopEnvironment,
-    create_backend,
     EVDEV_AVAILABLE,
     PYNPUT_AVAILABLE,
+    DesktopEnvironment,
+    create_backend,
 )
 
 

@@ -3,8 +3,10 @@
 import os
 import sys
 import unittest
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 
 # Autouse fixture to prevent sys.modules pollution
 @pytest.fixture(autouse=True)
@@ -31,12 +33,14 @@ if "gi" not in sys.modules:
 if "gi.repository" not in sys.modules:
     sys.modules["gi.repository"] = MagicMock()
 
-from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
-    _filter_non_speech,
-    _show_notification,
-    _get_system_model_paths,
-    test_audio_input as _test_audio_input,
+from vocalinux.speech_recognition.recognition_manager import (
     SpeechRecognitionManager,
+    _filter_non_speech,
+    _get_system_model_paths,
+    _show_notification,
+)
+from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
+    test_audio_input as _test_audio_input,
 )
 
 # Restore immediately
@@ -146,7 +150,9 @@ class TestTestAudioInput(unittest.TestCase):
         mock_pa_mod.paInt16 = 8
 
         mock_pa_inst.get_default_input_device_info.return_value = {
-            "name": "Test Mic", "index": 0, "defaultSampleRate": 16000
+            "name": "Test Mic",
+            "index": 0,
+            "defaultSampleRate": 16000,
         }
 
         mock_stream = MagicMock()
@@ -181,7 +187,9 @@ class TestTestAudioInput(unittest.TestCase):
         mock_pa_mod.paInt16 = 8
 
         mock_pa_inst.get_device_info_by_index.return_value = {
-            "name": "USB Mic", "index": 1, "defaultSampleRate": 44100
+            "name": "USB Mic",
+            "index": 1,
+            "defaultSampleRate": 44100,
         }
 
         mock_stream = MagicMock()
@@ -207,7 +215,9 @@ class TestTestAudioInput(unittest.TestCase):
         mock_pa_mod.paInt16 = 8
 
         mock_pa_inst.get_default_input_device_info.return_value = {
-            "name": "Mic", "index": 0, "defaultSampleRate": 16000
+            "name": "Mic",
+            "index": 0,
+            "defaultSampleRate": 16000,
         }
         mock_pa_inst.open.side_effect = IOError("Cannot open stream")
 

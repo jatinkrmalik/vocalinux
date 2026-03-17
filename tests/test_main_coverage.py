@@ -8,7 +8,7 @@ Covers normal startup, debug mode, version flag, keyboard interrupt, and excepti
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -272,9 +272,13 @@ class TestMainFunction(unittest.TestCase):
         # Create proper mock for ConfigManager with get_settings() returning valid data
         mock_config_manager = MagicMock()
         mock_config_manager.return_value.get_settings.return_value = {
-            "speech_recognition": {"engine": "whisper", "model_size": "medium", "language": "en-us"},
+            "speech_recognition": {
+                "engine": "whisper",
+                "model_size": "medium",
+                "language": "en-us",
+            },
             "audio": {},
-            "general": {"first_run": False}
+            "general": {"first_run": False},
         }
 
         # Mock the imported modules
@@ -354,9 +358,7 @@ class TestMainFunction(unittest.TestCase):
                     "vocalinux.common_types": MagicMock(),
                     "vocalinux.speech_recognition": MagicMock(
                         recognition_manager=MagicMock(
-                            SpeechRecognitionManager=MagicMock(
-                                side_effect=Exception("Init error")
-                            )
+                            SpeechRecognitionManager=MagicMock(side_effect=Exception("Init error"))
                         )
                     ),
                     "vocalinux.text_injection.text_injector": MagicMock(),

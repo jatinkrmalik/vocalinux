@@ -6,10 +6,10 @@ state handling, and UI updates.
 """
 
 import os
+import signal
 import sys
 import unittest
-from unittest.mock import MagicMock, patch, call
-import signal
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -66,13 +66,16 @@ class TestTrayIndicatorInitialization(unittest.TestCase):
     def test_tray_indicator_init(self):
         """Test TrayIndicator initialization."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             # Set up mocks
             mock_speech_engine = MagicMock()
@@ -118,13 +121,16 @@ class TestTrayIndicatorInitialization(unittest.TestCase):
     def test_tray_indicator_registers_state_callback(self):
         """Test that TrayIndicator registers state callback on speech engine."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -183,13 +189,16 @@ class TestTrayIndicatorMenuOperations(unittest.TestCase):
     def test_add_menu_item(self):
         """Test adding a menu item."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -220,13 +229,16 @@ class TestTrayIndicatorMenuOperations(unittest.TestCase):
     def test_add_menu_separator(self):
         """Test adding a menu separator."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -279,13 +291,16 @@ class TestTrayIndicatorStateHandling(unittest.TestCase):
     def test_on_recognition_state_changed(self):
         """Test state change callback."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -316,13 +331,16 @@ class TestTrayIndicatorStateHandling(unittest.TestCase):
     def test_update_ui_idle_state(self):
         """Test UI update for idle state."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -353,13 +371,16 @@ class TestTrayIndicatorStateHandling(unittest.TestCase):
     def test_update_ui_listening_state(self):
         """Test UI update for listening state."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -412,13 +433,16 @@ class TestTrayIndicatorSignalHandling(unittest.TestCase):
     def test_signal_handler(self):
         """Test signal handler for graceful termination."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -453,13 +477,16 @@ class TestTrayIndicatorSignalHandling(unittest.TestCase):
     def test_update_shortcut(self):
         """Test updating keyboard shortcut."""
         # Import BEFORE patching to ensure mocks are already in place
-        from vocalinux.ui.tray_indicator import TrayIndicator
         from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
 
-        with patch("vocalinux.ui.tray_indicator.logging"), \
-             patch("vocalinux.ui.tray_indicator._resource_manager") as mock_resource_manager, \
-             patch("vocalinux.ui.tray_indicator.ConfigManager") as mock_config_manager, \
-             patch("vocalinux.ui.tray_indicator.KeyboardShortcutManager") as mock_keyboard_manager:
+        with patch("vocalinux.ui.tray_indicator.logging"), patch(
+            "vocalinux.ui.tray_indicator._resource_manager"
+        ) as mock_resource_manager, patch(
+            "vocalinux.ui.tray_indicator.ConfigManager"
+        ) as mock_config_manager, patch(
+            "vocalinux.ui.tray_indicator.KeyboardShortcutManager"
+        ) as mock_keyboard_manager:
 
             from vocalinux.ui.tray_indicator import TrayIndicator
 

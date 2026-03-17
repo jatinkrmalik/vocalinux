@@ -39,7 +39,7 @@ class TestFirstRunDialogConstants(unittest.TestCase):
 
     def test_response_constants_are_distinct(self):
         """Test that response constants have unique values."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_YES, RESPONSE_NO, RESPONSE_LATER
+        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES
 
         constants = [RESPONSE_YES, RESPONSE_NO, RESPONSE_LATER]
         self.assertEqual(len(constants), len(set(constants)))

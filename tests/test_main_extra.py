@@ -5,10 +5,12 @@ Tests for uncovered lines in parse_arguments(), check_display_available(), and m
 Covers edge cases and error paths.
 """
 
-import sys
-import pytest
-from unittest.mock import MagicMock, patch, call
 import logging
+import sys
+from unittest.mock import MagicMock, call, patch
+
+import pytest
+
 
 # Autouse fixture to prevent sys.modules pollution
 @pytest.fixture(autouse=True)
@@ -46,12 +48,15 @@ class TestCheckDisplayAvailableExtra:
 
         with patch.dict(sys.modules, {"gi": MagicMock(), "gi.repository": MagicMock()}):
             with patch("builtins.__import__") as mock_import:
+
                 def side_effect(name, *args, **kwargs):
                     if name == "gi":
                         mock_gi = MagicMock()
                         mock_gi.require_version = MagicMock()
                         return mock_gi
-                    elif name == "gi.repository.Gdk" or (len(args) > 2 and args[2] and "Gdk" in str(args[2])):
+                    elif name == "gi.repository.Gdk" or (
+                        len(args) > 2 and args[2] and "Gdk" in str(args[2])
+                    ):
                         return mock_gdk
                     return MagicMock()
 
@@ -109,9 +114,13 @@ class TestMainFunctionExtra:
 
         mock_config_manager = MagicMock()
         mock_config_manager.return_value.get_settings.return_value = {
-            "speech_recognition": {"engine": "whisper_cpp", "model_size": "small", "language": "en-us"},
+            "speech_recognition": {
+                "engine": "whisper_cpp",
+                "model_size": "small",
+                "language": "en-us",
+            },
             "audio": {},
-            "general": {"first_run": True}
+            "general": {"first_run": True},
         }
         mock_config_manager.return_value.set = MagicMock()
         mock_config_manager.return_value.save_settings = MagicMock()
@@ -132,7 +141,9 @@ class TestMainFunctionExtra:
                 "vocalinux.ui.action_handler": MagicMock(),
                 "vocalinux.ui.config_manager": mock_config_manager,
                 "vocalinux.ui.logging_manager": MagicMock(),
-                "vocalinux.ui.first_run_dialog": MagicMock(show_first_run_dialog=MagicMock(return_value="yes")),
+                "vocalinux.ui.first_run_dialog": MagicMock(
+                    show_first_run_dialog=MagicMock(return_value="yes")
+                ),
                 "vocalinux.ui.autostart_manager": MagicMock(),
                 "vocalinux.text_injection.start_ibus_daemon": MagicMock(return_value=False),
             },
@@ -166,9 +177,13 @@ class TestMainFunctionExtra:
 
         mock_config_manager = MagicMock()
         mock_config_manager.return_value.get_settings.return_value = {
-            "speech_recognition": {"engine": "whisper_cpp", "model_size": "small", "language": "en-us"},
+            "speech_recognition": {
+                "engine": "whisper_cpp",
+                "model_size": "small",
+                "language": "en-us",
+            },
             "audio": {},
-            "general": {"first_run": True}
+            "general": {"first_run": True},
         }
         mock_config_manager.return_value.set = MagicMock()
         mock_config_manager.return_value.save_settings = MagicMock()
@@ -189,7 +204,9 @@ class TestMainFunctionExtra:
                 "vocalinux.ui.action_handler": MagicMock(),
                 "vocalinux.ui.config_manager": mock_config_manager,
                 "vocalinux.ui.logging_manager": MagicMock(),
-                "vocalinux.ui.first_run_dialog": MagicMock(show_first_run_dialog=MagicMock(return_value="no")),
+                "vocalinux.ui.first_run_dialog": MagicMock(
+                    show_first_run_dialog=MagicMock(return_value="no")
+                ),
                 "vocalinux.ui.autostart_manager": MagicMock(),
                 "vocalinux.text_injection.start_ibus_daemon": MagicMock(return_value=False),
             },
@@ -223,9 +240,13 @@ class TestMainFunctionExtra:
 
         mock_config_manager = MagicMock()
         mock_config_manager.return_value.get_settings.return_value = {
-            "speech_recognition": {"engine": "whisper_cpp", "model_size": "small", "language": "en-us"},
+            "speech_recognition": {
+                "engine": "whisper_cpp",
+                "model_size": "small",
+                "language": "en-us",
+            },
             "audio": {},
-            "general": {"first_run": True}
+            "general": {"first_run": True},
         }
 
         with patch.dict(
@@ -244,7 +265,9 @@ class TestMainFunctionExtra:
                 "vocalinux.ui.action_handler": MagicMock(),
                 "vocalinux.ui.config_manager": mock_config_manager,
                 "vocalinux.ui.logging_manager": MagicMock(),
-                "vocalinux.ui.first_run_dialog": MagicMock(show_first_run_dialog=MagicMock(return_value="cancel")),
+                "vocalinux.ui.first_run_dialog": MagicMock(
+                    show_first_run_dialog=MagicMock(return_value="cancel")
+                ),
                 "vocalinux.ui.autostart_manager": MagicMock(),
                 "vocalinux.text_injection.start_ibus_daemon": MagicMock(return_value=False),
             },
@@ -281,9 +304,13 @@ class TestMainFunctionExtra:
 
         mock_config_manager = MagicMock()
         mock_config_manager.return_value.get_settings.return_value = {
-            "speech_recognition": {"engine": "whisper_cpp", "model_size": "small", "language": "en-us"},
+            "speech_recognition": {
+                "engine": "whisper_cpp",
+                "model_size": "small",
+                "language": "en-us",
+            },
             "audio": {},
-            "general": {"first_run": False}
+            "general": {"first_run": False},
         }
 
         with patch.dict(
@@ -308,7 +335,11 @@ class TestMainFunctionExtra:
             },
         ):
             # Mock sys.argv to have CLI arguments
-            with patch.object(sys, "argv", ["vocalinux", "--engine", "vosk", "--model", "medium", "--language", "es"]):
+            with patch.object(
+                sys,
+                "argv",
+                ["vocalinux", "--engine", "vosk", "--model", "medium", "--language", "es"],
+            ):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
                 assert exc_info.value.code == 1
@@ -338,9 +369,13 @@ class TestMainFunctionExtra:
 
         mock_config_manager = MagicMock()
         mock_config_manager.return_value.get_settings.return_value = {
-            "speech_recognition": {"engine": "whisper_cpp", "model_size": "small", "language": "en-us"},
+            "speech_recognition": {
+                "engine": "whisper_cpp",
+                "model_size": "small",
+                "language": "en-us",
+            },
             "audio": {},
-            "general": {"first_run": False}
+            "general": {"first_run": False},
         }
 
         mock_ibus_daemon = MagicMock(return_value=True)
@@ -355,9 +390,7 @@ class TestMainFunctionExtra:
                         SpeechRecognitionManager=MagicMock(side_effect=Exception("Test exit"))
                     )
                 ),
-                "vocalinux.text_injection": MagicMock(
-                    start_ibus_daemon=mock_ibus_daemon
-                ),
+                "vocalinux.text_injection": MagicMock(start_ibus_daemon=mock_ibus_daemon),
                 "vocalinux.text_injection.text_injector": MagicMock(),
                 "vocalinux.ui.tray_indicator": MagicMock(),
                 "vocalinux.ui.action_handler": MagicMock(),
@@ -397,9 +430,13 @@ class TestMainFunctionExtra:
 
         mock_config_manager = MagicMock()
         mock_config_manager.return_value.get_settings.return_value = {
-            "speech_recognition": {"engine": "whisper_cpp", "model_size": "small", "language": "en-us"},
+            "speech_recognition": {
+                "engine": "whisper_cpp",
+                "model_size": "small",
+                "language": "en-us",
+            },
             "audio": {},
-            "general": {"first_run": False}
+            "general": {"first_run": False},
         }
 
         mock_ibus_daemon = MagicMock(side_effect=Exception("IBus error"))
@@ -414,9 +451,7 @@ class TestMainFunctionExtra:
                         SpeechRecognitionManager=MagicMock(side_effect=Exception("Test exit"))
                     )
                 ),
-                "vocalinux.text_injection": MagicMock(
-                    start_ibus_daemon=mock_ibus_daemon
-                ),
+                "vocalinux.text_injection": MagicMock(start_ibus_daemon=mock_ibus_daemon),
                 "vocalinux.text_injection.text_injector": MagicMock(),
                 "vocalinux.ui.tray_indicator": MagicMock(),
                 "vocalinux.ui.action_handler": MagicMock(),

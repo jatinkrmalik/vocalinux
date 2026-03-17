@@ -8,15 +8,15 @@ Focus areas:
 - Audio device detection edge cases
 """
 
+import json
 import os
+import shutil
 import sys
+import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import MagicMock, Mock, patch, PropertyMock, mock_open
-import json
-import tempfile
-import shutil
+from unittest.mock import MagicMock, Mock, PropertyMock, mock_open, patch
 
 # Mock modules BEFORE importing anything from vocalinux
 sys.modules["pyaudio"] = MagicMock()
@@ -34,13 +34,13 @@ sys.modules["zipfile"] = MagicMock()
 from conftest import mock_audio_feedback
 
 from vocalinux.common_types import RecognitionState
+from vocalinux.speech_recognition.command_processor import CommandProcessor
 from vocalinux.speech_recognition.recognition_manager import (
     SpeechRecognitionManager,
     _get_supported_channels,
     _get_supported_sample_rate,
     get_audio_input_devices,
 )
-from vocalinux.speech_recognition.command_processor import CommandProcessor
 
 
 class TestDownloadFunctions(unittest.TestCase):
@@ -70,9 +70,7 @@ class TestDownloadFunctions(unittest.TestCase):
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(
-            engine=engine,
-            defer_download=defer_download,
-            model_size="tiny"
+            engine=engine, defer_download=defer_download, model_size="tiny"
         )
         return manager
 
@@ -83,22 +81,23 @@ class TestDownloadFunctions(unittest.TestCase):
                 with patch("os.path.dirname") as mock_dirname:
                     with patch("os.makedirs"):
                         mock_dirname.return_value = "/fake/dir"
-                        
+
                         mock_response = MagicMock()
                         mock_response.headers = {"content-length": "1024"}
                         mock_response.iter_content.return_value = [b"x" * 512, b"y" * 512]
-                        
+
                         progress_calls = []
+
                         def progress_cb(progress, speed, status):
                             progress_calls.append((progress, speed, status))
-                        
+
                         with patch("requests.get", return_value=mock_response):
                             manager = self._create_manager(engine="whisper")
                             manager._download_progress_callback = progress_cb
-                            
+
                             # This should call the download function
                             manager._download_whisper_model("/fake/cache")
-                            
+
                             # Verify file was written
                             mock_file.assert_called()
                             # Verify progress callback was called
@@ -115,14 +114,14 @@ class TestDownloadFunctions(unittest.TestCase):
     def test_download_cancelled_flag(self):
         """Test that download can be marked as cancelled."""
         manager = self._create_manager(engine="whisper")
-        
+
         # Initial state should be False
         assert manager._download_cancelled is False
-        
+
         # Test that setting flag to True works
         manager._download_cancelled = True
         assert manager._download_cancelled is True
-        
+
         # Reset and verify again
         manager._download_cancelled = False
         assert manager._download_cancelled is False
@@ -132,10 +131,10 @@ class TestDownloadFunctions(unittest.TestCase):
         # Test that progress callback can be registered
         manager = self._create_manager(engine="vosk")
         manager.vosk_model_map = {"small": "en-us_0"}
-        
+
         progress_data = []
         manager._download_progress_callback = lambda p, s, st: progress_data.append(p)
-        
+
         assert manager._download_progress_callback is not None
         assert callable(manager._download_progress_callback)
 
@@ -167,11 +166,11 @@ class TestAudioDeviceDetection(unittest.TestCase):
             {"maxInputChannels": 2, "name": "Device 0"},
             {"maxInputChannels": 1, "name": "Device 1"},
         ]
-        
+
         self.pyaudio_mock.PyAudio.return_value = mock_audio
-        
+
         devices = get_audio_input_devices()
-        
+
         assert len(devices) == 2
         assert devices[0][0] == 0  # Device index
         assert devices[0][2] is True  # Is default
@@ -183,13 +182,13 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_audio.get_default_input_device_info.side_effect = IOError("No default")
         mock_audio.get_device_info_by_index.return_value = {
             "maxInputChannels": 2,
-            "name": "Device 0"
+            "name": "Device 0",
         }
-        
+
         self.pyaudio_mock.PyAudio.return_value = mock_audio
-        
+
         devices = get_audio_input_devices()
-        
+
         assert len(devices) == 1
         assert devices[0][2] is False  # Not default
 
@@ -203,11 +202,11 @@ class TestAudioDeviceDetection(unittest.TestCase):
             {"maxInputChannels": 2, "name": "Device 0"},
             IOError("Device error"),
         ]
-        
+
         self.pyaudio_mock.PyAudio.return_value = mock_audio
-        
+
         devices = get_audio_input_devices()
-        
+
         assert len(devices) == 1  # Only first device
 
     def test_get_supported_channels_mono(self):
@@ -215,11 +214,11 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_audio = MagicMock()
         mock_stream = MagicMock()
         mock_audio.open.return_value = mock_stream
-        
+
         self.pyaudio_mock.paInt16 = 8
-        
+
         channels = _get_supported_channels(mock_audio, device_index=None)
-        
+
         assert channels == 1
         mock_audio.open.assert_called()
 
@@ -228,11 +227,11 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_audio = MagicMock()
         # Both attempts fail
         mock_audio.open.side_effect = IOError("Channels not supported")
-        
+
         self.pyaudio_mock.paInt16 = 8
-        
+
         channels = _get_supported_channels(mock_audio, device_index=None)
-        
+
         assert channels == 1  # Default fallback
 
     def test_get_supported_sample_rate_default_rate(self):
@@ -240,31 +239,29 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_audio = MagicMock()
         mock_stream = MagicMock()
         mock_audio.open.return_value = mock_stream
-        mock_audio.get_device_info_by_index.return_value = {
-            "defaultSampleRate": 16000
-        }
-        
+        mock_audio.get_device_info_by_index.return_value = {"defaultSampleRate": 16000}
+
         self.pyaudio_mock.paInt16 = 8
-        
+
         rate = _get_supported_sample_rate(mock_audio, device_index=0, channels=1)
-        
+
         assert rate == 16000
 
     def test_get_supported_sample_rate_fallback(self):
         """Test sample rate fallback when default fails."""
         mock_audio = MagicMock()
         mock_stream = MagicMock()
-        
+
         # First call (default) fails, second (16000) succeeds
         mock_audio.open.side_effect = [IOError(), mock_stream]
         mock_audio.get_device_info_by_index.return_value = {
             "defaultSampleRate": 48000  # Not in COMMON_RATES, will try others
         }
-        
+
         self.pyaudio_mock.paInt16 = 8
-        
+
         rate = _get_supported_sample_rate(mock_audio, device_index=0, channels=1)
-        
+
         assert rate in [48000, 44100, 32000, 22050, 16000, 8000]
 
     def test_get_supported_sample_rate_all_fail(self):
@@ -272,11 +269,11 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_audio = MagicMock()
         mock_audio.open.side_effect = IOError("All rates failed")
         mock_audio.get_device_info_by_index.side_effect = IOError("No device info")
-        
+
         self.pyaudio_mock.paInt16 = 8
-        
+
         rate = _get_supported_sample_rate(mock_audio, device_index=0, channels=1)
-        
+
         assert rate == 16000  # Default fallback
 
 
@@ -328,9 +325,9 @@ class TestBufferManagement(unittest.TestCase):
         manager = self._create_manager()
         manager.set_buffer_limit(1000)
         manager.audio_buffer = [b"x" * 100, b"y" * 100]
-        
+
         stats = manager.get_buffer_stats()
-        
+
         assert stats["buffer_size"] == 2
         assert stats["memory_usage_bytes"] == 200
         assert stats["buffer_limit"] == 1000
@@ -346,10 +343,10 @@ class TestBufferManagement(unittest.TestCase):
         manager.audio_thread.is_alive.return_value = False
         manager.recognition_thread = MagicMock()
         manager.recognition_thread.is_alive.return_value = False
-        
+
         with patch("vocalinux.ui.audio_feedback.play_stop_sound"):
             manager.stop_recognition()
-            
+
             # Buffer should be cleared
             assert manager.audio_buffer == []
 
@@ -364,11 +361,11 @@ class TestBufferManagement(unittest.TestCase):
         manager.audio_thread.is_alive.return_value = False
         manager.recognition_thread = MagicMock()
         manager.recognition_thread.is_alive.return_value = False
-        
+
         with patch.object(manager, "_enqueue_audio_segment"):
             with patch("vocalinux.ui.audio_feedback.play_stop_sound"):
                 manager.stop_recognition()
-                
+
                 # Only first 5 chunks should remain (20 - 15 discarded)
                 assert len(manager.audio_buffer) == 0  # Will be enqueued then cleared
 
@@ -401,9 +398,9 @@ class TestErrorHandling(unittest.TestCase):
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
         manager._model_initialized = True
         original_engine = manager.engine
-        
+
         manager.reconfigure(engine="whisper", force_download=False)
-        
+
         assert manager.engine == "whisper"
         assert manager.engine != original_engine
 
@@ -422,9 +419,9 @@ class TestErrorHandling(unittest.TestCase):
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
         manager._model_initialized = True
-        
+
         manager.reconfigure(language="es", force_download=False)
-        
+
         assert manager.language == "es"
 
     def test_reconfigure_model_size_change(self):
@@ -441,9 +438,9 @@ class TestErrorHandling(unittest.TestCase):
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", model_size="small", defer_download=True)
-        
+
         manager.reconfigure(model_size="medium", force_download=False)
-        
+
         assert manager.model_size == "medium"
 
     def test_reconfigure_audio_device(self):
@@ -459,10 +456,10 @@ class TestErrorHandling(unittest.TestCase):
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        
+
         manager.reconfigure(audio_device_index=2, force_download=False)
         assert manager.audio_device_index == 2
-        
+
         manager.reconfigure(audio_device_index=-1, force_download=False)
         assert manager.audio_device_index is None
 
@@ -479,7 +476,7 @@ class TestErrorHandling(unittest.TestCase):
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        
+
         manager.reconfigure(vad_sensitivity=4, force_download=False)
         assert manager.vad_sensitivity == 4
 
@@ -511,7 +508,7 @@ class TestTranscriptionEdgeCases(unittest.TestCase):
         if engine == "whisper_cpp":
             # Skip whisper_cpp for now due to initialization issues
             return None
-        
+
         return SpeechRecognitionManager(engine=engine, defer_download=True)
 
     def test_transcribe_whisper_empty_buffer(self):
@@ -519,11 +516,11 @@ class TestTranscriptionEdgeCases(unittest.TestCase):
         manager = self._make_manager(engine="whisper")
         if manager is None:
             self.skipTest("Manager creation failed")
-        
+
         manager.model = MagicMock()
-        
+
         result = manager._transcribe_with_whisper([])
-        
+
         assert result == ""
 
     def test_transcribe_whisper_none_model(self):
@@ -531,11 +528,11 @@ class TestTranscriptionEdgeCases(unittest.TestCase):
         manager = self._make_manager(engine="whisper")
         if manager is None:
             self.skipTest("Manager creation failed")
-        
+
         manager.model = None
-        
+
         result = manager._transcribe_with_whisper([b"audio"])
-        
+
         assert result == ""
 
     def test_transcribe_whisper_exception(self):
@@ -543,15 +540,15 @@ class TestTranscriptionEdgeCases(unittest.TestCase):
         manager = self._make_manager(engine="whisper")
         if manager is None:
             self.skipTest("Manager creation failed")
-        
+
         manager.model = MagicMock()
         manager.model.device = "cpu"
         manager.model.transcribe.side_effect = RuntimeError("Transcription failed")
-        
+
         with patch("numpy.frombuffer", return_value=MagicMock()):
             with patch("numpy.astype", return_value=MagicMock()):
                 result = manager._transcribe_with_whisper([b"audio"])
-                
+
                 assert result == ""
 
 
@@ -724,15 +721,21 @@ class TestAudioDeviceReconnection(unittest.TestCase):
             patch("os.path.exists", return_value=True),
             patch("threading.Thread"),
             patch.object(SpeechRecognitionManager, "_get_vosk_model_path"),
-            patch("vocalinux.speech_recognition.recognition_manager._get_supported_channels", return_value=1),
-            patch("vocalinux.speech_recognition.recognition_manager._get_supported_sample_rate", return_value=16000),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._get_supported_channels",
+                return_value=1,
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._get_supported_sample_rate",
+                return_value=16000,
+            ),
         ]
         for p in patches:
             p.start()
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        
+
         # Create mock audio instance
         mock_audio = MagicMock()
         mock_stream = MagicMock()
@@ -751,15 +754,21 @@ class TestAudioDeviceReconnection(unittest.TestCase):
             patch("os.path.exists", return_value=True),
             patch("threading.Thread"),
             patch.object(SpeechRecognitionManager, "_get_vosk_model_path"),
-            patch("vocalinux.speech_recognition.recognition_manager._get_supported_channels", return_value=1),
-            patch("vocalinux.speech_recognition.recognition_manager._get_supported_sample_rate", return_value=16000),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._get_supported_channels",
+                return_value=1,
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._get_supported_sample_rate",
+                return_value=16000,
+            ),
         ]
         for p in patches:
             p.start()
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        
+
         # Create mock audio that fails
         mock_audio = MagicMock()
         mock_audio.open.side_effect = IOError("Device error")
@@ -794,7 +803,7 @@ class TestCallbackRegistration(unittest.TestCase):
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        
+
         def callback(text):
             pass
 
@@ -815,7 +824,7 @@ class TestCallbackRegistration(unittest.TestCase):
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        
+
         def action_callback(action):
             pass
 
@@ -836,7 +845,7 @@ class TestCallbackRegistration(unittest.TestCase):
             self.patches.append(p)
 
         manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        
+
         def progress_callback(progress, speed, status):
             pass
 

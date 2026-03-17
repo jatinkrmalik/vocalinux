@@ -10,12 +10,16 @@ import sys
 import threading
 import time
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 # ---- Safely mock external deps, preserving stdlib ----
 _MOCK_KEYS = [
-    "vosk", "whisper", "torch", "pyaudio",
-    "pywhispercpp", "pywhispercpp.model",
+    "vosk",
+    "whisper",
+    "torch",
+    "pyaudio",
+    "pywhispercpp",
+    "pywhispercpp.model",
 ]
 _ORIG_MODULES = {}
 for _k in _MOCK_KEYS:
@@ -31,9 +35,9 @@ if "gi.repository" not in sys.modules:
 from vocalinux.common_types import RecognitionState  # noqa: E402
 from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
     SpeechRecognitionManager,
-    _setup_alsa_error_handler,
     _get_supported_channels,
     _get_supported_sample_rate,
+    _setup_alsa_error_handler,
     get_audio_input_devices,
 )
 
@@ -51,8 +55,7 @@ def _make_manager(engine="whisper_cpp", **kw):
         with patch.object(SpeechRecognitionManager, "_init_whisper"):
             with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
                 mgr = SpeechRecognitionManager(
-                    engine=engine, model_size="small", language="en-us",
-                    defer_download=True, **kw
+                    engine=engine, model_size="small", language="en-us", defer_download=True, **kw
                 )
     return mgr
 
@@ -109,11 +112,13 @@ class TestSupportedChannels(unittest.TestCase):
         mock_pa = MagicMock()
         call_count = [0]
         mock_stream = MagicMock()
+
         def open_side_effect(**kw):
             call_count[0] += 1
             if kw.get("channels") == 1:
                 raise IOError("Invalid number of channels -9998")
             return mock_stream
+
         mock_pa.open.side_effect = open_side_effect
         result = self._run_with_pyaudio(lambda: _get_supported_channels(mock_pa, None))
         self.assertEqual(result, 2)
@@ -434,16 +439,21 @@ class TestInitWhispercpp(unittest.TestCase):
         with patch("os.path.exists", return_value=True):
             mock_pywhispercpp = MagicMock()
             call_count = [0]
+
             def model_side_effect(*a, **kw):
                 call_count[0] += 1
                 if call_count[0] == 1:
                     raise RuntimeError("16-bit storage not supported")
                 return MagicMock()
+
             mock_pywhispercpp.Model.side_effect = model_side_effect
-            with patch.dict("sys.modules", {
-                "pywhispercpp": MagicMock(),
-                "pywhispercpp.model": mock_pywhispercpp,
-            }):
+            with patch.dict(
+                "sys.modules",
+                {
+                    "pywhispercpp": MagicMock(),
+                    "pywhispercpp.model": mock_pywhispercpp,
+                },
+            ):
                 try:
                     mgr._init_whispercpp()
                 except Exception:

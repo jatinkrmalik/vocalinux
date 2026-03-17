@@ -4,12 +4,14 @@ Additional coverage tests for resource_manager.py module.
 Tests for resource directory discovery and validation.
 """
 
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
+
 
 # Autouse fixture to prevent sys.modules pollution
 @pytest.fixture(autouse=True)
@@ -31,7 +33,7 @@ class TestResourceManagerDefaults:
         """Test that ResourceManager defaults to first candidate when none exist."""
         from vocalinux.utils.resource_manager import ResourceManager
 
-        with patch('vocalinux.utils.resource_manager.Path') as mock_path:
+        with patch("vocalinux.utils.resource_manager.Path") as mock_path:
             # All candidates return False for exists()
             mock_candidate = MagicMock()
             mock_candidate.exists.return_value = False
@@ -41,12 +43,12 @@ class TestResourceManagerDefaults:
             manager = ResourceManager()
             # Reset to test again
             ResourceManager._resources_dir = None
-            
+
             # Patch the actual _find_resources_dir to return a path
-            with patch.object(manager, '_find_resources_dir', return_value='/tmp/resources'):
+            with patch.object(manager, "_find_resources_dir", return_value="/tmp/resources"):
                 manager._resources_dir = None
                 manager.__init__()
-                assert manager._resources_dir == '/tmp/resources'
+                assert manager._resources_dir == "/tmp/resources"
 
     def test_resource_manager_singleton(self):
         """Test that ResourceManager follows singleton pattern."""
@@ -55,7 +57,7 @@ class TestResourceManagerDefaults:
         ResourceManager._instance = None
         manager1 = ResourceManager()
         manager2 = ResourceManager()
-        
+
         assert manager1 is manager2
 
     def test_resource_manager_properties(self):
@@ -64,7 +66,7 @@ class TestResourceManagerDefaults:
 
         ResourceManager._instance = None
         manager = ResourceManager()
-        
+
         # Test that properties return strings
         assert isinstance(manager.resources_dir, str)
         assert isinstance(manager.icons_dir, str)
@@ -76,7 +78,7 @@ class TestResourceManagerDefaults:
 
         ResourceManager._instance = None
         manager = ResourceManager()
-        
+
         icon_path = manager.get_icon_path("test-icon")
         assert "test-icon.svg" in icon_path
         assert "icons" in icon_path
@@ -87,7 +89,7 @@ class TestResourceManagerDefaults:
 
         ResourceManager._instance = None
         manager = ResourceManager()
-        
+
         sound_path = manager.get_sound_path("test-sound")
         assert "test-sound.wav" in sound_path
         assert "sounds" in sound_path
@@ -98,7 +100,7 @@ class TestResourceManagerDefaults:
 
         ResourceManager._instance = None
         manager = ResourceManager()
-        
+
         # Just verify the method can be called without error
         # It will attempt to create directories but may fail if path doesn't exist
         try:
@@ -112,17 +114,19 @@ class TestResourceManagerDefaults:
         from vocalinux.utils.resource_manager import ResourceManager
 
         ResourceManager._instance = None
-        
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             manager = ResourceManager()
-            
-            with patch.object(manager, '_resources_dir', tmp_dir):
+
+            with patch.object(manager, "_resources_dir", tmp_dir):
                 results = manager.validate_resources()
-                
+
                 # Resources don't exist, so should show as missing
-                assert results["resources_dir_exists"] is False or \
-                       results["icons_dir_exists"] is False or \
-                       results["sounds_dir_exists"] is False
+                assert (
+                    results["resources_dir_exists"] is False
+                    or results["icons_dir_exists"] is False
+                    or results["sounds_dir_exists"] is False
+                )
 
 
 class TestResourceManagerLogging:
@@ -134,7 +138,7 @@ class TestResourceManagerLogging:
 
         ResourceManager._instance = None
         manager = ResourceManager()
-        
+
         # Just verify the method returns a string path
         result = manager._find_resources_dir()
         assert isinstance(result, str)

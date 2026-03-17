@@ -4,12 +4,14 @@ Additional coverage tests for autostart_manager.py module.
 Tests for uncovered error cases and edge cases in autostart enable/disable.
 """
 
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
+
 
 # Autouse fixture to prevent sys.modules pollution
 @pytest.fixture(autouse=True)
@@ -34,7 +36,7 @@ class TestAutostartManagerExtra:
         with tempfile.TemporaryDirectory() as tmp_dir:
             autostart_file = Path(tmp_dir) / "vocalinux.desktop"
             autostart_file.write_text("[Desktop Entry]\nName=Vocalinux")
-            
+
             with patch.object(autostart_manager, "get_autostart_file", return_value=autostart_file):
                 assert autostart_manager.is_autostart_enabled() is True
 
@@ -44,7 +46,7 @@ class TestAutostartManagerExtra:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             autostart_file = Path(tmp_dir) / "vocalinux.desktop"
-            
+
             with patch.object(autostart_manager, "get_autostart_file", return_value=autostart_file):
                 assert autostart_manager.is_autostart_enabled() is False
 
@@ -56,14 +58,22 @@ class TestAutostartManagerExtra:
             # Create a read-only directory
             readonly_dir = Path(tmp_dir) / "readonly"
             readonly_dir.mkdir()
-            
+
             autostart_file = readonly_dir / "vocalinux.desktop"
             readonly_dir.chmod(0o444)  # Remove write permission
-            
+
             try:
-                with patch.object(autostart_manager, "get_autostart_dir", return_value=readonly_dir):
-                    with patch.object(autostart_manager, "get_autostart_file", return_value=autostart_file):
-                        with patch.object(autostart_manager, "get_exec_command", return_value="vocalinux --start-minimized"):
+                with patch.object(
+                    autostart_manager, "get_autostart_dir", return_value=readonly_dir
+                ):
+                    with patch.object(
+                        autostart_manager, "get_autostart_file", return_value=autostart_file
+                    ):
+                        with patch.object(
+                            autostart_manager,
+                            "get_exec_command",
+                            return_value="vocalinux --start-minimized",
+                        ):
                             result = autostart_manager.enable_autostart()
                             assert result is False
             finally:
@@ -76,10 +86,12 @@ class TestAutostartManagerExtra:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
-                with patch("vocalinux.ui.autostart_manager.shutil.which", return_value="/usr/bin/vocalinux"):
+                with patch(
+                    "vocalinux.ui.autostart_manager.shutil.which", return_value="/usr/bin/vocalinux"
+                ):
                     result = autostart_manager.enable_autostart()
                     assert result is True
-                    
+
                     autostart_file = Path(tmp_dir) / "autostart" / "vocalinux.desktop"
                     assert autostart_file.exists()
                     content = autostart_file.read_text(encoding="utf-8")
@@ -92,7 +104,7 @@ class TestAutostartManagerExtra:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             autostart_file = Path(tmp_dir) / "vocalinux.desktop"
-            
+
             with patch.object(autostart_manager, "get_autostart_file", return_value=autostart_file):
                 result = autostart_manager.disable_autostart()
                 assert result is True
@@ -104,12 +116,12 @@ class TestAutostartManagerExtra:
         with tempfile.TemporaryDirectory() as tmp_dir:
             autostart_file = Path(tmp_dir) / "vocalinux.desktop"
             autostart_file.write_text("[Desktop Entry]\nName=Vocalinux")
-            
+
             # Create a mock that will raise a permission error on unlink()
             mock_file = MagicMock()
             mock_file.exists.return_value = True
             mock_file.unlink.side_effect = PermissionError("Permission denied")
-            
+
             with patch.object(autostart_manager, "get_autostart_file", return_value=mock_file):
                 result = autostart_manager.disable_autostart()
                 assert result is False
@@ -120,10 +132,12 @@ class TestAutostartManagerExtra:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
-                with patch("vocalinux.ui.autostart_manager.shutil.which", return_value="/usr/bin/vocalinux"):
+                with patch(
+                    "vocalinux.ui.autostart_manager.shutil.which", return_value="/usr/bin/vocalinux"
+                ):
                     result = autostart_manager.set_autostart(True)
                     assert result is True
-                    
+
                     autostart_file = Path(tmp_dir) / "autostart" / "vocalinux.desktop"
                     assert autostart_file.exists()
 
@@ -137,7 +151,7 @@ class TestAutostartManagerExtra:
             autostart_dir.mkdir(parents=True)
             autostart_file = autostart_dir / "vocalinux.desktop"
             autostart_file.write_text("[Desktop Entry]\nName=Vocalinux")
-            
+
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 result = autostart_manager.set_autostart(False)
                 assert result is True
@@ -149,7 +163,9 @@ class TestAutostartManagerExtra:
 
         with patch("vocalinux.ui.autostart_manager.shutil.which", return_value=None):
             with patch("vocalinux.ui.autostart_manager.sys.frozen", True, create=True):
-                with patch("vocalinux.ui.autostart_manager.sys.executable", "/usr/local/bin/vocalinux-bin"):
+                with patch(
+                    "vocalinux.ui.autostart_manager.sys.executable", "/usr/local/bin/vocalinux-bin"
+                ):
                     command = autostart_manager.get_exec_command()
                     assert "/usr/local/bin/vocalinux-bin --start-minimized" in command
 

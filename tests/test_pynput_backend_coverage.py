@@ -10,14 +10,15 @@ This module tests:
 - is_available() and get_permission_hint()
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, Mock, PropertyMock
 import threading
 import time
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+
+import pytest
 
 from vocalinux.ui.keyboard_backends.pynput_backend import (
-    PynputKeyboardBackend,
     PYNPUT_AVAILABLE,
+    PynputKeyboardBackend,
 )
 
 

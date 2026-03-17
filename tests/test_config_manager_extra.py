@@ -4,13 +4,15 @@ Additional coverage tests for config_manager.py module.
 Tests for uncovered config manager methods.
 """
 
-import sys
-import os
-import tempfile
 import json
+import os
+import sys
+import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
+
 
 # Autouse fixture to prevent sys.modules pollution
 @pytest.fixture(autouse=True)
@@ -34,9 +36,9 @@ class TestConfigManagerVoiceCommands:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_file = Path(tmp_dir) / "config.json"
-            config_file.write_text(json.dumps({
-                "speech_recognition": {"voice_commands_enabled": True}
-            }))
+            config_file.write_text(
+                json.dumps({"speech_recognition": {"voice_commands_enabled": True}})
+            )
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
@@ -49,9 +51,9 @@ class TestConfigManagerVoiceCommands:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_file = Path(tmp_dir) / "config.json"
-            config_file.write_text(json.dumps({
-                "speech_recognition": {"voice_commands_enabled": False}
-            }))
+            config_file.write_text(
+                json.dumps({"speech_recognition": {"voice_commands_enabled": False}})
+            )
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
@@ -64,9 +66,11 @@ class TestConfigManagerVoiceCommands:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_file = Path(tmp_dir) / "config.json"
-            config_file.write_text(json.dumps({
-                "speech_recognition": {"engine": "vosk", "voice_commands_enabled": None}
-            }))
+            config_file.write_text(
+                json.dumps(
+                    {"speech_recognition": {"engine": "vosk", "voice_commands_enabled": None}}
+                )
+            )
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
@@ -80,9 +84,11 @@ class TestConfigManagerVoiceCommands:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_file = Path(tmp_dir) / "config.json"
-            config_file.write_text(json.dumps({
-                "speech_recognition": {"engine": "whisper", "voice_commands_enabled": None}
-            }))
+            config_file.write_text(
+                json.dumps(
+                    {"speech_recognition": {"engine": "whisper", "voice_commands_enabled": None}}
+                )
+            )
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
@@ -96,9 +102,16 @@ class TestConfigManagerVoiceCommands:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_file = Path(tmp_dir) / "config.json"
-            config_file.write_text(json.dumps({
-                "speech_recognition": {"engine": "whisper_cpp", "voice_commands_enabled": None}
-            }))
+            config_file.write_text(
+                json.dumps(
+                    {
+                        "speech_recognition": {
+                            "engine": "whisper_cpp",
+                            "voice_commands_enabled": None,
+                        }
+                    }
+                )
+            )
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
@@ -116,21 +129,19 @@ class TestConfigManagerUpdateSettings:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_file = Path(tmp_dir) / "config.json"
-            config_file.write_text(json.dumps({
-                "speech_recognition": {"engine": "vosk", "model_size": "small"}
-            }))
+            config_file.write_text(
+                json.dumps({"speech_recognition": {"engine": "vosk", "model_size": "small"}})
+            )
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
                 manager.config = json.loads(config_file.read_text())
-                
+
                 # Update settings
-                manager.update_speech_recognition_settings({
-                    "engine": "whisper_cpp",
-                    "model_size": "medium",
-                    "language": "es"
-                })
-                
+                manager.update_speech_recognition_settings(
+                    {"engine": "whisper_cpp", "model_size": "medium", "language": "es"}
+                )
+
                 assert manager.config["speech_recognition"]["engine"] == "whisper_cpp"
                 assert manager.config["speech_recognition"]["language"] == "es"
 
@@ -145,12 +156,11 @@ class TestConfigManagerUpdateSettings:
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
                 manager.config = json.loads(config_file.read_text())
-                
-                manager.update_speech_recognition_settings({
-                    "engine": "whisper_cpp",
-                    "model_size": "small"
-                })
-                
+
+                manager.update_speech_recognition_settings(
+                    {"engine": "whisper_cpp", "model_size": "small"}
+                )
+
                 assert "speech_recognition" in manager.config
                 assert manager.config["speech_recognition"]["engine"] == "whisper_cpp"
 
@@ -177,9 +187,7 @@ class TestConfigManagerSoundEffects:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_file = Path(tmp_dir) / "config.json"
-            config_file.write_text(json.dumps({
-                "sound_effects": {"enabled": False}
-            }))
+            config_file.write_text(json.dumps({"sound_effects": {"enabled": False}}))
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
@@ -197,14 +205,14 @@ class TestConfigManagerSoundEffects:
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
                 manager.config = json.loads(config_file.read_text())
-                
+
                 # Initially should be enabled (default)
                 assert manager.is_sound_effects_enabled() is True
-                
+
                 # Disable
                 manager.set_sound_effects_enabled(False)
                 assert manager.is_sound_effects_enabled() is False
-                
+
                 # Enable again
                 manager.set_sound_effects_enabled(True)
                 assert manager.is_sound_effects_enabled() is True
@@ -220,7 +228,7 @@ class TestConfigManagerSoundEffects:
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
                 manager.config = json.loads(config_file.read_text())
-                
+
                 manager.set_sound_effects_enabled(False)
                 assert "sound_effects" in manager.config
                 assert manager.config["sound_effects"]["enabled"] is False
@@ -240,12 +248,9 @@ class TestConfigManagerUpdateDictRecursive:
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
                 manager.config = {"a": {"b": 1, "c": 2}, "d": 3}
-                
-                manager._update_dict_recursive(manager.config, {
-                    "a": {"b": 10},
-                    "d": 30
-                })
-                
+
+                manager._update_dict_recursive(manager.config, {"a": {"b": 10}, "d": 30})
+
                 assert manager.config["a"]["b"] == 10
                 assert manager.config["a"]["c"] == 2  # unchanged
                 assert manager.config["d"] == 30
@@ -260,20 +265,10 @@ class TestConfigManagerUpdateDictRecursive:
 
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp_dir}, clear=False):
                 manager = ConfigManager()
-                manager.config = {
-                    "level1": {
-                        "level2": {
-                            "level3": "original"
-                        }
-                    }
-                }
-                
-                manager._update_dict_recursive(manager.config, {
-                    "level1": {
-                        "level2": {
-                            "level3": "updated"
-                        }
-                    }
-                })
-                
+                manager.config = {"level1": {"level2": {"level3": "original"}}}
+
+                manager._update_dict_recursive(
+                    manager.config, {"level1": {"level2": {"level3": "updated"}}}
+                )
+
                 assert manager.config["level1"]["level2"]["level3"] == "updated"

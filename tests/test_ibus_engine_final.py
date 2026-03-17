@@ -232,7 +232,7 @@ class TestIsEngineRegistered(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     def test_is_engine_registered_true(self, mock_run):
         """Test when engine is registered."""
-        from vocalinux.text_injection.ibus_engine import is_engine_registered, ENGINE_NAME
+        from vocalinux.text_injection.ibus_engine import ENGINE_NAME, is_engine_registered
 
         mock_run.return_value.stdout = f"other\n{ENGINE_NAME}\nmore"
         result = is_engine_registered()
@@ -255,7 +255,7 @@ class TestIsEngineActive(unittest.TestCase):
     @patch("subprocess.run")
     def test_is_engine_active_true(self, mock_run):
         """Test when engine is active."""
-        from vocalinux.text_injection.ibus_engine import is_engine_active, ENGINE_NAME
+        from vocalinux.text_injection.ibus_engine import ENGINE_NAME, is_engine_active
 
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = ENGINE_NAME

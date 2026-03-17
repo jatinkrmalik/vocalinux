@@ -2,8 +2,9 @@
 
 import sys
 import unittest
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -18,25 +19,26 @@ def _restore_sys_modules():
             sys.modules[k] = v
 
 
-
-
 class TestCommandProcessorEdgeCases(unittest.TestCase):
     """Cover edge case lines in command_processor.py."""
 
     def test_capitalize_command(self):
         from vocalinux.speech_recognition.command_processor import CommandProcessor
+
         cp = CommandProcessor()
         result = cp.process_text("capitalize")
         self.assertIsInstance(result, tuple)
 
     def test_format_with_no_target(self):
         from vocalinux.speech_recognition.command_processor import CommandProcessor
+
         cp = CommandProcessor()
         result = cp.process_text("format with no target word")
         self.assertIsInstance(result, tuple)
 
     def test_multiple_format_modifiers(self):
         from vocalinux.speech_recognition.command_processor import CommandProcessor
+
         cp = CommandProcessor()
         result = cp.process_text("multiple format modifiers")
         self.assertIsInstance(result, tuple)
@@ -47,6 +49,7 @@ class TestResourceManagerFallback(unittest.TestCase):
 
     def test_resources_dir_fallback(self):
         from vocalinux.utils.resource_manager import ResourceManager
+
         rm = ResourceManager()
         # Just access the property - it should return a valid path
         path = rm.resources_dir
@@ -59,11 +62,12 @@ class TestKeyboardBackendImportFallbacks(unittest.TestCase):
     def test_evdev_import_failure(self):
         """Test that EVDEV_AVAILABLE is False when evdev isn't installed."""
         import importlib
+
         saved = dict(sys.modules)
 
         # Remove evdev modules to force ImportError
         for key in list(sys.modules.keys()):
-            if 'evdev' in key:
+            if "evdev" in key:
                 del sys.modules[key]
 
         # Create a module that will raise ImportError on evdev import
@@ -71,6 +75,7 @@ class TestKeyboardBackendImportFallbacks(unittest.TestCase):
         mock_evdev.side_effect = ImportError("No evdev")
 
         import vocalinux.ui.keyboard_backends as kb_mod
+
         # The module already imported - we can check the constants
         # EVDEV_AVAILABLE and PYNPUT_AVAILABLE should be booleans
         self.assertIsInstance(kb_mod.EVDEV_AVAILABLE, bool)
@@ -83,18 +88,21 @@ class TestKeyboardBackendImportFallbacks(unittest.TestCase):
     def test_desktop_environment_detect_unknown(self):
         """Test DesktopEnvironment detection with unknown session."""
         from vocalinux.ui.keyboard_backends import DesktopEnvironment
+
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "mir"}, clear=False):
             de = DesktopEnvironment.detect()
             self.assertIsNotNone(de)
 
     def test_desktop_environment_detect_wayland(self):
         from vocalinux.ui.keyboard_backends import DesktopEnvironment
+
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"}, clear=False):
             de = DesktopEnvironment.detect()
             self.assertEqual(de, "wayland")
 
     def test_desktop_environment_detect_x11(self):
         from vocalinux.ui.keyboard_backends import DesktopEnvironment
+
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=False):
             de = DesktopEnvironment.detect()
             self.assertEqual(de, "x11")
@@ -109,10 +117,13 @@ class TestKeyboardBaseAbstractMethods(unittest.TestCase):
         class TestBackend(KeyboardBackend):
             def start(self):
                 return super().start()
+
             def stop(self):
                 return super().stop()
+
             def is_available(self):
                 return super().is_available()
+
             def get_permission_hint(self):
                 return super().get_permission_hint()
 
@@ -129,6 +140,7 @@ class TestWhispercppModelInfoExtra(unittest.TestCase):
 
     def test_detect_compute_backend_returns_tuple(self):
         from vocalinux.utils.whispercpp_model_info import detect_compute_backend
+
         backend, name = detect_compute_backend()
         self.assertIsInstance(backend, str)
         self.assertIsInstance(name, str)
@@ -136,6 +148,7 @@ class TestWhispercppModelInfoExtra(unittest.TestCase):
 
     def test_detect_compute_backend_cpu_fallback(self):
         from vocalinux.utils.whispercpp_model_info import detect_compute_backend
+
         # When all GPU checks fail, should fall back to cpu
         with patch("subprocess.run", side_effect=FileNotFoundError("not found")):
             with patch("platform.system", return_value="Linux"):
@@ -145,7 +158,6 @@ class TestWhispercppModelInfoExtra(unittest.TestCase):
 
 
 import os  # noqa: E402 - needed for os.environ patches
-
 
 if __name__ == "__main__":
     unittest.main()
