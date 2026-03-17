@@ -62,6 +62,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
+    "pytest-timeout>=2.1.0",
     "black>=23.0.0",
     "isort>=5.12.0",
     "flake8>=6.0.0",
@@ -124,7 +125,7 @@ skip = [".git", "venv", "node_modules", "build", "dist"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q --strict-markers --timeout=10 --timeout_method=thread"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]

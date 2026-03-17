@@ -5,6 +5,7 @@ This file makes sure that the 'src' module can be imported in tests.
 
 import os
 import sys
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,8 +13,60 @@ import pytest
 # Set PYTEST_RUNNING early so audio_feedback module can detect it
 os.environ["PYTEST_RUNNING"] = "1"
 
+# Prevent specific known-blocking daemon threads from starting during tests.
+# Source code in ibus_engine.py and evdev_backend.py spawns daemon threads
+# (socket server, device monitor) that block on socket.accept() or
+# select.select(). These threads cannot be interrupted by pytest-timeout
+# and cause CI jobs to hang/timeout.
+#
+# We only block threads whose target function matches known blockers;
+# test-created daemon threads (e.g. for mock socket servers) are allowed.
+_real_thread_start = threading.Thread.start
+_BLOCKED_THREAD_TARGETS = {"server_thread", "_monitor_devices"}
+
+
+_real_thread_join = threading.Thread.join
+
+
+def _safe_thread_start(self):
+    """Skip known-blocking daemon threads to prevent CI hangs."""
+    if self.daemon and hasattr(self, "_target") and self._target is not None:
+        target_name = getattr(self._target, "__name__", "")
+        if target_name in _BLOCKED_THREAD_TARGETS:
+            # Mark this thread so join() can recognise it was never started.
+            self._skipped_by_conftest = True
+            return
+    _real_thread_start(self)
+
+
+def _safe_thread_join(self, timeout=None):
+    """Handle join() for threads that were skipped by _safe_thread_start."""
+    if getattr(self, "_skipped_by_conftest", False):
+        return  # Thread was never started; nothing to join
+    _real_thread_join(self, timeout)
+
+
+threading.Thread.start = _safe_thread_start
+threading.Thread.join = _safe_thread_join
+
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Always mock GI/GTK modules before any test files are collected.
+# On CI, real gi (PyGObject) is installed via "pip install PyGObject" and
+# module-level imports in vocalinux source files (ibus_engine, tray_indicator,
+# settings_dialog, etc.) will trigger GTK initialization or IBus daemon
+# connections that hang indefinitely in headless environments.
+# pytest-timeout cannot interrupt these C-level blocking calls.
+#
+# We unconditionally replace gi with a mock — even if the real package is
+# already imported — because the real gi causes hangs on headless CI runners.
+# The previous "if 'gi' not in sys.modules" guard was ineffective on CI
+# precisely because PyGObject was installed and already loaded.
+_mock_gi = MagicMock()
+_mock_gi_repository = MagicMock()
+sys.modules["gi"] = _mock_gi
+sys.modules["gi.repository"] = _mock_gi_repository
 
 # Create and export the mock_audio_feedback module for tests that need it
 # This mock is used by test_recognition_manager.py and test_speech_recognition.py
@@ -24,6 +77,33 @@ mock_audio_feedback.play_error_sound = MagicMock()
 
 # Inject the mock into sys.modules so imports resolve correctly
 sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_ibus_server():
+    """Stop any leftover IBus socket server threads after each test.
+
+    Some tests trigger VocalinuxEngine._start_socket_server() which spawns
+    a daemon thread blocking on socket.accept().  If the test doesn't call
+    stop_socket_server(), the thread keeps running and eventually causes
+    pytest-timeout to kill the whole process.
+    """
+    yield
+
+    try:
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        if getattr(VocalinuxEngine, "_server_running", False):
+            VocalinuxEngine._server_running = False
+        sock = getattr(VocalinuxEngine, "_server_socket", None)
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
+            VocalinuxEngine._server_socket = None
+    except Exception:
+        pass
 
 
 def pytest_addoption(parser):
