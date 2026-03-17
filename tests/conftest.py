@@ -4,8 +4,8 @@ This file makes sure that the 'src' module can be imported in tests.
 """
 
 import os
-import socket
 import sys
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -13,12 +13,32 @@ import pytest
 # Set PYTEST_RUNNING early so audio_feedback module can detect it
 os.environ["PYTEST_RUNNING"] = "1"
 
-# Set a moderate global default socket timeout to prevent tests from
-# blocking indefinitely on socket operations (e.g. accept(), connect()).
-# 2 seconds is long enough for legitimate test sockets to complete their
-# handshake but short enough to unblock daemon threads that would otherwise
-# hang forever waiting for connections that never arrive.
-socket.setdefaulttimeout(2)
+# Prevent specific known-blocking daemon threads from starting during tests.
+# Source code in ibus_engine.py and evdev_backend.py spawns daemon threads
+# (socket server, device monitor) that block on socket.accept() or
+# select.select(). These threads cannot be interrupted by pytest-timeout
+# and cause CI jobs to hang/timeout.
+#
+# We only block threads whose target function matches known blockers;
+# test-created daemon threads (e.g. for mock socket servers) are allowed.
+_real_thread_start = threading.Thread.start
+_BLOCKED_THREAD_TARGETS = {"server_thread", "_monitor_devices"}
+
+
+def _safe_thread_start(self):
+    """Skip known-blocking daemon threads to prevent CI hangs."""
+    if self.daemon and hasattr(self, "_target") and self._target is not None:
+        target_name = getattr(self._target, "__name__", "")
+        if target_name in _BLOCKED_THREAD_TARGETS:
+            # Mark the thread as "started" so join() doesn't raise
+            # RuntimeError("cannot join thread before it is started").
+            self._started.set()
+            self._is_stopped = True
+            return
+    _real_thread_start(self)
+
+
+threading.Thread.start = _safe_thread_start
 
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
