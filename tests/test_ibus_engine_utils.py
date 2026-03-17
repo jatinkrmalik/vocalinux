@@ -5,8 +5,33 @@ These tests exercise code paths to improve coverage without platform-specific is
 """
 
 import subprocess
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
+
+# Mock GI imports before importing any vocalinux modules that use gi.
+# On CI, real gi/IBus may be installed; importing ibus_engine without mocks
+# would set IBUS_AVAILABLE=True and VocalinuxEngine would inherit from real
+# IBus.Engine, causing hangs when super().__init__() tries to connect to IBus.
+_mock_gi = MagicMock()
+_mock_ibus = MagicMock()
+_mock_glib = MagicMock()
+_mock_gobject = MagicMock()
+_mock_ibus.Engine = MagicMock
+_mock_glib.MainLoop = MagicMock
+
+_mock_gi_repo = MagicMock()
+_mock_gi_repo.IBus = _mock_ibus
+_mock_gi_repo.GLib = _mock_glib
+_mock_gi_repo.GObject = _mock_gobject
+
+sys.modules["gi"] = _mock_gi
+sys.modules["gi.repository"] = _mock_gi_repo
+
+# Force reload ibus_engine so it picks up mocks (in case it was already imported)
+for _key in list(sys.modules.keys()):
+    if "vocalinux" in _key and "ibus_engine" in _key:
+        del sys.modules[_key]
 
 
 class TestIBusSetupError(unittest.TestCase):

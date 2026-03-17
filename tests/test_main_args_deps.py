@@ -13,6 +13,19 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 
+# Autouse fixture to prevent sys.modules pollution between tests
+@pytest.fixture(autouse=True)
+def _restore_sys_modules():
+    saved = dict(sys.modules)
+    yield
+    added = set(sys.modules.keys()) - set(saved.keys())
+    for k in added:
+        del sys.modules[k]
+    for k, v in saved.items():
+        if k not in sys.modules or sys.modules[k] is not v:
+            sys.modules[k] = v
+
+
 class TestParseArguments(unittest.TestCase):
     """Tests for parse_arguments() function."""
 
@@ -108,32 +121,34 @@ class TestCheckDependencies(unittest.TestCase):
     """Tests for check_dependencies() function."""
 
     def test_check_dependencies_success(self):
-        """Test successful dependency check."""
-        with patch("vocalinux.main.logging"):
-            from vocalinux.main import check_dependencies
+        """Test successful dependency check with all deps mocked as available."""
+        from vocalinux.main import check_dependencies
 
-            # Mock all required modules
-            with patch.dict(sys.modules, {"gi": MagicMock()}):
-                # Patch gi.require_version to not raise
-                with patch("builtins.__import__", return_value=MagicMock()):
-                    result = check_dependencies()
-                    # Result depends on actual system, but function should run
-                    assert isinstance(result, bool)
+        mock_gi = MagicMock()
+        mock_gi_repo = MagicMock()
+
+        with patch("vocalinux.main.logging"):
+            with patch.dict(
+                sys.modules,
+                {
+                    "gi": mock_gi,
+                    "gi.repository": mock_gi_repo,
+                    "pynput": MagicMock(),
+                    "requests": MagicMock(),
+                },
+            ):
+                result = check_dependencies()
+                assert result is True
 
     def test_check_dependencies_missing_gtk(self):
         """Test dependency check with missing GTK."""
         from vocalinux.main import check_dependencies
 
-        # Patch gi to raise ValueError for GTK
-        def mock_require_version(name, version):
-            if "Gtk" in name or "AppIndicator" in name or "pynput" in name:
-                raise ValueError(f"Cannot find {name}")
-
         with patch("vocalinux.main.logging"):
             with patch("builtins.__import__", side_effect=ImportError("No module")):
                 # Just verify the function doesn't crash
                 result = check_dependencies()
-                assert isinstance(result, bool)
+                assert result is False
 
 
 class TestCheckDisplayAvailable(unittest.TestCase):
@@ -141,22 +156,31 @@ class TestCheckDisplayAvailable(unittest.TestCase):
 
     @patch("vocalinux.main.logging")
     def test_check_display_available_success(self, mock_logging):
-        """Test successful display check."""
+        """Test successful display check - mocks gi to avoid real Gdk calls."""
         from vocalinux.main import check_display_available
 
-        with patch.dict(sys.modules, {"gi": MagicMock()}):
-            # Mock the display
+        mock_gi = MagicMock()
+        mock_gdk = MagicMock()
+        mock_gdk.Display.get_default.return_value = MagicMock()  # display exists
+        mock_gi_repo = MagicMock(Gdk=mock_gdk)
+
+        with patch.dict(sys.modules, {"gi": mock_gi, "gi.repository": mock_gi_repo}):
             result = check_display_available()
-            assert isinstance(result, bool)
+            assert result is True
 
     @patch("vocalinux.main.logging")
     def test_check_display_available_no_display(self, mock_logging):
         """Test display check when no display is available."""
         from vocalinux.main import check_display_available
 
-        with patch.dict(sys.modules, {"gi": MagicMock()}):
+        mock_gi = MagicMock()
+        mock_gdk = MagicMock()
+        mock_gdk.Display.get_default.return_value = None  # no display
+        mock_gi_repo = MagicMock(Gdk=mock_gdk)
+
+        with patch.dict(sys.modules, {"gi": mock_gi, "gi.repository": mock_gi_repo}):
             result = check_display_available()
-            assert isinstance(result, bool)
+            assert result is False
 
 
 class TestMainFunction(unittest.TestCase):

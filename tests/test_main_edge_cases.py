@@ -33,10 +33,13 @@ class TestCheckDisplayAvailableExtra:
         """Test check_display_available when an exception is raised."""
         from vocalinux.main import check_display_available
 
-        # Simply test that function handles exceptions gracefully
-        result = check_display_available()
-        # Result should be a boolean
-        assert isinstance(result, bool)
+        # Mock gi so we don't call real Gdk.Display.get_default() (hangs in headless CI)
+        mock_gi = MagicMock()
+        mock_gi.require_version.side_effect = ValueError("Cannot find Gdk")
+        with patch.dict(sys.modules, {"gi": mock_gi, "gi.repository": MagicMock()}):
+            result = check_display_available()
+            # Should handle the exception gracefully and return False
+            assert result is False
 
     @patch("vocalinux.main.logging")
     def test_check_display_available_no_display_none(self, mock_logging):

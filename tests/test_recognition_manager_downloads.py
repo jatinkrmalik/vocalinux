@@ -7,20 +7,42 @@ Key focus areas:
 - IBus engine utility functions
 """
 
+import importlib.util
 import os
 import sys
-import tempfile
+import sysconfig
 import time
-import zipfile
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Mock GI imports before importing any vocalinux modules that use gi.
+# On CI, real gi/IBus packages are installed; without mocks, importing
+# ibus_engine would connect to a real IBus daemon and hang.
+if "gi" not in sys.modules:
+    sys.modules["gi"] = MagicMock()
+if "gi.repository" not in sys.modules:
+    sys.modules["gi.repository"] = MagicMock()
+
 from vocalinux.speech_recognition.recognition_manager import (
     SpeechRecognitionManager,
 )
+
+
+def _load_stdlib_module(module_name: str):
+    """Load a real stdlib module even if sys.modules was polluted by test mocks."""
+    stdlib_path = sysconfig.get_path("stdlib")
+    module_path = os.path.join(stdlib_path, f"{module_name}.py")
+    spec = importlib.util.spec_from_file_location(f"_stdlib_{module_name}", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+REAL_ZIPFILE = _load_stdlib_module("zipfile")
 
 
 def _make_manager(engine="whisper_cpp", **kw):
@@ -61,31 +83,29 @@ def cleanup_sys_modules():
 class TestDownloadWhispercppModel:
     """Test _download_whispercpp_model() with runtime import mocking."""
 
-    def test_download_whispercpp_success_basic(self):
+    def test_download_whispercpp_success_basic(self, tmp_path):
         """Test successful whisper.cpp model download."""
         manager = _make_manager(engine="whisper_cpp")
+        model_file = str(tmp_path / "ggml-small.bin")
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            model_file = os.path.join(tmpdir, "ggml-small.bin")
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {"content-length": "1000"}
+        mock_response.iter_content.return_value = [b"x" * 500, b"y" * 500]
+        mock_requests.get.return_value = mock_response
+        mock_requests.exceptions.RequestException = Exception
 
-            mock_requests = MagicMock()
-            mock_response = MagicMock()
-            mock_response.headers = {"content-length": "1000"}
-            mock_response.iter_content.return_value = [b"x" * 500, b"y" * 500]
-            mock_requests.get.return_value = mock_response
-            mock_requests.exceptions.RequestException = Exception
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value=model_file,
+            ):
+                manager._download_whispercpp_model()
 
-            with patch.dict("sys.modules", {"requests": mock_requests}):
-                with patch(
-                    "vocalinux.speech_recognition.recognition_manager.get_model_path",
-                    return_value=model_file,
-                ):
-                    manager._download_whispercpp_model()
+        assert os.path.exists(model_file)
+        assert os.path.getsize(model_file) == 1000
 
-            assert os.path.exists(model_file)
-            assert os.path.getsize(model_file) == 1000
-
-    def test_download_whispercpp_progress_callback(self):
+    def test_download_whispercpp_progress_callback(self, tmp_path):
         """Test progress callback is invoked during download."""
         manager = _make_manager(engine="whisper_cpp")
         progress_calls = []
@@ -94,81 +114,73 @@ class TestDownloadWhispercppModel:
             progress_calls.append((progress, speed, status))
 
         manager._download_progress_callback = track_progress
+        model_file = str(tmp_path / "ggml-small.bin")
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            model_file = os.path.join(tmpdir, "ggml-small.bin")
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {"content-length": "1000"}
+        mock_response.iter_content.return_value = [b"x" * 500, b"y" * 500]
+        mock_requests.get.return_value = mock_response
+        mock_requests.exceptions.RequestException = Exception
 
-            mock_requests = MagicMock()
-            mock_response = MagicMock()
-            mock_response.headers = {"content-length": "1000"}
-            mock_response.iter_content.return_value = [b"x" * 500, b"y" * 500]
-            mock_requests.get.return_value = mock_response
-            mock_requests.exceptions.RequestException = Exception
-
-            with patch.dict("sys.modules", {"requests": mock_requests}):
-                with patch(
-                    "vocalinux.speech_recognition.recognition_manager.get_model_path",
-                    return_value=model_file,
-                ):
-                    with patch("time.time", side_effect=[0, 0.2, 0.4, 0.6]):
-                        manager._download_whispercpp_model()
-
-            # Verify requests.get was called with a URL
-            mock_requests.get.assert_called_once()
-            call_args = mock_requests.get.call_args
-            assert call_args is not None
-            # First positional arg should be the URL string
-            assert len(call_args[0]) > 0 or "url" in call_args[1]
-            assert len(progress_calls) >= 1
-
-    def test_download_whispercpp_no_content_length(self):
-        """Test download when content-length header is missing."""
-        manager = _make_manager(engine="whisper_cpp")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            model_file = os.path.join(tmpdir, "ggml-small.bin")
-
-            mock_requests = MagicMock()
-            mock_response = MagicMock()
-            mock_response.headers = {}  # No content-length
-            mock_response.iter_content.return_value = [b"x" * 500, b"y" * 500]
-            mock_requests.get.return_value = mock_response
-            mock_requests.exceptions.RequestException = Exception
-
-            with patch.dict("sys.modules", {"requests": mock_requests}):
-                with patch(
-                    "vocalinux.speech_recognition.recognition_manager.get_model_path",
-                    return_value=model_file,
-                ):
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value=model_file,
+            ):
+                with patch("time.time", side_effect=[0, 0.2, 0.4, 0.6]):
                     manager._download_whispercpp_model()
 
-            assert os.path.exists(model_file)
+        mock_requests.get.assert_called_once()
+        call_args = mock_requests.get.call_args
+        assert call_args is not None
+        assert len(call_args[0]) > 0 or "url" in call_args[1]
+        assert len(progress_calls) >= 1
 
-    def test_download_whispercpp_request_error(self):
+    def test_download_whispercpp_no_content_length(self, tmp_path):
+        """Test download when content-length header is missing."""
+        manager = _make_manager(engine="whisper_cpp")
+        model_file = str(tmp_path / "ggml-small.bin")
+
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {}  # No content-length
+        mock_response.iter_content.return_value = [b"x" * 500, b"y" * 500]
+        mock_requests.get.return_value = mock_response
+        mock_requests.exceptions.RequestException = Exception
+
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value=model_file,
+            ):
+                manager._download_whispercpp_model()
+
+        assert os.path.exists(model_file)
+
+    def test_download_whispercpp_request_error(self, tmp_path):
         """Test download request error handling."""
         manager = _make_manager(engine="whisper_cpp")
+        model_file = str(tmp_path / "ggml-small.bin")
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            model_file = os.path.join(tmpdir, "ggml-small.bin")
+        mock_requests = MagicMock()
+        mock_error = Exception("Network error")
+        mock_requests.get.side_effect = mock_error
+        mock_requests.exceptions.RequestException = Exception
 
-            mock_requests = MagicMock()
-            mock_error = Exception("Network error")
-            mock_requests.get.side_effect = mock_error
-            mock_requests.exceptions.RequestException = Exception
-
-            with patch.dict("sys.modules", {"requests": mock_requests}):
-                with patch(
-                    "vocalinux.speech_recognition.recognition_manager.get_model_path",
-                    return_value=model_file,
-                ):
-                    with pytest.raises(RuntimeError, match="Failed to download"):
-                        manager._download_whispercpp_model()
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value=model_file,
+            ):
+                with pytest.raises(RuntimeError, match="Failed to download"):
+                    manager._download_whispercpp_model()
 
 
 class TestDownloadVoskModel:
     """Test _download_vosk_model() with runtime import mocking."""
 
-    def test_download_vosk_progress_callback(self):
+    def test_download_vosk_progress_callback(self, tmp_path):
         """Test progress callback during Vosk download."""
         manager = _make_manager(engine="vosk")
         progress_calls = []
@@ -178,46 +190,46 @@ class TestDownloadVoskModel:
 
         manager._download_progress_callback = track_progress
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            zip_data = BytesIO()
-            with zipfile.ZipFile(zip_data, "w") as zf:
-                zf.writestr("model-en-us-0.22-lgraph/am/model.pkl", "x" * 5000)
-            zip_bytes = zip_data.getvalue()
+        zip_data = BytesIO()
+        with REAL_ZIPFILE.ZipFile(zip_data, "w") as zf:
+            zf.writestr("model-en-us-0.22-lgraph/am/model.pkl", "x" * 5000)
+        zip_bytes = zip_data.getvalue()
 
-            mock_requests = MagicMock()
-            mock_response = MagicMock()
-            mock_response.headers = {"content-length": str(len(zip_bytes))}
-            mock_response.iter_content.return_value = [zip_bytes]
-            mock_requests.get.return_value = mock_response
-            mock_requests.exceptions.RequestException = Exception
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {"content-length": str(len(zip_bytes))}
+        mock_response.iter_content.return_value = [zip_bytes]
+        mock_requests.get.return_value = mock_response
+        mock_requests.exceptions.RequestException = Exception
 
-            with patch.dict("sys.modules", {"requests": mock_requests}):
-                with patch("vocalinux.speech_recognition.recognition_manager.MODELS_DIR", tmpdir):
-                    with patch("time.time", side_effect=[0, 0.2, 0.4, 0.6]):
-                        manager._download_vosk_model()
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.MODELS_DIR", str(tmp_path)
+            ):
+                with patch("time.time", side_effect=[0, 0.2, 0.4, 0.6]):
+                    manager._download_vosk_model()
 
-            # Verify requests.get was called with a URL
-            mock_requests.get.assert_called_once()
-            call_args = mock_requests.get.call_args
-            assert call_args is not None
-            # First positional arg should be the URL string
-            assert len(call_args[0]) > 0 or "url" in call_args[1]
-            assert len(progress_calls) >= 1
+        mock_requests.get.assert_called_once()
+        call_args = mock_requests.get.call_args
+        assert call_args is not None
+        assert len(call_args[0]) > 0 or "url" in call_args[1]
+        assert len(progress_calls) >= 1
 
-    def test_download_vosk_request_error(self):
+    def test_download_vosk_request_error(self, tmp_path):
         """Test Vosk download request error handling."""
         manager = _make_manager(engine="vosk")
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            mock_requests = MagicMock()
-            mock_error = Exception("Network error")
-            mock_requests.get.side_effect = mock_error
-            mock_requests.exceptions.RequestException = Exception
+        mock_requests = MagicMock()
+        mock_error = Exception("Network error")
+        mock_requests.get.side_effect = mock_error
+        mock_requests.exceptions.RequestException = Exception
 
-            with patch.dict("sys.modules", {"requests": mock_requests}):
-                with patch("vocalinux.speech_recognition.recognition_manager.MODELS_DIR", tmpdir):
-                    with pytest.raises(RuntimeError, match="Failed to download"):
-                        manager._download_vosk_model()
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.MODELS_DIR", str(tmp_path)
+            ):
+                with pytest.raises(RuntimeError, match="Failed to download"):
+                    manager._download_vosk_model()
 
 
 class TestAudioReconnection:

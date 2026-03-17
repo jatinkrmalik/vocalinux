@@ -22,10 +22,8 @@ sys.modules["pywhispercpp.model"] = mock_pywhispercpp.model
 sys.modules["requests"] = MagicMock()
 sys.modules["pyaudio"] = MagicMock()
 sys.modules["wave"] = MagicMock()
-sys.modules["tempfile"] = MagicMock()
 sys.modules["tqdm"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
-sys.modules["zipfile"] = MagicMock()
 sys.modules["torch"] = MagicMock()
 sys.modules["psutil"] = MagicMock()
 
