@@ -50,6 +50,33 @@ mock_audio_feedback.play_error_sound = MagicMock()
 sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
 
 
+@pytest.fixture(autouse=True)
+def _cleanup_ibus_server():
+    """Stop any leftover IBus socket server threads after each test.
+
+    Some tests trigger VocalinuxEngine._start_socket_server() which spawns
+    a daemon thread blocking on socket.accept().  If the test doesn't call
+    stop_socket_server(), the thread keeps running and eventually causes
+    pytest-timeout to kill the whole process.
+    """
+    yield
+
+    try:
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        if getattr(VocalinuxEngine, "_server_running", False):
+            VocalinuxEngine._server_running = False
+        sock = getattr(VocalinuxEngine, "_server_socket", None)
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
+            VocalinuxEngine._server_socket = None
+    except Exception:
+        pass
+
+
 def pytest_addoption(parser):
     """Add custom command line options for pytest."""
     parser.addoption(
