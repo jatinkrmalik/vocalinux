@@ -68,6 +68,24 @@ ENGINE_LONGNAME = "Vocalinux"
 ENGINE_DESCRIPTION = "Vocalinux voice dictation (use as default input method)"
 COMPONENT_NAME = "org.freedesktop.IBus.Vocalinux"
 
+# Shared metadata used by component XML, --xml output, and runtime registration.
+# Kept in one place to prevent drift between the three consumers.
+ENGINE_RANK = 50
+_ENGINE_META = {
+    "language": "other",
+    "license": "GPL-3.0",
+    "author": "Vocalinux",
+    "icon": "audio-input-microphone",
+    "layout": "default",
+}
+_COMPONENT_META = {
+    "version": "1.0",
+    "license": "GPL-3.0",
+    "author": "Vocalinux",
+    "homepage": "https://github.com/jatinkrmalik/vocalinux",
+    "textdomain": "vocalinux",
+}
+
 
 def ensure_ibus_dir() -> None:
     """Ensure the IBus data directory exists with secure permissions."""
@@ -210,32 +228,38 @@ def start_ibus_daemon():
         return False
 
 
+def _get_exec_command() -> str:
+    """Return the engine exec command for component XML and runtime registration."""
+    engine_script = Path(__file__).resolve()
+    return f"{sys.executable} {engine_script} --ibus"
+
+
 def _get_expected_component_xml() -> str:
     """Generate the expected component XML content for the current installation."""
-    engine_script = Path(__file__).resolve()
-    python_exec = sys.executable
+    e = _ENGINE_META
+    c = _COMPONENT_META
 
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <component>
     <name>{COMPONENT_NAME}</name>
     <description>{ENGINE_DESCRIPTION}</description>
-    <exec>{python_exec} {engine_script} --ibus</exec>
-    <version>1.0</version>
-    <author>Vocalinux</author>
-    <license>GPL-3.0</license>
-    <homepage>https://github.com/jatinkrmalik/vocalinux</homepage>
-    <textdomain>vocalinux</textdomain>
+    <exec>{_get_exec_command()}</exec>
+    <version>{c['version']}</version>
+    <author>{c['author']}</author>
+    <license>{c['license']}</license>
+    <homepage>{c['homepage']}</homepage>
+    <textdomain>{c['textdomain']}</textdomain>
     <engines>
         <engine>
             <name>{ENGINE_NAME}</name>
-            <language>other</language>
-            <license>GPL-3.0</license>
-            <author>Vocalinux</author>
-            <icon>audio-input-microphone</icon>
-            <layout>default</layout>
             <longname>{ENGINE_LONGNAME}</longname>
+            <language>{e['language']}</language>
+            <license>{e['license']}</license>
+            <author>{e['author']}</author>
+            <icon>{e['icon']}</icon>
+            <layout>{e['layout']}</layout>
             <description>{ENGINE_DESCRIPTION}</description>
-            <rank>50</rank>
+            <rank>{ENGINE_RANK}</rank>
         </engine>
     </engines>
 </component>
@@ -644,28 +668,24 @@ class VocalinuxEngineApplication:
         if exec_by_ibus:
             # IBus launched us — it already knows about our component,
             # just claim the well-known D-Bus name.
-            self.bus.request_name(COMPONENT_NAME, 0)
+            if not self.bus.request_name(COMPONENT_NAME, 0):
+                logger.error("bus.request_name() failed")
+                raise RuntimeError("Failed to acquire IBus D-Bus name")
         else:
             # Launched by Vocalinux directly — register the full component
             # so IBus discovers our engine without having launched us.
             component = IBus.Component(
                 name=COMPONENT_NAME,
                 description=ENGINE_DESCRIPTION,
-                version="1.0",
-                license="GPL-3.0",
-                author="Vocalinux",
-                homepage="https://github.com/jatinkrmalik/vocalinux",
-                textdomain="vocalinux",
+                command_line=_get_exec_command(),
+                **_COMPONENT_META,
             )
             engine_desc = IBus.EngineDesc(
                 name=ENGINE_NAME,
                 longname=ENGINE_LONGNAME,
                 description=ENGINE_DESCRIPTION,
-                language="other",
-                license="GPL-3.0",
-                author="Vocalinux",
-                icon="audio-input-microphone",
-                layout="default",
+                rank=ENGINE_RANK,
+                **_ENGINE_META,
             )
             component.add_engine(engine_desc)
             if not self.bus.register_component(component):
@@ -903,19 +923,21 @@ def _get_engines_xml() -> str:
     ``ibus list-engine`` to discover available engines.  The expected
     output is a bare ``<engines>`` block printed to stdout.
     """
+    e = _ENGINE_META
+
     return f"""<engines>
     <engine>
         <name>{ENGINE_NAME}</name>
         <longname>{ENGINE_LONGNAME}</longname>
-        <language>other</language>
-        <license>GPL-3.0</license>
-        <author>Vocalinux</author>
-        <icon>audio-input-microphone</icon>
-        <layout>default</layout>
+        <language>{e['language']}</language>
+        <license>{e['license']}</license>
+        <author>{e['author']}</author>
+        <icon>{e['icon']}</icon>
+        <layout>{e['layout']}</layout>
         <layout_variant />
         <layout_option />
         <description>{ENGINE_DESCRIPTION}</description>
-        <rank>50</rank>
+        <rank>{ENGINE_RANK}</rank>
     </engine>
 </engines>"""
 
