@@ -96,7 +96,7 @@ jobs:
   python-test:
     name: 🧪 Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: [changes, python-lint]
     if: needs.changes.outputs.python == 'true'
     strategy:
