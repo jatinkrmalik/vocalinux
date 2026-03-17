@@ -13,12 +13,13 @@ import pytest
 # Set PYTEST_RUNNING early so audio_feedback module can detect it
 os.environ["PYTEST_RUNNING"] = "1"
 
-# Set a global default socket timeout to prevent tests from blocking
+# Set a short global default socket timeout to prevent tests from blocking
 # indefinitely on socket operations (e.g. accept(), connect(), recv()).
 # This is critical on CI where ibus_engine tests create real Unix sockets
 # with daemon threads that block on accept() and can never be interrupted
 # by pytest-timeout's signal- or thread-based mechanisms.
-socket.setdefaulttimeout(5)
+# Use a very short timeout (0.1s) to avoid slowing down the test suite.
+socket.setdefaulttimeout(0.1)
 
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
