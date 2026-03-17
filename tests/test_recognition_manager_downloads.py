@@ -7,11 +7,10 @@ Key focus areas:
 - IBus engine utility functions
 """
 
-import importlib.util
 import os
 import sys
-import sysconfig
 import time
+import zipfile as REAL_ZIPFILE  # Capture real zipfile before any test mocks it
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -29,38 +28,6 @@ if "gi.repository" not in sys.modules:
 from vocalinux.speech_recognition.recognition_manager import (
     SpeechRecognitionManager,
 )
-
-
-def _load_stdlib_module(module_name: str):
-    """Load a real stdlib module even if sys.modules was polluted by test mocks.
-
-    Handles both single-file modules (e.g. ``zipfile.py``) and package modules
-    (e.g. ``zipfile/`` directory with ``__init__.py``) which can vary across
-    Python versions (``zipfile`` became a package in Python 3.13).
-    """
-    stdlib_path = sysconfig.get_path("stdlib")
-
-    # Try single-file module first, then package (directory with __init__.py)
-    module_file = os.path.join(stdlib_path, f"{module_name}.py")
-    package_init = os.path.join(stdlib_path, module_name, "__init__.py")
-
-    if os.path.isfile(module_file):
-        module_path = module_file
-    elif os.path.isfile(package_init):
-        module_path = package_init
-    else:
-        raise FileNotFoundError(
-            f"Cannot find stdlib module '{module_name}' at {module_file} or {package_init}"
-        )
-
-    spec = importlib.util.spec_from_file_location(f"_stdlib_{module_name}", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec is not None and spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-REAL_ZIPFILE = _load_stdlib_module("zipfile")
 
 
 def _make_manager(engine="whisper_cpp", **kw):
