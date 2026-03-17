@@ -15,6 +15,17 @@ os.environ["PYTEST_RUNNING"] = "1"
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Mock GI/GTK modules before any test files are collected.
+# On CI, real gi (PyGObject) is installed and module-level imports in
+# vocalinux source files (ibus_engine, tray_indicator, settings_dialog, etc.)
+# will trigger GTK initialization or IBus daemon connections that hang
+# in headless environments.  Mocking here in conftest ensures protection
+# for ALL test files, not just those that remember to mock individually.
+if "gi" not in sys.modules:
+    sys.modules["gi"] = MagicMock()
+if "gi.repository" not in sys.modules:
+    sys.modules["gi.repository"] = MagicMock()
+
 # Create and export the mock_audio_feedback module for tests that need it
 # This mock is used by test_recognition_manager.py and test_speech_recognition.py
 mock_audio_feedback = MagicMock()
