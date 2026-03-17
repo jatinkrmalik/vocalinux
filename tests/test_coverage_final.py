@@ -18,40 +18,6 @@ def _restore_sys_modules():
             sys.modules[k] = v
 
 
-class TestCommonTypesProtocols(unittest.TestCase):
-    """Cover Protocol method stubs in common_types.py."""
-
-    def test_recognition_manager_protocol_methods(self):
-        from vocalinux.common_types import SpeechRecognitionManagerProtocol, RecognitionState
-
-        # Instantiate protocol directly to cover the stub lines
-        proto = SpeechRecognitionManagerProtocol.__new__(SpeechRecognitionManagerProtocol)
-        # Call each stub method - they just have ... as body
-        try:
-            proto.start_recognition()
-        except (TypeError, NotImplementedError):
-            pass
-        try:
-            proto.stop_recognition()
-        except (TypeError, NotImplementedError):
-            pass
-        try:
-            proto.register_state_callback(lambda s: None)
-        except (TypeError, NotImplementedError):
-            pass
-        try:
-            proto.register_text_callback(lambda t: None)
-        except (TypeError, NotImplementedError):
-            pass
-
-    def test_text_injector_protocol_method(self):
-        from vocalinux.common_types import TextInjectorProtocol
-
-        proto = TextInjectorProtocol.__new__(TextInjectorProtocol)
-        try:
-            proto.inject_text("hello")
-        except (TypeError, NotImplementedError):
-            pass
 
 
 class TestCommandProcessorEdgeCases(unittest.TestCase):

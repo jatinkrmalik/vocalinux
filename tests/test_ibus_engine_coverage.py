@@ -346,6 +346,13 @@ class TestVocalinuxEngine(unittest.TestCase):
 
         engine = VocalinuxEngine()
         self.assertIsNotNone(engine)
+        # Verify the engine is properly initialized with expected attributes
+        self.assertIsInstance(engine, VocalinuxEngine)
+        # Verify class-level attributes exist
+        self.assertIsNone(VocalinuxEngine._active_instance)
+        self.assertIsNone(VocalinuxEngine._socket_server)
+        self.assertIsNone(VocalinuxEngine._server_socket)
+        self.assertFalse(VocalinuxEngine._server_running)
 
     def test_vocalinux_engine_do_enable(self):
         """Test engine enable signal handler."""
@@ -380,8 +387,10 @@ class TestVocalinuxEngine(unittest.TestCase):
         from vocalinux.text_injection.ibus_engine import VocalinuxEngine
 
         engine = VocalinuxEngine()
+        VocalinuxEngine._active_instance = engine
         engine.do_focus_out()
-        # Focus out doesn't change active instance
+        # Focus out should not clear the active instance
+        self.assertEqual(VocalinuxEngine._active_instance, engine)
 
     def test_vocalinux_engine_do_process_key_event(self):
         """Test engine key event processing."""
@@ -477,6 +486,9 @@ class TestIBusTextInjector(unittest.TestCase):
 
         injector = IBusTextInjector(auto_activate=False)
         self.assertIsNotNone(injector)
+        # Verify auto_activate=False means _previous_engine is not set
+        self.assertFalse(hasattr(injector, '_previous_engine') and injector._previous_engine is not None)
+        # Verify the auto_activate flag is properly False (no setup was called)
         self.assertIsNone(injector._previous_engine)
 
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
@@ -599,8 +611,13 @@ class TestVocalinuxEngineApplication(unittest.TestCase):
 
         app = VocalinuxEngineApplication()
         self.assertIsNotNone(app)
+        # Verify bus attribute is properly initialized
         self.assertIsNotNone(app.bus)
+        # Verify mainloop attribute is properly initialized
         self.assertIsNotNone(app.mainloop)
+        # Verify they are the correct types (mocked in test)
+        self.assertEqual(type(app.bus).__name__, 'MagicMock')
+        self.assertEqual(type(app.mainloop).__name__, 'MagicMock')
 
     @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
     def test_vocalinux_engine_application_on_disconnected(self, mock_start_server):

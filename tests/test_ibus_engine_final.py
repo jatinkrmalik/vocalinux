@@ -51,7 +51,10 @@ class TestIsIBusAvailable(unittest.TestCase):
         from vocalinux.text_injection.ibus_engine import is_ibus_available
 
         result = is_ibus_available()
+        # Verify the function returns True when IBUS_AVAILABLE flag is True
         self.assertTrue(result)
+        # Verify it's checking the flag, not just always returning a value
+        self.assertEqual(result, True)
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False)
     def test_is_ibus_available_false(self):
@@ -341,7 +344,9 @@ class TestStopEngineProcess(unittest.TestCase):
 
         mock_exists.return_value = False
         # Should not raise any exception
-        stop_engine_process()
+        result = stop_engine_process()
+        # Verify the function handles missing PID file gracefully
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,13 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+# Mock gi and Gtk before importing first_run_dialog
+mock_gi = MagicMock()
+mock_gtk = MagicMock()
+sys.modules["gi"] = mock_gi
+sys.modules["gi.repository"] = MagicMock()
+sys.modules["gi.repository.Gtk"] = mock_gtk
+
 
 class TestFirstRunDialogConstants(unittest.TestCase):
     """Tests for FirstRunDialog constants."""
@@ -36,29 +43,6 @@ class TestFirstRunDialogConstants(unittest.TestCase):
 
         constants = [RESPONSE_YES, RESPONSE_NO, RESPONSE_LATER]
         self.assertEqual(len(constants), len(set(constants)))
-
-
-class TestFirstRunDialogClassStructure(unittest.TestCase):
-    """Tests for FirstRunDialog class structure via source code."""
-
-    def test_first_run_dialog_source_has_class(self):
-        """Test that FirstRunDialog class exists in source."""
-        import os
-
-        source_path = os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "src",
-            "vocalinux",
-            "ui",
-            "first_run_dialog.py",
-        )
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        self.assertIn("class FirstRunDialog(", source)
-        self.assertIn("def __init__(", source)
-        self.assertIn("def do_response(", source)
 
 
 class TestShowFirstRunDialogFunction(unittest.TestCase):

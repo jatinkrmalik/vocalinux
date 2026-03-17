@@ -284,16 +284,16 @@ class TestEnumImports(unittest.TestCase):
         """Test that all RecognitionState members are accessible."""
         from vocalinux.common_types import RecognitionState
 
-        # Should not raise
+        # Verify enum values exist and are correct
         idle = RecognitionState.IDLE
         listening = RecognitionState.LISTENING
         processing = RecognitionState.PROCESSING
         error = RecognitionState.ERROR
 
-        self.assertIsNotNone(idle)
-        self.assertIsNotNone(listening)
-        self.assertIsNotNone(processing)
-        self.assertIsNotNone(error)
+        self.assertEqual(idle.name, "IDLE")
+        self.assertEqual(listening.name, "LISTENING")
+        self.assertEqual(processing.name, "PROCESSING")
+        self.assertEqual(error.name, "ERROR")
 
 
 class TestProtocolImports(unittest.TestCase):
@@ -306,8 +306,11 @@ class TestProtocolImports(unittest.TestCase):
             TextInjectorProtocol,
         )
 
-        self.assertIsNotNone(SpeechRecognitionManagerProtocol)
-        self.assertIsNotNone(TextInjectorProtocol)
+        # Verify protocols are types with expected methods
+        self.assertTrue(hasattr(SpeechRecognitionManagerProtocol, "start_recognition"))
+        self.assertTrue(hasattr(SpeechRecognitionManagerProtocol, "stop_recognition"))
+        self.assertTrue(hasattr(SpeechRecognitionManagerProtocol, "register_state_callback"))
+        self.assertTrue(hasattr(TextInjectorProtocol, "inject_text"))
 
 
 if __name__ == "__main__":

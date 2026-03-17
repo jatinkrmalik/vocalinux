@@ -92,19 +92,21 @@ class TestInjectText(unittest.TestCase):
     def test_inject_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
         obj = _make_injector(DesktopEnvironment.X11)
-        with patch.object(obj, "_inject_with_xdotool"):
-            with patch.object(obj, "_log_current_window_info"):
-                result = obj.inject_text("hello")
-                self.assertTrue(result)
+        with patch("subprocess.run") as mock_run:
+            result = obj.inject_text("hello")
+            # Verify that subprocess.run was called (by _inject_with_xdotool)
+            self.assertTrue(mock_run.called)
+            self.assertTrue(result)
 
     def test_inject_wayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         obj.wayland_tool = "wtype"
-        with patch.object(obj, "_inject_with_wayland_tool"):
-            with patch.object(obj, "_log_current_window_info"):
-                result = obj.inject_text("hello")
-                self.assertTrue(result)
+        with patch("subprocess.run") as mock_run:
+            result = obj.inject_text("hello")
+            # Verify that subprocess.run was called (by _inject_with_wayland_tool)
+            self.assertTrue(mock_run.called)
+            self.assertTrue(result)
 
     def test_inject_ibus(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
@@ -127,29 +129,36 @@ class TestInjectText(unittest.TestCase):
     def test_inject_xwayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
         obj = _make_injector(DesktopEnvironment.WAYLAND_XDOTOOL)
-        with patch.object(obj, "_inject_with_xdotool"):
-            with patch.object(obj, "_log_current_window_info"):
-                result = obj.inject_text("hello")
-                self.assertTrue(result)
+        with patch("subprocess.run") as mock_run:
+            result = obj.inject_text("hello")
+            # Verify that subprocess.run was called (by _inject_with_xdotool)
+            self.assertTrue(mock_run.called)
+            self.assertTrue(result)
 
 
 class TestLogWindowInfo(unittest.TestCase):
     def test_log_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
         obj = _make_injector(DesktopEnvironment.X11)
-        with patch.object(obj, "_log_x11_window_info"):
+        with patch.object(obj, "_log_x11_window_info") as mock_log:
             obj._log_current_window_info()
+            # Verify that _log_x11_window_info was called for X11 environment
+            mock_log.assert_called_once()
 
     def test_log_wayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
         obj = _make_injector(DesktopEnvironment.WAYLAND)
+        # For pure Wayland, _log_current_window_info logs a debug message instead
+        # Just verify it doesn't raise
         obj._log_current_window_info()
 
     def test_log_xwayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
         obj = _make_injector(DesktopEnvironment.WAYLAND_XDOTOOL)
-        with patch.object(obj, "_log_x11_window_info"):
+        with patch.object(obj, "_log_x11_window_info") as mock_log:
             obj._log_current_window_info()
+            # Verify that _log_x11_window_info was called for WAYLAND_XDOTOOL environment
+            mock_log.assert_called_once()
 
     def test_log_exception(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
@@ -219,9 +228,12 @@ class TestCopyToClipboard(unittest.TestCase):
     def test_copy_success(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
         obj = _make_injector(DesktopEnvironment.X11)
-        with patch("subprocess.run"):
+        with patch("subprocess.run") as mock_run:
             with patch("shutil.which", return_value="/usr/bin/xclip"):
                 result = obj._copy_to_clipboard("hello")
+                # Verify subprocess.run was called and result is True
+                self.assertTrue(mock_run.called)
+                self.assertTrue(result)
 
     def test_copy_no_tools(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment

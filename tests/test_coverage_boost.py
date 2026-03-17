@@ -113,6 +113,12 @@ class TestDownloadWhispercppModel:
                     with patch('time.time', side_effect=[0, 0.2, 0.4, 0.6]):
                         manager._download_whispercpp_model()
 
+            # Verify requests.get was called with a URL
+            mock_requests.get.assert_called_once()
+            call_args = mock_requests.get.call_args
+            assert call_args is not None
+            # First positional arg should be the URL string
+            assert len(call_args[0]) > 0 or 'url' in call_args[1]
             assert len(progress_calls) >= 1
 
     def test_download_whispercpp_no_content_length(self):
@@ -186,6 +192,12 @@ class TestDownloadVoskModel:
                     with patch('time.time', side_effect=[0, 0.2, 0.4, 0.6]):
                         manager._download_vosk_model()
 
+            # Verify requests.get was called with a URL
+            mock_requests.get.assert_called_once()
+            call_args = mock_requests.get.call_args
+            assert call_args is not None
+            # First positional arg should be the URL string
+            assert len(call_args[0]) > 0 or 'url' in call_args[1]
             assert len(progress_calls) >= 1
 
     def test_download_vosk_request_error(self):

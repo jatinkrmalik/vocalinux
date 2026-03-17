@@ -80,9 +80,8 @@ class TestCreateBackendPynput:
                     
                     backend = keyboard_backends.create_backend()
                     
-                    # Should have tried to create pynput backend
-                    if mock_pynput is not None:
-                        mock_pynput.assert_called()
+                    # Should have tried to create pynput backend (unconditional assertion)
+                    mock_pynput.assert_called()
 
     def test_create_backend_pynput_preferred(self):
         """Test create_backend with pynput as preferred backend."""
@@ -200,10 +199,18 @@ class TestKeyboardBackendImports:
             parse_shortcut,
         )
         
-        assert KeyboardBackend is not None
-        assert create_backend is not None
-        assert DesktopEnvironment is not None
-        assert SUPPORTED_SHORTCUTS is not None
-        assert DEFAULT_SHORTCUT is not None
-        assert DEFAULT_SHORTCUT_MODE is not None
-        assert parse_shortcut is not None
+        # Verify KeyboardBackend is a class/type
+        assert callable(KeyboardBackend)
+        # Verify create_backend is a callable function
+        assert callable(create_backend)
+        # Verify DesktopEnvironment is a class
+        assert callable(DesktopEnvironment)
+        # Verify SUPPORTED_SHORTCUTS is a dict with valid content
+        assert isinstance(SUPPORTED_SHORTCUTS, dict)
+        assert len(SUPPORTED_SHORTCUTS) > 0
+        # Verify DEFAULT_SHORTCUT is a string
+        assert isinstance(DEFAULT_SHORTCUT, str)
+        # Verify DEFAULT_SHORTCUT_MODE is a string
+        assert isinstance(DEFAULT_SHORTCUT_MODE, str)
+        # Verify parse_shortcut is callable
+        assert callable(parse_shortcut)

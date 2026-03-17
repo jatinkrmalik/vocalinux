@@ -35,7 +35,7 @@ from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
     _filter_non_speech,
     _show_notification,
     _get_system_model_paths,
-    test_audio_input,
+    test_audio_input as _test_audio_input,
     SpeechRecognitionManager,
 )
 
@@ -66,14 +66,19 @@ class TestFilterNonSpeech(unittest.TestCase):
         self.assertEqual(result, "")
 
     def test_known_hallucination_patterns(self):
-        # whisper commonly hallucinates these
+        # Test that actual speech passes through the filter
         result = _filter_non_speech("Thank you for watching!")
-        # Depending on the filter, this may or may not be filtered
-        self.assertIsInstance(result, str)
+        # This is actual speech content, should pass through
+        self.assertIn("Thank", result)
 
     def test_mixed_content(self):
+        # Test that normal speech content is preserved
         result = _filter_non_speech("Hello, how are you?")
+        # Normal speech should be preserved
         self.assertIn("Hello", result)
+        self.assertIn("how", result)
+        self.assertIn("are", result)
+        self.assertIn("you", result)
 
 
 class TestShowNotification(unittest.TestCase):
@@ -157,14 +162,14 @@ class TestTestAudioInput(unittest.TestCase):
         mock_np.mean.return_value = 250.0
 
         with patch.dict("sys.modules", {"pyaudio": mock_pa_mod, "numpy": mock_np}):
-            result = test_audio_input()
+            result = _test_audio_input()
         self.assertIsInstance(result, dict)
 
     def test_audio_input_import_error(self):
         # When pyaudio is not available
         with patch.dict("sys.modules", {"pyaudio": None}):
             try:
-                result = test_audio_input()
+                result = _test_audio_input()
                 self.assertIn("error", result)
             except ImportError:
                 pass  # Expected if module is None
@@ -192,7 +197,7 @@ class TestTestAudioInput(unittest.TestCase):
         mock_np.mean.return_value = 0.0
 
         with patch.dict("sys.modules", {"pyaudio": mock_pa_mod, "numpy": mock_np}):
-            result = test_audio_input(device_index=1)
+            result = _test_audio_input(device_index=1)
         self.assertIsInstance(result, dict)
 
     def test_audio_input_open_error(self):
@@ -207,7 +212,7 @@ class TestTestAudioInput(unittest.TestCase):
         mock_pa_inst.open.side_effect = IOError("Cannot open stream")
 
         with patch.dict("sys.modules", {"pyaudio": mock_pa_mod}):
-            result = test_audio_input()
+            result = _test_audio_input()
         self.assertIn("error", result)
 
     def test_audio_input_info_error(self):
@@ -218,7 +223,7 @@ class TestTestAudioInput(unittest.TestCase):
         mock_pa_inst.get_default_input_device_info.side_effect = IOError("No device")
 
         with patch.dict("sys.modules", {"pyaudio": mock_pa_mod}):
-            result = test_audio_input()
+            result = _test_audio_input()
         self.assertIn("error", result)
 
 

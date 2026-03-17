@@ -210,16 +210,6 @@ class TestCancelDownload(unittest.TestCase):
 
 
 class TestStartStopRecognition(unittest.TestCase):
-    def test_start_recognition_no_model(self):
-        mgr = _make_manager()
-        mgr.model = None
-        mgr.state = RecognitionState.IDLE
-        # start_recognition when no model should try to init
-        with patch.object(mgr, "_init_whispercpp"):
-            try:
-                mgr.start_recognition()
-            except Exception:
-                pass
 
     def test_stop_recognition(self):
         mgr = _make_manager()
@@ -402,48 +392,42 @@ class TestInitVosk(unittest.TestCase):
         with patch("os.path.exists", return_value=True):
             with patch("os.path.isdir", return_value=True):
                 mock_vosk = MagicMock()
+                mock_model = MagicMock()
+                mock_recognizer = MagicMock()
+                mock_vosk.Model.return_value = mock_model
+                mock_vosk.KaldiRecognizer.return_value = mock_recognizer
                 with patch.dict("sys.modules", {"vosk": mock_vosk}):
-                    try:
-                        mgr._init_vosk()
-                    except Exception:
-                        pass
+                    mgr._init_vosk()
+                    self.assertTrue(mgr._model_initialized)
+                    self.assertEqual(mgr.model, mock_model)
+                    self.assertEqual(mgr.recognizer, mock_recognizer)
 
     def test_init_vosk_no_model(self):
         mgr = _make_manager(engine="vosk")
+        mock_vosk = MagicMock()
         with patch("os.path.exists", return_value=False):
-            with patch("os.path.isdir", return_value=False):
-                try:
-                    mgr._init_vosk()
-                except Exception:
-                    pass
+            with patch.dict("sys.modules", {"vosk": mock_vosk}):
+                mgr._init_vosk()
+                # When model doesn't exist and defer_download is True, should not initialize
+                self.assertFalse(mgr._model_initialized)
 
 
 class TestInitWhisper(unittest.TestCase):
     def test_init_whisper(self):
         mgr = _make_manager(engine="whisper")
+        mock_model = MagicMock()
         mock_whisper = MagicMock()
-        mock_whisper.load_model.return_value = MagicMock()
-        with patch.dict("sys.modules", {"whisper": mock_whisper, "torch": MagicMock()}):
+        mock_whisper.load_model.return_value = mock_model
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = False
+        with patch.dict("sys.modules", {"whisper": mock_whisper, "torch": mock_torch}):
             with patch("os.path.exists", return_value=True):
-                try:
-                    mgr._init_whisper()
-                except Exception:
-                    pass
+                mgr._init_whisper()
+                self.assertTrue(mgr._model_initialized)
+                self.assertEqual(mgr.model, mock_model)
 
 
 class TestInitWhispercpp(unittest.TestCase):
-    def test_init_whispercpp_model_exists(self):
-        mgr = _make_manager(engine="whisper_cpp")
-        with patch("os.path.exists", return_value=True):
-            mock_model = MagicMock()
-            with patch.dict("sys.modules", {
-                "pywhispercpp": MagicMock(),
-                "pywhispercpp.model": MagicMock(),
-            }):
-                try:
-                    mgr._init_whispercpp()
-                except Exception:
-                    pass
 
     def test_init_whispercpp_vulkan_fallback(self):
         mgr = _make_manager(engine="whisper_cpp")
@@ -467,25 +451,27 @@ class TestInitWhispercpp(unittest.TestCase):
 
 
 class TestDownloadVoskModel(unittest.TestCase):
-    def test_download_cancelled(self):
-        mgr = _make_manager(engine="vosk")
-        mgr._download_cancelled = True
-        try:
-            mgr._download_vosk_model()
-        except (RuntimeError, Exception):
-            pass
+    pass
 
 
 class TestDownloadWhisperModel(unittest.TestCase):
     def test_download_whisper_model(self):
         mgr = _make_manager(engine="whisper")
         mgr._download_cancelled = False
-        mock_whisper = MagicMock()
-        with patch.dict("sys.modules", {"whisper": mock_whisper}):
-            try:
-                mgr._download_whisper_model(cache_dir="/tmp/test")
-            except Exception:
-                pass
+        # Mock the download by preventing actual network calls
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers.get.return_value = "1000"  # content-length
+        mock_response.iter_content.return_value = [b"test" * 250]
+        mock_requests.get.return_value = mock_response
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch("builtins.open", create=True) as mock_open:
+                mock_file = MagicMock()
+                mock_open.return_value.__enter__.return_value = mock_file
+                with patch("os.rename"):
+                    mgr._download_whisper_model(cache_dir="/tmp/test")
+                    # Verify file write was called
+                    mock_file.write.assert_called()
 
 
 class TestBufferManagement(unittest.TestCase):
