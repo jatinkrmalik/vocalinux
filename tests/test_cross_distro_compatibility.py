@@ -89,7 +89,7 @@ class TestCrossDistroCompatibility:
         # The sed command for desktop entry should use the detected path
         assert (
             "GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED" in install_sh_content
-            or "GI_TYPELIB_PATH=\${GI_TYPELIB_DETECTED}" in install_sh_content
+            or r"GI_TYPELIB_PATH=${GI_TYPELIB_DETECTED}" in install_sh_content
         ), "Desktop entry sed command should use GI_TYPELIB_DETECTED"
 
         # Should NOT have hardcoded /usr/lib/girepository-1.0 in desktop entry section
