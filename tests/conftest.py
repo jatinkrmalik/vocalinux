@@ -25,20 +25,29 @@ _real_thread_start = threading.Thread.start
 _BLOCKED_THREAD_TARGETS = {"server_thread", "_monitor_devices"}
 
 
+_real_thread_join = threading.Thread.join
+
+
 def _safe_thread_start(self):
     """Skip known-blocking daemon threads to prevent CI hangs."""
     if self.daemon and hasattr(self, "_target") and self._target is not None:
         target_name = getattr(self._target, "__name__", "")
         if target_name in _BLOCKED_THREAD_TARGETS:
-            # Mark the thread as "started" so join() doesn't raise
-            # RuntimeError("cannot join thread before it is started").
-            self._started.set()
-            self._is_stopped = True
+            # Mark this thread so join() can recognise it was never started.
+            self._skipped_by_conftest = True
             return
     _real_thread_start(self)
 
 
+def _safe_thread_join(self, timeout=None):
+    """Handle join() for threads that were skipped by _safe_thread_start."""
+    if getattr(self, "_skipped_by_conftest", False):
+        return  # Thread was never started; nothing to join
+    _real_thread_join(self, timeout)
+
+
 threading.Thread.start = _safe_thread_start
+threading.Thread.join = _safe_thread_join
 
 # Add the parent directory to sys.path so that 'src' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
