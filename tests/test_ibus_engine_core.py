@@ -648,6 +648,190 @@ class TestVocalinuxEngineApplication(unittest.TestCase):
             app.run()
             app.mainloop.run.assert_called_once()
 
+    @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.EngineDesc")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Component")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Factory.new")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Bus")
+    def test_vocalinux_engine_application_standalone_registers_component(
+        self,
+        mock_bus_cls,
+        mock_factory_new,
+        mock_component_cls,
+        mock_engine_desc_cls,
+        mock_start_server,
+    ):
+        """Test standalone launch path uses register_component with metadata."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngineApplication
+
+        mock_bus = MagicMock()
+        mock_bus.is_connected.return_value = True
+        mock_bus.get_connection.return_value = MagicMock()
+        mock_bus.register_component.return_value = True
+        mock_bus_cls.return_value = mock_bus
+
+        mock_component = MagicMock()
+        mock_engine_desc = MagicMock()
+        mock_component_cls.return_value = mock_component
+        mock_engine_desc_cls.return_value = mock_engine_desc
+        mock_factory_new.return_value = MagicMock()
+
+        app_kwargs = {"exec_by_ibus": False}
+        VocalinuxEngineApplication(**app_kwargs)
+
+        mock_bus.request_name.assert_not_called()
+        mock_bus.register_component.assert_called_once_with(mock_component)
+        mock_component.add_engine.assert_called_once_with(mock_engine_desc)
+
+        component_kwargs = mock_component_cls.call_args.kwargs
+        self.assertIn("--ibus", component_kwargs["command_line"])
+
+    @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Factory.new")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Bus")
+    def test_vocalinux_engine_application_ibus_exec_requests_name(
+        self,
+        mock_bus_cls,
+        mock_factory_new,
+        mock_start_server,
+    ):
+        """Test --ibus launch path uses request_name without register_component."""
+        from vocalinux.text_injection.ibus_engine import COMPONENT_NAME, VocalinuxEngineApplication
+
+        mock_bus = MagicMock()
+        mock_bus.is_connected.return_value = True
+        mock_bus.get_connection.return_value = MagicMock()
+        mock_bus.request_name.return_value = True
+        mock_bus_cls.return_value = mock_bus
+        mock_factory_new.return_value = MagicMock()
+
+        app_kwargs = {"exec_by_ibus": True}
+        VocalinuxEngineApplication(**app_kwargs)
+
+        mock_bus.request_name.assert_called_once_with(COMPONENT_NAME, 0)
+        mock_bus.register_component.assert_not_called()
+
+    @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Factory.new")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Bus")
+    def test_vocalinux_engine_application_request_name_failure_raises(
+        self,
+        mock_bus_cls,
+        mock_factory_new,
+        mock_start_server,
+    ):
+        """Test --ibus mode raises when request_name fails."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngineApplication
+
+        mock_bus = MagicMock()
+        mock_bus.is_connected.return_value = True
+        mock_bus.get_connection.return_value = MagicMock()
+        mock_bus.request_name.return_value = False
+        mock_bus_cls.return_value = mock_bus
+        mock_factory_new.return_value = MagicMock()
+
+        with self.assertRaises(RuntimeError):
+            app_kwargs = {"exec_by_ibus": True}
+            VocalinuxEngineApplication(**app_kwargs)
+
+    @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Factory.new")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Bus")
+    def test_vocalinux_engine_application_register_component_failure_raises(
+        self,
+        mock_bus_cls,
+        mock_factory_new,
+        mock_start_server,
+    ):
+        """Test standalone mode raises when register_component fails."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngineApplication
+
+        mock_bus = MagicMock()
+        mock_bus.is_connected.return_value = True
+        mock_bus.get_connection.return_value = MagicMock()
+        mock_bus.register_component.return_value = False
+        mock_bus_cls.return_value = mock_bus
+        mock_factory_new.return_value = MagicMock()
+
+        with self.assertRaises(RuntimeError):
+            app_kwargs = {"exec_by_ibus": False}
+            VocalinuxEngineApplication(**app_kwargs)
+
+    @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Bus")
+    def test_vocalinux_engine_application_disconnected_bus_raises(
+        self,
+        mock_bus_cls,
+        mock_start_server,
+    ):
+        """Test init raises when bus is not connected."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngineApplication
+
+        mock_bus = MagicMock()
+        mock_bus.is_connected.return_value = False
+        mock_bus_cls.return_value = mock_bus
+
+        with self.assertRaises(RuntimeError):
+            VocalinuxEngineApplication()
+
+    @patch("vocalinux.text_injection.ibus_engine.VocalinuxEngine._start_socket_server")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Factory.new")
+    @patch("vocalinux.text_injection.ibus_engine.IBus.Bus")
+    def test_vocalinux_engine_application_none_connection_raises(
+        self,
+        mock_bus_cls,
+        mock_factory_new,
+        mock_start_server,
+    ):
+        """Test init raises when bus.get_connection() returns None."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngineApplication
+
+        mock_bus = MagicMock()
+        mock_bus.is_connected.return_value = True
+        mock_bus.get_connection.return_value = None
+        mock_bus_cls.return_value = mock_bus
+        mock_factory_new.return_value = MagicMock()
+
+        with self.assertRaises(RuntimeError):
+            VocalinuxEngineApplication()
+
+
+class TestIBusEngineMainEntrypoint(unittest.TestCase):
+    """Test ibus_engine.main() flag handling."""
+
+    def test_main_xml_flag_prints_engines_and_exits(self):
+        """Test --xml path prints engines XML and exits early."""
+        from vocalinux.text_injection import ibus_engine
+
+        with patch.object(sys, "argv", ["ibus_engine.py", "--xml"]), patch.object(
+            ibus_engine, "_get_engines_xml", return_value="<engines></engines>"
+        ) as mock_get_xml, patch("builtins.print") as mock_print, patch.object(
+            ibus_engine.IBus, "init"
+        ) as mock_init:
+            result = ibus_engine.main()
+
+        self.assertEqual(result, 0)
+        mock_get_xml.assert_called_once_with()
+        mock_print.assert_called_once_with("<engines></engines>")
+        mock_init.assert_not_called()
+
+    def test_main_passes_ibus_flag_to_application(self):
+        """Test --ibus path initializes application in IBus exec mode."""
+        from vocalinux.text_injection import ibus_engine
+
+        mock_app = MagicMock()
+        with patch.object(sys, "argv", ["ibus_engine.py", "--ibus"]), patch.object(
+            ibus_engine, "IBUS_AVAILABLE", True
+        ), patch.object(ibus_engine.IBus, "init") as mock_init, patch.object(
+            ibus_engine, "VocalinuxEngineApplication", return_value=mock_app
+        ) as mock_app_cls:
+            result = ibus_engine.main()
+
+        self.assertEqual(result, 0)
+        mock_init.assert_called_once_with()
+        mock_app_cls.assert_called_once_with(exec_by_ibus=True)
+        mock_app.run.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()
