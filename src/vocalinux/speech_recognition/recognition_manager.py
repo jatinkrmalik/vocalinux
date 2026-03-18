@@ -1707,7 +1707,7 @@ class SpeechRecognitionManager:
             speech_detected_in_session = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
-            
+
             # Real-time streaming variables
             streaming_timer = 0.0
             last_stream_time = time.time()
@@ -1809,15 +1809,17 @@ class SpeechRecognitionManager:
                             )
                             speech_detected_in_session = True
                         silence_counter = 0
-                    
+
                     # Real-time streaming logic: process chunks at regular intervals
                     if self.real_time_streaming and speech_detected_in_session:
                         current_time = time.time()
                         streaming_timer += CHUNK / RATE
-                        
+
                         if streaming_timer >= self.streaming_chunk_duration:
                             if len(self.audio_buffer) > 0:
-                                logger.debug(f"Streaming interval reached ({self.streaming_chunk_duration}s), queueing audio segment")
+                                logger.debug(
+                                    f"Streaming interval reached ({self.streaming_chunk_duration}s), queueing audio segment"
+                                )
                                 self._enqueue_audio_segment(self.audio_buffer)
                                 self.audio_buffer = []
                             streaming_timer = 0.0
@@ -2106,7 +2108,7 @@ class SpeechRecognitionManager:
             self.vad_sensitivity = max(1, min(5, int(vad_sensitivity)))
         if silence_timeout is not None:
             self.silence_timeout = max(0.5, min(5.0, float(silence_timeout)))
-        
+
         # Update streaming params if provided
         if real_time_streaming is not None:
             self.real_time_streaming = bool(real_time_streaming)
