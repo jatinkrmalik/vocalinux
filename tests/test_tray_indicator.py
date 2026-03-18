@@ -322,7 +322,9 @@ class TestTrayIndicator(unittest.TestCase):
             patched_gtk.MenuItem = type(mock_menu_item)
             result = self.tray_indicator._update_ui(self.RecognitionState.LISTENING)
 
-        self.tray_indicator.indicator.set_icon_full.assert_called_once()
+        self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
+            "vocalinux-microphone", "Microphone on"
+        )
         self.assertEqual(result, False)
 
     def test_update_ui_processing_state(self):
@@ -337,7 +339,9 @@ class TestTrayIndicator(unittest.TestCase):
             patched_gtk.MenuItem = type(mock_menu_item)
             result = self.tray_indicator._update_ui(self.RecognitionState.PROCESSING)
 
-        self.tray_indicator.indicator.set_icon_full.assert_called_once()
+        self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
+            "vocalinux-microphone-process", "Processing speech"
+        )
         self.assertEqual(result, False)
 
     def test_update_ui_error_state(self):
@@ -352,7 +356,9 @@ class TestTrayIndicator(unittest.TestCase):
             patched_gtk.MenuItem = type(mock_menu_item)
             result = self.tray_indicator._update_ui(self.RecognitionState.ERROR)
 
-        self.tray_indicator.indicator.set_icon_full.assert_called_once()
+        self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
+            "vocalinux-microphone-off", "Error"
+        )
         self.assertEqual(result, False)
 
     def test_set_menu_item_enabled(self):
