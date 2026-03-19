@@ -726,6 +726,7 @@ class SettingsDialog(Gtk.Dialog):
         shortcut_update_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
+        self.set_decorated(True)  # Force window decorations (close button) on all WMs
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
