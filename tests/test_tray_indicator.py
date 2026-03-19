@@ -215,7 +215,8 @@ class TestTrayIndicator(unittest.TestCase):
 
         with patch("vocalinux.ui.tray_indicator.Gtk") as patched_gtk:
             self.tray_indicator._quit()
-            self.mock_ksm.stop.assert_called_once()
+            # stop() is called twice: once for shortcut_manager, once for settings_shortcut_manager
+            self.assertEqual(self.mock_ksm.stop.call_count, 2)
             patched_gtk.main_quit.assert_called_once()
 
     def test_signal_handler(self):

@@ -18,14 +18,17 @@ SUPPORTED_SHORTCUTS = {
     "ctrl+ctrl": "ctrl",
     "alt+alt": "alt",
     "shift+shift": "shift",
+    "super+super": "super",
     # Left side only
     "left_ctrl+left_ctrl": "left_ctrl",
     "left_alt+left_alt": "left_alt",
     "left_shift+left_shift": "left_shift",
+    "left_super+left_super": "left_super",
     # Right side only
     "right_ctrl+right_ctrl": "right_ctrl",
     "right_alt+right_alt": "right_alt",
     "right_shift+right_shift": "right_shift",
+    "right_super+right_super": "right_super",
 }
 
 # Human-readable names for shortcuts (mode-agnostic base names)
@@ -33,19 +36,22 @@ SHORTCUT_DISPLAY_NAMES = {
     "ctrl+ctrl": "Ctrl (either side)",
     "alt+alt": "Alt (either side)",
     "shift+shift": "Shift (either side)",
+    "super+super": "Super (either side)",
     "left_ctrl+left_ctrl": "Left Ctrl",
     "left_alt+left_alt": "Left Alt",
     "left_shift+left_shift": "Left Shift",
+    "left_super+left_super": "Left Super",
     "right_ctrl+right_ctrl": "Right Ctrl",
     "right_alt+right_alt": "Right Alt",
     "right_shift+right_shift": "Right Shift",
+    "right_super+right_super": "Right Super",
 }
 
 # Grouping for UI display: maps group label -> list of shortcut IDs
 SHORTCUT_GROUPS = {
-    "Either Side": ["ctrl+ctrl", "alt+alt", "shift+shift"],
-    "Left Side": ["left_ctrl+left_ctrl", "left_alt+left_alt", "left_shift+left_shift"],
-    "Right Side": ["right_ctrl+right_ctrl", "right_alt+right_alt", "right_shift+right_shift"],
+    "Either Side": ["ctrl+ctrl", "alt+alt", "shift+shift", "super+super"],
+    "Left Side": ["left_ctrl+left_ctrl", "left_alt+left_alt", "left_shift+left_shift", "left_super+left_super"],
+    "Right Side": ["right_ctrl+right_ctrl", "right_alt+right_alt", "right_shift+right_shift", "right_super+right_super"],
 }
 
 # Mode-specific display names (format: {shortcut: {mode: display_name}})
@@ -62,6 +68,10 @@ SHORTCUT_MODE_DISPLAY_NAMES = {
         "toggle": "Double-tap Shift",
         "push_to_talk": "Hold Shift",
     },
+    "super+super": {
+        "toggle": "Double-tap Super",
+        "push_to_talk": "Hold Super",
+    },
     "left_ctrl+left_ctrl": {
         "toggle": "Double-tap Left Ctrl",
         "push_to_talk": "Hold Left Ctrl",
@@ -74,6 +84,10 @@ SHORTCUT_MODE_DISPLAY_NAMES = {
         "toggle": "Double-tap Left Shift",
         "push_to_talk": "Hold Left Shift",
     },
+    "left_super+left_super": {
+        "toggle": "Double-tap Left Super",
+        "push_to_talk": "Hold Left Super",
+    },
     "right_ctrl+right_ctrl": {
         "toggle": "Double-tap Right Ctrl",
         "push_to_talk": "Hold Right Ctrl",
@@ -85,6 +99,10 @@ SHORTCUT_MODE_DISPLAY_NAMES = {
     "right_shift+right_shift": {
         "toggle": "Double-tap Right Shift",
         "push_to_talk": "Hold Right Shift",
+    },
+    "right_super+right_super": {
+        "toggle": "Double-tap Right Super",
+        "push_to_talk": "Hold Right Super",
     },
 }
 

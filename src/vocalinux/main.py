@@ -6,6 +6,7 @@ Main entry point for Vocalinux application.
 import argparse
 import atexit
 import logging
+import signal
 import sys
 
 # Configure logging
@@ -66,6 +67,11 @@ def parse_arguments():
         "--start-minimized",
         action="store_true",
         help="Start minimized to system tray",
+    )
+    parser.add_argument(
+        "--settings",
+        action="store_true",
+        help="Open the settings dialog. If Vocalinux is already running, signals the running instance to open settings.",
     )
     return parser.parse_args()
 
@@ -176,6 +182,23 @@ def main():
     # Check for single instance BEFORE any initialization
     from . import single_instance
 
+    # Parse args early to check for --settings
+    args = parse_arguments()
+
+    # Handle --settings with a running instance
+    if args.settings:
+        running_pid = single_instance.get_running_pid()
+        if running_pid is not None:
+            import os as _os
+
+            try:
+                _os.kill(running_pid, signal.SIGUSR1)
+                logger.info(f"Sent SIGUSR1 to running Vocalinux instance (PID {running_pid}) to open settings")
+                sys.exit(0)
+            except OSError as e:
+                logger.warning(f"Failed to signal running instance: {e}")
+                # Fall through to start a new instance
+
     if not single_instance.acquire_lock():
         # Another instance is already running - show notification and exit
         try:
@@ -199,8 +222,6 @@ def main():
 
     # Register cleanup to release lock on exit
     atexit.register(single_instance.release_lock)
-
-    args = parse_arguments()
 
     # Configure debug logging if requested
     if args.debug:
@@ -366,6 +387,16 @@ def main():
             speech_engine=speech_engine,
             text_injector=text_system,
         )
+
+        # If --settings was passed, schedule opening settings after GTK starts
+        if args.settings:
+            from gi.repository import GLib
+
+            def _open_settings_on_start():
+                indicator._open_settings()
+                return False  # Run only once
+
+            GLib.idle_add(_open_settings_on_start)
 
         # Start the GTK main loop
         indicator.run()

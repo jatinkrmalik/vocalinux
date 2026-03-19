@@ -96,3 +96,33 @@ def release_lock():
             logger.warning(f"Failed to release lock: {e}")
             # Ensure clean state
             _lock_file = None
+
+
+def get_running_pid() -> Optional[int]:
+    """
+    Get the PID of the currently running Vocalinux instance.
+
+    Returns:
+        The PID if a running instance is found and the PID is valid, None otherwise.
+    """
+    try:
+        if not LOCK_FILE_PATH.exists():
+            return None
+
+        with open(str(LOCK_FILE_PATH), "r") as f:
+            pid_str = f.read().strip()
+
+        if not pid_str:
+            return None
+
+        pid = int(pid_str)
+
+        # Check if the process is actually running
+        try:
+            os.kill(pid, 0)  # Signal 0 just checks if the process exists
+            return pid
+        except OSError:
+            return None
+
+    except (ValueError, IOError, OSError):
+        return None

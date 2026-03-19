@@ -35,9 +35,11 @@ if PYNPUT_AVAILABLE:
         "left_ctrl": keyboard.Key.ctrl_l,
         "left_alt": keyboard.Key.alt_l,
         "left_shift": keyboard.Key.shift_l,
+        "left_super": keyboard.Key.cmd_l,
         "right_ctrl": keyboard.Key.ctrl_r,
         "right_alt": keyboard.Key.alt_r,
         "right_shift": keyboard.Key.shift_r,
+        "right_super": keyboard.Key.cmd_r,
     }
 
     MODIFIER_NORMALIZE_MAP = {
@@ -225,9 +227,11 @@ class PynputKeyboardBackend(KeyboardBackend):
             "left_ctrl": {keyboard.Key.ctrl_l},
             "left_alt": {keyboard.Key.alt_l},
             "left_shift": {keyboard.Key.shift_l},
+            "left_super": {keyboard.Key.cmd_l},
             "right_ctrl": {keyboard.Key.ctrl_r},
             "right_alt": {keyboard.Key.alt_r},
             "right_shift": {keyboard.Key.shift_r},
+            "right_super": {keyboard.Key.cmd_r},
         }
         return variants.get(modifier_name, set())
 
