@@ -71,7 +71,29 @@ ENGINE_MODELS = {
         "medium",
         "large",
     ],  # whisper.cpp models (ggml format)
+    "remote_api": [],  # Remote API does not need local models
 }
+
+# Engine display name mapping
+ENGINE_DISPLAY_NAMES = {
+    "vosk": "Vosk",
+    "whisper": "Whisper",
+    "whisper_cpp": "Whisper_cpp",
+    "remote_api": "Remote API",
+}
+
+
+def _engine_display_name(engine: str) -> str:
+    """Get the display name of the engine."""
+    return ENGINE_DISPLAY_NAMES.get(engine, engine.capitalize())
+
+
+def _engine_from_display(display_name: str) -> str:
+    """Reverse lookup engine ID from display name."""
+    for engine_id, name in ENGINE_DISPLAY_NAMES.items():
+        if name == display_name:
+            return engine_id
+    return display_name.lower()
 
 # Whisper model metadata for display
 WHISPER_MODEL_INFO = {
@@ -88,7 +110,7 @@ def get_available_engines():
     Detect which speech recognition engines are available/installed.
     Returns a dictionary of engine_name -> availability (bool).
     """
-    engines = {"vosk": False, "whisper": False, "whisper_cpp": False}
+    engines = {"vosk": False, "whisper": False, "whisper_cpp": False, "remote_api": False}
 
     # Check VOSK
     try:
@@ -111,6 +133,14 @@ def get_available_engines():
         from pywhispercpp.model import Model
 
         engines["whisper_cpp"] = True
+    except ImportError:
+        pass
+
+    # Remote API is always available (only requires requests package)
+    try:
+        import requests  # noqa: F401
+
+        engines["remote_api"] = True
     except ImportError:
         pass
 
@@ -1049,26 +1079,93 @@ class SettingsDialog(Gtk.Dialog):
         self.model_combo = Gtk.ComboBoxText()
         self.model_combo.set_size_request(180, -1)
         _prevent_scroll_on_hover(self.model_combo)
-        model_row = PreferenceRow(
+        self.model_row = PreferenceRow(
             title="Model Size",
             subtitle="Larger models are more accurate but slower",
             widget=self.model_combo,
         )
-        group.add_row(model_row)
+        group.add_row(self.model_row)
 
         # Language selection
         self.language_combo = Gtk.ComboBoxText()
         self.language_combo.set_size_request(180, -1)
         self.language_combo.set_tooltip_text("Primary language for speech recognition")
         _prevent_scroll_on_hover(self.language_combo)
-        language_row = PreferenceRow(
+        self.language_row = PreferenceRow(
             title="Language",
             subtitle="Primary language for recognition",
             widget=self.language_combo,
         )
-        group.add_row(language_row)
+        group.add_row(self.language_row)
 
         self.content_box.pack_start(group, False, False, 0)
+
+        # Remote API settings area
+        self.remote_api_group = PreferencesGroup(title="Remote Server Settings")
+
+        # Server URL input field
+        self.remote_api_url_entry = Gtk.Entry()
+        self.remote_api_url_entry.set_placeholder_text("http://192.168.1.100:8080")
+        self.remote_api_url_entry.set_tooltip_text(
+            "URL of the remote speech recognition server\n"
+            "Supports OpenAI compatible API and whisper.cpp server"
+        )
+        self.remote_api_url_entry.set_size_request(280, -1)
+        remote_url_row = PreferenceRow(
+            title="Server URL",
+            subtitle="Remote speech recognition server address",
+            widget=self.remote_api_url_entry,
+        )
+        self.remote_api_group.add_row(remote_url_row)
+
+        # API Key input field
+        self.remote_api_key_entry = Gtk.Entry()
+        self.remote_api_key_entry.set_placeholder_text("(optional)")
+        self.remote_api_key_entry.set_visibility(False)  # Password hidden mode
+        self.remote_api_key_entry.set_tooltip_text(
+            "API Key for authentication (optional)"
+        )
+        self.remote_api_key_entry.set_size_request(280, -1)
+        remote_key_row = PreferenceRow(
+            title="API Key",
+            subtitle="Authentication key (optional)",
+            widget=self.remote_api_key_entry,
+        )
+        self.remote_api_group.add_row(remote_key_row)
+
+        # API Format / Endpoint Combo
+        self.remote_api_endpoint_combo = Gtk.ComboBoxText()
+        self.remote_api_endpoint_combo.set_size_request(280, -1)
+        self.remote_api_endpoint_combo.set_tooltip_text("Select the API format of the remote server (API Endpoint Format)")
+        self.remote_api_endpoint_combo.append("/v1/audio/transcriptions", "OpenAI (/v1/audio/transcriptions)")
+        self.remote_api_endpoint_combo.append("/inference", "Whisper.cpp (/inference)")
+        _prevent_scroll_on_hover(self.remote_api_endpoint_combo)
+        remote_endpoint_row = PreferenceRow(
+            title="API Endpoint",
+            subtitle="API format for the remote server",
+            widget=self.remote_api_endpoint_combo,
+        )
+        self.remote_api_group.add_row(remote_endpoint_row)
+
+        # Connection test button
+        self.remote_test_btn = Gtk.Button(label="Test Connection")
+        self.remote_test_btn.set_tooltip_text("Test connection to remote server")
+        self.remote_test_btn.connect("clicked", self._on_test_remote_connection)
+        remote_test_row = PreferenceRow(
+            title="Connection Test",
+            subtitle="Verify remote server is reachable",
+            widget=self.remote_test_btn,
+        )
+        self.remote_api_group.add_row(remote_test_row)
+
+        self.content_box.pack_start(self.remote_api_group, False, False, 0)
+
+        # Remote API connection status label
+        self.remote_status_label = Gtk.Label(label="", use_markup=True, xalign=0)
+        self.remote_status_label.set_margin_start(16)
+        self.remote_status_label.set_margin_top(4)
+        self.remote_status_label.get_style_context().add_class("status-info")
+        self.content_box.pack_start(self.remote_status_label, False, False, 0)
 
         # Model info card (shown below the group)
         self.model_info_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -1097,10 +1194,10 @@ class SettingsDialog(Gtk.Dialog):
         self.content_box.pack_start(self.language_warning, False, False, 0)
 
         # Legend
-        legend_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        legend_box.set_halign(Gtk.Align.CENTER)
-        legend_box.set_margin_top(4)
-        legend_box.set_margin_bottom(4)
+        self.legend_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        self.legend_box.set_halign(Gtk.Align.CENTER)
+        self.legend_box.set_margin_top(4)
+        self.legend_box.set_margin_bottom(4)
 
         for symbol, text in [
             ("✓", "Downloaded"),
@@ -1109,14 +1206,115 @@ class SettingsDialog(Gtk.Dialog):
         ]:
             item = Gtk.Label(label=f"{symbol} {text}")
             item.get_style_context().add_class("status-info")
-            legend_box.pack_start(item, False, False, 0)
+            self.legend_box.pack_start(item, False, False, 0)
 
-        self.content_box.pack_start(legend_box, False, False, 0)
+        self.content_box.pack_start(self.legend_box, False, False, 0)
+
+        # Load saved remote API settings
+        saved_url = self.config_manager.get("speech_recognition", "remote_api_url", "")
+        saved_key = self.config_manager.get("speech_recognition", "remote_api_key", "")
+        saved_endpoint = self.config_manager.get("speech_recognition", "remote_api_endpoint", "/v1/audio/transcriptions")
+        if saved_url:
+            self.remote_api_url_entry.set_text(saved_url)
+        if saved_key:
+            self.remote_api_key_entry.set_text(saved_key)
+        self.remote_api_endpoint_combo.set_active_id(saved_endpoint)
 
         # Connect signals
         self.engine_combo.connect("changed", self._on_engine_changed)
         self.model_combo.connect("changed", self._on_model_changed)
         self.language_combo.connect("changed", self._on_language_changed)
+        self.remote_api_url_entry.connect("changed", self._on_remote_api_settings_changed)
+        self.remote_api_key_entry.connect("changed", self._on_remote_api_settings_changed)
+        self.remote_api_endpoint_combo.connect("changed", self._on_remote_api_settings_changed)
+
+    def _on_remote_api_settings_changed(self, widget):
+        """Handle remote API URL or Key changes."""
+        if self._initializing or self._applying_settings:
+            return
+
+        url = self.remote_api_url_entry.get_text().strip()
+        key = self.remote_api_key_entry.get_text().strip()
+        endpoint = self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+
+        # Save settings
+        self.config_manager.set("speech_recognition", "remote_api_url", url)
+        self.config_manager.set("speech_recognition", "remote_api_key", key)
+        self.config_manager.set("speech_recognition", "remote_api_endpoint", endpoint)
+        self.config_manager.save_settings()
+
+        # Auto apply settings if current engine is remote_api
+        engine_text = self.engine_combo.get_active_text()
+        if engine_text and _engine_from_display(engine_text) == "remote_api":
+            self._auto_apply_settings()
+
+    def _on_test_remote_connection(self, widget):
+        """Test remote server connection."""
+        url = self.remote_api_url_entry.get_text().strip()
+        if not url:
+            self.remote_status_label.set_markup(
+                "<span foreground='#c01c28'>✗ Please enter a server URL</span>"
+            )
+            return
+
+        self.remote_test_btn.set_sensitive(False)
+        self.remote_test_btn.set_label("Testing...")
+        self.remote_status_label.set_markup("<i>Connecting...</i>")
+
+        def test_connection():
+            try:
+                import requests
+
+                headers = {}
+                key = self.remote_api_key_entry.get_text().strip()
+                if key:
+                    headers["Authorization"] = f"Bearer {key}"
+
+                clean_url = url.rstrip("/")
+
+                # Try connecting to the server
+                response = requests.get(clean_url, headers=headers, timeout=5)
+
+                # Determine server type
+                server_info = ""
+                endpoint = self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+                
+                try:
+                    if endpoint == "/v1/audio/transcriptions":
+                        # Try OpenAI endpoint
+                        openai_resp = requests.get(
+                            f"{clean_url}/v1/models", headers=headers, timeout=5
+                        )
+                        if openai_resp.status_code == 200:
+                            server_info = " (OpenAI compatible)"
+                    elif endpoint == "/inference":
+                        # Try whisper.cpp server endpoint
+                        whispercpp_resp = requests.get(
+                            f"{clean_url}/inference", headers=headers, timeout=5
+                        )
+                        if whispercpp_resp.status_code != 404:
+                            server_info = " (whisper.cpp server)"
+                except Exception:
+                    pass
+
+                GLib.idle_add(
+                    self.remote_status_label.set_markup,
+                    f"<span foreground='#26a269'>✓ Connected! "
+                    f"(status={response.status_code}){server_info}</span>",
+                )
+
+            except Exception as e:
+                error_msg = str(e)[:80]
+                GLib.idle_add(
+                    self.remote_status_label.set_markup,
+                    f"<span foreground='#c01c28'>✗ Connection failed: {error_msg}</span>",
+                )
+
+            # Restore button state
+            GLib.idle_add(self.remote_test_btn.set_sensitive, True)
+            GLib.idle_add(self.remote_test_btn.set_label, "Test Connection")
+
+        threading.Thread(target=test_connection, daemon=True).start()
 
     def _build_recognition_section(self):
         """Build the Recognition Settings section."""
@@ -1461,16 +1659,16 @@ class SettingsDialog(Gtk.Dialog):
 
         for engine in ENGINE_MODELS.keys():
             if available_engines.get(engine, False):
-                capitalized_engine = engine.capitalize()
-                self.engine_combo.append(capitalized_engine, capitalized_engine)
+                display_name = _engine_display_name(engine)
+                self.engine_combo.append(display_name, display_name)
                 available_count += 1
 
         if available_count == 0:
             logger.error("No speech recognition engines available!")
             # Still add them so the UI works, but log the error
             for engine in ENGINE_MODELS.keys():
-                capitalized_engine = engine.capitalize()
-                self.engine_combo.append(capitalized_engine, capitalized_engine)
+                display_name = _engine_display_name(engine)
+                self.engine_combo.append(display_name, display_name)
         else:
             logger.info(f"Populated {available_count} available engines: {available_engines}")
 
@@ -1485,14 +1683,14 @@ class SettingsDialog(Gtk.Dialog):
                     self.current_engine = engine
                     break
 
-        engine_text = self.current_engine.capitalize()
+        engine_text = _engine_display_name(self.current_engine)
         logger.info(f"Setting active engine to: {engine_text}")
         if not self.engine_combo.set_active_id(engine_text):
             logger.warning("Could not set engine by ID, trying by index")
             # Find index of current engine
             model = self.engine_combo.get_model()
             for i, row in enumerate(model):
-                if row[0].lower() == self.current_engine.lower():
+                if _engine_from_display(row[0]) == self.current_engine:
                     self.engine_combo.set_active(i)
                     break
             else:
@@ -1555,8 +1753,13 @@ class SettingsDialog(Gtk.Dialog):
                 logger.warning("No engine selected during model options population")
                 return
 
-            engine = engine_text.lower()
+            engine = _engine_from_display(engine_text)
             logger.info(f"Populating model options for engine: {engine}")
+
+            # Remote API does not need model options
+            if engine == "remote_api":
+                logger.info("Remote API engine selected, no model options needed")
+                return
 
             saved_model_for_engine = self.config_manager.get_model_size_for_engine(engine)
             logger.info(f"Saved model for {engine}: {saved_model_for_engine}")
@@ -1630,7 +1833,7 @@ class SettingsDialog(Gtk.Dialog):
         if not engine_text:
             return
 
-        engine = engine_text.lower()
+        engine = _engine_from_display(engine_text)
 
         current_lang = self.language_combo.get_active_id()
         if current_lang:
@@ -1638,7 +1841,7 @@ class SettingsDialog(Gtk.Dialog):
                 current_lang == "auto" or not SUPPORTED_LANGUAGES.get(current_lang, {}).get("vosk")
             ):
                 self.language = "en-us"
-            elif engine in ["whisper", "whisper_cpp"] and not current_lang:
+            elif engine in ["whisper", "whisper_cpp", "remote_api"] and not current_lang:
                 self.language = "auto"
 
         self._populate_model_options()
@@ -1655,7 +1858,7 @@ class SettingsDialog(Gtk.Dialog):
 
         if voice_commands_enabled is None:
             engine_text = self.engine_combo.get_active_text()
-            engine = engine_text.lower() if engine_text else sr_config.get("engine", "whisper_cpp")
+            engine = _engine_from_display(engine_text) if engine_text else "whisper_cpp"
             auto_enabled = engine == "vosk"
             self.voice_commands_switch.set_active(auto_enabled)
 
@@ -1699,7 +1902,7 @@ class SettingsDialog(Gtk.Dialog):
         if not engine:
             return
 
-        engine = engine.lower()
+        engine = _engine_from_display(engine)
 
         for lang_code, lang_info in SUPPORTED_LANGUAGES.items():
             display_text = lang_info["name"]
@@ -1710,7 +1913,7 @@ class SettingsDialog(Gtk.Dialog):
                     continue
                 is_downloaded = _is_vosk_model_downloaded("small", lang_code)
                 display_text += " ✓" if is_downloaded else " ↓"
-            elif engine in ["whisper", "whisper_cpp"]:
+            elif engine in ["whisper", "whisper_cpp", "remote_api"]:
                 # Both Whisper and whisper.cpp support auto-detect
                 if lang_code == "auto":
                     display_text += " ⚠"
@@ -1734,7 +1937,7 @@ class SettingsDialog(Gtk.Dialog):
 
         self._processing_language_change = True
         try:
-            engine = engine.lower()
+            engine = _engine_from_display(engine)
             lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
 
             if lang_info.get("warning"):
@@ -1754,6 +1957,23 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
+        engine_text = self.engine_combo.get_active_text()
+        engine = _engine_from_display(engine_text) if engine_text else ""
+        is_remote = engine == "remote_api"
+
+        # Remote API does not need model selection and download legend
+        if is_remote:
+            self.model_row.hide()
+            self.model_info_card.hide()
+            self.legend_box.hide()
+            self.remote_api_group.show_all()
+            self.remote_status_label.show()
+        else:
+            self.model_row.show_all()
+            self.legend_box.show_all()
+            self.remote_api_group.hide()
+            self.remote_status_label.hide()
+
         self._update_model_info()
 
     def _update_model_info(self):
@@ -1763,7 +1983,13 @@ class SettingsDialog(Gtk.Dialog):
             self.model_info_card.hide()
             return
 
-        engine = engine_text.lower()
+        engine = _engine_from_display(engine_text)
+
+        # Remote API does not show model info card
+        if engine == "remote_api":
+            self.model_info_card.hide()
+            return
+
         model_id = self.model_combo.get_active_id()
         if not model_id:
             self.model_info_card.hide()
@@ -1929,20 +2155,28 @@ class SettingsDialog(Gtk.Dialog):
         model_id = self.model_combo.get_active_id()
         language_id = self.language_combo.get_active_id()
 
-        engine = engine_text.lower() if engine_text else "vosk"
+        engine = _engine_from_display(engine_text) if engine_text else "vosk"
         model_size = model_id.lower() if model_id else "small"
         language = language_id if language_id else "auto"
 
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
 
-        return {
+        settings = {
             "engine": engine,
             "model_size": model_size,
             "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
         }
+
+        # Remote API additional settings
+        if engine == "remote_api":
+            settings["remote_api_url"] = self.remote_api_url_entry.get_text().strip()
+            settings["remote_api_key"] = self.remote_api_key_entry.get_text().strip()
+            settings["remote_api_endpoint"] = self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+
+        return settings
 
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""
