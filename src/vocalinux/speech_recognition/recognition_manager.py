@@ -385,9 +385,70 @@ def _filter_non_speech(text: str) -> str:
         r"^\s*$",  # Whitespace only
     ]
 
+    # Common hallucination phrases that whisper.cpp outputs during silence
+    # These are typical YouTube-style phrases that appear in training data
+    HALLUCINATION_PHRASES = [
+        # YouTube outro phrases
+        "thank you for watching",
+        "thanks for watching",
+        "thanks for watching.",
+        "thank you for watching.",
+        "thanks for watching!",
+        "thank you for watching!",
+        # Closing phrases
+        "see you next time",
+        "see you next time!",
+        "see you later",
+        "see you later!",
+        "goodbye",
+        "good bye",
+        "bye",
+        "bye bye",
+        "bye-bye",
+        "so long",
+        "so long!",
+        "take care",
+        "take care!",
+        # Common filler phrases
+        "you",
+        "um",
+        "uh",
+        "yeah",
+        "okay",
+        "ok",
+        "sure",
+        "right",
+        "cool",
+        "alright",
+        "all right",
+        # YouTube-specific content
+        "please like and subscribe",
+        "please subscribe",
+        "subscribe",
+        "subscribe for more",
+        "click the link",
+        "check out my other videos",
+        "link in description",
+        "in the description",
+        "down below",
+        "comment below",
+        "bell",
+        "ding",
+        "music",
+        "laughter",
+        "applause",
+    ]
+
     for pattern in non_speech_patterns:
         if re.match(pattern, text, re.IGNORECASE):
             logger.debug(f"Filtered non-speech token: '{text}'")
+            return ""
+
+    # Filter hallucination phrases (whisper.cpp outputs these during silence)
+    text_lower = text.lower().strip()
+    for phrase in HALLUCINATION_PHRASES:
+        if text_lower == phrase.lower() or text_lower.startswith(phrase.lower() + " "):
+            logger.debug(f"Filtered hallucination phrase: '{text}' (matched: {phrase})")
             return ""
 
     # Check if text has enough actual speech content
