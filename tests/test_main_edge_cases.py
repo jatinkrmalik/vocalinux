@@ -87,6 +87,10 @@ class TestMainFunctionExtra:
         mock_single_instance = MagicMock()
         mock_single_instance.acquire_lock.return_value = False
 
+        mock_args = MagicMock()
+        mock_args.settings = False
+        mock_parse_args.return_value = mock_args
+
         with patch.dict(sys.modules, {"vocalinux.single_instance": mock_single_instance}):
             with pytest.raises(SystemExit) as exc_info:
                 main()
@@ -110,6 +114,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -173,6 +178,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -236,6 +242,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -300,6 +307,7 @@ class TestMainFunctionExtra:
         mock_args.engine = "vosk"
         mock_args.model = "medium"
         mock_args.language = "es"
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -365,6 +373,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -426,6 +435,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
