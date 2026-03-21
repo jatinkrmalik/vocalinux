@@ -109,8 +109,11 @@ class TestCheckDependencies(unittest.TestCase):
 
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         with patch("shutil.which", return_value=None):
-            with self.assertRaises(RuntimeError):
-                obj._check_dependencies()
+            with patch(
+                "vocalinux.text_injection.text_injector.is_ibus_available", return_value=False
+            ):
+                with self.assertRaises(RuntimeError):
+                    obj._check_dependencies()
 
 
 class TestInjectText(unittest.TestCase):

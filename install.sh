@@ -1152,7 +1152,7 @@ install_system_dependencies() {
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip wl-clipboard"
     local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-devel glslang xclip wl-clipboard"
     # Gentoo uses Portage and different package naming convention
-    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.8 pkgconf dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
+    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
     # Alpine Linux uses apk and has musl libc
     local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf wget curl unzip glslang vulkan-tools xclip wl-clipboard"
     # Void Linux uses xbps
@@ -1721,7 +1721,7 @@ mkdir -p "$ICON_DIR"
 
 # Check Python version
 check_python_version() {
-    local MIN_VERSION="3.8"
+    local MIN_VERSION="3.9"
     local PYTHON_CMD="python3"
 
     # Check if python3 command exists

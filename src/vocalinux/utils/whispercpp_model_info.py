@@ -8,7 +8,7 @@ for whisper.cpp, supporting Vulkan, CUDA, and CPU backends.
 import logging
 import os
 import subprocess
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class ComputeBackend:
     CPU = "cpu"
 
 
-def detect_vulkan_support() -> Tuple[bool, Optional[str]]:
+def detect_vulkan_support() -> tuple[bool, Optional[str]]:
     """
     Detect if Vulkan is available and get device info.
 
@@ -91,7 +91,7 @@ def detect_vulkan_support() -> Tuple[bool, Optional[str]]:
     return False, None
 
 
-def detect_cuda_support() -> Tuple[bool, Optional[str]]:
+def detect_cuda_support() -> tuple[bool, Optional[str]]:
     """
     Detect if NVIDIA CUDA is available and get device info.
 
@@ -119,7 +119,7 @@ def detect_cuda_support() -> Tuple[bool, Optional[str]]:
     return False, None
 
 
-def detect_compute_backend() -> Tuple[str, str]:
+def detect_compute_backend() -> tuple[str, str]:
     """
     Detect the best available compute backend.
 
@@ -177,7 +177,7 @@ def detect_cpu_info() -> str:
     return "CPU"
 
 
-def get_recommended_model() -> Tuple[str, str]:
+def get_recommended_model() -> tuple[str, str]:
     """
     Get the recommended whisper.cpp model based on system configuration.
 

@@ -11,7 +11,7 @@ const troubleshootingItems = [
     solutions: [
       "Ensure you ran the installer: curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash",
       "Check if the virtual environment is activated: source ~/.local/share/vocalinux/venv/bin/activate",
-      "Verify Python version (3.8+ required): python3 --version",
+      "Verify Python version (3.9+ required): python3 --version",
       "Try reinstalling: ./uninstall.sh && ./install.sh",
     ],
   },

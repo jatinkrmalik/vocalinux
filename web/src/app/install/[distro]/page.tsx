@@ -37,8 +37,8 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     intro:
       "This Ubuntu guide is tuned for practical desktop use: terminals, browsers, IDEs, office suites, and chat apps. Vocalinux runs locally so your voice data never leaves your machine.",
     prerequisites: [
-      "Ubuntu 22.04+ (or Ubuntu-based distro)",
-      "Python 3.8+",
+       "Ubuntu 22.04+ (or Ubuntu-based distro)",
+       "Python 3.9+",
       "Working microphone",
       "curl installed (sudo apt update && sudo apt install -y curl)",
     ],
@@ -68,8 +68,8 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     intro:
       "Fedora is an excellent match for Vocalinux thanks to current Python stacks and up-to-date system libraries. This guide focuses on reliable setup and minimal friction.",
     prerequisites: [
-      "Fedora Workstation 39+ (or Fedora-based distro)",
-      "Python 3.8+",
+       "Fedora Workstation 39+ (or Fedora-based distro)",
+       "Python 3.9+",
       "Working microphone",
       "curl installed (sudo dnf install -y curl)",
     ],
@@ -99,8 +99,8 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     intro:
       "Arch users usually care about control and performance. This guide keeps setup lean while preserving compatibility across rolling-release desktop environments.",
     prerequisites: [
-      "Arch Linux / Manjaro / EndeavourOS",
-      "Python 3.8+",
+       "Arch Linux / Manjaro / EndeavourOS",
+       "Python 3.9+",
       "Working microphone",
       "curl installed (sudo pacman -Sy --needed curl)",
     ],

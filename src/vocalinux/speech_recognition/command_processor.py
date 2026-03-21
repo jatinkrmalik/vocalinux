@@ -7,7 +7,6 @@ This module processes text commands from speech recognition, such as
 
 import logging
 import re
-from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +98,7 @@ class CommandProcessor:
         )
         self.format_cmd_regex = re.compile(format_cmd_pattern, re.IGNORECASE)
 
-    def process_text(self, text: str) -> Tuple[str, List[str]]:
+    def process_text(self, text: str) -> tuple[str, list[str]]:
         """
         Process text commands in the recognized text.
 

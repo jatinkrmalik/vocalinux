@@ -31,7 +31,7 @@ git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./ins
 | Requirement | Details |
 |-------------|---------|
 | **Operating System** | Ubuntu 22.04+ (recommended), Debian 11+, Fedora 38+, Arch Linux |
-| **Python** | 3.8 or newer |
+| **Python** | 3.9 or newer |
 | **Display Server** | X11 or Wayland |
 | **Hardware** | Microphone for speech input |
 | **Disk Space** | ~200MB (including whisper.cpp model) |

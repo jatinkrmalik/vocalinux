@@ -106,7 +106,6 @@ class TestImports:
         """Test that all types can be imported."""
         from vocalinux.common_types import (
             Callable,
-            List,
             Optional,
             Protocol,
             RecognitionState,
@@ -120,7 +119,6 @@ class TestImports:
                 SpeechRecognitionManagerProtocol,
                 TextInjectorProtocol,
                 Callable,
-                List,
                 Optional,
                 Protocol,
             ]
