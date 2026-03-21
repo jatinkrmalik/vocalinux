@@ -143,3 +143,47 @@ class TestResourceManagerLogging:
         result = manager._find_resources_dir()
         assert isinstance(result, str)
         assert len(result) > 0
+
+
+class TestResourceManagerCandidateSelection:
+    def test_choose_best_candidate_prefers_assets_over_empty_existing_dir(self):
+        from vocalinux.utils.resource_manager import ResourceManager
+
+        ResourceManager._instance = None
+        ResourceManager._resources_dir = None
+        manager = ResourceManager()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            empty_candidate = Path(tmp_dir) / "empty_resources"
+            full_candidate = Path(tmp_dir) / "full_resources"
+
+            empty_candidate.mkdir(parents=True, exist_ok=True)
+            (full_candidate / "icons" / "scalable").mkdir(parents=True, exist_ok=True)
+            (full_candidate / "sounds").mkdir(parents=True, exist_ok=True)
+
+            for icon in [
+                "vocalinux",
+                "vocalinux-microphone",
+                "vocalinux-microphone-off",
+                "vocalinux-microphone-process",
+            ]:
+                (full_candidate / "icons" / "scalable" / f"{icon}.svg").write_text("x")
+
+            for sound in ["start_recording", "stop_recording", "error"]:
+                (full_candidate / "sounds" / f"{sound}.wav").write_text("x")
+
+            choose_best_candidate = getattr(manager, "_choose_best_candidate")
+            chosen = choose_best_candidate([empty_candidate, full_candidate])
+            assert chosen == full_candidate
+
+    def test_candidate_score_returns_negative_for_missing_path(self):
+        from vocalinux.utils.resource_manager import ResourceManager
+
+        ResourceManager._instance = None
+        ResourceManager._resources_dir = None
+        manager = ResourceManager()
+
+        missing = Path("/tmp/this-path-should-not-exist-vocalinux-resource-manager")
+        candidate_score = getattr(manager, "_candidate_score")
+        score = candidate_score(missing)
+        assert score == -1

@@ -95,6 +95,11 @@ class TrayIndicator:
             "active": _resource_manager.get_icon_path(ACTIVE_ICON),
             "processing": _resource_manager.get_icon_path(PROCESSING_ICON),
         }
+        self.icon_names = {
+            "default": DEFAULT_ICON,
+            "active": ACTIVE_ICON,
+            "processing": PROCESSING_ICON,
+        }
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -186,6 +191,7 @@ class TrayIndicator:
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
             ICON_DIR,
         )
+        self.indicator.set_icon_theme_path(ICON_DIR)
 
         # Set the indicator status
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
@@ -324,19 +330,19 @@ class TrayIndicator:
             state: The current recognition state
         """
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon_full(self.icon_paths["default"], "Microphone off")
+            self.indicator.set_icon_full(self.icon_names["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon_full(self.icon_paths["active"], "Microphone on")
+            self.indicator.set_icon_full(self.icon_names["active"], "Microphone on")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon_full(self.icon_paths["processing"], "Processing speech")
+            self.indicator.set_icon_full(self.icon_names["processing"], "Processing speech")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon_full(self.icon_paths["default"], "Error")
+            self.indicator.set_icon_full(self.icon_names["default"], "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 

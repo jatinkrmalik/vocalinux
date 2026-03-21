@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional  # noqa: F401
+from typing import Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class ResourceManager:
     """
 
     _instance = None
-    _resources_dir = None
+    _resources_dir: Optional[str] = None
 
     def __new__(cls):
         """Singleton pattern to ensure only one instance exists."""
@@ -86,31 +86,71 @@ class ResourceManager:
                 f"Checking resources candidate: {candidate} (exists: {candidate.exists()})"
             )
 
-        # Return the first candidate that exists
-        for candidate in candidates:
-            if candidate.exists():
-                logger.info(f"Found resources directory: {candidate}")
-                return str(candidate)
+        best_candidate = self._choose_best_candidate(candidates)
+        if best_candidate is not None:
+            logger.info(f"Found resources directory: {best_candidate}")
+            return str(best_candidate)
 
         # If no candidate exists, default to the first one (with warning)
         default_path = str(candidates[0])
         logger.warning(f"Could not find resources directory, defaulting to: {default_path}")
         return default_path
 
+    def _candidate_score(self, candidate: Path) -> int:
+        if not candidate.exists():
+            return -1
+
+        expected_icons = [
+            "vocalinux",
+            "vocalinux-microphone",
+            "vocalinux-microphone-off",
+            "vocalinux-microphone-process",
+        ]
+        expected_sounds = ["start_recording", "stop_recording", "error"]
+
+        icon_score = sum(
+            (candidate / "icons" / "scalable" / f"{icon}.svg").exists() for icon in expected_icons
+        )
+        sound_score = sum(
+            (candidate / "sounds" / f"{sound}.wav").exists() for sound in expected_sounds
+        )
+
+        total_score = icon_score + sound_score
+        logger.debug(
+            "Resource candidate score: %s (icons=%s sounds=%s total=%s)",
+            candidate,
+            icon_score,
+            sound_score,
+            total_score,
+        )
+        return total_score
+
+    def _choose_best_candidate(self, candidates: list[Path]) -> Optional[Path]:
+        best_candidate: Optional[Path] = None
+        best_score = -1
+
+        for candidate in candidates:
+            score = self._candidate_score(candidate)
+            if score > best_score:
+                best_score = score
+                best_candidate = candidate
+
+        return best_candidate
+
     @property
     def resources_dir(self) -> str:
         """Get the resources directory path."""
-        return self._resources_dir
+        return cast(str, self._resources_dir)
 
     @property
     def icons_dir(self) -> str:
         """Get the icons directory path."""
-        return os.path.join(self._resources_dir, "icons", "scalable")
+        return os.path.join(self.resources_dir, "icons", "scalable")
 
     @property
     def sounds_dir(self) -> str:
         """Get the sounds directory path."""
-        return os.path.join(self._resources_dir, "sounds")
+        return os.path.join(self.resources_dir, "sounds")
 
     def get_icon_path(self, icon_name: str) -> str:
         """
@@ -148,8 +188,9 @@ class ResourceManager:
         Returns:
             Dictionary with validation results
         """
+        resources_dir = self.resources_dir
         results = {
-            "resources_dir_exists": os.path.exists(self._resources_dir),
+            "resources_dir_exists": os.path.exists(resources_dir),
             "icons_dir_exists": os.path.exists(self.icons_dir),
             "sounds_dir_exists": os.path.exists(self.sounds_dir),
             "missing_icons": [],
