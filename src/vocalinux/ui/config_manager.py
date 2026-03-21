@@ -7,7 +7,7 @@ This module handles loading, saving, and accessing user preferences.
 import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
 
-    def _check_needs_migration(self, user_config: Dict) -> bool:
+    def _check_needs_migration(self, user_config: dict) -> bool:
         """Check if the user config needs migration to add per-engine model sizes."""
         sr_config = user_config.get("speech_recognition", {})
         # Need migration if we have model_size but not the per-engine keys
@@ -117,7 +117,7 @@ class ConfigManager:
             "vosk_model_size" not in sr_config or "whisper_model_size" not in sr_config
         )
 
-    def _migrate_config(self, user_config: Dict):
+    def _migrate_config(self, user_config: dict):
         """Migrate old config formats to the current format."""
         sr_config = self.config.get("speech_recognition", {})
         user_sr_config = user_config.get("speech_recognition", {})
@@ -210,7 +210,7 @@ class ConfigManager:
             logger.error(f"Failed to set config value: {e}")
             return False
 
-    def get_settings(self) -> Dict[str, Any]:
+    def get_settings(self) -> dict[str, Any]:
         """Get the entire configuration dictionary."""
         return self.config
 
@@ -267,7 +267,7 @@ class ConfigManager:
 
         return enabled
 
-    def update_speech_recognition_settings(self, settings: Dict[str, Any]):
+    def update_speech_recognition_settings(self, settings: dict[str, Any]):
         """Update multiple speech recognition settings at once."""
         if "speech_recognition" not in self.config:
             self.config["speech_recognition"] = {}
@@ -293,7 +293,7 @@ class ConfigManager:
             self.config["sound_effects"] = {}
         self.config["sound_effects"]["enabled"] = enabled
 
-    def _update_dict_recursive(self, target: Dict, source: Dict):
+    def _update_dict_recursive(self, target: dict, source: dict):
         """
         Update a dictionary recursively.
 

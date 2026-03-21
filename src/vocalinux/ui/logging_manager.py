@@ -9,7 +9,7 @@ import logging
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,8 @@ class LoggingManager:
             max_records: Maximum number of log records to keep in memory
         """
         self.max_records = max_records
-        self.log_records: List[LogRecord] = []
-        self.log_callbacks: List[Callable[[LogRecord], None]] = []
+        self.log_records: list[LogRecord] = []
+        self.log_callbacks: list[Callable[[LogRecord], None]] = []
         self.lock = threading.Lock()
 
         # Create logs directory
@@ -130,7 +130,7 @@ class LoggingManager:
         level_filter: Optional[str] = None,
         module_filter: Optional[str] = None,
         last_n: Optional[int] = None,
-    ) -> List[LogRecord]:
+    ) -> list[LogRecord]:
         """
         Get log records with optional filtering.
 

@@ -11,7 +11,7 @@ import os
 import select
 import threading
 import time
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 # Try to import evdev
 try:
@@ -41,7 +41,7 @@ KEY_LEFTMETA = 125  # Super/Windows key
 KEY_RIGHTMETA = 126
 
 # Map modifier key names to evdev key codes
-MODIFIER_KEY_CODES: Dict[str, Set[int]] = {
+MODIFIER_KEY_CODES: dict[str, set[int]] = {
     "ctrl": {KEY_LEFTCTRL, KEY_RIGHTCTRL},
     "alt": {KEY_LEFTALT, KEY_RIGHTALT},
     "shift": {KEY_LEFTSHIFT, KEY_RIGHTSHIFT},
@@ -55,7 +55,7 @@ MODIFIER_KEY_CODES: Dict[str, Set[int]] = {
 }
 
 
-def find_keyboard_devices() -> List[str]:
+def find_keyboard_devices() -> list[str]:
     """
     Find all keyboard input devices.
 
@@ -149,22 +149,22 @@ class EvdevKeyboardBackend(KeyboardBackend):
             mode: The shortcut mode ("toggle" or "push_to_talk")
         """
         super().__init__(shortcut, mode)
-        self.devices: List[InputDevice] = []
-        self.device_fds: List[int] = []
+        self.devices: list[InputDevice] = []
+        self.device_fds: list[int] = []
         self.running = False
         self.monitor_thread: Optional[threading.Thread] = None
 
         self.last_trigger_time = 0
         self.last_key_press_time = 0
         self.double_tap_threshold = 0.3  # seconds
-        self.key_pressed_devices: Set[int] = set()
+        self.key_pressed_devices: set[int] = set()
 
         self._devices_lock = threading.Lock()
 
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
 
-    def _get_target_key_codes(self) -> Set[int]:
+    def _get_target_key_codes(self) -> set[int]:
         """Get the evdev key codes for the configured modifier."""
         return MODIFIER_KEY_CODES.get(self._modifier_key, set())
 

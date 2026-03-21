@@ -803,11 +803,14 @@ class TestIBusEngineMainEntrypoint(unittest.TestCase):
         """Test --xml path prints engines XML and exits early."""
         from vocalinux.text_injection import ibus_engine
 
-        with patch.object(sys, "argv", ["ibus_engine.py", "--xml"]), patch.object(
-            ibus_engine, "_get_engines_xml", return_value="<engines></engines>"
-        ) as mock_get_xml, patch("builtins.print") as mock_print, patch.object(
-            ibus_engine.IBus, "init"
-        ) as mock_init:
+        with (
+            patch.object(sys, "argv", ["ibus_engine.py", "--xml"]),
+            patch.object(
+                ibus_engine, "_get_engines_xml", return_value="<engines></engines>"
+            ) as mock_get_xml,
+            patch("builtins.print") as mock_print,
+            patch.object(ibus_engine.IBus, "init") as mock_init,
+        ):
             result = ibus_engine.main()
 
         self.assertEqual(result, 0)
@@ -820,11 +823,14 @@ class TestIBusEngineMainEntrypoint(unittest.TestCase):
         from vocalinux.text_injection import ibus_engine
 
         mock_app = MagicMock()
-        with patch.object(sys, "argv", ["ibus_engine.py", "--ibus"]), patch.object(
-            ibus_engine, "IBUS_AVAILABLE", True
-        ), patch.object(ibus_engine.IBus, "init") as mock_init, patch.object(
-            ibus_engine, "VocalinuxEngineApplication", return_value=mock_app
-        ) as mock_app_cls:
+        with (
+            patch.object(sys, "argv", ["ibus_engine.py", "--ibus"]),
+            patch.object(ibus_engine, "IBUS_AVAILABLE", True),
+            patch.object(ibus_engine.IBus, "init") as mock_init,
+            patch.object(
+                ibus_engine, "VocalinuxEngineApplication", return_value=mock_app
+            ) as mock_app_cls,
+        ):
             result = ibus_engine.main()
 
         self.assertEqual(result, 0)

@@ -14,7 +14,7 @@ authors = [
 maintainers = [
     {name = "Jatin K Malik", email = "jatinkrmalik@gmail.com"}
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 keywords = [
     "voice", "dictation", "speech", "recognition",
     "linux", "accessibility", "voice-typing", "speech-to-text"
@@ -26,7 +26,6 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -99,7 +98,7 @@ version = {attr = "vocalinux.version.__version__"}
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312', 'py313']
+target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -157,7 +156,7 @@ exclude_lines = [
 show_missing = true
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true

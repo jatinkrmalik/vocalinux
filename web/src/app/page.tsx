@@ -858,7 +858,7 @@ export default function HomePage() {
                 </h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>• Ubuntu 22.04+ (or equivalent)</li>
-                  <li>• Python 3.8 or newer</li>
+                  <li>• Python 3.9 or newer</li>
                   <li>• 4GB RAM (8GB for large models)</li>
                   <li>• Microphone</li>
                   <li>• X11 or Wayland display server</li>
@@ -1134,7 +1134,7 @@ export default function HomePage() {
                 question: "What are the system requirements?",
                 answer: (
                   <>
-                    Minimum: 4GB RAM, Python 3.8+, ~200MB disk space. 8GB+ RAM recommended for larger Whisper models. The default whisper.cpp tiny model (~39MB) works great on modest hardware. GPU acceleration is available via Vulkan for AMD, Intel, and NVIDIA GPUs.{" "}
+                    Minimum: 4GB RAM, Python 3.9+, ~200MB disk space. 8GB+ RAM recommended for larger Whisper models. The default whisper.cpp tiny model (~39MB) works great on modest hardware. GPU acceleration is available via Vulkan for AMD, Intel, and NVIDIA GPUs.{" "}
                     <Link href="/install/" className="text-primary hover:underline">View full installation requirements</Link>.
                   </>
                 ),

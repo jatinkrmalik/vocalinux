@@ -112,7 +112,7 @@ sudo zypper install -y python3-gobject python3-gobject-cairo gtk3 \
 ### Gentoo
 ```bash
 sudo emerge dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 \
-  media-libs/portaudio dev-lang/python:3.8
+  media-libs/portaudio dev-lang/python:3.9
 ```
 
 **Note:** Gentoo compiles packages from source, which will take longer.

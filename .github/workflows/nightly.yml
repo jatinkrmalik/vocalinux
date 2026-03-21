@@ -175,7 +175,7 @@ jobs:
           | **Version** | ${{ steps.version.outputs.version }} |
           | **Base Version** | ${{ steps.version.outputs.base_version }} |
           | **Build Date** | ${{ steps.version.outputs.date }} |
-          | **Python** | 3.8+ |
+          | **Python** | 3.9+ |
           | **OS** | Linux (X11 & Wayland) |
 
           ---

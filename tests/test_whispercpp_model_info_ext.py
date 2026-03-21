@@ -261,9 +261,10 @@ class TestDetectCPUInfo(unittest.TestCase):
 
     def test_detect_cpu_info_fallback_to_nproc(self):
         """Test CPU detection falls back to nproc."""
-        with patch("builtins.open", create=True, side_effect=Exception("No /proc/cpuinfo")), patch(
-            "subprocess.run"
-        ) as mock_run:
+        with (
+            patch("builtins.open", create=True, side_effect=Exception("No /proc/cpuinfo")),
+            patch("subprocess.run") as mock_run,
+        ):
 
             mock_run.return_value = MagicMock(returncode=0, stdout="8\n")
 
@@ -275,8 +276,9 @@ class TestDetectCPUInfo(unittest.TestCase):
 
     def test_detect_cpu_info_default_fallback(self):
         """Test CPU detection returns default when all methods fail."""
-        with patch("builtins.open", create=True, side_effect=Exception()), patch(
-            "subprocess.run", side_effect=Exception()
+        with (
+            patch("builtins.open", create=True, side_effect=Exception()),
+            patch("subprocess.run", side_effect=Exception()),
         ):
 
             from vocalinux.utils.whispercpp_model_info import detect_cpu_info
@@ -299,11 +301,10 @@ class TestDetectComputeBackend(unittest.TestCase):
 
     def test_detect_compute_backend_prefers_vulkan(self):
         """Test that detect_compute_backend prefers Vulkan."""
-        with patch(
-            "vocalinux.utils.whispercpp_model_info.detect_vulkan_support"
-        ) as mock_vulkan, patch(
-            "vocalinux.utils.whispercpp_model_info.detect_cuda_support"
-        ) as mock_cuda:
+        with (
+            patch("vocalinux.utils.whispercpp_model_info.detect_vulkan_support") as mock_vulkan,
+            patch("vocalinux.utils.whispercpp_model_info.detect_cuda_support") as mock_cuda,
+        ):
 
             mock_vulkan.return_value = (True, "Intel Arc GPU")
             mock_cuda.return_value = (True, "NVIDIA RTX 3080 (10GB)")
@@ -319,11 +320,10 @@ class TestDetectComputeBackend(unittest.TestCase):
 
     def test_detect_compute_backend_falls_back_to_cuda(self):
         """Test that detect_compute_backend falls back to CUDA."""
-        with patch(
-            "vocalinux.utils.whispercpp_model_info.detect_vulkan_support"
-        ) as mock_vulkan, patch(
-            "vocalinux.utils.whispercpp_model_info.detect_cuda_support"
-        ) as mock_cuda:
+        with (
+            patch("vocalinux.utils.whispercpp_model_info.detect_vulkan_support") as mock_vulkan,
+            patch("vocalinux.utils.whispercpp_model_info.detect_cuda_support") as mock_cuda,
+        ):
 
             mock_vulkan.return_value = (False, None)
             mock_cuda.return_value = (True, "NVIDIA RTX 3080 (10GB)")
@@ -339,13 +339,11 @@ class TestDetectComputeBackend(unittest.TestCase):
 
     def test_detect_compute_backend_falls_back_to_cpu(self):
         """Test that detect_compute_backend falls back to CPU."""
-        with patch(
-            "vocalinux.utils.whispercpp_model_info.detect_vulkan_support"
-        ) as mock_vulkan, patch(
-            "vocalinux.utils.whispercpp_model_info.detect_cuda_support"
-        ) as mock_cuda, patch(
-            "vocalinux.utils.whispercpp_model_info.detect_cpu_info"
-        ) as mock_cpu:
+        with (
+            patch("vocalinux.utils.whispercpp_model_info.detect_vulkan_support") as mock_vulkan,
+            patch("vocalinux.utils.whispercpp_model_info.detect_cuda_support") as mock_cuda,
+            patch("vocalinux.utils.whispercpp_model_info.detect_cpu_info") as mock_cpu,
+        ):
 
             mock_vulkan.return_value = (False, None)
             mock_cuda.return_value = (False, None)

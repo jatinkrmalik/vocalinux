@@ -13,7 +13,7 @@ import queue
 import sys
 import threading
 import time
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
@@ -518,9 +518,9 @@ class SpeechRecognitionManager:
         self._voice_commands_preference = kwargs.get("voice_commands_enabled")
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
-        self.text_callbacks: List[Callable[[str], None]] = []
-        self.state_callbacks: List[Callable[[RecognitionState], None]] = []
-        self.action_callbacks: List[Callable[[str], None]] = []
+        self.text_callbacks: list[Callable[[str], None]] = []
+        self.state_callbacks: list[Callable[[RecognitionState], None]] = []
+        self.action_callbacks: list[Callable[[str], None]] = []
 
         # Download progress tracking
         self._download_progress_callback: Optional[Callable[[float, float, str], None]] = None
@@ -537,7 +537,7 @@ class SpeechRecognitionManager:
 
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
-        self._audio_level_callbacks: List[Callable[[float], None]] = []
+        self._audio_level_callbacks: list[Callable[[float], None]] = []
 
         # Recording control flags
         self.should_record = False
@@ -699,7 +699,7 @@ class SpeechRecognitionManager:
             self.state = RecognitionState.ERROR
             raise
 
-    def _transcribe_with_whisper(self, audio_buffer: List[bytes]) -> str:
+    def _transcribe_with_whisper(self, audio_buffer: list[bytes]) -> str:
         """
         Transcribe audio buffer using Whisper.
 
@@ -911,7 +911,7 @@ class SpeechRecognitionManager:
             self.state = RecognitionState.ERROR
             raise
 
-    def _transcribe_with_whispercpp(self, audio_buffer: List[bytes]) -> str:
+    def _transcribe_with_whispercpp(self, audio_buffer: list[bytes]) -> str:
         """
         Transcribe audio buffer using whisper.cpp.
 
@@ -1397,11 +1397,11 @@ class SpeechRecognitionManager:
         except ValueError:
             logger.warning(f"Callback {callback} not found in text_callbacks.")
 
-    def get_text_callbacks(self) -> List[Callable[[str], None]]:
+    def get_text_callbacks(self) -> list[Callable[[str], None]]:
         """Get a copy of the current text callbacks list."""
         return list(self.text_callbacks)
 
-    def set_text_callbacks(self, callbacks: List[Callable[[str], None]]):
+    def set_text_callbacks(self, callbacks: list[Callable[[str], None]]):
         """Set the text callbacks list (used for temporarily replacing callbacks)."""
         self.text_callbacks = list(callbacks)
 
@@ -1829,7 +1829,7 @@ class SpeechRecognitionManager:
 
         self._process_audio_buffer(audio_buffer)
 
-    def _process_audio_buffer(self, audio_buffer: List[bytes]):
+    def _process_audio_buffer(self, audio_buffer: list[bytes]):
         """Process an immutable audio segment for transcription and commands."""
         if not audio_buffer:
             return
@@ -1959,7 +1959,7 @@ class SpeechRecognitionManager:
                 self._update_state(RecognitionState.LISTENING)
         logger.info("DEBUG: _perform_recognition thread exiting")
 
-    def _enqueue_audio_segment(self, audio_buffer: List[bytes]):
+    def _enqueue_audio_segment(self, audio_buffer: list[bytes]):
         """Queue an audio segment for asynchronous transcription."""
         segment = audio_buffer.copy()
         if not segment:

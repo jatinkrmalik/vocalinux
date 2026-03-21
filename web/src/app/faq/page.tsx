@@ -20,7 +20,7 @@ const faqCategories = [
       },
       {
         q: "What are the system requirements?",
-        a: "You need Python 3.8+, a working microphone, and about 500MB of disk space. For GPU acceleration with whisper.cpp, you need Vulkan support (AMD, Intel, or NVIDIA).",
+        a: "You need Python 3.9+, a working microphone, and about 500MB of disk space. For GPU acceleration with whisper.cpp, you need Vulkan support (AMD, Intel, or NVIDIA).",
       },
     ],
   },
