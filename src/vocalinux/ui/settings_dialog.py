@@ -95,6 +95,7 @@ def _engine_from_display(display_name: str) -> str:
             return engine_id
     return display_name.lower()
 
+
 # Whisper model metadata for display
 WHISPER_MODEL_INFO = {
     "tiny": {"size_mb": 75, "desc": "Fastest, lowest accuracy", "params": "39M"},
@@ -1122,9 +1123,7 @@ class SettingsDialog(Gtk.Dialog):
         self.remote_api_key_entry = Gtk.Entry()
         self.remote_api_key_entry.set_placeholder_text("(optional)")
         self.remote_api_key_entry.set_visibility(False)  # Password hidden mode
-        self.remote_api_key_entry.set_tooltip_text(
-            "API Key for authentication (optional)"
-        )
+        self.remote_api_key_entry.set_tooltip_text("API Key for authentication (optional)")
         self.remote_api_key_entry.set_size_request(280, -1)
         remote_key_row = PreferenceRow(
             title="API Key",
@@ -1136,8 +1135,12 @@ class SettingsDialog(Gtk.Dialog):
         # API Format / Endpoint Combo
         self.remote_api_endpoint_combo = Gtk.ComboBoxText()
         self.remote_api_endpoint_combo.set_size_request(280, -1)
-        self.remote_api_endpoint_combo.set_tooltip_text("Select the API format of the remote server (API Endpoint Format)")
-        self.remote_api_endpoint_combo.append("/v1/audio/transcriptions", "OpenAI (/v1/audio/transcriptions)")
+        self.remote_api_endpoint_combo.set_tooltip_text(
+            "Select the API format of the remote server (API Endpoint Format)"
+        )
+        self.remote_api_endpoint_combo.append(
+            "/v1/audio/transcriptions", "OpenAI (/v1/audio/transcriptions)"
+        )
         self.remote_api_endpoint_combo.append("/inference", "Whisper.cpp (/inference)")
         _prevent_scroll_on_hover(self.remote_api_endpoint_combo)
         remote_endpoint_row = PreferenceRow(
@@ -1213,7 +1216,9 @@ class SettingsDialog(Gtk.Dialog):
         # Load saved remote API settings
         saved_url = self.config_manager.get("speech_recognition", "remote_api_url", "")
         saved_key = self.config_manager.get("speech_recognition", "remote_api_key", "")
-        saved_endpoint = self.config_manager.get("speech_recognition", "remote_api_endpoint", "/v1/audio/transcriptions")
+        saved_endpoint = self.config_manager.get(
+            "speech_recognition", "remote_api_endpoint", "/v1/audio/transcriptions"
+        )
         if saved_url:
             self.remote_api_url_entry.set_text(saved_url)
         if saved_key:
@@ -1277,8 +1282,10 @@ class SettingsDialog(Gtk.Dialog):
 
                 # Determine server type
                 server_info = ""
-                endpoint = self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
-                
+                endpoint = (
+                    self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+                )
+
                 try:
                     if endpoint == "/v1/audio/transcriptions":
                         # Try OpenAI endpoint
@@ -2174,7 +2181,9 @@ class SettingsDialog(Gtk.Dialog):
         if engine == "remote_api":
             settings["remote_api_url"] = self.remote_api_url_entry.get_text().strip()
             settings["remote_api_key"] = self.remote_api_key_entry.get_text().strip()
-            settings["remote_api_endpoint"] = self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+            settings["remote_api_endpoint"] = (
+                self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+            )
 
         return settings
 

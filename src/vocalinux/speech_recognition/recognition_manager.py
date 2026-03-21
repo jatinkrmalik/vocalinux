@@ -1013,9 +1013,7 @@ class SpeechRecognitionManager:
         Verify URL settings and try connection test. No need to load local model.
         """
         if not self.remote_api_url:
-            logger.warning(
-                "Remote API URL not set. Please enter the server URL in settings."
-            )
+            logger.warning("Remote API URL not set. Please enter the server URL in settings.")
             self._model_initialized = False
             return
 
@@ -1034,9 +1032,7 @@ class SpeechRecognitionManager:
                 headers["Authorization"] = f"Bearer {self.remote_api_key}"
 
             response = requests.get(test_url, headers=headers, timeout=5)
-            logger.info(
-                f"Remote server connection test successful (status={response.status_code})"
-            )
+            logger.info(f"Remote server connection test successful (status={response.status_code})")
         except Exception as e:
             logger.warning(
                 f"Remote server connection test failed: {e}。"
@@ -1144,9 +1140,7 @@ class SpeechRecognitionManager:
                 if audio_buffer
                 else "empty audio buffer"
             )
-            logger.error(
-                f"Remote API transcription error: {e} ({audio_info})", exc_info=True
-            )
+            logger.error(f"Remote API transcription error: {e} ({audio_info})", exc_info=True)
             return ""
 
     def _try_openai_api(self, wav_bytes: bytes, lang, headers: dict):
@@ -1170,14 +1164,10 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = requests.post(
-                url, headers=headers, files=files, data=data, timeout=30
-            )
+            response = requests.post(url, headers=headers, files=files, data=data, timeout=30)
 
             if response.status_code == 404:
-                logger.debug(
-                    "OpenAI API endpoint does not exist, try other formats"
-                )
+                logger.debug("OpenAI API endpoint does not exist, try other formats")
                 return None
 
             response.raise_for_status()
@@ -1218,14 +1208,10 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = requests.post(
-                url, headers=headers, files=files, data=data, timeout=30
-            )
+            response = requests.post(url, headers=headers, files=files, data=data, timeout=30)
 
             if response.status_code == 404:
-                logger.debug(
-                    "whisper.cpp server endpoint does not exist"
-                )
+                logger.debug("whisper.cpp server endpoint does not exist")
                 return None
 
             response.raise_for_status()
