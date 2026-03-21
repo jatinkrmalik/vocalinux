@@ -21,17 +21,22 @@ class TestAutostartManager(unittest.TestCase):
         self.assertEqual(command, "/usr/bin/vocalinux --start-minimized")
 
     def test_get_exec_command_falls_back_to_python_module(self):
-        with patch("vocalinux.ui.autostart_manager.shutil.which", return_value=None), patch(
-            "vocalinux.ui.autostart_manager.sys.executable", "/usr/bin/python3"
-        ), patch("vocalinux.ui.autostart_manager.sys.frozen", new=False, create=True):
+        with (
+            patch("vocalinux.ui.autostart_manager.shutil.which", return_value=None),
+            patch("vocalinux.ui.autostart_manager.sys.executable", "/usr/bin/python3"),
+            patch("vocalinux.ui.autostart_manager.sys.frozen", new=False, create=True),
+        ):
             command = autostart_manager.get_exec_command()
         self.assertEqual(command, "/usr/bin/python3 -m vocalinux.main --start-minimized")
 
     def test_enable_disable_autostart_creates_and_removes_entry(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("os.environ", {"XDG_CONFIG_HOME": tmp_dir}, clear=False), patch(
-                "vocalinux.ui.autostart_manager.shutil.which",
-                return_value="/usr/bin/vocalinux",
+            with (
+                patch.dict("os.environ", {"XDG_CONFIG_HOME": tmp_dir}, clear=False),
+                patch(
+                    "vocalinux.ui.autostart_manager.shutil.which",
+                    return_value="/usr/bin/vocalinux",
+                ),
             ):
                 enabled = autostart_manager.enable_autostart()
                 self.assertTrue(enabled)

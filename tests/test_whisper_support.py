@@ -90,10 +90,14 @@ class TestWhisperSupport:
         whisper_mock.load_model.return_value = model_mock
 
         # Patch modules and mock the download method to avoid network/file operations
-        with patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}), patch(
-            "vocalinux.speech_recognition.recognition_manager."
-            "SpeechRecognitionManager._download_whisper_model"
-        ) as _mock_download, patch("os.path.exists", return_value=True):
+        with (
+            patch.dict(sys.modules, {"whisper": whisper_mock, "torch": torch_mock}),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager."
+                "SpeechRecognitionManager._download_whisper_model"
+            ) as _mock_download,
+            patch("os.path.exists", return_value=True),
+        ):
             from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
             # Create manager with Whisper engine and defer_download=False to trigger model loading
@@ -132,23 +136,31 @@ class TestWhisperSupport:
         ):
             from vocalinux.speech_recognition import recognition_manager as rm
 
-            with patch("os.makedirs"), patch("os.path.exists", return_value=True), patch(
-                "os.path.getsize", return_value=40 * 1024 * 1024
-            ), patch("multiprocessing.cpu_count", return_value=4), patch(
-                "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
-                return_value=("vulkan", "Intel GPU"),
-            ), patch(
-                "vocalinux.utils.whispercpp_model_info.get_backend_display_name",
-                return_value="Vulkan",
-            ), patch(
-                "vocalinux.speech_recognition.recognition_manager.get_model_path",
-                return_value="/tmp/mock-ggml-tiny.bin",
-            ), patch(
-                "vocalinux.speech_recognition.recognition_manager._show_notification"
-            ) as notify_mock, patch.dict(
-                os.environ,
-                {"GGML_VULKAN": "1", "GGML_CUDA": "1"},
-                clear=False,
+            with (
+                patch("os.makedirs"),
+                patch("os.path.exists", return_value=True),
+                patch("os.path.getsize", return_value=40 * 1024 * 1024),
+                patch("multiprocessing.cpu_count", return_value=4),
+                patch(
+                    "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
+                    return_value=("vulkan", "Intel GPU"),
+                ),
+                patch(
+                    "vocalinux.utils.whispercpp_model_info.get_backend_display_name",
+                    return_value="Vulkan",
+                ),
+                patch(
+                    "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                    return_value="/tmp/mock-ggml-tiny.bin",
+                ),
+                patch(
+                    "vocalinux.speech_recognition.recognition_manager._show_notification"
+                ) as notify_mock,
+                patch.dict(
+                    os.environ,
+                    {"GGML_VULKAN": "1", "GGML_CUDA": "1"},
+                    clear=False,
+                ),
             ):
                 manager = rm.SpeechRecognitionManager(
                     engine="whisper_cpp", model_size="tiny", defer_download=False

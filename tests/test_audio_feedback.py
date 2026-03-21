@@ -175,8 +175,9 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
-            audio_feedback, "_get_audio_player", return_value=(None, [])
+        with (
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.object(audio_feedback, "_get_audio_player", return_value=(None, [])),
         ):
             # Call the function
             result = audio_feedback._play_sound_file("test.wav")
@@ -189,11 +190,15 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
-            audio_feedback,
-            "_get_audio_player",
-            return_value=("paplay", ["wav"]),
-        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
+        with (
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.object(
+                audio_feedback,
+                "_get_audio_player",
+                return_value=("paplay", ["wav"]),
+            ),
+            patch.object(audio_feedback.subprocess, "Popen") as mock_popen,
+        ):
             # Call the function
             result = audio_feedback._play_sound_file("test.wav")
 
@@ -209,11 +214,15 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
-            audio_feedback,
-            "_get_audio_player",
-            return_value=("aplay", ["wav"]),
-        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
+        with (
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.object(
+                audio_feedback,
+                "_get_audio_player",
+                return_value=("aplay", ["wav"]),
+            ),
+            patch.object(audio_feedback.subprocess, "Popen") as mock_popen,
+        ):
             # Call the function
             result = audio_feedback._play_sound_file("test.wav")
 
@@ -230,11 +239,15 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
-            audio_feedback,
-            "_get_audio_player",
-            return_value=("mplayer", ["wav"]),
-        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
+        with (
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.object(
+                audio_feedback,
+                "_get_audio_player",
+                return_value=("mplayer", ["wav"]),
+            ),
+            patch.object(audio_feedback.subprocess, "Popen") as mock_popen,
+        ):
             # Call the function
             result = audio_feedback._play_sound_file("test.wav")
 
@@ -251,9 +264,11 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
-            audio_feedback, "_get_audio_player", return_value=("play", ["wav"])
-        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
+        with (
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.object(audio_feedback, "_get_audio_player", return_value=("play", ["wav"])),
+            patch.object(audio_feedback.subprocess, "Popen") as mock_popen,
+        ):
             # Call the function
             result = audio_feedback._play_sound_file("test.wav")
 
@@ -270,14 +285,18 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
-            audio_feedback,
-            "_get_audio_player",
-            return_value=("paplay", ["wav"]),
-        ), patch.object(
-            audio_feedback.subprocess,
-            "Popen",
-            side_effect=Exception("Mock error"),
+        with (
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.object(
+                audio_feedback,
+                "_get_audio_player",
+                return_value=("paplay", ["wav"]),
+            ),
+            patch.object(
+                audio_feedback.subprocess,
+                "Popen",
+                side_effect=Exception("Mock error"),
+            ),
         ):
             # Call the function
             result = audio_feedback._play_sound_file("test.wav")
@@ -326,11 +345,15 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.os.path, "exists", return_value=True), patch.object(
-            audio_feedback,
-            "_get_audio_player",
-            return_value=("ci_test_player", ["wav"]),
-        ), patch.object(audio_feedback.subprocess, "Popen") as mock_popen:
+        with (
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.object(
+                audio_feedback,
+                "_get_audio_player",
+                return_value=("ci_test_player", ["wav"]),
+            ),
+            patch.object(audio_feedback.subprocess, "Popen") as mock_popen,
+        ):
             # Call the function
             result = audio_feedback._play_sound_file("test.wav")
 
@@ -346,9 +369,11 @@ class TestAudioFeedback(unittest.TestCase):
         # Import the module first
         import vocalinux.ui.audio_feedback as audio_feedback
 
-        with patch.object(audio_feedback.shutil, "which", return_value=None), patch.object(
-            audio_feedback.os.path, "exists", return_value=True
-        ), patch.dict("os.environ", {"GITHUB_ACTIONS": "true"}):
+        with (
+            patch.object(audio_feedback.shutil, "which", return_value=None),
+            patch.object(audio_feedback.os.path, "exists", return_value=True),
+            patch.dict("os.environ", {"GITHUB_ACTIONS": "true"}),
+        ):
             # First verify _get_audio_player returns None
             player, formats = audio_feedback._get_audio_player()
             self.assertIsNone(player)
