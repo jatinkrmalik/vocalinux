@@ -1043,7 +1043,7 @@ class SpeechRecognitionManager:
         self._model_initialized = True
         logger.info("Remote API engine setup complete.")
 
-    def _transcribe_with_remote_api(self, audio_buffer: List[bytes]) -> str:
+    def _transcribe_with_remote_api(self, audio_buffer: list[bytes]) -> str:
         """Transcribe audio via remote API.
 
         Package audio buffer into WAV format and send to remote server via HTTP POST.
