@@ -160,6 +160,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.key_pressed_devices: set[int] = set()
 
         self._devices_lock = threading.Lock()
+        self._dropped_devices: set[int] = set()  # fds with SYN_DROPPED pending
 
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
@@ -247,6 +248,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.devices = []
         self.device_fds = []
         self.key_pressed_devices = set()
+        self._dropped_devices = set()
 
         for device_path in device_paths:
             try:
@@ -321,6 +323,22 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
                         # Read events from this device
                         for event in device.read():
+                            if event.type == ecodes.EV_SYN:
+                                if event.code == ecodes.SYN_DROPPED:
+                                    # Kernel buffer overflowed — discard until SYN_REPORT
+                                    self._dropped_devices.add(fd)
+                                    logger.warning(
+                                        f"SYN_DROPPED on {device.name} (fd={fd}), "
+                                        "resetting key state"
+                                    )
+                                elif event.code == ecodes.SYN_REPORT:
+                                    if fd in self._dropped_devices:
+                                        # End of dropped sequence — clear stale state
+                                        self._dropped_devices.discard(fd)
+                                        self.key_pressed_devices.discard(id(device))
+                                continue
+                            if fd in self._dropped_devices:
+                                continue
                             if event.type == ecodes.EV_KEY:
                                 self._handle_key_event(event, device)
 
@@ -343,6 +361,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                         if fd in self.device_fds:
                             with self._devices_lock:
                                 self.device_fds.remove(fd)
+                        self._dropped_devices.discard(fd)
                         continue
 
             except (OSError, ValueError) as e:
