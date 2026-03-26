@@ -1017,7 +1017,6 @@ class SpeechRecognitionManager:
             self._model_initialized = False
             return
 
-        # 驗證 URL 協議格式
         if not self.remote_api_url.startswith(("http://", "https://")):
             logger.error(
                 f"Remote API URL must start with http:// or https://, "
