@@ -193,7 +193,9 @@ def main():
 
             try:
                 _os.kill(running_pid, signal.SIGUSR1)
-                logger.info(f"Sent SIGUSR1 to running Vocalinux instance (PID {running_pid}) to open settings")
+                logger.info(
+                    f"Sent SIGUSR1 to running Vocalinux instance (PID {running_pid}) to open settings"
+                )
                 sys.exit(0)
             except OSError as e:
                 logger.warning(f"Failed to signal running instance: {e}")
@@ -259,10 +261,6 @@ def main():
             logger.debug("IBus daemon started for text injection")
     except Exception as e:
         logger.debug(f"Could not start IBus daemon: {e}")
-
-    config_manager = ConfigManager()
-    initialize_logging()
-    logger.info("Logging system initialized")
 
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})

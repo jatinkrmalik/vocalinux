@@ -50,8 +50,18 @@ SHORTCUT_DISPLAY_NAMES = {
 # Grouping for UI display: maps group label -> list of shortcut IDs
 SHORTCUT_GROUPS = {
     "Either Side": ["ctrl+ctrl", "alt+alt", "shift+shift", "super+super"],
-    "Left Side": ["left_ctrl+left_ctrl", "left_alt+left_alt", "left_shift+left_shift", "left_super+left_super"],
-    "Right Side": ["right_ctrl+right_ctrl", "right_alt+right_alt", "right_shift+right_shift", "right_super+right_super"],
+    "Left Side": [
+        "left_ctrl+left_ctrl",
+        "left_alt+left_alt",
+        "left_shift+left_shift",
+        "left_super+left_super",
+    ],
+    "Right Side": [
+        "right_ctrl+right_ctrl",
+        "right_alt+right_alt",
+        "right_shift+right_shift",
+        "right_super+right_super",
+    ],
 }
 
 # Mode-specific display names (format: {shortcut: {mode: display_name}})
