@@ -1017,6 +1017,15 @@ class SpeechRecognitionManager:
             self._model_initialized = False
             return
 
+        # 驗證 URL 協議格式
+        if not self.remote_api_url.startswith(("http://", "https://")):
+            logger.error(
+                f"Remote API URL must start with http:// or https://, "
+                f"got: '{self.remote_api_url}'"
+            )
+            self._model_initialized = False
+            return
+
         # Clean trailing slash from URL
         self.remote_api_url = self.remote_api_url.rstrip("/")
 
@@ -1032,13 +1041,18 @@ class SpeechRecognitionManager:
                 headers["Authorization"] = f"Bearer {self.remote_api_key}"
 
             response = requests.get(test_url, headers=headers, timeout=5)
-            logger.info(f"Remote server connection test successful (status={response.status_code})")
+            if response.ok:
+                logger.info(
+                    f"Remote server connection test successful (status={response.status_code})"
+                )
+            else:
+                logger.warning(
+                    f"Remote server connection test returned non-success status: "
+                    f"{response.status_code}. Will try again during recognition."
+                )
         except Exception as e:
             logger.warning(
-            logger.warning(
                 f"Remote server connection test failed: {e}. "
-                "Will try to connect again during recognition."
-            )
                 "Will try to connect again during recognition."
             )
 

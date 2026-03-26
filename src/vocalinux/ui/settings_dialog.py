@@ -1217,7 +1217,7 @@ class SettingsDialog(Gtk.Dialog):
         saved_url = self.config_manager.get("speech_recognition", "remote_api_url", "")
         saved_key = self.config_manager.get("speech_recognition", "remote_api_key", "")
         saved_endpoint = self.config_manager.get(
-            "speech_recognition", "remote_api_endpoint", "/v1/audio/transcriptions"
+            "speech_recognition", "remote_api_endpoint", "/inference"
         )
         if saved_url:
             self.remote_api_url_entry.set_text(saved_url)
@@ -1240,7 +1240,7 @@ class SettingsDialog(Gtk.Dialog):
 
         url = self.remote_api_url_entry.get_text().strip()
         key = self.remote_api_key_entry.get_text().strip()
-        endpoint = self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+        endpoint = self.remote_api_endpoint_combo.get_active_id() or "/inference"
 
         # Save settings
         self.config_manager.set("speech_recognition", "remote_api_url", url)
@@ -1266,12 +1266,14 @@ class SettingsDialog(Gtk.Dialog):
         self.remote_test_btn.set_label("Testing...")
         self.remote_status_label.set_markup("<i>Connecting...</i>")
 
-        def test_connection():
+        key = self.remote_api_key_entry.get_text().strip()
+        endpoint = self.remote_api_endpoint_combo.get_active_id() or "/inference"
+
+        def test_connection(url=url, key=key, endpoint=endpoint):
             try:
                 import requests
 
                 headers = {}
-                key = self.remote_api_key_entry.get_text().strip()
                 if key:
                     headers["Authorization"] = f"Bearer {key}"
 
@@ -1282,9 +1284,6 @@ class SettingsDialog(Gtk.Dialog):
 
                 # Determine server type
                 server_info = ""
-                endpoint = (
-                    self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
-                )
 
                 try:
                     if endpoint == "/v1/audio/transcriptions":
@@ -2182,7 +2181,7 @@ class SettingsDialog(Gtk.Dialog):
             settings["remote_api_url"] = self.remote_api_url_entry.get_text().strip()
             settings["remote_api_key"] = self.remote_api_key_entry.get_text().strip()
             settings["remote_api_endpoint"] = (
-                self.remote_api_endpoint_combo.get_active_id() or "/v1/audio/transcriptions"
+                self.remote_api_endpoint_combo.get_active_id() or "/inference"
             )
 
         return settings
