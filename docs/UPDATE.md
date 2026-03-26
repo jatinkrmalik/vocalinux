@@ -2,6 +2,42 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.10.0-beta
+
+### 🚀 Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **⌨️ Keyboard Robustness** | Better modifier alias handling across layouts and evdev `SYN_DROPPED` recovery |
+| **🎙️ Audio Compatibility** | Audio channel probing now validates sample-rate support per device |
+| **🖥️ IBus + Tray Stability** | IBus activation is more reliable and tray icon refresh is more consistent |
+| **🧪 Testing & CI Upgrades** | Coverage increased to 80%+, with modernized Node 24 CI workflows |
+
+### ✨ New Features
+
+- **IBus registration improvements** — Text injection activation now uses `register_component`
+- **Expanded IBus test coverage** — Added launch-mode and main-entrypoint test paths
+- **Python baseline update** — Minimum supported Python version is now 3.9+
+
+### 🐛 Bug Fixes
+
+- **#342**: Generalize pynput modifier alias matching across layouts
+- **#341**: Probe audio channels using device-supported sample rates
+- **#339**: Handle evdev `SYN_DROPPED` to prevent stale modifier state
+- **#333**: Force window decorations in settings dialog
+- **#330**: Use icon names for AppIndicator tray updates
+- **#304**: Use `register_component` for IBus engine activation
+
+### 🔧 Improvements
+
+- Installer fallback now resolves latest tag through GitHub API and better handles piped shell execution
+- CI now uses Node.js 24 for website deployment and path-based filtering to skip unnecessary workflows
+- Removed stale `setup.py` and legacy `build-website.sh`
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.10.0-beta).
+
+---
+
 ## What's New in v0.9.0-beta
 
 ### 🚀 Highlights
@@ -93,7 +129,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.9.0-beta
+git checkout v0.10.0-beta
 ./install.sh
 ```
 
