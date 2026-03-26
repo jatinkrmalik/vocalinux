@@ -328,6 +328,7 @@ git push origin v0.5.1-beta
 | 0.7.0-beta | 2026 | Beta | Autostart, tabbed settings, Intel GPU support, single instance |
 | 0.8.0-beta | 2026-03-01 | Beta | Push-to-talk mode, optional voice commands, input/audio compatibility fixes |
 | 0.9.0-beta | 2026-03-14 | Beta | Left/right modifier keys, sound effects toggle, Wayland clipboard fallback, leading-space fix |
+| 0.10.0-beta | 2026-03-25 | Beta | Keyboard/audio reliability hardening, IBus/tray stability fixes, CI + test coverage improvements |
 
 ## Questions?
 
