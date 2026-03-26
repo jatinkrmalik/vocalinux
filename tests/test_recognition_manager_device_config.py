@@ -86,6 +86,84 @@ class TestAudioDeviceDetection(unittest.TestCase):
             channels = _get_supported_channels(mock_audio, None)
             assert channels == 1
 
+    def test_get_supported_channels_48khz_only_device(self):
+        """Test channel detection on 48kHz-only pro audio devices (Issue #340).
+
+        Professional audio interfaces (MUPRO, Vocaster, etc.) only support 48kHz
+        and reject 16kHz probes with misleading "Invalid number of channels" error.
+        The fix should use the device's defaultSampleRate for channel probing.
+        """
+        mock_audio = MagicMock()
+        mock_stream = MagicMock()
+
+        def open_side_effect(**kwargs):
+            rate = kwargs.get("rate")
+            channels = kwargs.get("channels")
+
+            # Simulate 48kHz-only device: 16kHz fails, 48kHz succeeds
+            if rate == 16000:
+                raise IOError("[Errno -9998] Invalid number of channels")
+            elif rate == 48000 and channels == 1:
+                return mock_stream
+            else:
+                raise IOError("Unsupported configuration")
+
+        mock_audio.open.side_effect = open_side_effect
+        mock_audio.get_device_info_by_index.return_value = {"defaultSampleRate": 48000}
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            channels = _get_supported_channels(mock_audio, 0)
+            assert channels == 1
+            # Verify that it tried using the device's default rate (48000)
+            assert any(
+                call[1].get("rate") == 48000 for call in mock_audio.open.call_args_list
+            ), "Should probe using device's defaultSampleRate (48000)"
+
+    def test_get_supported_channels_default_rate_fails_fallback(self):
+        """Test fallback when device's default rate fails during channel probing."""
+        mock_audio = MagicMock()
+        mock_stream = MagicMock()
+
+        def open_side_effect(**kwargs):
+            rate = kwargs.get("rate")
+            channels = kwargs.get("channels")
+
+            # Default rate (48000) fails, but 44100 works
+            if rate == 48000:
+                raise IOError("Device busy")
+            elif rate == 44100 and channels == 1:
+                return mock_stream
+            else:
+                raise IOError("Unsupported")
+
+        mock_audio.open.side_effect = open_side_effect
+        mock_audio.get_device_info_by_index.return_value = {"defaultSampleRate": 48000}
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            channels = _get_supported_channels(mock_audio, 0)
+            assert channels == 1
+
+    def test_get_supported_channels_no_device_info(self):
+        """Test channel probing when device info is unavailable."""
+        mock_audio = MagicMock()
+        mock_stream = MagicMock()
+
+        def open_side_effect(**kwargs):
+            # Works with 44100Hz mono
+            if kwargs.get("rate") == 44100 and kwargs.get("channels") == 1:
+                return mock_stream
+            raise IOError("Unsupported")
+
+        mock_audio.open.side_effect = open_side_effect
+        mock_audio.get_device_info_by_index.side_effect = IOError("Device not found")
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            channels = _get_supported_channels(mock_audio, 0)
+            assert channels == 1  # Should fallback through common rates and find 44100
+
     def test_get_supported_sample_rate_default_rate_works(self):
         """Test using device's default sample rate."""
         mock_audio = MagicMock()
