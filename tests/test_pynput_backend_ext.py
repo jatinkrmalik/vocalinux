@@ -16,10 +16,7 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
-from vocalinux.ui.keyboard_backends.pynput_backend import (
-    PYNPUT_AVAILABLE,
-    PynputKeyboardBackend,
-)
+from vocalinux.ui.keyboard_backends.pynput_backend import PYNPUT_AVAILABLE, PynputKeyboardBackend
 
 
 # Create mock pynput objects if pynput is not available
@@ -32,6 +29,7 @@ class MockKey:
     alt = MagicMock(name="alt")
     alt_l = MagicMock(name="alt_l")
     alt_r = MagicMock(name="alt_r")
+    alt_gr = MagicMock(name="alt_gr")
     shift = MagicMock(name="shift")
     shift_l = MagicMock(name="shift_l")
     shift_r = MagicMock(name="shift_r")
@@ -547,3 +545,33 @@ class TestPynputKeyboardBackendGetKeyVariants:
         for modifier in modifiers:
             result = backend._get_key_variants(modifier)
             assert isinstance(result, set)
+
+
+class TestPynputKeyboardBackendModifierMatching:
+    @patch("vocalinux.ui.keyboard_backends.pynput_backend.PYNPUT_AVAILABLE", True)
+    @patch("vocalinux.ui.keyboard_backends.pynput_backend.MODIFIER_KEY_VARIANTS")
+    def test_on_press_push_to_talk_triggers_with_alias_variant(self, mock_variants):
+        backend = PynputKeyboardBackend(shortcut="right_alt+right_alt", mode="push_to_talk")
+        callback = MagicMock()
+        backend.register_press_callback(callback)
+        mock_variants.get.return_value = {MockKey.alt_r, MockKey.alt_gr}
+
+        backend._on_press(MockKey.alt_gr)
+        time.sleep(0.1)
+
+        assert callback.called
+
+    @patch("vocalinux.ui.keyboard_backends.pynput_backend.PYNPUT_AVAILABLE", True)
+    @patch("vocalinux.ui.keyboard_backends.pynput_backend.MODIFIER_KEY_VARIANTS")
+    def test_on_press_generic_uses_normalized_fallback(self, mock_variants):
+        backend = PynputKeyboardBackend(shortcut="alt+alt", mode="push_to_talk")
+        callback = MagicMock()
+        backend.register_press_callback(callback)
+        mock_variants.get.return_value = set()
+        backend._get_target_key = MagicMock(return_value=MockKey.alt)
+        backend._normalize_modifier_key = MagicMock(return_value=MockKey.alt)
+
+        backend._on_press(MockKey.alt_r)
+        time.sleep(0.1)
+
+        assert callback.called
