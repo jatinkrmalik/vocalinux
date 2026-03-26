@@ -1035,7 +1035,10 @@ class SpeechRecognitionManager:
             logger.info(f"Remote server connection test successful (status={response.status_code})")
         except Exception as e:
             logger.warning(
-                f"Remote server connection test failed: {e}。"
+            logger.warning(
+                f"Remote server connection test failed: {e}. "
+                "Will try to connect again during recognition."
+            )
                 "Will try to connect again during recognition."
             )
 
