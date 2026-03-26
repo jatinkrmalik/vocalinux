@@ -214,11 +214,13 @@ class TestGetSupportedChannels:
         mock_audio = MagicMock()
         mock_stream = MagicMock()
 
-        # Mono fails, stereo succeeds
-        mock_audio.open.side_effect = [
-            IOError("-9998 invalid number of channels"),
-            mock_stream,
-        ]
+        def open_side_effect(**kwargs):
+            if kwargs.get("channels") == 1:
+                raise IOError("-9998 invalid number of channels")
+            return mock_stream
+
+        mock_audio.open.side_effect = open_side_effect
+        mock_audio.get_default_input_device_info.return_value = {"defaultSampleRate": 48000}
 
         with patch.dict(
             "sys.modules",
@@ -233,11 +235,8 @@ class TestGetSupportedChannels:
 
         mock_audio = MagicMock()
 
-        # Both fail
-        mock_audio.open.side_effect = [
-            IOError("Mono failed"),
-            IOError("Stereo failed"),
-        ]
+        mock_audio.open.side_effect = IOError("All channel/rate probes failed")
+        mock_audio.get_default_input_device_info.return_value = {"defaultSampleRate": 48000}
 
         with patch.dict(
             "sys.modules",

@@ -102,13 +102,17 @@ def get_audio_input_devices() -> list:
     return devices
 
 
-def _get_supported_channels(audio, device_index: int = None) -> int:
+def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
     """
     Detect the supported number of channels for the audio device.
 
     Some audio devices (particularly professional audio interfaces and certain
     onboard audio chips) only support specific channel configurations. This
     function tests mono (1) and stereo (2) to find a working configuration.
+
+    Pro-audio USB interfaces (MUPRO, Vocaster, etc.) often only support 48kHz
+    and will reject 16kHz probes. This function uses the device's default
+    sample rate first, then falls back to common rates.
 
     Args:
         audio: PyAudio instance
@@ -121,41 +125,57 @@ def _get_supported_channels(audio, device_index: int = None) -> int:
 
     FORMAT = pyaudio.paInt16
     CHUNK = 1024
-    RATE = 16000  # Use standard rate for channel testing
 
-    # Try mono first (preferred for speech recognition)
+    COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
+
+    rates_to_try = []
+    try:
+        if device_index is not None:
+            device_info = audio.get_device_info_by_index(device_index)
+        else:
+            device_info = audio.get_default_input_device_info()
+
+        default_rate = int(device_info.get("defaultSampleRate", 0))
+        if default_rate > 0:
+            rates_to_try.append(default_rate)
+            logger.debug(f"Device reports default sample rate: {default_rate}Hz")
+    except (IOError, OSError) as e:
+        logger.debug(f"Could not get device info for channel probing: {e}")
+
+    for rate in COMMON_RATES:
+        if rate not in rates_to_try:
+            rates_to_try.append(rate)
+
     for channels in [1, 2]:
-        try:
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": channels,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
-            if device_index is not None:
-                stream_kwargs["input_device_index"] = device_index
+        for rate in rates_to_try:
+            try:
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": channels,
+                    "rate": rate,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
+                if device_index is not None:
+                    stream_kwargs["input_device_index"] = device_index
 
-            test_stream = audio.open(**stream_kwargs)
-            test_stream.close()
-            logger.debug(f"Device supports {channels} channel(s)")
-            return channels
-        except (IOError, OSError) as e:
-            error_str = str(e).lower()
-            if "invalid number of channels" in error_str or "-9998" in error_str:
-                logger.debug(f"Device does not support {channels} channel(s)")
-                continue
-            else:
-                # Different error, try next channel count anyway
-                logger.debug(f"Channel test failed for {channels} channel(s): {e}")
+                test_stream = audio.open(**stream_kwargs)
+                test_stream.close()
+                logger.debug(f"Device supports {channels} channel(s) at {rate}Hz")
+                return channels
+            except (IOError, OSError) as e:
+                error_str = str(e).lower()
+                if "invalid number of channels" in error_str or "-9998" in error_str:
+                    logger.debug(f"Device rejected {channels} channel(s) at {rate}Hz: {e}")
+                else:
+                    logger.debug(f"Channel test failed at {rate}Hz: {e}")
                 continue
 
-    # Default to mono if we couldn't determine
     logger.warning("Could not determine supported channel count, defaulting to 1")
     return 1
 
 
-def _get_supported_sample_rate(audio, device_index: int, channels: int = 1) -> int:
+def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int = 1) -> int:
     """
     Get a supported sample rate for the audio device.
 
