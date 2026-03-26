@@ -531,6 +531,8 @@ class SpeechRecognitionManager:
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
+        self.real_time_streaming = kwargs.get("real_time_streaming", True)
+        self.streaming_chunk_duration = kwargs.get("streaming_chunk_duration", 3.0)
 
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
@@ -1667,6 +1669,10 @@ class SpeechRecognitionManager:
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
 
+            # Real-time streaming variables
+            streaming_timer = 0.0
+            last_stream_time = time.time()
+
             while self.should_record:
                 try:
                     # Check buffer size and enforce limits (with lock for thread safety)
@@ -1743,7 +1749,8 @@ class SpeechRecognitionManager:
 
                     if volume < threshold:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if silence_counter > self.silence_timeout:  # Use self.silence_timeout
+                        if silence_counter > self.silence_timeout and not self.real_time_streaming:
+                            # Only use silence-based chunking if real-time streaming is disabled
                             if len(self.audio_buffer) > 0:
                                 logger.debug("Silence detected, queueing audio segment")
                                 self._enqueue_audio_segment(self.audio_buffer)
@@ -1757,6 +1764,20 @@ class SpeechRecognitionManager:
                             )
                             speech_detected_in_session = True
                         silence_counter = 0
+
+                    # Real-time streaming logic: process chunks at regular intervals
+                    if self.real_time_streaming and speech_detected_in_session:
+                        current_time = time.time()
+                        streaming_timer += CHUNK / RATE
+
+                        if streaming_timer >= self.streaming_chunk_duration:
+                            if len(self.audio_buffer) > 0:
+                                logger.debug(
+                                    f"Streaming interval reached ({self.streaming_chunk_duration}s), queueing audio segment"
+                                )
+                                self._enqueue_audio_segment(self.audio_buffer)
+                                self.audio_buffer = []
+                            streaming_timer = 0.0
                 except (IOError, OSError) as e:
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
@@ -1997,6 +2018,8 @@ class SpeechRecognitionManager:
         language: Optional[str] = None,
         vad_sensitivity: Optional[int] = None,
         silence_timeout: Optional[float] = None,
+        real_time_streaming: Optional[bool] = None,
+        streaming_chunk_duration: Optional[float] = None,
         audio_device_index: Optional[int] = None,
         force_download: bool = True,
         **kwargs,  # Allow for future expansion
@@ -2010,11 +2033,13 @@ class SpeechRecognitionManager:
             language: The new language code (e.g., "en-us", "hi", "auto").
             vad_sensitivity: New VAD sensitivity (for VOSK).
             silence_timeout: New silence timeout (for VOSK).
+            real_time_streaming: Enable real-time streaming transcription.
+            streaming_chunk_duration: Duration in seconds for streaming chunks.
             audio_device_index: Audio input device index (None for default, -1 to clear).
             force_download: If True, download missing models (default: True for UI-triggered reconfigures).
         """
         logger.info(
-            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, language={language}, vad={vad_sensitivity}, silence={silence_timeout}, audio_device={audio_device_index}"
+            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, language={language}, vad={vad_sensitivity}, silence={silence_timeout}, streaming={real_time_streaming}, chunk_duration={streaming_chunk_duration}, audio_device={audio_device_index}"
         )
 
         restart_needed = False
@@ -2038,6 +2063,12 @@ class SpeechRecognitionManager:
             self.vad_sensitivity = max(1, min(5, int(vad_sensitivity)))
         if silence_timeout is not None:
             self.silence_timeout = max(0.5, min(5.0, float(silence_timeout)))
+
+        # Update streaming params if provided
+        if real_time_streaming is not None:
+            self.real_time_streaming = bool(real_time_streaming)
+        if streaming_chunk_duration is not None:
+            self.streaming_chunk_duration = max(1.0, min(10.0, float(streaming_chunk_duration)))
 
         # Handle audio device index (-1 means use default/clear selection)
         if audio_device_index is not None:
