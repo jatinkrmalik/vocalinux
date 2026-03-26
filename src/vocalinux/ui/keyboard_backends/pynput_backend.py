@@ -45,6 +45,7 @@ if PYNPUT_AVAILABLE:
         keyboard.Key.ctrl_r: keyboard.Key.ctrl,
         keyboard.Key.alt_l: keyboard.Key.alt,
         keyboard.Key.alt_r: keyboard.Key.alt,
+        keyboard.Key.alt_gr: keyboard.Key.alt,  # AltGr (ISO_Level3_Shift) on int'l keyboards
         keyboard.Key.shift_l: keyboard.Key.shift,
         keyboard.Key.shift_r: keyboard.Key.shift,
         keyboard.Key.cmd_l: keyboard.Key.cmd,
@@ -155,7 +156,8 @@ class PynputKeyboardBackend(KeyboardBackend):
             is_side_specific = self._modifier_key.startswith(("left_", "right_"))
 
             if is_side_specific:
-                matched = key == target_key
+                key_variants = self._get_key_variants(self._modifier_key)
+                matched = key in key_variants
             else:
                 normalized_key = self._normalize_modifier_key(key)
                 matched = normalized_key == target_key
@@ -196,7 +198,8 @@ class PynputKeyboardBackend(KeyboardBackend):
             self.current_keys.discard(normalized_key)
 
             if is_side_specific:
-                matched = key == target_key
+                key_variants = self._get_key_variants(self._modifier_key)
+                matched = key in key_variants
             else:
                 matched = normalized_key == target_key
 
@@ -219,14 +222,19 @@ class PynputKeyboardBackend(KeyboardBackend):
 
         variants = {
             "ctrl": {keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r},
-            "alt": {keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r},
+            "alt": {
+                keyboard.Key.alt,
+                keyboard.Key.alt_l,
+                keyboard.Key.alt_r,
+                keyboard.Key.alt_gr,
+            },
             "shift": {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r},
             "super": {keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r},
             "left_ctrl": {keyboard.Key.ctrl_l},
             "left_alt": {keyboard.Key.alt_l},
             "left_shift": {keyboard.Key.shift_l},
             "right_ctrl": {keyboard.Key.ctrl_r},
-            "right_alt": {keyboard.Key.alt_r},
+            "right_alt": {keyboard.Key.alt_r, keyboard.Key.alt_gr},
             "right_shift": {keyboard.Key.shift_r},
         }
         return variants.get(modifier_name, set())
