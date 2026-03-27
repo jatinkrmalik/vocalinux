@@ -1,0 +1,3 @@
+include resources/icons/scalable/*.svg
+include resources/sounds/*.wav
+include vocalinux.desktop

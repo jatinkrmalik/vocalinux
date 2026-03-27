@@ -49,9 +49,12 @@ class ResourceManager:
 
         # Build list of candidate paths in priority order
         candidates = [
+            # Resources bundled inside the installed package (pip install)
+            # This resolves to src/vocalinux/resources when installed
+            module_dir.parent / "resources",
             # For direct repository execution (go up from src/vocalinux/utils to root)
             module_dir.parent.parent.parent / "resources",
-            # For installed package or virtual environment
+            # For installed package or virtual environment (install.sh copies here)
             Path(sys.prefix) / "share" / "vocalinux" / "resources",
             # For development in virtual environment
             Path(sys.prefix).parent / "resources",
