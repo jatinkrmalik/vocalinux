@@ -487,6 +487,7 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
@@ -500,6 +501,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_active,
         mock_get_engine,
         mock_switch,
+        mock_start_proc,
         mock_get_xkb,
         mock_restore_xkb,
     ):
