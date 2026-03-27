@@ -453,3 +453,71 @@ class TestTrayIndicator(unittest.TestCase):
                 mock_about_dialog.destroy.assert_called_once()
                 # set_logo should NOT be called due to the error
                 mock_about_dialog.set_logo.assert_not_called()
+
+    def test_has_super_shortcut_conflict_true(self):
+        """Test conflict detection when using super shortcut."""
+        self.tray_indicator.shortcut_manager = MagicMock()
+        self.tray_indicator.shortcut_manager.shortcut = "super+super"
+        self.assertTrue(self.tray_indicator._has_super_shortcut_conflict())
+
+    def test_has_super_shortcut_conflict_false(self):
+        """Test no conflict when using non-super shortcut."""
+        self.tray_indicator.shortcut_manager = MagicMock()
+        self.tray_indicator.shortcut_manager.shortcut = "ctrl+ctrl"
+        self.assertFalse(self.tray_indicator._has_super_shortcut_conflict())
+
+    def test_has_super_shortcut_conflict_left_super(self):
+        """Test conflict detection for left super variant."""
+        self.tray_indicator.shortcut_manager = MagicMock()
+        self.tray_indicator.shortcut_manager.shortcut = "left_super+left_super"
+        self.assertTrue(self.tray_indicator._has_super_shortcut_conflict())
+
+    def test_open_settings_creates_dialog(self):
+        """Test _open_settings creates and shows SettingsDialog."""
+        import vocalinux.ui.tray_indicator as tray_module
+
+        mock_dialog = MagicMock()
+        mock_class = MagicMock(return_value=mock_dialog)
+        with patch.object(tray_module, "SettingsDialog", mock_class):
+            result = self.tray_indicator._open_settings()
+            mock_class.assert_called_once()
+            mock_dialog.connect.assert_called_once()
+            mock_dialog.show.assert_called_once()
+            self.assertFalse(result)
+
+    def test_open_settings_from_shortcut_uses_glib(self):
+        """Test _open_settings_from_shortcut schedules via GLib."""
+        with patch("vocalinux.ui.tray_indicator.GLib") as patched_glib:
+            self.tray_indicator._open_settings_from_shortcut()
+            patched_glib.idle_add.assert_called_once_with(self.tray_indicator._open_settings)
+
+    def test_on_settings_signal_uses_glib(self):
+        """Test SIGUSR1 handler schedules settings opening."""
+        with patch("vocalinux.ui.tray_indicator.GLib") as patched_glib:
+            self.tray_indicator._on_settings_signal(10, None)
+            patched_glib.idle_add.assert_called_once_with(self.tray_indicator._open_settings)
+
+    def test_setup_settings_shortcut_disabled_on_conflict(self):
+        """Test settings shortcut is disabled when using super key for recognition."""
+        self.tray_indicator.shortcut_manager = MagicMock()
+        self.tray_indicator.shortcut_manager.shortcut = "super+super"
+        mock_settings_mgr = MagicMock()
+        mock_settings_mgr.active = False
+        self.tray_indicator.settings_shortcut_manager = mock_settings_mgr
+
+        self.tray_indicator._setup_settings_shortcut()
+
+        # Should NOT start when there's a conflict
+        mock_settings_mgr.start.assert_not_called()
+
+    def test_setup_settings_shortcut_enabled_no_conflict(self):
+        """Test settings shortcut is enabled when no super key conflict."""
+        self.tray_indicator.shortcut_manager = MagicMock()
+        self.tray_indicator.shortcut_manager.shortcut = "ctrl+ctrl"
+        mock_settings_mgr = MagicMock()
+        mock_settings_mgr.active = True
+        self.tray_indicator.settings_shortcut_manager = mock_settings_mgr
+
+        self.tray_indicator._setup_settings_shortcut()
+
+        mock_settings_mgr.start.assert_called_once()
