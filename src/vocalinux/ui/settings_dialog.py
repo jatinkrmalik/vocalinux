@@ -8,7 +8,7 @@ UX Design Notes:
 - Follows GNOME Human Interface Guidelines (HIG) for modern desktop look
 - Uses preference-page style layout with clearly grouped sections
 - Settings apply immediately when changed (instant-apply pattern)
-- No action buttons needed - use title bar close button
+- Close button provided for WM compatibility (some WMs hide title bar close)
 - Provides real-time progress feedback for recognition state
 - Multi-modal feedback (text + icon + audio level) for accessibility
 - Modal dialog for model downloads (explicit confirmation for large downloads)
@@ -727,6 +727,11 @@ class SettingsDialog(Gtk.Dialog):
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.set_decorated(True)  # Force window decorations (close button) on all WMs
+
+        # Add a Close action button so the dialog always has a visible way to
+        # dismiss it, even on window managers that hide the title-bar close
+        # button for Gtk.Dialog windows without action buttons (fixes #323).
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
@@ -742,7 +747,7 @@ class SettingsDialog(Gtk.Dialog):
         # Setup CSS styling
         _setup_css()
 
-        # Dialog configuration - no action buttons needed (use title bar close)
+        # Dialog configuration - Close button added above for WM compatibility
         # Calculate dialog size
         display = Gdk.Display.get_default()
         if display:

@@ -262,8 +262,14 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
 
         self.assertIn("def _auto_apply_settings(self", source_code)
 
-    def test_settings_dialog_no_action_buttons(self):
-        """Test that SettingsDialog uses no action buttons (title bar close only)."""
+    def test_settings_dialog_has_close_button_only(self):
+        """Test that SettingsDialog has a Close button but no Apply button.
+
+        A Close button is required for window managers that hide the title bar
+        close button on Gtk.Dialog windows (fixes #323). The instant-apply
+        pattern means settings are applied immediately, so no Apply button is
+        needed.
+        """
         import os
 
         source_path = os.path.join(
@@ -277,11 +283,12 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         with open(source_path, "r") as f:
             source_code = f.read()
 
-        # Should NOT have action buttons - uses title bar close (instant-apply pattern)
-        self.assertNotIn("_Close", source_code)
+        # Should have a Close button for WM compatibility
+        self.assertIn("ResponseType.CLOSE", source_code)
+
+        # Should NOT have Apply button - uses instant-apply pattern
         self.assertNotIn("_Apply", source_code)
         self.assertNotIn("ResponseType.APPLY", source_code)
-        self.assertNotIn("ResponseType.CLOSE", source_code)
 
     def test_settings_dialog_no_revert_settings(self):
         """Test that SettingsDialog does NOT have _revert_settings (removed)."""
