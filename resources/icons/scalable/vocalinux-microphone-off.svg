@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Placeholder for microphone off icon -->
+  <circle cx="64" cy="64" r="60" fill="#e74c3c" />
+  <rect x="44" y="40" width="40" height="60" rx="20" fill="#7f8c8d" />
+  <line x1="40" y1="88" x2="88" y2="40" stroke="#e74c3c" stroke-width="8" />
+  <!-- This is a placeholder. Replace with actual custom design. -->
+</svg>

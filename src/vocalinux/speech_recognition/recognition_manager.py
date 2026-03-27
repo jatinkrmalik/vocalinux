@@ -1,0 +1,2231 @@
+"""
+Speech recognition manager module for Vocalinux.
+
+This module provides a unified interface to different speech recognition engines,
+currently supporting VOSK, Whisper, and whisper.cpp.
+"""
+
+import ctypes
+import json
+import logging
+import os
+import queue
+import sys
+import threading
+import time
+from typing import Callable, Optional
+
+from ..common_types import RecognitionState
+from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
+from ..utils.vosk_model_info import VOSK_MODEL_INFO
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
+from .command_processor import CommandProcessor
+
+
+# ALSA error handler to suppress warnings during PyAudio initialization
+def _setup_alsa_error_handler():
+    """Set up an error handler to suppress ALSA warnings."""
+    try:
+        # Try multiple library name variations for cross-distro compatibility
+        # Different distributions may use different soname or library naming
+        for lib_name in ["libasound.so.2", "libasound.so", "libasound.so.0", "asound"]:
+            try:
+                asound = ctypes.CDLL(lib_name)
+                # Define error handler type
+                ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
+                    None,
+                    ctypes.c_char_p,
+                    ctypes.c_int,
+                    ctypes.c_char_p,
+                    ctypes.c_int,
+                    ctypes.c_char_p,
+                )
+
+                # Create a no-op error handler
+                def _error_handler(filename, line, function, err, fmt):
+                    pass
+
+                _alsa_error_handler = ERROR_HANDLER_FUNC(_error_handler)
+                asound.snd_lib_error_set_handler(_alsa_error_handler)
+                # Note: Can't use logger here as it's not defined yet
+                return _alsa_error_handler  # Keep reference to prevent GC
+            except OSError:
+                continue
+        # If all library names fail, return None
+        return None
+    except (OSError, AttributeError):
+        # ALSA not available or different platform
+        return None
+
+
+# Set up ALSA error handler at module load time
+_alsa_handler = _setup_alsa_error_handler()
+
+
+def get_audio_input_devices() -> list:
+    """
+    Get a list of available audio input devices.
+
+    Returns:
+        List of tuples: (device_index, device_name, is_default)
+    """
+    devices = []
+    try:
+        import pyaudio
+
+        audio = pyaudio.PyAudio()
+
+        default_input_device = None
+        try:
+            default_info = audio.get_default_input_device_info()
+            default_input_device = default_info.get("index")
+        except (IOError, OSError):
+            pass  # No default input device
+
+        for i in range(audio.get_device_count()):
+            try:
+                info = audio.get_device_info_by_index(i)
+                # Only include devices that have input channels
+                if info.get("maxInputChannels", 0) > 0:
+                    name = info.get("name", f"Device {i}")
+                    is_default = i == default_input_device
+                    devices.append((i, name, is_default))
+            except (IOError, OSError):
+                continue
+
+        audio.terminate()
+    except ImportError:
+        logger.error("PyAudio not installed, cannot enumerate audio devices")
+    except Exception as e:
+        logger.error(f"Error enumerating audio devices: {e}")
+
+    return devices
+
+
+def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
+    """
+    Detect the supported number of channels for the audio device.
+
+    Some audio devices (particularly professional audio interfaces and certain
+    onboard audio chips) only support specific channel configurations. This
+    function tests mono (1) and stereo (2) to find a working configuration.
+
+    Pro-audio USB interfaces (MUPRO, Vocaster, etc.) often only support 48kHz
+    and will reject 16kHz probes. This function uses the device's default
+    sample rate first, then falls back to common rates.
+
+    Args:
+        audio: PyAudio instance
+        device_index: The device index to test (None for default)
+
+    Returns:
+        int: Number of channels supported (1 or 2), defaults to 1
+    """
+    import pyaudio
+
+    FORMAT = pyaudio.paInt16
+    CHUNK = 1024
+
+    COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
+
+    rates_to_try = []
+    try:
+        if device_index is not None:
+            device_info = audio.get_device_info_by_index(device_index)
+        else:
+            device_info = audio.get_default_input_device_info()
+
+        default_rate = int(device_info.get("defaultSampleRate", 0))
+        if default_rate > 0:
+            rates_to_try.append(default_rate)
+            logger.debug(f"Device reports default sample rate: {default_rate}Hz")
+    except (IOError, OSError) as e:
+        logger.debug(f"Could not get device info for channel probing: {e}")
+
+    for rate in COMMON_RATES:
+        if rate not in rates_to_try:
+            rates_to_try.append(rate)
+
+    for channels in [1, 2]:
+        for rate in rates_to_try:
+            try:
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": channels,
+                    "rate": rate,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
+                if device_index is not None:
+                    stream_kwargs["input_device_index"] = device_index
+
+                test_stream = audio.open(**stream_kwargs)
+                test_stream.close()
+                logger.debug(f"Device supports {channels} channel(s) at {rate}Hz")
+                return channels
+            except (IOError, OSError) as e:
+                error_str = str(e).lower()
+                if "invalid number of channels" in error_str or "-9998" in error_str:
+                    logger.debug(f"Device rejected {channels} channel(s) at {rate}Hz: {e}")
+                else:
+                    logger.debug(f"Channel test failed at {rate}Hz: {e}")
+                continue
+
+    logger.warning("Could not determine supported channel count, defaulting to 1")
+    return 1
+
+
+def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int = 1) -> int:
+    """
+    Get a supported sample rate for the audio device.
+
+    Some audio devices (like Vocaster One) only support specific sample rates
+    (e.g., 48kHz) and will fail with the default 16kHz. This function tests
+    common sample rates and returns the highest supported one.
+
+    Args:
+        audio: PyAudio instance
+        device_index: The device index to test
+        channels: Number of channels (default 1)
+
+    Returns:
+        int: A supported sample rate, defaulting to 16000 if none work
+    """
+    import pyaudio
+
+    FORMAT = pyaudio.paInt16
+    CHUNK = 1024
+
+    # Common sample rates to try, ordered from highest to lowest quality
+    COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
+
+    # First, try the device's default sample rate
+    try:
+        if device_index is not None:
+            device_info = audio.get_device_info_by_index(device_index)
+        else:
+            device_info = audio.get_default_input_device_info()
+
+        default_rate = int(device_info.get("defaultSampleRate", 0))
+        if default_rate > 0 and default_rate in COMMON_RATES:
+            # Test if the default rate actually works
+            try:
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": channels,
+                    "rate": default_rate,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
+                if device_index is not None:
+                    stream_kwargs["input_device_index"] = device_index
+
+                test_stream = audio.open(**stream_kwargs)
+                test_stream.close()
+                logger.debug(f"Using device default sample rate: {default_rate}Hz")
+                return default_rate
+            except (IOError, OSError):
+                logger.debug(f"Device default rate {default_rate}Hz failed, trying common rates")
+    except (IOError, OSError) as e:
+        logger.debug(f"Could not get device default rate: {e}")
+
+    # Try common sample rates in order of preference
+    for rate in COMMON_RATES:
+        try:
+            stream_kwargs = {
+                "format": FORMAT,
+                "channels": channels,
+                "rate": rate,
+                "input": True,
+                "frames_per_buffer": CHUNK,
+            }
+            if device_index is not None:
+                stream_kwargs["input_device_index"] = device_index
+
+            test_stream = audio.open(**stream_kwargs)
+            test_stream.close()
+            logger.debug(f"Found supported sample rate: {rate}Hz")
+            return rate
+        except (IOError, OSError):
+            continue
+
+    # Fallback to 16kHz if nothing works
+    logger.warning("Could not find supported sample rate, defaulting to 16000Hz")
+    return 16000
+
+
+def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
+    """
+    Test audio input from a device and return diagnostic information.
+
+    Args:
+        device_index: The device index to test (None for default)
+        duration: How long to record in seconds
+
+    Returns:
+        Dictionary with test results including:
+        - success: bool
+        - device_name: str
+        - sample_count: int
+        - max_amplitude: float
+        - mean_amplitude: float
+        - has_signal: bool (amplitude above noise floor)
+        - error: str (if failed)
+    """
+    result = {
+        "success": False,
+        "device_name": "Unknown",
+        "device_index": device_index,
+        "sample_count": 0,
+        "max_amplitude": 0.0,
+        "mean_amplitude": 0.0,
+        "has_signal": False,
+        "error": None,
+    }
+
+    try:
+        import numpy as np
+        import pyaudio
+
+        CHUNK = 1024
+        FORMAT = pyaudio.paInt16
+
+        audio = pyaudio.PyAudio()
+
+        # Get device info
+        try:
+            if device_index is not None:
+                info = audio.get_device_info_by_index(device_index)
+            else:
+                info = audio.get_default_input_device_info()
+                device_index = info.get("index")
+            result["device_name"] = info.get("name", "Unknown")
+            result["device_index"] = device_index
+        except (IOError, OSError) as e:
+            result["error"] = f"Cannot get device info: {e}"
+            audio.terminate()
+            return result
+
+        # Detect supported channel count first (some devices require stereo)
+        CHANNELS = _get_supported_channels(audio, device_index)
+        logger.info(f"Using {CHANNELS} channel(s) for audio test")
+
+        # Detect supported sample rate for this device
+        RATE = _get_supported_sample_rate(audio, device_index, CHANNELS)
+        result["sample_rate"] = RATE
+
+        # Open stream
+        try:
+            stream_kwargs = {
+                "format": FORMAT,
+                "channels": CHANNELS,
+                "rate": RATE,
+                "input": True,
+                "frames_per_buffer": CHUNK,
+            }
+            if device_index is not None:
+                stream_kwargs["input_device_index"] = device_index
+
+            stream = audio.open(**stream_kwargs)
+        except (IOError, OSError) as e:
+            result["error"] = f"Cannot open audio stream: {e}"
+            audio.terminate()
+            return result
+
+        # Record and analyze
+        all_amplitudes = []
+        frames_to_read = int(RATE * duration / CHUNK)
+
+        for _ in range(frames_to_read):
+            try:
+                data = stream.read(CHUNK, exception_on_overflow=False)
+                audio_data = np.frombuffer(data, dtype=np.int16)
+                amplitudes = np.abs(audio_data)
+                all_amplitudes.extend(amplitudes)
+            except Exception as e:
+                result["error"] = f"Error reading audio: {e}"
+                break
+
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
+
+        if all_amplitudes:
+            all_amplitudes = np.array(all_amplitudes)
+            result["success"] = True
+            result["sample_count"] = len(all_amplitudes)
+            result["max_amplitude"] = float(np.max(all_amplitudes))
+            result["mean_amplitude"] = float(np.mean(all_amplitudes))
+            # Signal present if max amplitude is above typical digital noise floor
+            # 16-bit audio has max value of 32768, noise floor is typically < 100
+            result["has_signal"] = result["max_amplitude"] > 200
+
+    except ImportError as e:
+        result["error"] = f"Missing dependency: {e}"
+    except Exception as e:
+        result["error"] = f"Unexpected error: {e}"
+
+    return result
+
+
+logger = logging.getLogger(__name__)
+
+
+def _filter_non_speech(text: str) -> str:
+    """
+    Filter out non-speech tokens from transcription results.
+
+    This handles cases where whisper.cpp outputs special tokens like
+    [BLANK_AUDIO], music notes, or other non-speech artifacts when
+    transcribing silent or ambiguous audio.
+
+    Args:
+        text: The transcribed text to filter
+
+    Returns:
+        Filtered text, or empty string if it's all non-speech
+    """
+    import re
+
+    if not text or not text.strip():
+        return ""
+
+    text = text.strip()
+
+    # Non-speech patterns to filter out
+    non_speech_patterns = [
+        r"^\[BLANK_AUDIO\]$",
+        r"^\[.*\]$",  # Any bracketed token like [MUSIC], [APPLAUSE]
+        r"^[\s\[\]{}()<>@#$%^&*\-_+=|\\~`\"\'\.,!?;:]+$",  # Pure punctuation
+        r"^[♪♫♬♩♭♮♯]+$",  # Music notes
+        r"^[「」『』]+$",  # Japanese brackets
+        r"^[<>]+$",  # Angle brackets
+        r"^[-]{2,}$",  # Multiple dashes
+        r"^\.{2,}$",  # Multiple dots
+        r"^\s*$",  # Whitespace only
+    ]
+
+    for pattern in non_speech_patterns:
+        if re.match(pattern, text, re.IGNORECASE):
+            logger.debug(f"Filtered non-speech token: '{text}'")
+            return ""
+
+    # Check if text has enough actual speech content
+    # At least 30% of characters should be alphanumeric or common speech punctuation
+    speech_chars = sum(1 for c in text if c.isalnum() or c in ".,!?-'\"")
+    total_chars = len(text)
+
+    if total_chars > 0 and speech_chars / total_chars < 0.3:
+        logger.debug(f"Filtered low-speech-content text: '{text}'")
+        return ""
+
+    return text
+
+
+def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
+    """Show a desktop notification."""
+    try:
+        import subprocess
+
+        # Use notify-send which is available on most Linux desktops
+        subprocess.Popen(
+            ["notify-send", "-i", icon, "-a", "Vocalinux", title, message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        logger.debug(f"Could not show notification: {e}")
+
+
+# Define constants
+MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
+
+
+def _get_system_model_paths() -> list:
+    """
+    Get system-wide model paths based on distro standards.
+
+    This function dynamically determines where system-wide models might be
+    installed based on XDG standards and distribution-specific conventions.
+
+    Returns:
+        List of paths to check for pre-installed models
+    """
+    paths = []
+
+    # XDG standard paths from XDG_DATA_DIRS
+    xdg_data = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+    for base in xdg_data.split(":"):
+        if base:  # Skip empty strings
+            paths.append(os.path.join(base, "vocalinux", "models"))
+
+    # Distribution-specific paths
+    # Try to detect the distribution from /etc/os-release
+    try:
+        with open("/etc/os-release", "r") as f:
+            os_release = f.read().lower()
+
+            # Fedora/RHEL/CentOS/Rocky/AlmaLinux use /usr/lib64
+            if any(
+                id in os_release
+                for id in ["fedora", "rhel", "centos", "rocky", "almalinux", "red hat"]
+            ):
+                paths.append("/usr/lib64/vocalinux/models")
+                paths.append("/usr/lib/vocalinux/models")
+
+            # Arch Linux doesn't use /usr/local
+            if "arch" in os_release:
+                paths.remove("/usr/local/share/vocalinux/models")
+
+    except (IOError, OSError, FileNotFoundError):
+        pass  # File doesn't exist on all systems
+
+    # Add common fallback paths that might be used
+    additional_paths = [
+        "/usr/local/lib/vocalinux/models",
+        "/usr/lib/vocalinux/models",
+        "/usr/lib64/vocalinux/models",
+        "/opt/vocalinux/models",  # Some distros use /opt
+    ]
+
+    for path in additional_paths:
+        if path not in paths:
+            paths.append(path)
+
+    return paths
+
+
+# Alternative locations for pre-installed models (now dynamic)
+SYSTEM_MODELS_DIRS = _get_system_model_paths()
+
+
+class SpeechRecognitionManager:
+    """
+    Manager class for speech recognition engines.
+
+    This class provides a unified interface for working with different
+    speech recognition engines (VOSK and Whisper).
+    """
+
+    def __init__(
+        self,
+        engine: str = "vosk",
+        model_size: str = "small",
+        language: str = "en-us",
+        defer_download: bool = True,
+        **kwargs,
+    ):
+        """
+        Initialize the speech recognition manager.
+
+        Args:
+            engine: The speech recognition engine to use ("vosk" or "whisper")
+            model_size: The size of the model to use ("small", "medium", "large")
+            defer_download: If True, don't download missing models at startup (default: True)
+            audio_device_index: Optional audio input device index (None for default)
+        """
+        self.engine = engine
+        self.model_size = model_size
+        self.language = language
+        self.state = RecognitionState.IDLE
+        self.audio_thread = None
+        self.recognition_thread = None
+        self.model = None
+        self.recognizer = None  # Added for VOSK
+        self.command_processor = CommandProcessor()
+
+        # Voice commands: None=auto (VOSK=yes, Whisper=no), True=always on, False=always off
+        self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
+
+        self.text_callbacks: list[Callable[[str], None]] = []
+        self.state_callbacks: list[Callable[[RecognitionState], None]] = []
+        self.action_callbacks: list[Callable[[str], None]] = []
+
+        # Download progress tracking
+        self._download_progress_callback: Optional[Callable[[float, float, str], None]] = None
+        self._download_cancelled = False
+        self._defer_download = defer_download
+        self._model_initialized = False
+
+        # Speech detection parameters (load defaults, will be overridden by configure)
+        self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
+        self.silence_timeout = kwargs.get("silence_timeout", 2.0)
+
+        # Audio device selection (None means use system default)
+        self.audio_device_index = kwargs.get("audio_device_index", None)
+
+        # Audio diagnostics tracking
+        self._last_audio_level = 0.0
+        self._audio_level_callbacks: list[Callable[[float], None]] = []
+
+        # Recording control flags
+        self.should_record = False
+        self.audio_buffer = []
+        self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
+        self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
+        self._segment_queue = queue.Queue(maxsize=32)
+
+        # Reliability improvements - Issue #92
+        self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
+        self._reconnection_attempts = 0
+        self._max_reconnection_attempts = 5
+        self._reconnection_delay = 1.0  # Initial delay in seconds
+        self._last_audio_error_time = 0
+        self._audio_stream = None
+        self._pyaudio_instance = None
+        self._capture_sample_rate = 16000  # Default, updated when device is opened
+
+        # Create models directory if it doesn't exist
+        os.makedirs(MODELS_DIR, exist_ok=True)
+
+        logger.info(
+            f"Initializing speech recognition with {engine} engine, {language} language and {model_size} model"
+        )
+
+        # Initialize the selected speech recognition engine
+        if engine == "vosk":
+            self._init_vosk()
+        elif engine == "whisper":
+            self._init_whisper()
+        elif engine == "whisper_cpp":
+            self._init_whispercpp()
+        else:
+            raise ValueError(f"Unsupported speech recognition engine: {engine}")
+
+    def _resolve_voice_commands_enabled(self) -> bool:
+        """Resolve effective voice commands state from preference and engine."""
+        if self._voice_commands_preference is None:
+            return self.engine == "vosk"
+        return bool(self._voice_commands_preference)
+
+    def _init_vosk(self):
+        """Initialize the VOSK speech recognition engine."""
+        # VOSK doesn't support auto-detect, so fall back to en-us for "auto"
+        vosk_language = "en-us" if self.language == "auto" else self.language
+
+        self.vosk_model_map = {
+            "small": VOSK_MODEL_INFO["small"]["languages"].get(vosk_language),
+            "medium": VOSK_MODEL_INFO["medium"]["languages"].get(vosk_language),
+            "large": VOSK_MODEL_INFO["large"]["languages"].get(vosk_language),
+        }
+
+        try:
+            from vosk import KaldiRecognizer, Model
+
+            self.vosk_model_path = self._get_vosk_model_path()
+
+            if not os.path.exists(self.vosk_model_path):
+                if self._defer_download:
+                    logger.info(
+                        f"VOSK model not found at {self.vosk_model_path}. Will download when needed."
+                    )
+                    self._model_initialized = False
+                    return  # Don't block startup
+                else:
+                    logger.info(f"VOSK model not found at {self.vosk_model_path}. Downloading...")
+                    self._download_vosk_model()
+                    # Update path after download
+                    self.vosk_model_path = self._get_vosk_model_path()
+            else:
+                # Check if this is a pre-installed model
+                if any(self.vosk_model_path.startswith(sys_dir) for sys_dir in SYSTEM_MODELS_DIRS):
+                    logger.info(f"Using pre-installed VOSK model from {self.vosk_model_path}")
+                elif os.path.exists(os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")):
+                    logger.info(f"Using installer-provided VOSK model from {self.vosk_model_path}")
+                else:
+                    logger.info(f"Using existing VOSK model from {self.vosk_model_path}")
+
+            logger.info(f"Loading VOSK model from {self.vosk_model_path}")
+            # Ensure previous model/recognizer are released if re-initializing
+            self.model = None
+            self.recognizer = None
+            self.model = Model(self.vosk_model_path)
+            self.recognizer = KaldiRecognizer(self.model, 16000)
+            self._model_initialized = True
+            logger.info("VOSK engine initialized successfully.")
+
+        except ImportError:
+            logger.error("Failed to import VOSK. Please install it with 'pip install vosk'")
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _init_whisper(self):
+        """Initialize the Whisper speech recognition engine."""
+        import warnings
+
+        try:
+            import whisper
+
+            # Suppress CUDA warnings during import
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                import torch
+
+            # Validate model size for Whisper
+            valid_whisper_models = ["tiny", "base", "small", "medium", "large"]
+            if self.model_size not in valid_whisper_models:
+                logger.warning(
+                    f"Model size '{self.model_size}' not valid for Whisper. "
+                    f"Valid options: {valid_whisper_models}. Using 'base' instead."
+                )
+                self.model_size = "base"
+
+            # Check if model is downloaded
+            whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
+            os.makedirs(whisper_cache_dir, exist_ok=True)
+            model_file = os.path.join(whisper_cache_dir, f"{self.model_size}.pt")
+            default_cache = os.path.expanduser("~/.cache/whisper")
+            default_model_file = os.path.join(default_cache, f"{self.model_size}.pt")
+
+            model_exists = os.path.exists(model_file) or os.path.exists(default_model_file)
+
+            if not model_exists and self._defer_download:
+                logger.info(
+                    f"Whisper model '{self.model_size}' not found. Will download when needed."
+                )
+                self._model_initialized = False
+                return  # Don't block startup
+
+            # If model doesn't exist and we're not deferring, download it with progress
+            if not model_exists:
+                logger.info(f"Downloading Whisper '{self.model_size}' model...")
+                self._download_whisper_model(whisper_cache_dir)
+
+            # Determine device (GPU if available, otherwise CPU)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Using device: {device}")
+
+            logger.info(f"Loading Whisper '{self.model_size}' model...")
+            # Ensure previous model is released if re-initializing
+            self.model = None
+
+            # Load model with device and custom cache directory
+            self.model = whisper.load_model(
+                self.model_size, device=device, download_root=whisper_cache_dir
+            )
+
+            self._model_initialized = True
+            logger.info(f"Whisper model loaded on {device.upper()}")
+            logger.info("Whisper engine initialized successfully.")
+
+        except ImportError as e:
+            logger.error(f"Failed to import required libraries for Whisper: {e}")
+            logger.error("Please install with: pip install openai-whisper torch")
+            self.state = RecognitionState.ERROR
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize Whisper engine: {e}")
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _transcribe_with_whisper(self, audio_buffer: list[bytes]) -> str:
+        """
+        Transcribe audio buffer using Whisper.
+
+        Args:
+            audio_buffer: List of audio data chunks (16-bit PCM at 16kHz)
+
+        Returns:
+            Transcribed text
+        """
+        import warnings
+
+        try:
+            import numpy as np
+
+            if not audio_buffer:
+                return ""
+
+            # Convert audio buffer to numpy array
+            audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+
+            # Convert to float32 and normalize to [-1, 1] (Whisper expects this format)
+            audio_float = audio_data.astype(np.float32) / 32768.0
+
+            duration = len(audio_float) / 16000.0  # 16kHz sample rate
+            logger.debug(f"Transcribing audio: {duration:.2f} seconds")
+
+            # Lock model access to prevent race condition with reconfigure
+            with self._model_lock:
+                # Check if model is still valid
+                if self.model is None:
+                    logger.warning("Model is None during transcription, returning empty result")
+                    return ""
+
+                # Determine if we should use fp16 (only on CUDA)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    import torch
+                use_fp16 = self.model.device != torch.device("cpu")
+
+                lang = self.language
+                if self.language == "en-us":
+                    lang = "en"
+                elif self.language == "auto":
+                    lang = None  # Auto-detect
+
+                # Transcribe with Whisper (handles variable length audio automatically)
+                result = self.model.transcribe(
+                    audio_float,
+                    language=lang,
+                    task="transcribe",
+                    verbose=False,
+                    temperature=0.0,  # Greedy decoding for consistency
+                    no_speech_threshold=0.6,
+                    fp16=use_fp16,  # Explicitly set to avoid warning on CPU
+                )
+
+            text = result.get("text", "").strip()
+
+            if text:
+                logger.info(f"Whisper transcribed: '{text}'")
+            else:
+                logger.debug("Whisper returned empty transcription")
+
+            return text
+
+        except Exception as e:
+            logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
+            return ""
+
+    def _init_whispercpp(self):
+        """Initialize the whisper.cpp speech recognition engine."""
+        import time
+
+        try:
+            from pywhispercpp.model import Model
+
+            # Validate model size for whisper.cpp
+            valid_models = list(WHISPERCPP_MODEL_INFO.keys())
+            if self.model_size not in valid_models:
+                logger.warning(
+                    f"Model size '{self.model_size}' not valid for whisper.cpp. "
+                    f"Valid options: {valid_models}. Using 'tiny' instead."
+                )
+                self.model_size = "tiny"
+
+            # Check if model is downloaded
+            model_path = get_model_path(self.model_size)
+
+            if not os.path.exists(model_path):
+                if self._defer_download:
+                    logger.info(
+                        f"whisper.cpp model '{self.model_size}' not found at {model_path}. "
+                        "Will download when needed."
+                    )
+                    self._model_initialized = False
+                    return  # Don't block startup
+                else:
+                    logger.info(f"Downloading whisper.cpp '{self.model_size}' model...")
+                    self._download_whispercpp_model()
+
+            # Detect and log compute backend
+            from ..utils.whispercpp_model_info import (
+                ComputeBackend,
+                detect_compute_backend,
+                get_backend_display_name,
+            )
+
+            backend, backend_info = detect_compute_backend()
+            logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
+            logger.info(
+                f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
+            )
+
+            # Log hardware summary
+            import psutil
+
+            total_ram_gb = psutil.virtual_memory().total // (1024**3)
+            logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
+
+            # Validate model file exists and get size
+            if os.path.exists(model_path):
+                model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
+                logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
+            else:
+                logger.error(f"whisper.cpp model file not found: {model_path}")
+                raise FileNotFoundError(f"Model file not found: {model_path}")
+
+            logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
+            # Ensure previous model is released if re-initializing
+            self.model = None
+
+            # Load model with pywhispercpp
+            # It auto-detects the best backend (Vulkan, CUDA, or CPU)
+            # Use all available CPU cores for best performance
+            import multiprocessing
+
+            n_threads = multiprocessing.cpu_count()
+            cpu_count = multiprocessing.cpu_count()
+
+            load_start_time = time.time()
+
+            loaded_backend = backend
+
+            # Attempt to load model with automatic backend selection
+            # If Vulkan GPU fails (e.g., incompatible Intel GPU), fallback to CPU
+            try:
+                self.model = Model(
+                    model_path,
+                    n_threads=n_threads,
+                    suppress_blank=True,
+                    no_speech_thold=0.6,
+                    entropy_thold=2.4,
+                )
+            except RuntimeError as model_error:
+                error_str = str(model_error).lower()
+                # Check for Vulkan 16-bit storage incompatibility
+                if (
+                    "16-bit storage" in error_str
+                    or "unsupported device" in error_str
+                    or "incompatible driver" in error_str
+                ):
+                    logger.warning(
+                        f"Vulkan GPU initialization failed: {model_error}. "
+                        "Falling back to CPU backend."
+                    )
+                    _show_notification(
+                        "Vocalinux: GPU Fallback",
+                        "Your GPU doesn't support whisper.cpp Vulkan.\n"
+                        "Switched to CPU mode - still fast!",
+                        "dialog-information",
+                    )
+                    # Force CPU backend by disabling GPU backends
+                    os.environ["GGML_VULKAN"] = "0"
+                    os.environ["GGML_CUDA"] = "0"
+                    # Retry with CPU-only backend
+                    self.model = Model(
+                        model_path,
+                        n_threads=n_threads,
+                        suppress_blank=True,
+                        no_speech_thold=0.6,
+                        entropy_thold=2.4,
+                    )
+                    loaded_backend = ComputeBackend.CPU
+                    backend_info = "CPU (fallback from incompatible Vulkan GPU)"
+                    logger.info("Successfully loaded model with CPU backend")
+                else:
+                    raise
+
+            load_duration = time.time() - load_start_time
+
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} (detected {cpu_count} CPUs)"
+            )
+            logger.info(
+                f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)"
+            )
+
+            self._model_initialized = True
+            logger.info("whisper.cpp engine initialized successfully.")
+
+        except ImportError as e:
+            logger.error(f"Failed to import pywhispercpp: {e}")
+            logger.error(f"Python path: {sys.path}")
+            logger.error("Please install with: pip install pywhispercpp")
+            self.state = RecognitionState.ERROR
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
+            self.state = RecognitionState.ERROR
+            raise
+
+    def _transcribe_with_whispercpp(self, audio_buffer: list[bytes]) -> str:
+        """
+        Transcribe audio buffer using whisper.cpp.
+
+        Args:
+            audio_buffer: List of audio data chunks (16-bit PCM at 16kHz)
+
+        Returns:
+            Transcribed text
+        """
+        import time
+
+        try:
+            import numpy as np
+
+            if not audio_buffer:
+                return ""
+
+            # Convert audio buffer to numpy array
+            audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+
+            # Convert to float32 and normalize to [-1, 1]
+            audio_float = audio_data.astype(np.float32) / 32768.0
+
+            duration = len(audio_float) / 16000.0  # 16kHz sample rate
+            num_chunks = len(audio_buffer)
+            logger.debug(
+                f"whisper.cpp audio preprocessing: {len(audio_float)} samples, {duration:.2f}s, {num_chunks} chunks"
+            )
+
+            # Prepare language parameter
+            lang = self.language
+            if self.language == "en-us":
+                lang = "en"
+            elif self.language == "auto":
+                lang = None  # Auto-detect
+
+            logger.debug(f"whisper.cpp using language: {lang or 'auto-detect'}")
+
+            # Lock model access to prevent race condition with reconfigure
+            # This is critical because self.model is a C++ object via pywhispercpp
+            # and accessing it while reconfigure() sets it to None causes a segfault
+            with self._model_lock:
+                # Check if model is still valid
+                if self.model is None:
+                    logger.warning("Model is None during transcription, returning empty result")
+                    return ""
+
+                # Transcribe with whisper.cpp
+                # pywhispercpp expects audio as numpy array
+                transcribe_start = time.time()
+                segments = self.model.transcribe(audio_float, language=lang)
+                transcribe_duration = time.time() - transcribe_start
+
+            # Extract text from segments, filtering non-speech tokens
+            text_parts = []
+            for segment in segments:
+                if hasattr(segment, "text") and segment.text:
+                    filtered_text = _filter_non_speech(segment.text.strip())
+                    if filtered_text:
+                        text_parts.append(filtered_text)
+
+            text = " ".join(text_parts).strip()
+            num_segments = len(text_parts)
+
+            # Calculate RTF (Real-Time Factor)
+            rtf = transcribe_duration / duration if duration > 0 else 0
+
+            if text:
+                logger.info(f"whisper.cpp transcribed: '{text}'")
+                logger.info(
+                    f"whisper.cpp transcription completed in {transcribe_duration:.3f}s for {duration:.2f}s audio (RTF: {rtf:.2f}x) - {num_segments} segments"
+                )
+            else:
+                logger.debug(
+                    f"whisper.cpp returned empty transcription ({transcribe_duration:.3f}s)"
+                )
+
+            return text
+
+        except Exception as e:
+            audio_info = (
+                f"audio buffer: {len(audio_buffer)} chunks"
+                if audio_buffer
+                else "empty audio buffer"
+            )
+            logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
+            return ""
+
+    def _download_whispercpp_model(self):
+        """Download a whisper.cpp model with progress tracking."""
+        import requests
+
+        self._download_cancelled = False
+
+        model_info = WHISPERCPP_MODEL_INFO.get(self.model_size)
+        if not model_info:
+            raise ValueError(f"Unknown whisper.cpp model size: {self.model_size}")
+
+        url = model_info["url"]
+        model_path = get_model_path(self.model_size)
+        temp_file = model_path + ".tmp"
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
+
+        logger.info(f"Downloading whisper.cpp {self.model_size} model to {model_path}")
+        logger.info(f"Downloading from {url}")
+
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks
+
+            with open(temp_file, "wb") as f:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                        raise RuntimeError("Download cancelled")
+
+                    f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Rename temp file to final
+            os.rename(temp_file, model_path)
+            logger.info("whisper.cpp model downloaded successfully")
+
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download whisper.cpp model from {url}: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
+        except Exception as e:
+            logger.error(f"An error occurred during whisper.cpp model download: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise
+
+    def _get_vosk_model_path(self) -> str:
+        """Get the path to the VOSK model based on the selected size and language."""
+        model_name = self.vosk_model_map.get(self.model_size, self.vosk_model_map["small"])
+
+        # First, check user's local models directory
+        user_model_path = os.path.join(MODELS_DIR, model_name)
+        if os.path.exists(user_model_path):
+            logger.debug(f"Found user model at: {user_model_path}")
+            return user_model_path
+
+        # Then check system-wide installation directories
+        for system_dir in SYSTEM_MODELS_DIRS:
+            system_model_path = os.path.join(system_dir, model_name)
+            if os.path.exists(system_model_path):
+                logger.info(f"Found pre-installed model at: {system_model_path}")
+                return system_model_path
+
+        # If not found anywhere, return the user path (will be created if needed)
+        logger.debug(f"No existing model found, will use: {user_model_path}")
+        return user_model_path
+
+    def set_download_progress_callback(
+        self, callback: Optional[Callable[[float, float, str], None]]
+    ):
+        """
+        Set a callback for download progress updates.
+
+        Args:
+            callback: Function(progress_fraction, speed_mbps, status_text)
+                      or None to clear
+        """
+        self._download_progress_callback = callback
+
+    def cancel_download(self):
+        """Request cancellation of the current download."""
+        self._download_cancelled = True
+        logger.info("Download cancellation requested")
+
+    def _download_vosk_model(self):
+        """Download the VOSK model if it doesn't exist."""
+        import zipfile
+
+        import requests
+
+        self._download_cancelled = False
+
+        model_urls = {
+            "small": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['small']}.zip",
+            "medium": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['medium']}.zip",
+            "large": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['large']}.zip",
+        }
+
+        url = model_urls.get(self.model_size)
+        if not url:
+            raise ValueError(f"Unknown model size: {self.model_size}")
+
+        model_name = os.path.basename(url).replace(".zip", "")
+
+        # Always download to user's local directory
+        model_path = os.path.join(MODELS_DIR, model_name)
+        zip_path = os.path.join(MODELS_DIR, os.path.basename(url))
+
+        # Create models directory if it doesn't exist
+        os.makedirs(MODELS_DIR, exist_ok=True)
+
+        logger.info(f"Downloading VOSK {self.model_size} model to user directory: {model_path}")
+
+        # Download the model
+        logger.info(f"Downloading VOSK model from {url}")
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks for smoother progress
+
+            with open(zip_path, "wb") as f:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(zip_path):
+                            os.remove(zip_path)
+                        raise RuntimeError("Download cancelled")
+
+                    f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        # Also log progress periodically
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Update status for extraction phase
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Extracting model...")
+
+            # Extract the model
+            logger.info(f"Extracting VOSK model to {model_path}")
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(MODELS_DIR)
+
+            # Remove the zip file
+            os.remove(zip_path)
+            logger.info("VOSK model downloaded and extracted successfully")
+
+            # Final status
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download VOSK model from {url}: {e}")
+            # Clean up potentially incomplete download
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            raise RuntimeError(f"Failed to download VOSK model: {e}") from e
+        except zipfile.BadZipFile:
+            logger.error(f"Downloaded file from {url} is not a valid zip file.")
+            # Clean up corrupted download
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            raise RuntimeError("Downloaded VOSK model file is corrupted.")
+        except Exception as e:
+            logger.error(f"An error occurred during VOSK model download/extraction: {e}")
+            # Clean up potentially corrupted extraction
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            # Consider removing partially extracted model dir if needed
+            # if os.path.exists(model_path): shutil.rmtree(model_path)
+            raise
+
+    def _download_whisper_model(self, cache_dir: str):
+        """Download a Whisper model with progress tracking."""
+        import requests
+
+        self._download_cancelled = False
+
+        # Whisper model URLs (from openai-whisper package)
+        model_urls = {
+            "tiny": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/"
+            "tiny.pt",
+            "base": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/"
+            "base.pt",
+            "small": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/"
+            "small.pt",
+            "medium": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/"
+            "medium.pt",
+            "large": "https://openaipublic.azureedge.net/main/whisper/models/"
+            "e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/"
+            "large-v3.pt",
+        }
+
+        url = model_urls.get(self.model_size)
+        if not url:
+            raise ValueError(f"Unknown Whisper model size: {self.model_size}")
+
+        model_file = os.path.join(cache_dir, f"{self.model_size}.pt")
+        temp_file = model_file + ".tmp"
+
+        os.makedirs(cache_dir, exist_ok=True)
+
+        logger.info(f"Downloading Whisper {self.model_size} model to {model_file}")
+        logger.info(f"Downloading from {url}")
+
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+            start_time = time.time()
+            last_update_time = start_time
+            chunk_size = 8192  # 8KB chunks
+
+            with open(temp_file, "wb") as f:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    if self._download_cancelled:
+                        logger.info("Download cancelled by user")
+                        f.close()
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                        raise RuntimeError("Download cancelled")
+
+                    f.write(data)
+                    downloaded_size += len(data)
+
+                    # Update progress callback
+                    current_time = time.time()
+                    if (
+                        self._download_progress_callback
+                        and (current_time - last_update_time) >= 0.1
+                    ):
+                        elapsed = current_time - start_time
+                        if elapsed > 0:
+                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
+                        else:
+                            speed_mbps = 0
+
+                        if total_size > 0:
+                            progress = downloaded_size / total_size
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                            if speed_mbps > 0:
+                                eta_seconds = remaining_mb / speed_mbps
+                                eta_str = (
+                                    f"{int(eta_seconds)}s"
+                                    if eta_seconds < 60
+                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                                )
+                            else:
+                                eta_str = "--"
+                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        else:
+                            progress = 0
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
+
+                        self._download_progress_callback(progress, speed_mbps, status)
+                        last_update_time = current_time
+
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Rename temp file to final
+            os.rename(temp_file, model_file)
+            logger.info("Whisper model downloaded successfully")
+
+            if self._download_progress_callback:
+                self._download_progress_callback(1.0, 0, "Complete!")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to download Whisper model from {url}: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise RuntimeError(f"Failed to download Whisper model: {e}") from e
+        except Exception as e:
+            logger.error(f"An error occurred during Whisper model download: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            raise
+
+    def register_text_callback(self, callback: Callable[[str], None]):
+        """
+        Register a callback function that will be called when text is recognized.
+
+        Args:
+            callback: A function that takes a string argument (the recognized text)
+        """
+        self.text_callbacks.append(callback)
+
+    def unregister_text_callback(self, callback: Callable[[str], None]):
+        """
+        Unregister a text callback function.
+
+        Args:
+            callback: The callback function to remove.
+        """
+        try:
+            self.text_callbacks.remove(callback)
+            logger.debug(f"Unregistered text callback: {callback}")
+        except ValueError:
+            logger.warning(f"Callback {callback} not found in text_callbacks.")
+
+    def get_text_callbacks(self) -> list[Callable[[str], None]]:
+        """Get a copy of the current text callbacks list."""
+        return list(self.text_callbacks)
+
+    def set_text_callbacks(self, callbacks: list[Callable[[str], None]]):
+        """Set the text callbacks list (used for temporarily replacing callbacks)."""
+        self.text_callbacks = list(callbacks)
+
+    def register_state_callback(self, callback: Callable[[RecognitionState], None]):
+        """
+        Register a callback function that will be called when the recognition state changes.
+
+        Args:
+            callback: A function that takes a RecognitionState argument
+        """
+        self.state_callbacks.append(callback)
+
+    def register_action_callback(self, callback: Callable[[str], None]):
+        """
+        Register a callback function that will be called when a special action is triggered.
+
+        Args:
+            callback: A function that takes a string argument (the action)
+        """
+        self.action_callbacks.append(callback)
+
+    def register_audio_level_callback(self, callback: Callable[[float], None]):
+        """
+        Register a callback function that will be called with audio level updates.
+
+        Args:
+            callback: A function that takes a float argument (0-100 representing audio level %)
+        """
+        self._audio_level_callbacks.append(callback)
+
+    def unregister_audio_level_callback(self, callback: Callable[[float], None]):
+        """
+        Unregister an audio level callback function.
+
+        Args:
+            callback: The callback function to remove.
+        """
+        try:
+            self._audio_level_callbacks.remove(callback)
+        except ValueError:
+            pass
+
+    def set_audio_device(self, device_index: Optional[int]):
+        """
+        Set the audio input device to use.
+
+        Args:
+            device_index: The device index to use, or None for system default
+        """
+        if device_index != self.audio_device_index:
+            logger.info(f"Audio device changed from {self.audio_device_index} to {device_index}")
+            self.audio_device_index = device_index
+
+    def get_audio_device(self) -> Optional[int]:
+        """Get the currently configured audio device index."""
+        return self.audio_device_index
+
+    def get_last_audio_level(self) -> float:
+        """Get the last recorded audio level (0-100)."""
+        return self._last_audio_level
+
+    def _update_state(self, new_state: RecognitionState):
+        """
+        Update the recognition state and notify callbacks.
+
+        Args:
+            new_state: The new recognition state
+        """
+        self.state = new_state
+        for callback in self.state_callbacks:
+            callback(new_state)
+
+    @property
+    def model_ready(self) -> bool:
+        """Check if the model is initialized and ready for recognition."""
+        return self._model_initialized and self.model is not None
+
+    def start_recognition(self):
+        """Start the speech recognition process."""
+        if self.state != RecognitionState.IDLE:
+            logger.warning(f"Cannot start recognition in current state: {self.state}")
+            return
+
+        # Check if model is ready
+        if not self.model_ready:
+            logger.warning(
+                "Cannot start recognition: model not downloaded. " "Please download via Settings."
+            )
+            play_error_sound()
+            _show_notification(
+                "No Speech Model",
+                "Please open Settings and download a speech recognition model " "to use dictation.",
+                "dialog-warning",
+            )
+            return
+
+        logger.info("Starting speech recognition")
+        self._update_state(RecognitionState.LISTENING)
+
+        # Play the start sound
+        play_start_sound()
+
+        # Set recording flag
+        self.should_record = True
+        self.audio_buffer = []
+        self._segment_queue = queue.Queue(maxsize=32)
+
+        # Start the audio recording thread
+        self.audio_thread = threading.Thread(target=self._record_audio)
+        self.audio_thread.daemon = True
+        self.audio_thread.start()
+
+        # Start the recognition thread
+        self.recognition_thread = threading.Thread(target=self._perform_recognition)
+        self.recognition_thread.daemon = True
+        self.recognition_thread.start()
+
+    def stop_recognition(self):
+        """Stop the speech recognition process."""
+        if self.state == RecognitionState.IDLE:
+            return
+
+        logger.info("Stopping speech recognition")
+
+        # Stop recording FIRST to prevent capturing the stop sound
+        self.should_record = False
+
+        # Wait for audio thread to finish recording and enqueue any pending audio
+        # This is critical to prevent race condition where recognition thread exits
+        # before the final audio segment is enqueued
+        if self.audio_thread and self.audio_thread.is_alive():
+            self.audio_thread.join(timeout=2.0)
+
+        # Discard the last ~1 second of audio to avoid transcribing the stop sound
+        # Audio is recorded in 1024-sample chunks at 16000 Hz = ~64ms per chunk
+        # We discard the last 15 chunks (~1 second) which should contain the feedback sound
+        with self._buffer_lock:
+            if len(self.audio_buffer) > 15:
+                discarded_chunks = self.audio_buffer[-15:]
+                self.audio_buffer = self.audio_buffer[:-15]
+                logger.debug(
+                    f"Discarded {len(discarded_chunks)} audio chunks to avoid transcribing feedback sound"
+                )
+            elif self.audio_buffer:
+                # If buffer is small, just clear it entirely to be safe
+                logger.debug(f"Clearing small audio buffer ({len(self.audio_buffer)} chunks)")
+                self.audio_buffer = []
+
+            if self.audio_buffer:
+                logger.info(f"DEBUG: Enqueuing final buffer with {len(self.audio_buffer)} chunks")
+                self._enqueue_audio_segment(self.audio_buffer)
+                self.audio_buffer = []
+
+        # Now play the stop sound (after recording has stopped)
+        play_stop_sound()
+
+        # Wake up recognition thread so it can drain queued segments and stop
+        self._signal_recognition_stop()
+
+        if self.recognition_thread and self.recognition_thread.is_alive():
+            self.recognition_thread.join(timeout=5.0)  # Increased timeout for transcription
+        self._signal_recognition_stop()
+
+        if self.recognition_thread and self.recognition_thread.is_alive():
+            self.recognition_thread.join(timeout=1.0)
+
+        self._update_state(RecognitionState.IDLE)
+
+    def _record_audio(self):
+        """Record audio from the microphone with reconnection logic."""
+        # Lazy import to avoid circular dependency
+        from ..ui.audio_feedback import play_error_sound  # noqa: F401
+
+        try:
+            import numpy as np
+            import pyaudio
+        except ImportError as e:
+            logger.error(f"Failed to import required audio libraries: {e}")
+            logger.error("Please install required dependencies: pip install pyaudio numpy")
+            play_error_sound()
+            self._update_state(RecognitionState.ERROR)
+            return
+
+        try:
+            # PyAudio configuration
+            CHUNK = 1024
+            FORMAT = pyaudio.paInt16
+
+            # Initialize PyAudio with reconnection support
+            self._pyaudio_instance = pyaudio.PyAudio()
+            audio = self._pyaudio_instance
+
+            # Log available devices for debugging
+            logger.debug("Available audio input devices:")
+            for i in range(audio.get_device_count()):
+                try:
+                    info = audio.get_device_info_by_index(i)
+                    if info.get("maxInputChannels", 0) > 0:
+                        logger.debug(
+                            f"  [{i}] {info.get('name')} (inputs: {info.get('maxInputChannels')})"
+                        )
+                except (IOError, OSError):
+                    continue
+
+            # Detect supported channel count first (some devices require stereo)
+            CHANNELS = _get_supported_channels(audio, self.audio_device_index)
+            logger.info(f"Using {CHANNELS} channel(s) for recording")
+
+            # Detect supported sample rate for the selected device
+            RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
+            self._capture_sample_rate = RATE
+            logger.info(f"Using sample rate: {RATE}Hz")
+
+            # Open microphone stream with optional device selection and reconnection logic
+            stream_kwargs = {
+                "format": FORMAT,
+                "channels": CHANNELS,
+                "rate": RATE,
+                "input": True,
+                "frames_per_buffer": CHUNK,
+            }
+
+            # Use specified device if set, otherwise use system default
+            if self.audio_device_index is not None:
+                stream_kwargs["input_device_index"] = self.audio_device_index
+                try:
+                    device_info = audio.get_device_info_by_index(self.audio_device_index)
+                    logger.info(
+                        f"Using audio device [{self.audio_device_index}]: {device_info.get('name')}"
+                    )
+                except (IOError, OSError):
+                    logger.warning(f"Could not get info for device index {self.audio_device_index}")
+            else:
+                try:
+                    default_device = audio.get_default_input_device_info()
+                    logger.info(
+                        f"Using default audio device [{default_device.get('index')}]: {default_device.get('name')}"
+                    )
+                except (IOError, OSError):
+                    logger.warning("Could not get default input device info")
+
+            try:
+                self._audio_stream = audio.open(**stream_kwargs)
+                stream = self._audio_stream
+            except (IOError, OSError) as e:
+                logger.error(f"Failed to open audio stream: {e}")
+                logger.error("This may indicate a problem with the audio device or permissions.")
+
+                # Attempt reconnection
+                if self._attempt_audio_reconnection(audio):
+                    stream = self._audio_stream
+                else:
+                    play_error_sound()
+                    audio.terminate()
+                    self._update_state(RecognitionState.ERROR)
+                    return
+
+            logger.info("Audio recording started")
+
+            # Record audio while should_record is True
+            silence_counter = 0
+            speech_detected_in_session = False
+            log_level_interval = 0  # Counter for periodic level logging
+            max_level_seen = 0.0
+
+            while self.should_record:
+                try:
+                    # Check buffer size and enforce limits (with lock for thread safety)
+                    with self._buffer_lock:
+                        if len(self.audio_buffer) >= self._max_buffer_size:
+                            logger.warning(
+                                f"Audio buffer limit reached ({len(self.audio_buffer)} chunks). Clearing oldest data."
+                            )
+                            # Remove oldest 25% of data to prevent memory issues
+                            remove_count = self._max_buffer_size // 4
+                            self.audio_buffer = self.audio_buffer[remove_count:]
+                            logger.info(f"Buffer trimmed by {remove_count} chunks")
+
+                        data = stream.read(CHUNK, exception_on_overflow=False)
+
+                        # Convert stereo to mono if necessary
+                        # Speech recognition engines expect mono (1 channel) audio
+                        if CHANNELS == 2:
+                            audio_array = np.frombuffer(data, dtype=np.int16)
+                            # Reshape to (n_samples, 2) and average channels
+                            stereo_samples = audio_array.reshape(-1, 2)
+                            mono_samples = stereo_samples.mean(axis=1).astype(np.int16)
+                            data = mono_samples.tobytes()
+
+                        # Resample to 16kHz if capturing at non-16kHz for Vosk/Whisper compatibility
+                        if self._capture_sample_rate != 16000:
+                            audio_array = np.frombuffer(data, dtype=np.int16)
+                            resample_ratio = 16000 / self._capture_sample_rate
+                            resampled_length = int(len(audio_array) * resample_ratio)
+                            resampled = np.interp(
+                                np.linspace(0, len(audio_array), resampled_length),
+                                np.arange(len(audio_array)),
+                                audio_array,
+                            ).astype(np.int16)
+                            data = resampled.tobytes()
+
+                        self.audio_buffer.append(data)
+
+                    # Simple Voice Activity Detection (VAD)
+                    audio_data = np.frombuffer(data, dtype=np.int16)
+                    volume = np.abs(audio_data).mean()
+
+                    # Track max level and notify callbacks
+                    # Normalize to 0-100 scale (16-bit audio max is ~32768)
+                    normalized_level = min(100.0, (volume / 327.68))
+                    self._last_audio_level = normalized_level
+                    max_level_seen = max(max_level_seen, normalized_level)
+
+                    # Notify audio level callbacks
+                    for callback in self._audio_level_callbacks:
+                        try:
+                            callback(normalized_level)
+                        except Exception as e:
+                            logger.debug(f"Audio level callback error: {e}")
+
+                    # Log audio levels periodically for debugging
+                    log_level_interval += 1
+                    if log_level_interval >= 50:  # Every ~3 seconds at 16kHz/1024 chunks
+                        logger.debug(
+                            f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%, buffer_size={len(self.audio_buffer)}"
+                        )
+                        log_level_interval = 0
+
+                    # Threshold based on sensitivity (1-5)
+                    # Ensure vad_sensitivity is treated as integer for calculation
+                    try:
+                        vad_sens = int(self.vad_sensitivity)
+                        threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
+                    except ValueError:
+                        logger.warning(
+                            f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
+                        )
+                        threshold = 500 / 3
+
+                    if volume < threshold:  # Silence
+                        silence_counter += CHUNK / RATE  # Convert chunks to seconds
+                        if silence_counter > self.silence_timeout:  # Use self.silence_timeout
+                            if len(self.audio_buffer) > 0:
+                                logger.debug("Silence detected, queueing audio segment")
+                                self._enqueue_audio_segment(self.audio_buffer)
+                                self.audio_buffer = []
+                            silence_counter = 0
+                    else:  # Speech
+                        if not speech_detected_in_session:
+                            logger.debug(
+                                f"Speech detected (level={normalized_level:.1f}%, "
+                                f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
+                            )
+                            speech_detected_in_session = True
+                        silence_counter = 0
+                except (IOError, OSError) as e:
+                    current_time = time.time()
+                    logger.error(f"Audio device error: {e}")
+
+                    # Implement reconnection logic with exponential backoff
+                    if (
+                        current_time - self._last_audio_error_time > 5.0
+                    ):  # Prevent rapid reconnection attempts
+                        self._last_audio_error_time = current_time
+
+                        if self._attempt_audio_reconnection(audio):
+                            logger.info("Audio reconnection successful, continuing recording")
+                            stream = self._audio_stream  # Update stream reference
+                            continue  # Continue recording with new stream
+                        else:
+                            logger.error("Audio reconnection failed, stopping recording")
+                            break
+                    else:
+                        logger.warning(
+                            "Audio error occurred too soon after last error, stopping recording"
+                        )
+                        break
+                except Exception as e:
+                    logger.error(f"Unexpected error reading audio data: {e}")
+                    break
+
+            # Clean up
+            if stream and hasattr(stream, "is_active") and stream.is_active():
+                try:
+                    stream.stop_stream()
+                    stream.close()
+                except Exception as e:
+                    logger.warning(f"Error closing audio stream: {e}")
+
+            if audio and hasattr(audio, "terminate"):
+                try:
+                    audio.terminate()
+                except Exception as e:
+                    logger.warning(f"Error terminating PyAudio: {e}")
+
+            # Reset audio stream reference and reconnection state
+            self._audio_stream = None
+            self._pyaudio_instance = None
+            self._reconnection_attempts = 0
+            self._last_audio_error_time = 0
+
+            # Log summary
+            if not speech_detected_in_session and max_level_seen < 5:
+                logger.warning(
+                    f"No speech detected during session. Max audio level was "
+                    f"only {max_level_seen:.1f}%. This may indicate the wrong "
+                    "audio device is selected or the microphone is muted."
+                )
+
+            logger.info("Audio recording stopped")
+
+        except Exception as e:
+            logger.error(f"Error in audio recording: {e}")
+            play_error_sound()
+            self._update_state(RecognitionState.ERROR)
+
+    def _process_final_buffer(self):
+        """Process the final audio buffer after silence is detected."""
+        with self._buffer_lock:
+            if not self.audio_buffer:
+                return
+
+            audio_buffer = self.audio_buffer.copy()
+            self.audio_buffer = []
+
+        self._process_audio_buffer(audio_buffer)
+
+    def _process_audio_buffer(self, audio_buffer: list[bytes]):
+        """Process an immutable audio segment for transcription and commands."""
+        if not audio_buffer:
+            return
+
+        if self.engine == "vosk":
+            # Lock recognizer access to prevent race condition with reconfigure
+            with self._model_lock:
+                # Check if recognizer is still valid
+                if self.recognizer is None:
+                    logger.warning("Recognizer is None during processing, returning empty result")
+                    return
+                for data in audio_buffer:
+                    self.recognizer.AcceptWaveform(data)
+
+                result = json.loads(self.recognizer.FinalResult())
+                text = result.get("text", "")
+
+        elif self.engine == "whisper":
+            text = self._transcribe_with_whisper(audio_buffer)
+
+        elif self.engine == "whisper_cpp":
+            text = self._transcribe_with_whispercpp(audio_buffer)
+
+        else:
+            logger.error(f"Unknown engine: {self.engine}")
+            return
+
+        # Process text - either with voice commands or pass through directly
+        logger.info(
+            f"DEBUG: _process_audio_buffer got text='{text[:50] if text else '(empty)'}...'"
+        )
+        if text:
+            if self._voice_commands_enabled:
+                # Process with voice commands (original behavior)
+                processed_text, actions = self.command_processor.process_text(text)
+            else:
+                # Voice commands disabled - pass text through directly (Whisper handles punctuation)
+                processed_text = text.strip()
+                actions = []
+
+            # Call text callbacks with processed text
+            logger.info(
+                f"DEBUG: processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+            )
+            if processed_text:
+                for callback in self.text_callbacks:
+                    logger.info(
+                        f"DEBUG: invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                    )
+                    callback(processed_text)
+
+            # Call action callbacks for each action
+            for action in actions:
+                for callback in self.action_callbacks:
+                    callback(action)
+
+    def _perform_recognition(self):
+        """Perform speech recognition in real-time."""
+        logger.info("DEBUG: _perform_recognition thread started")
+        while True:
+            logger.debug(
+                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
+            )
+            try:
+                segment = self._segment_queue.get(timeout=0.1)
+            except queue.Empty:
+                # Only exit if we're not recording AND queue is empty
+                if not self.should_record and self._segment_queue.empty():
+                    logger.info(
+                        "DEBUG: Recognition loop - not recording and queue empty, checking for final items..."
+                    )
+                    # Give a brief moment for any final items to be enqueued
+                    try:
+                        segment = self._segment_queue.get(timeout=0.5)
+                    except queue.Empty:
+                        logger.info("DEBUG: Recognition loop - no more items, exiting")
+                        break
+                else:
+                    logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
+                    continue
+
+            if segment is None:
+                logger.info(
+                    "DEBUG: Recognition loop - got None signal, draining remaining items..."
+                )
+                # Drain any remaining items before exiting
+                while not self._segment_queue.empty():
+                    try:
+                        remaining = self._segment_queue.get_nowait()
+                        if remaining is not None:
+                            logger.info(
+                                f"DEBUG: Recognition loop - processing remaining segment with {len(remaining)} chunks"
+                            )
+                            self._update_state(RecognitionState.PROCESSING)
+                            self._process_audio_buffer(remaining)
+                    except queue.Empty:
+                        break
+                logger.info("DEBUG: Recognition loop - exiting after None signal")
+                break
+
+            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
+            self._update_state(RecognitionState.PROCESSING)
+            self._process_audio_buffer(segment)
+            if self.should_record:
+                self._update_state(RecognitionState.LISTENING)
+        logger.info("DEBUG: _perform_recognition thread exiting")
+        """Perform speech recognition in real-time."""
+        logger.info("DEBUG: _perform_recognition thread started")
+        while self.should_record or not self._segment_queue.empty():
+            logger.debug(
+                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
+            )
+            try:
+                segment = self._segment_queue.get(timeout=0.1)
+            except queue.Empty:
+                logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
+                continue
+
+            if segment is None:
+                logger.info("DEBUG: Recognition loop - got None signal, continuing")
+                continue
+
+            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
+            self._update_state(RecognitionState.PROCESSING)
+            self._process_audio_buffer(segment)
+            if self.should_record:
+                self._update_state(RecognitionState.LISTENING)
+        logger.info("DEBUG: _perform_recognition thread exiting")
+
+    def _enqueue_audio_segment(self, audio_buffer: list[bytes]):
+        """Queue an audio segment for asynchronous transcription."""
+        segment = audio_buffer.copy()
+        if not segment:
+            logger.warning("DEBUG: _enqueue_audio_segment called with empty buffer")
+            return
+
+        logger.info(f"DEBUG: _enqueue_audio_segment called with {len(segment)} chunks")
+
+        try:
+            self._segment_queue.put_nowait(segment)
+            logger.info("DEBUG: Enqueued segment successfully")
+        except queue.Full:
+            logger.warning("Transcription queue is full, dropping oldest pending segment")
+            try:
+                self._segment_queue.get_nowait()
+                self._segment_queue.put_nowait(segment)
+            except queue.Empty:
+                logger.warning("Could not recover queue space for transcription segment")
+
+    def _signal_recognition_stop(self):
+        """Signal recognition thread to wake up and stop cleanly."""
+        try:
+            self._segment_queue.put_nowait(None)
+        except queue.Full:
+            try:
+                self._segment_queue.get_nowait()
+                self._segment_queue.put_nowait(None)
+            except queue.Empty:
+                logger.debug("Recognition queue emptied before stop signal")
+
+    def reconfigure(
+        self,
+        engine: Optional[str] = None,
+        model_size: Optional[str] = None,
+        language: Optional[str] = None,
+        vad_sensitivity: Optional[int] = None,
+        silence_timeout: Optional[float] = None,
+        audio_device_index: Optional[int] = None,
+        force_download: bool = True,
+        **kwargs,  # Allow for future expansion
+    ):
+        """
+        Reconfigure the speech recognition engine on the fly.
+
+        Args:
+            engine: The new speech recognition engine ("vosk" or "whisper").
+            model_size: The new model size.
+            language: The new language code (e.g., "en-us", "hi", "auto").
+            vad_sensitivity: New VAD sensitivity (for VOSK).
+            silence_timeout: New silence timeout (for VOSK).
+            audio_device_index: Audio input device index (None for default, -1 to clear).
+            force_download: If True, download missing models (default: True for UI-triggered reconfigures).
+        """
+        logger.info(
+            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, language={language}, vad={vad_sensitivity}, silence={silence_timeout}, audio_device={audio_device_index}"
+        )
+
+        restart_needed = False
+        if engine is not None and engine != self.engine:
+            self.engine = engine
+            restart_needed = True
+
+        if model_size is not None and model_size != self.model_size:
+            self.model_size = model_size
+            restart_needed = True
+
+        # Language change requires restart for both engines
+        # Whisper needs to know the language for transcription
+        # VOSK needs to load a different model for the new language
+        if language is not None and language != self.language:
+            self.language = language
+            restart_needed = True
+
+        # Update VOSK specific params if provided
+        if vad_sensitivity is not None:
+            self.vad_sensitivity = max(1, min(5, int(vad_sensitivity)))
+        if silence_timeout is not None:
+            self.silence_timeout = max(0.5, min(5.0, float(silence_timeout)))
+
+        # Handle audio device index (-1 means use default/clear selection)
+        if audio_device_index is not None:
+            if audio_device_index == -1:
+                self.audio_device_index = None
+            else:
+                self.audio_device_index = audio_device_index
+
+        if "voice_commands_enabled" in kwargs:
+            self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
+
+        if restart_needed:
+            logger.info("Engine or model changed, re-initializing...")
+            # When reconfiguring from UI, allow downloads
+            old_defer = self._defer_download
+            self._defer_download = not force_download
+
+            # Lock model access during reinitialization to prevent race condition
+            # with transcription threads that may be using the model/recognizer
+            with self._model_lock:
+                # Release old resources explicitly if necessary (Python's GC might handle it)
+                self.model = None
+                self.recognizer = None
+                try:
+                    if self.engine == "vosk":
+                        self._init_vosk()
+                    elif self.engine == "whisper":
+                        self._init_whisper()
+                    elif self.engine == "whisper_cpp":
+                        self._init_whispercpp()
+                    else:
+                        raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
+                    logger.info("Speech engine re-initialized successfully.")
+                except Exception as e:
+                    logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
+                    self._update_state(RecognitionState.ERROR)
+                    # Re-raise or handle appropriately
+                    raise
+                finally:
+                    self._defer_download = old_defer
+        else:
+            # If only VOSK params changed, just log it
+            logger.info("Applied VAD/silence timeout changes.")
+
+    def _attempt_audio_reconnection(self, audio_instance) -> bool:
+        """
+        Attempt to reconnect to the audio device.
+
+        Args:
+            audio_instance: The PyAudio instance to use for reconnection
+
+        Returns:
+            bool: True if reconnection was successful, False otherwise
+        """
+        import pyaudio
+
+        self._reconnection_attempts += 1
+
+        if self._reconnection_attempts > self._max_reconnection_attempts:
+            logger.error(f"Max reconnection attempts ({self._max_reconnection_attempts}) reached")
+            return False
+
+        # Calculate delay with exponential backoff
+        delay = self._reconnection_delay * (2 ** (self._reconnection_attempts - 1))
+        delay = min(delay, 10.0)  # Cap at 10 seconds
+
+        logger.info(
+            f"Attempting audio reconnection (attempt {self._reconnection_attempts}/{self._max_reconnection_attempts}) after {delay:.1f}s delay..."
+        )
+
+        # Wait before attempting reconnection
+        time.sleep(delay)
+
+        try:
+            # Close existing stream if it exists
+            if self._audio_stream:
+                try:
+                    self._audio_stream.stop_stream()
+                    self._audio_stream.close()
+                except Exception as e:
+                    logger.debug(f"Error closing old audio stream: {e}")
+
+            # Stream configuration
+            CHUNK = 1024
+            FORMAT = pyaudio.paInt16
+
+            # Detect supported channel count first (some devices require stereo)
+            CHANNELS = _get_supported_channels(audio_instance, self.audio_device_index)
+            logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
+
+            # Detect supported sample rate for the device
+            RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
+            self._capture_sample_rate = RATE
+            logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
+
+            stream_kwargs = {
+                "format": FORMAT,
+                "channels": CHANNELS,
+                "rate": RATE,
+                "input": True,
+                "frames_per_buffer": CHUNK,
+            }
+
+            # Use specified device if set
+            if self.audio_device_index is not None:
+                stream_kwargs["input_device_index"] = self.audio_device_index
+
+            # Attempt to open new stream
+            new_stream = audio_instance.open(**stream_kwargs)
+
+            # Test the stream by reading a small amount of data
+            test_data = new_stream.read(CHUNK, exception_on_overflow=False)
+
+            if test_data:
+                self._audio_stream = new_stream
+                logger.info("Audio reconnection successful")
+                return True
+            else:
+                logger.error("Reconnected stream returned no data")
+                try:
+                    new_stream.stop_stream()
+                    new_stream.close()
+                except Exception:
+                    pass
+                return False
+
+        except (IOError, OSError) as e:
+            logger.error(f"Audio reconnection failed: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error during audio reconnection: {e}")
+            return False
+
+    def set_buffer_limit(self, max_chunks: int):
+        """
+        Set the maximum number of audio chunks to buffer.
+
+        Args:
+            max_chunks: Maximum number of chunks to buffer (default: 5000)
+        """
+        if max_chunks < 100:
+            logger.warning("Buffer limit too small, setting to minimum 100")
+            max_chunks = 100
+        elif max_chunks > 20000:
+            logger.warning("Buffer limit too large, setting to maximum 20000")
+            max_chunks = 20000
+
+        self._max_buffer_size = max_chunks
+        logger.info(f"Audio buffer limit set to {max_chunks} chunks")
+
+    def get_buffer_stats(self) -> dict:
+        """
+        Get current buffer statistics.
+
+        Returns:
+            dict: Buffer statistics including size, memory usage, etc.
+        """
+        with self._buffer_lock:
+            total_memory = sum(len(chunk) for chunk in self.audio_buffer)
+            buffer_size = len(self.audio_buffer)
+        return {
+            "buffer_size": buffer_size,
+            "buffer_limit": self._max_buffer_size,
+            "memory_usage_bytes": total_memory,
+            "memory_usage_mb": total_memory / (1024 * 1024),
+            "buffer_full_percentage": (
+                (buffer_size / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
+            ),
+        }

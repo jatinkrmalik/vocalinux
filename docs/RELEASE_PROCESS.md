@@ -1,0 +1,352 @@
+# Vocalinux Release Process
+
+This document outlines the step-by-step process for creating a new release of Vocalinux.
+
+## Overview
+
+Vocalinux uses [Semantic Versioning](https://semver.org/) with pre-release suffixes:
+- **Alpha**: Early testing phase (e.g., `0.4.1-alpha`)
+- **Beta**: Feature-complete, testing phase (e.g., `0.5.0-beta`)
+- **RC** (Release Candidate): Final testing before stable (e.g., `0.5.0-rc1`)
+- **Stable**: Production-ready (e.g., `1.0.0`)
+
+## Quick Release Checklist
+
+Use this checklist for every release:
+
+```markdown
+## Version Bump Checklist for X.Y.Z-PHASE
+
+### Core Version Files
+- [ ] `src/vocalinux/version.py` - Update `__version__` and `__version_info__`
+- [ ] `pyproject.toml` - Confirm `Development Status` classifier and `requires-python` are correct for this release phase
+
+### Documentation
+- [ ] `README.md` - Update release announcement and status references
+- [ ] `docs/INSTALL.md` - Verify install examples use `main/install.sh` (not version-pinned raw URLs)
+- [ ] `docs/UPDATE.md` - Add "What's New" section for new version
+- [ ] `SECURITY.md` - Update supported versions table
+
+### Website
+- [ ] `web/src/app/page.tsx` - Update `softwareVersion` in schema (around line 68)
+- [ ] `web/src/app/page.tsx` - Update version badge in header (around line 293)
+- [ ] `web/src/app/changelog/page.tsx` - Add new release entry to changelog
+- [ ] `web/package.json` - Update version field
+- [ ] `web/package-lock.json` - Keep top-level/version metadata aligned with `web/package.json`
+
+### Testing & Verification
+- [ ] Run `make test` - All tests pass
+- [ ] Run `make lint` - No linting errors
+- [ ] Run `make typecheck` - No type errors
+- [ ] Run `make build` - Package builds successfully
+- [ ] Run `npm run build` in `web/` - Website builds successfully
+
+> Note: CI workflows also sync website version metadata from `src/vocalinux/version.py`, but source files should still be updated in-repo during release prep for review clarity.
+
+### Git Operations
+- [ ] Create release branch: `git checkout -b release/vX.Y.Z-PHASE`
+- [ ] Commit all version changes
+- [ ] Push branch and create PR
+- [ ] After PR merge, create tag: `git tag -a vX.Y.Z-PHASE -m "Release X.Y.Z-PHASE"`
+- [ ] Push tag: `git push origin vX.Y.Z-PHASE`
+```
+
+## Detailed Release Steps
+
+### Step 1: Determine Version Number
+
+Follow semantic versioning:
+
+```
+Given version MAJOR.MINOR.PATCH-PHASE:
+
+MAJOR - Breaking changes (for 1.0.0: public API stable)
+MINOR - New features, backwards compatible
+PATCH - Bug fixes, backwards compatible
+PHASE - alpha, beta, rc1, rc2, etc. (omit for stable releases)
+```
+
+**Examples:**
+- Alpha → Beta: `0.4.1-alpha` → `0.5.0-beta` (new features, phase change)
+- Beta → RC: `0.5.0-beta` → `0.5.0-rc1` (same features, testing phase)
+- RC → Stable: `0.5.0-rc1` → `1.0.0` (first stable release)
+- Stable patch: `1.0.0` → `1.0.1` (bug fixes only)
+- Stable minor: `1.0.0` → `1.1.0` (new features)
+
+### Step 2: Update Core Version Files
+
+#### 2.1 Update `src/vocalinux/version.py`
+
+```python
+__version__ = "0.5.0-beta"
+__version_info__ = (0, 5, 0, "beta")
+```
+
+#### 2.2 Update `pyproject.toml`
+
+Change the Development Status classifier:
+
+```toml
+# For Alpha:
+"Development Status :: 3 - Alpha",
+
+# For Beta:
+"Development Status :: 4 - Beta",
+
+# For Stable:
+"Development Status :: 5 - Production/Stable",
+```
+
+### Step 3: Update Documentation
+
+#### 3.1 Update `README.md`
+
+**Status Badge (line ~6):**
+```markdown
+<!-- Alpha -->
+[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange)]
+
+<!-- Beta -->
+[![Status: Beta](https://img.shields.io/badge/Status-Beta-blue)]
+
+<!-- Stable -->
+[![Status: Stable](https://img.shields.io/badge/Status-Stable-brightgreen)]
+```
+
+**Install Commands:**
+Keep install commands on `main/install.sh` (installer resolves latest release tag automatically):
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+```
+
+**Release Announcement (lines ~31-34):**
+```markdown
+> 🎉 **Beta Release!**
+>
+> We're excited to share Vocalinux Beta with the community.
+> This release is feature-complete and ready for broader testing.
+```
+
+#### 3.2 Update `docs/INSTALL.md`
+
+Confirm install examples point to `main/install.sh` and not release-tag raw URLs.
+
+#### 3.3 Update `docs/UPDATE.md`
+
+Add a new "What's New" section at the top:
+
+```markdown
+## What's New in v0.5.0-beta
+
+- Feature 1
+- Feature 2
+- Bug fix 1
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.5.0-beta).
+
+---
+
+## Previous Versions
+
+### v0.4.1-alpha
+...
+```
+
+#### 3.4 Update `SECURITY.md`
+
+Update the supported versions table:
+
+```markdown
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.5.x   | :white_check_mark: |
+| 0.4.x   | :x:                |
+| < 0.4   | :x:                |
+```
+
+### Step 4: Update Website
+
+#### 4.1 Update `web/src/app/page.tsx`
+
+Update the schema.org softwareVersion (around line 68):
+
+```typescript
+"softwareVersion": "vX.Y.Z-PHASE",
+```
+
+Update the version badge in the header (around line 293):
+
+```tsx
+vX.Y.Z Beta
+```
+
+#### 4.2 Update `web/src/app/changelog/page.tsx`
+
+Add new release entry to the `releases` array at the top of the file.
+
+#### 4.3 Update `web/package.json`
+
+```json
+{
+  "name": "vocalinux-website",
+  "version": "0.5.0"
+}
+```
+
+Also align `web/package-lock.json` top-level `version` fields with `web/package.json`.
+
+### Step 5: Verify Everything Works
+
+Run the full verification suite:
+
+```bash
+# Run tests
+make test
+
+# Run linting
+make lint
+
+# Run type checking
+make typecheck
+
+# Build package
+make build
+
+# Website build
+cd web && npm run build && cd ..
+
+# Install script sanity checks (optional but recommended)
+bash -n install.sh
+./install.sh --help | grep -- --tag
+```
+
+### Step 6: Create Release Branch and PR
+
+```bash
+# Create branch
+git checkout -b release/v0.5.0-beta
+
+# Stage all changes
+git add -A
+
+# Commit with conventional commit format
+git commit -m "chore(release): prepare v0.5.0-beta
+
+- Update version from 0.4.1-alpha to 0.5.0-beta
+- Update status badges from Alpha to Beta
+- Update documentation version references
+- Update website schema and badges
+- Update pyproject.toml classifiers
+- Update SECURITY.md supported versions table"
+
+# Push branch
+git push origin release/v0.5.0-beta
+
+# Create PR (use GitHub CLI or web interface)
+gh pr create --title "chore(release): prepare v0.5.0-beta" \
+  --body "This PR prepares the repository for the v0.5.0-beta release.
+
+## Changes
+- Bumped version to 0.5.0-beta
+- Updated status badges from Alpha to Beta
+- Updated all documentation version references
+- Updated website version info
+- Updated SECURITY.md supported versions
+
+## Checklist
+- [x] All tests passing
+- [x] Linting clean
+- [x] Type checking clean
+- [x] Package builds successfully"
+```
+
+### Step 7: Create and Push Tag (After PR Merge)
+
+Once the PR is merged to main:
+
+```bash
+# Checkout main
+git checkout main
+git pull origin main
+
+# Create annotated tag
+git tag -a v0.5.0-beta -m "Vocalinux Beta Release 0.5.0
+
+Key changes since 0.4.1-alpha:
+- Feature 1
+- Feature 2
+- Bug fix 1
+
+Full changelog: https://github.com/jatinkrmalik/vocalinux/releases"
+
+# Push tag
+git push origin v0.5.0-beta
+```
+
+### Step 8: Monitor Release
+
+After pushing the tag, the GitHub Actions workflow will automatically:
+
+1. Build the Python package (wheel and sdist)
+2. Create a GitHub Release with auto-generated notes
+3. Publish to PyPI
+4. Deploy the website to vocalinux.com
+5. Mark as pre-release if version contains alpha/beta/rc
+
+Monitor at: https://github.com/jatinkrmalik/vocalinux/actions
+
+### Step 9: Post-Release Tasks
+
+- [ ] Verify GitHub Release was created correctly
+- [ ] Verify PyPI package was published (if applicable)
+- [ ] Verify website was deployed (check vocalinux.com)
+- [ ] Announce on social media/communities
+- [ ] Update any pinned issues or discussions
+
+## Emergency Hotfix Process
+
+For critical bugs in a released version:
+
+```bash
+# Create hotfix branch from the tag
+git checkout -b hotfix/v0.5.1-beta v0.5.0-beta
+
+# Make fix, commit, push
+git add -A
+git commit -m "fix: critical bug description"
+git push origin hotfix/v0.5.1-beta
+
+# Create PR targeting main
+# After merge, tag new version
+git tag -a v0.5.1-beta -m "Hotfix release v0.5.1-beta"
+git push origin v0.5.1-beta
+```
+
+## Version History
+
+| Version | Date | Phase | Notes |
+|---------|------|-------|-------|
+| 0.2.0-alpha | 2024 | Alpha | Initial alpha |
+| 0.3.0-alpha | 2024 | Alpha | - |
+| 0.4.0-alpha | 2024 | Alpha | Multi-language support |
+| 0.4.1-alpha | 2024 | Alpha | Language selector UI |
+| 0.5.0-beta | 2025 | Beta | First beta release |
+| 0.6.0-beta | 2026-02-11 | Beta | Web SEO, mobile responsiveness, improved Fedora support |
+| 0.6.1-beta | 2026-02-12 | Beta | Device handling improvements |
+| 0.6.2-beta | 2026-02-17 | Beta | Bug fixes |
+| 0.6.3-beta | 2026-02-19 | Beta | GPU detection improvements |
+| 0.7.0-beta | 2026 | Beta | Autostart, tabbed settings, Intel GPU support, single instance |
+| 0.8.0-beta | 2026-03-01 | Beta | Push-to-talk mode, optional voice commands, input/audio compatibility fixes |
+| 0.9.0-beta | 2026-03-14 | Beta | Left/right modifier keys, sound effects toggle, Wayland clipboard fallback, leading-space fix |
+| 0.10.0-beta | 2026-03-25 | Beta | Keyboard/audio reliability hardening, IBus/tray stability fixes, CI + test coverage improvements |
+
+## Questions?
+
+If you're unsure about any step:
+1. Check previous releases for examples
+2. Review the GitHub Actions workflows in `.github/workflows/`
+3. Ask in the project's discussions
+
+---
+
+**Note**: This document should be updated when the release process changes.

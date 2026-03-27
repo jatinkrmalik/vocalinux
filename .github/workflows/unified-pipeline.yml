@@ -1,0 +1,261 @@
+name: Vocalinux CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: 🔎 Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      python: ${{ steps.filter.outputs.python }}
+      deploy_website: ${{ steps.deploy_check.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'web/**'
+              - '.github/workflows/unified-pipeline.yml'
+            python:
+              - 'src/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - 'requirements*.txt'
+              - 'Makefile'
+              - '.pre-commit-config.yaml'
+              - '.github/workflows/unified-pipeline.yml'
+      - name: Check if website should deploy
+        id: deploy_check
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          # Deploy if web files changed OR python files changed (for version updates)
+          # Use heredoc to safely handle multi-line commit messages
+          COMMIT_MSG_FILE=$(mktemp)
+          printenv COMMIT_MESSAGE > "$COMMIT_MSG_FILE"
+
+          # Use case-insensitive matching with grep
+          if [[ "${{ steps.filter.outputs.web }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.python }}" == "true" ]] || \
+             [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
+             grep -iE "(feat\(website\)|docs\(website\)|chore\(website\)|fix\(website\)|refactor\(website\))" "$COMMIT_MSG_FILE"; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+          fi
+          rm -f "$COMMIT_MSG_FILE"
+
+  python-lint:
+    name: 🔍 Lint Python
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 "black>=26,<27" isort
+
+      - name: Lint with flake8 (critical errors)
+        run: |
+          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Check formatting with black
+        run: |
+          black --check --diff src/ tests/
+
+      - name: Check import sorting with isort
+        run: |
+          isort --check-only --diff --profile black src/ tests/
+
+  python-test:
+    name: 🧪 Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [changes, python-lint]
+    if: needs.changes.outputs.python == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xdotool \
+            gir1.2-appindicator3-0.1 \
+            libcairo2-dev \
+            pkg-config \
+            python3-dev \
+            libgirepository1.0-dev \
+            gobject-introspection \
+            libcairo-gobject2 \
+            gir1.2-gtk-3.0 \
+            portaudio19-dev
+
+      - name: Install GObject introspection dependencies
+        run: |
+          sudo apt-get update
+          # For Ubuntu 24.04+ (or the latest GitHub Actions runner image)
+          sudo apt-get install -y gir1.2-glib-2.0 libgirepository-2.0-dev pkg-config
+          # Alternatively, for older Ubuntu versions (like 22.04), you might need:
+          # sudo apt-get install -y libgirepository1.0-dev pkg-config
+
+      - name: Set up virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          python -m pip install --upgrade pip setuptools wheel
+          # Install PyGObject from pip (with build deps installed above)
+          pip install PyGObject
+          pip install -e ".[dev]"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Run tests with coverage
+        run: |
+          source venv/bin/activate
+          # Set GI_TYPELIB_PATH so pip-installed PyGObject can find system typelibs (AppIndicator3, etc.)
+          # Use dynamic detection for cross-distro compatibility, fallback to common Ubuntu paths
+          export GI_TYPELIB_PATH=$(pkg-config --variable=typelibdir gobject-introspection-1.0 2>/dev/null || echo "/usr/lib/x86_64-linux-gnu/girepository-1.0:/usr/lib/girepository-1.0")
+          PYTHONPATH=$PWD pytest --junitxml=junit-${{ matrix.python-version }}.xml --cov=src --cov-report=xml tests/
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: junit-${{ matrix.python-version }}.xml
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.10'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  web-build:
+    name: 🌐 Build Website
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.deploy_website == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: ./web
+        run: npm ci || npm install
+
+      - name: Sync version from source code
+        run: |
+          VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
+          echo "Syncing version: $VERSION"
+          # Update softwareVersion where JSON-LD currently lives
+          if grep -q '"softwareVersion": "' web/src/app/page.tsx; then
+            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/page.tsx
+            echo "Updated page.tsx version:"
+            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/page.tsx
+          elif grep -q '"softwareVersion": "' web/src/app/layout.tsx; then
+            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/layout.tsx
+            echo "Updated layout.tsx version:"
+            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/layout.tsx
+          else
+            echo "::warning::No softwareVersion field found in page.tsx or layout.tsx; skipping sync"
+          fi
+          # Update package.json version (remove -alpha suffix for npm)
+          NPM_VERSION=${VERSION%-*}
+          sed -i 's/"version": "[^"]*"/"version": "'"$NPM_VERSION"'"/' web/package.json
+          # Verify the changes
+          echo "Updated package.json version:"
+          grep -oP '"version":\s*"\K[^"]+' web/package.json
+
+      - name: Lint
+        working-directory: ./web
+        run: npm run lint || true
+
+      - name: Type check
+        working-directory: ./web
+        run: npm run test:types || true
+
+      - name: Build
+        working-directory: ./web
+        run: npm run build
+
+  deploy-website:
+    name: 🚀 Deploy Website
+    runs-on: ubuntu-latest
+    needs: [changes, web-build]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.deploy_website == 'true' &&
+      needs.web-build.result == 'success'
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: './web/package-lock.json'
+
+      - name: Install and build
+        working-directory: ./web
+        run: |
+          npm ci || npm install
+          npm run deploy
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web/out
+          publish_branch: gh-pages
+          cname: vocalinux.com
+          force_orphan: true

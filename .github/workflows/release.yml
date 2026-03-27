@@ -1,0 +1,193 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write  # Required for PyPI trusted publishing
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  build-and-release:
+    name: Build and Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine wheel setuptools
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Verify version consistency
+        run: |
+          # Get version from version.py file directly (avoid importing full package which needs gi)
+          PACKAGE_VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
+          TAG_VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "Package version: $PACKAGE_VERSION"
+          echo "Tag version: $TAG_VERSION"
+          # Allow alpha/beta suffixes in package version
+          if [[ ! "$PACKAGE_VERSION" == *"$TAG_VERSION"* ]] && [[ ! "$TAG_VERSION" == *"$PACKAGE_VERSION"* ]]; then
+            echo "Warning: Version mismatch between tag ($TAG_VERSION) and package ($PACKAGE_VERSION)"
+          fi
+
+      - name: Build package
+        run: |
+          python -m build
+          echo "Built packages:"
+          ls -la dist/
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          body: |
+            ## Installation
+
+            ### Quick Install (Recommended)
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/${{ github.ref_name }}/install.sh | bash
+            ```
+
+            ### From Source
+            ```bash
+            git clone https://github.com/jatinkrmalik/vocalinux.git
+            cd vocalinux
+            ./install.sh
+            ```
+
+            ### From PyPI (if available)
+            ```bash
+            pip install vocalinux
+            ```
+
+            ---
+            See [CHANGELOG](https://github.com/jatinkrmalik/vocalinux/releases) for detailed changes.
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/vocalinux/
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        run: |
+          python -m build
+          echo "Built packages:"
+          ls -la dist/
+
+      - name: Verify package
+        run: |
+          twine check dist/*
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          twine upload dist/* --skip-existing
+
+  deploy-website:
+    name: Deploy Website
+    runs-on: ubuntu-latest
+    needs: [build-and-release, publish-pypi]
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: './web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: ./web
+        run: npm ci || npm install
+
+      - name: Sync version from source code
+        run: |
+          VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
+          echo "Syncing version: $VERSION"
+          # Update softwareVersion where JSON-LD currently lives
+          if grep -q '"softwareVersion": "' web/src/app/page.tsx; then
+            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/page.tsx
+            echo "Updated page.tsx version:"
+            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/page.tsx
+          elif grep -q '"softwareVersion": "' web/src/app/layout.tsx; then
+            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/layout.tsx
+            echo "Updated layout.tsx version:"
+            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/layout.tsx
+          else
+            echo "::warning::No softwareVersion field found in page.tsx or layout.tsx; skipping sync"
+          fi
+          # Update package.json version (remove -alpha/beta/rc suffix for npm)
+          NPM_VERSION=${VERSION%-*}
+          NPM_VERSION=${NPM_VERSION%-beta*}
+          NPM_VERSION=${NPM_VERSION%-rc*}
+          sed -i 's/"version": "[^"]*"/"version": "'"$NPM_VERSION"'"/' web/package.json
+          # Verify the changes
+          echo "Updated package.json version:"
+          grep -oP '"version":\s*"\K[^"]+' web/package.json
+
+      - name: Build and deploy website
+        working-directory: ./web
+        run: |
+          npm ci || npm install
+          npm run deploy
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web/out
+          publish_branch: gh-pages
+          cname: vocalinux.com
+          force_orphan: true

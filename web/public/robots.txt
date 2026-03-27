@@ -1,0 +1,13 @@
+# Robots.txt for Vocalinux
+# https://vocalinux.com
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/
+Disallow: /out/
+Disallow: /*?*
+
+# Sitemap location
+Sitemap: https://vocalinux.com/sitemap.xml
+Host: vocalinux.com
