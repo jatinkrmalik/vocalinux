@@ -866,6 +866,16 @@ class IBusTextInjector:
                     "Try manually: ibus engine vocalinux"
                 )
 
+        # Restore the user's XKB layout immediately after engine activation.
+        # Switching to the Vocalinux IBus engine can override the system
+        # keyboard layout (e.g. Spanish, French AZERTY) with the engine's
+        # default layout. Re-applying the captured XKB layout ensures the
+        # user's keyboard keeps working correctly while Vocalinux is active.
+        # See issue #292.
+        if self._previous_xkb_layout:
+            layout, variant, option = self._previous_xkb_layout
+            restore_xkb_layout(layout, variant, option)
+
     def stop(self) -> None:
         """
         Stop the IBus text injector and restore previous engine and XKB layout.
@@ -881,7 +891,7 @@ class IBusTextInjector:
         # This ensures the user's original keyboard layout is preserved
         if self._previous_xkb_layout:
             layout, variant, option = self._previous_xkb_layout
-            if layout and layout != "us":
+            if layout:
                 logger.info(f"Restoring XKB layout: {layout}")
                 restore_xkb_layout(layout, variant, option)
             self._previous_xkb_layout = None

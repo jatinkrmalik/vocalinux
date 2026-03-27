@@ -18,13 +18,27 @@ class TestXkbLayoutFunctions(unittest.TestCase):
 
         result = get_current_xkb_layout()
 
-        self.assertEqual(result, ("us", "", ""))
+        self.assertEqual(result, ("us", "", "compose:menu,grp:caps_toggle"))
         mock_run.assert_called_once_with(
             ["setxkbmap", "-query"],
             capture_output=True,
             text=True,
             timeout=2,
         )
+
+    @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
+    def test_get_current_xkb_layout_spanish(self, mock_run):
+        """Verify Spanish layout is captured correctly (issue #292)."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rules:      evdev\nlayout:     es\nvariant:    \noptions:    ",
+        )
+
+        from vocalinux.text_injection.ibus_engine import get_current_xkb_layout
+
+        result = get_current_xkb_layout()
+
+        self.assertEqual(result, ("es", "", ""))
 
     @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
     def test_get_current_xkb_layout_with_variant(self, mock_run):
@@ -37,7 +51,21 @@ class TestXkbLayoutFunctions(unittest.TestCase):
 
         result = get_current_xkb_layout()
 
-        self.assertEqual(result, ("es", "catalan", ""))
+        self.assertEqual(result, ("es", "catalan", "compose:menu"))
+
+    @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
+    def test_get_current_xkb_layout_french_azerty(self, mock_run):
+        """Verify French AZERTY layout is captured correctly (issue #292)."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rules:      evdev\nlayout:     fr\nvariant:    azerty\noptions:    ",
+        )
+
+        from vocalinux.text_injection.ibus_engine import get_current_xkb_layout
+
+        result = get_current_xkb_layout()
+
+        self.assertEqual(result, ("fr", "azerty", ""))
 
     @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
     def test_get_current_xkb_layout_with_options(self, mock_run):
@@ -65,7 +93,7 @@ class TestXkbLayoutFunctions(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
     def test_get_current_xkb_layout_timeout(self, mock_run):
-        mock_run.side_effect = subprocess.TimeoutExpired("Timeout")
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="setxkbmap", timeout=2)
 
         from vocalinux.text_injection.ibus_engine import get_current_xkb_layout
 
@@ -74,8 +102,7 @@ class TestXkbLayoutFunctions(unittest.TestCase):
         self.assertEqual(result, ("us", "", ""))
 
     @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
-    @patch("vocalinux.text_injection.ibus_engine.logger")
-    def test_restore_xkb_layout_success(self, mock_logger, mock_run):
+    def test_restore_xkb_layout_with_variant_and_option(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
 
         from vocalinux.text_injection.ibus_engine import restore_xkb_layout
@@ -83,8 +110,13 @@ class TestXkbLayoutFunctions(unittest.TestCase):
         result = restore_xkb_layout("es", "catalan", "compose:menu")
 
         self.assertTrue(result)
-        calls = [call.args for call in mock_run]
-        self.assertEqual(len(calls), 2)
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("-layout", cmd)
+        self.assertIn("es", cmd)
+        self.assertIn("-variant", cmd)
+        self.assertIn("catalan", cmd)
+        self.assertIn("-option", cmd)
 
     @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
     def test_restore_xkb_layout_no_variant(self, mock_run):
