@@ -2073,6 +2073,15 @@ class SpeechRecognitionManager:
 
         if restart_needed:
             logger.info("Engine or model changed, re-initializing...")
+
+            # Stop any active recognition before switching engines.
+            # This is critical to prevent segfaults when the old engine's
+            # native resources (e.g. whisper.cpp C model) are freed while
+            # a background thread is still using them.
+            if self.state != RecognitionState.IDLE:
+                logger.info("Stopping active recognition before engine switch...")
+                self.stop_recognition()
+
             # When reconfiguring from UI, allow downloads
             old_defer = self._defer_download
             self._defer_download = not force_download
