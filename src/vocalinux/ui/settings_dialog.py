@@ -1916,6 +1916,13 @@ class SettingsDialog(Gtk.Dialog):
 
             self.config_manager.update_speech_recognition_settings(settings)
             self.config_manager.save_settings()
+
+            # Stop recognition before reconfiguring to avoid segfaults when
+            # switching between engines with native resources (e.g. whisper.cpp)
+            was_running = self.speech_engine.state != RecognitionState.IDLE
+            if was_running:
+                self.speech_engine.stop_recognition()
+
             self.speech_engine.reconfigure(**settings)
             logger.info("Settings auto-applied successfully")
         except Exception as e:
