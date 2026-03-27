@@ -338,6 +338,85 @@ def get_current_engine() -> Optional[str]:
     return None
 
 
+def get_current_xkb_layout() -> tuple:
+    """
+    Get the current XKB keyboard layout, variant, and options.
+
+    This queries the system's current keyboard configuration using setxkbmap.
+    This is important because IBus may not reflect the actual XKB layout,
+    especially when the user configured their keyboard via desktop environment
+    settings or setxkbmap directly rather than through IBus.
+
+    Returns:
+        A tuple of (layout, variant, option). Defaults to ("us", "", "") on error.
+    """
+    try:
+        result = subprocess.run(
+            ["setxkbmap", "-query"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            layout, variant, option = "us", "", ""
+            for line in result.stdout.split("\n"):
+                line = line.strip()
+                if line.startswith("layout:"):
+                    layout = line.split(":", 1)[1].strip()
+                elif line.startswith("variant:"):
+                    variant = line.split(":", 1)[1].strip()
+                elif line.startswith("options:"):
+                    option = line.split(":", 1)[1].strip()
+            logger.debug(f"Current XKB layout: {layout}, variant: {variant}, option: {option}")
+            return layout, variant, option
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        logger.debug(f"Could not query XKB layout: {e}")
+    return "us", "", ""
+
+
+def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool:
+    """
+    Restore the XKB keyboard layout.
+
+    This is used to ensure the user's keyboard layout is preserved
+    after IBus engine operations that might change it.
+
+    Args:
+        layout: The XKB layout to set (e.g., "us", "es", "de")
+        variant: Optional layout variant
+        option: Optional layout options
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if not layout:
+        return False
+
+    try:
+        cmd = ["setxkbmap", "-layout", layout]
+        if variant:
+            cmd.extend(["-variant", variant])
+        if option:
+            # Clear existing options first, then set new ones
+            cmd = ["setxkbmap", "-option", ""] + cmd[1:]
+            cmd.extend(["-option", option])
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            logger.info(f"Restored XKB layout: {layout} (variant: {variant}, option: {option})")
+            return True
+        else:
+            logger.warning(f"Failed to restore XKB layout: {result.stderr}")
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        logger.error(f"Could not restore XKB layout: {e}")
+    return False
+
+
 def switch_engine(engine_name: str) -> bool:
     """Switch to the specified IBus engine."""
     import time
@@ -735,6 +814,7 @@ class IBusTextInjector:
 
         ensure_ibus_dir()
         self._previous_engine: Optional[str] = None
+        self._previous_xkb_layout: tuple = ("us", "", "")
 
         if auto_activate:
             self._setup_engine()
@@ -762,6 +842,15 @@ class IBusTextInjector:
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
+        # Capture current XKB layout before switching engines
+        # This is critical for preserving the user's keyboard layout
+        # when IBus engine switching might override it
+        self._previous_xkb_layout = get_current_xkb_layout()
+        logger.debug(
+            f"Captured XKB layout: {self._previous_xkb_layout[0]}, "
+            f"variant: {self._previous_xkb_layout[1]}, option: {self._previous_xkb_layout[2]}"
+        )
+
         # Save current engine and switch to Vocalinux
         if not is_engine_active():
             self._previous_engine = get_current_engine()
@@ -777,9 +866,19 @@ class IBusTextInjector:
                     "Try manually: ibus engine vocalinux"
                 )
 
+        # Restore the user's XKB layout immediately after engine activation.
+        # Switching to the Vocalinux IBus engine can override the system
+        # keyboard layout (e.g. Spanish, French AZERTY) with the engine's
+        # default layout. Re-applying the captured XKB layout ensures the
+        # user's keyboard keeps working correctly while Vocalinux is active.
+        # See issue #292.
+        if self._previous_xkb_layout:
+            layout, variant, option = self._previous_xkb_layout
+            restore_xkb_layout(layout, variant, option)
+
     def stop(self) -> None:
         """
-        Stop the IBus text injector and restore previous engine.
+        Stop the IBus text injector and restore previous engine and XKB layout.
 
         Call this when Vocalinux is shutting down.
         """
@@ -787,6 +886,15 @@ class IBusTextInjector:
             logger.info(f"Restoring previous engine: {self._previous_engine}")
             switch_engine(self._previous_engine)
             self._previous_engine = None
+
+        # Restore the XKB layout that was captured during setup
+        # This ensures the user's original keyboard layout is preserved
+        if self._previous_xkb_layout:
+            layout, variant, option = self._previous_xkb_layout
+            if layout:
+                logger.info(f"Restoring XKB layout: {layout}")
+                restore_xkb_layout(layout, variant, option)
+            self._previous_xkb_layout = None
 
         # Stop the engine process
         stop_engine_process()
