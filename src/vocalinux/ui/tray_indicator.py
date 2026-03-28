@@ -237,7 +237,7 @@ class TrayIndicator:
     def _start_recognition(self):
         """Start voice recognition (for push-to-talk mode)."""
         if self.speech_engine.state == RecognitionState.IDLE:
-            self.speech_engine.start_recognition()
+            self.speech_engine.start_recognition(mode="push_to_talk")
 
     def _stop_recognition(self):
         """Stop voice recognition (for push-to-talk mode)."""

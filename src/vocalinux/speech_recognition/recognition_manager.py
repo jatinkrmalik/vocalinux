@@ -561,6 +561,7 @@ class SpeechRecognitionManager:
 
         # Recording control flags
         self.should_record = False
+        self._recognition_mode = "toggle"  # "toggle" or "push_to_talk"
         self.audio_buffer = []
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
@@ -1499,7 +1500,7 @@ class SpeechRecognitionManager:
         """Check if the model is initialized and ready for recognition."""
         return self._model_initialized and self.model is not None
 
-    def start_recognition(self):
+    def start_recognition(self, mode: str = "toggle"):
         """Start the speech recognition process."""
         if self.state != RecognitionState.IDLE:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
@@ -1526,6 +1527,7 @@ class SpeechRecognitionManager:
 
         # Set recording flag
         self.should_record = True
+        self._recognition_mode = mode
         self.audio_buffer = []
         self._segment_queue = queue.Queue(maxsize=32)
 
@@ -1588,6 +1590,7 @@ class SpeechRecognitionManager:
         if self.recognition_thread and self.recognition_thread.is_alive():
             self.recognition_thread.join(timeout=1.0)
 
+        self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
 
     def _record_audio(self):
@@ -1765,9 +1768,15 @@ class SpeechRecognitionManager:
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
                         if silence_counter > self.silence_timeout:  # Use self.silence_timeout
                             if len(self.audio_buffer) > 0:
-                                logger.debug("Silence detected, queueing audio segment")
-                                self._enqueue_audio_segment(self.audio_buffer)
-                                self.audio_buffer = []
+                                if self._recognition_mode == "push_to_talk":
+                                    logger.debug(
+                                        "Silence detected in push-to-talk mode, "
+                                        "deferring transcription until key release"
+                                    )
+                                else:
+                                    logger.debug("Silence detected, queueing audio segment")
+                                    self._enqueue_audio_segment(self.audio_buffer)
+                                    self.audio_buffer = []
                             silence_counter = 0
                     else:  # Speech
                         if not speech_detected_in_session:
