@@ -235,7 +235,7 @@ resolve_install_tag() {
             return
         fi
     fi
-    INSTALL_TAG="v0.10.0-beta"
+    INSTALL_TAG="v0.10.1-beta"
 }
 
 resolve_install_tag

@@ -2,39 +2,35 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
-## What's New in v0.10.0-beta
+## What's New in v0.10.1-beta
 
 ### 🚀 Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **⌨️ Keyboard Robustness** | Better modifier alias handling across layouts and evdev `SYN_DROPPED` recovery |
-| **🎙️ Audio Compatibility** | Audio channel probing now validates sample-rate support per device |
-| **🖥️ IBus + Tray Stability** | IBus activation is more reliable and tray icon refresh is more consistent |
-| **🧪 Testing & CI Upgrades** | Coverage increased to 80%+, with modernized Node 24 CI workflows |
+| **🖼️ Tray Resource Reliability** | Bundled package resources now prevent missing system tray icons |
+| **🧠 Engine Switch Safety** | Recognition now stops before engine changes to avoid segfaults |
+| **⌨️ Keyboard Layout Preservation** | XKB layout is preserved when activating the Vocalinux IBus engine |
+| **🪟 Settings Dialog Compatibility** | Added an explicit Close button for improved WM interoperability |
 
-### ✨ New Features
+### ✨ Scope
 
-- **IBus registration improvements** — Text injection activation now uses `register_component`
-- **Expanded IBus test coverage** — Added launch-mode and main-entrypoint test paths
-- **Python baseline update** — Minimum supported Python version is now 3.9+
+- **Patch-focused release** — No new feature surface; this version is dedicated to stability and compatibility fixes
+- **Desktop reliability hardening** — Improved behavior across tray, engine switching, settings dialog actions, and keyboard layout handling
 
 ### 🐛 Bug Fixes
 
-- **#342**: Generalize pynput modifier alias matching across layouts
-- **#341**: Probe audio channels using device-supported sample rates
-- **#339**: Handle evdev `SYN_DROPPED` to prevent stale modifier state
-- **#333**: Force window decorations in settings dialog
-- **#330**: Use icon names for AppIndicator tray updates
-- **#304**: Use `register_component` for IBus engine activation
+- **#349 / #354**: Bundle resources in package to fix missing system tray icons
+- **#350 / #355**: Stop recognition before switching engines to prevent segfaults
+- **#323 / #356**: Add Close button to settings dialog for WM compatibility
+- **#292 / #343**: Preserve XKB layout when activating Vocalinux IBus engine
 
 ### 🔧 Improvements
 
-- Installer fallback now resolves latest tag through GitHub API and better handles piped shell execution
-- CI now uses Node.js 24 for website deployment and path-based filtering to skip unnecessary workflows
-- Removed stale `setup.py` and legacy `build-website.sh`
+- Bumped npm/yarn dependency group across the web workspace (#346)
+- Bumped `brace-expansion` in development dependencies (#357)
 
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.10.0-beta).
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.10.1-beta).
 
 ---
 
@@ -129,7 +125,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.10.0-beta
+git checkout v0.10.1-beta
 ./install.sh
 ```
 
