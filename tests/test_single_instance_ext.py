@@ -196,5 +196,86 @@ class TestLockFileConstants(unittest.TestCase):
         self.assertIsInstance(single_instance_module.LOCK_FILE_DIR, Path)
 
 
+class TestGetRunningPid(unittest.TestCase):
+    """Tests for get_running_pid() function."""
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    def test_returns_none_when_lock_file_missing(self, mock_path):
+        """Test returns None when lock file does not exist."""
+        mock_path.exists.return_value = False
+        result = single_instance_module.get_running_pid()
+        self.assertIsNone(result)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", mock_open(read_data=""))
+    def test_returns_none_when_lock_file_empty(self, mock_path):
+        """Test returns None when lock file is empty."""
+        mock_path.exists.return_value = True
+        result = single_instance_module.get_running_pid()
+        self.assertIsNone(result)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", mock_open(read_data="12345\n"))
+    @patch("os.kill")
+    def test_returns_pid_when_process_running(self, mock_kill, mock_path):
+        """Test returns PID when the process is alive."""
+        mock_path.exists.return_value = True
+        result = single_instance_module.get_running_pid()
+        self.assertEqual(result, 12345)
+        mock_kill.assert_called_once_with(12345, 0)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", mock_open(read_data="99999\n"))
+    @patch("os.kill")
+    def test_returns_none_when_process_not_running(self, mock_kill, mock_path):
+        """Test returns None for stale PID (process no longer exists)."""
+        mock_path.exists.return_value = True
+        mock_kill.side_effect = ProcessLookupError()
+        result = single_instance_module.get_running_pid()
+        self.assertIsNone(result)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", mock_open(read_data="12345\n"))
+    @patch("os.kill")
+    def test_returns_pid_on_permission_error(self, mock_kill, mock_path):
+        """Test returns PID when process exists but signal permission denied."""
+        mock_path.exists.return_value = True
+        mock_kill.side_effect = PermissionError()
+        result = single_instance_module.get_running_pid()
+        self.assertEqual(result, 12345)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", mock_open(read_data="-5\n"))
+    def test_returns_none_for_negative_pid(self, mock_path):
+        """Test returns None for negative PID values."""
+        mock_path.exists.return_value = True
+        result = single_instance_module.get_running_pid()
+        self.assertIsNone(result)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", mock_open(read_data="0\n"))
+    def test_returns_none_for_zero_pid(self, mock_path):
+        """Test returns None for zero PID."""
+        mock_path.exists.return_value = True
+        result = single_instance_module.get_running_pid()
+        self.assertIsNone(result)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", mock_open(read_data="not_a_number\n"))
+    def test_returns_none_for_invalid_content(self, mock_path):
+        """Test returns None when lock file contains non-numeric content."""
+        mock_path.exists.return_value = True
+        result = single_instance_module.get_running_pid()
+        self.assertIsNone(result)
+
+    @patch("vocalinux.single_instance.LOCK_FILE_PATH")
+    @patch("builtins.open", side_effect=OSError("Cannot read"))
+    def test_returns_none_on_read_error(self, mock_open_fn, mock_path):
+        """Test returns None when lock file cannot be read."""
+        mock_path.exists.return_value = True
+        result = single_instance_module.get_running_pid()
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()

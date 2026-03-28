@@ -84,6 +84,11 @@ class TestMainFunctionExtra:
         """Test that notification is attempted when another instance is running."""
         from vocalinux.main import main
 
+        mock_args = MagicMock()
+        mock_args.debug = False
+        mock_args.settings = False
+        mock_parse_args.return_value = mock_args
+
         mock_single_instance = MagicMock()
         mock_single_instance.acquire_lock.return_value = False
 
@@ -110,6 +115,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -173,6 +179,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -236,6 +243,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -300,6 +308,7 @@ class TestMainFunctionExtra:
         mock_args.engine = "vosk"
         mock_args.model = "medium"
         mock_args.language = "es"
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -365,6 +374,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -426,6 +436,7 @@ class TestMainFunctionExtra:
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         mock_single_instance = MagicMock()
@@ -467,3 +478,72 @@ class TestMainFunctionExtra:
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 1
+
+    @patch("vocalinux.main.logging")
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.main.check_display_available")
+    @patch("vocalinux.main.parse_arguments")
+    @patch("vocalinux.main.atexit")
+    def test_main_settings_signals_running_instance(
+        self, mock_atexit, mock_parse_args, mock_check_display, mock_check_deps, mock_logging
+    ):
+        """Test --settings sends SIGUSR1 to running instance and exits with 0."""
+        from vocalinux.main import main
+
+        mock_args = MagicMock()
+        mock_args.settings = True
+        mock_args.debug = False
+        mock_parse_args.return_value = mock_args
+
+        with patch("vocalinux.single_instance.acquire_lock", return_value=False):
+            with patch("vocalinux.single_instance.get_running_pid", return_value=12345):
+                with patch("os.kill") as mock_kill:
+                    with pytest.raises(SystemExit) as exc_info:
+                        main()
+                    assert exc_info.value.code == 0
+                    mock_kill.assert_called_once()
+
+    @patch("vocalinux.main.logging")
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.main.check_display_available")
+    @patch("vocalinux.main.parse_arguments")
+    @patch("vocalinux.main.atexit")
+    def test_main_settings_no_running_pid_falls_through(
+        self, mock_atexit, mock_parse_args, mock_check_display, mock_check_deps, mock_logging
+    ):
+        """Test --settings with no running PID falls through to exit(1)."""
+        from vocalinux.main import main
+
+        mock_args = MagicMock()
+        mock_args.settings = True
+        mock_args.debug = False
+        mock_parse_args.return_value = mock_args
+
+        with patch("vocalinux.single_instance.acquire_lock", return_value=False):
+            with patch("vocalinux.single_instance.get_running_pid", return_value=None):
+                with pytest.raises(SystemExit) as exc_info:
+                    main()
+                assert exc_info.value.code == 1
+
+    @patch("vocalinux.main.logging")
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.main.check_display_available")
+    @patch("vocalinux.main.parse_arguments")
+    @patch("vocalinux.main.atexit")
+    def test_main_settings_signal_fails_falls_through(
+        self, mock_atexit, mock_parse_args, mock_check_display, mock_check_deps, mock_logging
+    ):
+        """Test --settings when SIGUSR1 send fails falls through to exit(1)."""
+        from vocalinux.main import main
+
+        mock_args = MagicMock()
+        mock_args.settings = True
+        mock_args.debug = False
+        mock_parse_args.return_value = mock_args
+
+        with patch("vocalinux.single_instance.acquire_lock", return_value=False):
+            with patch("vocalinux.single_instance.get_running_pid", return_value=12345):
+                with patch("os.kill", side_effect=OSError("No such process")):
+                    with pytest.raises(SystemExit) as exc_info:
+                        main()
+                    assert exc_info.value.code == 1

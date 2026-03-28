@@ -202,6 +202,9 @@ class TestMainFunction(unittest.TestCase):
         """Test main() when another instance is already running."""
         from vocalinux.main import main
 
+        mock_args = MagicMock(debug=False, settings=False)
+        mock_parse_args.return_value = mock_args
+
         # Mock single_instance module since it's imported inside main()
         mock_single_instance = MagicMock()
         mock_single_instance.acquire_lock.return_value = False
@@ -225,7 +228,7 @@ class TestMainFunction(unittest.TestCase):
 
         # Set up mocks
         mock_check_deps.return_value = False
-        mock_parse_args.return_value = MagicMock(debug=False)
+        mock_parse_args.return_value = MagicMock(debug=False, settings=False)
 
         # Mock single_instance module since it's imported inside main()
         mock_single_instance = MagicMock()
@@ -251,7 +254,7 @@ class TestMainFunction(unittest.TestCase):
         # Set up mocks
         mock_check_deps.return_value = True
         mock_check_display.return_value = False
-        mock_parse_args.return_value = MagicMock(debug=False)
+        mock_parse_args.return_value = MagicMock(debug=False, settings=False)
 
         # Mock single_instance module since it's imported inside main()
         mock_single_instance = MagicMock()
@@ -287,6 +290,7 @@ class TestMainFunction(unittest.TestCase):
         mock_args.debug = True
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         # Mock single_instance module since it's imported inside main()
@@ -364,6 +368,7 @@ class TestMainFunction(unittest.TestCase):
         mock_args.debug = False
         mock_args.wayland = False
         mock_args.start_minimized = False
+        mock_args.settings = False
         mock_parse_args.return_value = mock_args
 
         # Mock single_instance module since it's imported inside main()
