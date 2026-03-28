@@ -9,6 +9,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 import time
 from enum import Enum
 from typing import Optional  # noqa: F401
@@ -446,8 +447,11 @@ class TextInjector:
                     if result:
                         logger.info("Text injection completed successfully")
                         if self._should_copy_to_clipboard():
-                            self._copy_to_clipboard(text)
-                            logger.debug("Text also copied to clipboard (setting enabled)")
+                            threading.Thread(
+                                target=self._copy_to_clipboard,
+                                args=(text,),
+                                daemon=True,
+                            ).start()
                     return result
                 else:
                     logger.error("IBus injector not initialized")
@@ -478,8 +482,11 @@ class TextInjector:
             logger.info("Text injection completed successfully")
 
             if self._should_copy_to_clipboard():
-                self._copy_to_clipboard(text)
-                logger.debug("Text also copied to clipboard (setting enabled)")
+                threading.Thread(
+                    target=self._copy_to_clipboard,
+                    args=(text,),
+                    daemon=True,
+                ).start()
 
             return True
         except Exception as e:
