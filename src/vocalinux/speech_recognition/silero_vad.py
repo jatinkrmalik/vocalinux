@@ -24,7 +24,11 @@ _CONTEXT_SIZE = 64
 
 
 class SileroVAD:
-    """Silero VAD wrapper using ONNX Runtime inference."""
+    """Silero VAD wrapper using ONNX Runtime inference.
+
+    Not thread-safe — process() and reset() mutate internal LSTM state.
+    Currently only called from the recording thread in _record_audio().
+    """
 
     def __init__(self):
         import onnxruntime as ort
@@ -54,7 +58,12 @@ class SileroVAD:
 
         Returns:
             Speech probability in [0, 1].
+
+        Raises:
+            ValueError: If audio_int16 length is not SILERO_CHUNK_SIZE.
         """
+        if len(audio_int16) != SILERO_CHUNK_SIZE:
+            raise ValueError(f"Expected {SILERO_CHUNK_SIZE} samples, got {len(audio_int16)}")
         # Normalize int16 → float32 [-1, 1]
         audio_f32 = audio_int16.astype(np.float32) / 32768.0
         audio_f32 = audio_f32.reshape(1, -1)
@@ -75,5 +84,8 @@ def load_silero_vad():
         vad = SileroVAD()
         return vad
     except Exception as e:
+        # Catches ImportError (missing onnxruntime), FileNotFoundError,
+        # onnxruntime.capi.onnxruntime_pybind11_state.NoSuchFile (missing model),
+        # and RuntimeError (corrupted model / ONNX errors).
         logger.warning(f"Silero VAD unavailable, falling back to amplitude VAD: {e}")
         return None
