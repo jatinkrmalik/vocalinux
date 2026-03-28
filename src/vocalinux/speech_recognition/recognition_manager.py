@@ -555,6 +555,10 @@ class SpeechRecognitionManager:
 
         # Silero VAD (neural-network-based, falls back to amplitude if unavailable)
         self._silero_vad = load_silero_vad()
+        if self._silero_vad is not None:
+            logger.info("Using Silero neural VAD")
+        else:
+            logger.info("Using amplitude-based VAD (install vocalinux[vad] for neural VAD)")
 
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
@@ -1690,7 +1694,13 @@ class SpeechRecognitionManager:
             speech_detected_in_session = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
-            silero_chunk_buf = np.array([], dtype=np.int16)  # accumulator for 512-sample chunks
+            # Accumulator for 512-sample Silero chunks.  When the capture rate
+            # is higher than 16 kHz (e.g. 48 kHz), resampling produces fewer
+            # than 1024 samples per read (~341 at 48 kHz), so the buffer may
+            # need several reads to fill a full 512-sample chunk.  This is
+            # expected — VAD decisions simply arrive less frequently (every
+            # ~128 ms instead of ~64 ms) with no impact on accuracy.
+            silero_chunk_buf = np.array([], dtype=np.int16)
 
             # Reset Silero VAD state for this recording session
             if self._silero_vad is not None:
@@ -1764,11 +1774,13 @@ class SpeechRecognitionManager:
                     if self._silero_vad is not None:
                         # Silero VAD: accumulate samples into 512-sample chunks
                         speech_prob = 0.0
+                        chunk_processed = False
                         silero_chunk_buf = np.concatenate([silero_chunk_buf, audio_data])
                         while len(silero_chunk_buf) >= SILERO_CHUNK_SIZE:
                             chunk_512 = silero_chunk_buf[:SILERO_CHUNK_SIZE]
                             silero_chunk_buf = silero_chunk_buf[SILERO_CHUNK_SIZE:]
                             speech_prob = max(speech_prob, self._silero_vad.process(chunk_512))
+                            chunk_processed = True
 
                         # Map vad_sensitivity (1-5) to threshold:
                         # 1 (least sensitive) → 0.8, 5 (most sensitive) → 0.3
@@ -1779,7 +1791,10 @@ class SpeechRecognitionManager:
                             vad_sens = 3
                         silero_threshold = 0.8 - (vad_sens - 1) * 0.125
 
-                        is_speech = speech_prob >= silero_threshold
+                        # Skip speech decision until at least one full chunk
+                        # has been processed to avoid false silence detection
+                        if chunk_processed:
+                            is_speech = speech_prob >= silero_threshold
                     else:
                         # Amplitude fallback when Silero is unavailable
                         try:
