@@ -54,31 +54,9 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    @patch("vocalinux.text_injection.ibus_engine.install_ibus_component")
-    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
-    def test_raises_on_registration_failure(
-        self, mock_is_registered, mock_install, mock_ensure_dir
-    ):
-        """Test that IBusSetupError is raised when engine registration fails."""
-        mock_is_registered.return_value = False  # Registration fails
-        mock_install.return_value = True
-
-        from vocalinux.text_injection.ibus_engine import IBusSetupError, IBusTextInjector
-
-        with self.assertRaises(IBusSetupError) as context:
-            IBusTextInjector(auto_activate=True)
-
-        self.assertIn("Failed to register IBus engine", str(context.exception))
-
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
-    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
-    def test_raises_on_engine_process_failure(
-        self, mock_start_engine, mock_is_registered, mock_ensure_dir
-    ):
+    def test_raises_on_engine_process_failure(self, mock_start_engine, mock_ensure_dir):
         """Test that IBusSetupError is raised when engine process fails to start."""
-        mock_is_registered.return_value = True
         mock_start_engine.return_value = False  # Process start fails
 
         from vocalinux.text_injection.ibus_engine import IBusSetupError, IBusTextInjector
@@ -90,7 +68,6 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
@@ -101,11 +78,9 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
         mock_get_current,
         mock_is_active,
         mock_start_engine,
-        mock_is_registered,
         mock_ensure_dir,
     ):
         """Test that IBusSetupError is raised when engine activation fails."""
-        mock_is_registered.return_value = True
         mock_start_engine.return_value = True
         mock_is_active.return_value = False
         mock_get_current.return_value = "xkb:us::eng"
@@ -368,8 +343,6 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    @patch("vocalinux.text_injection.ibus_engine.install_ibus_component")
-    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
@@ -380,12 +353,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_get_current,
         mock_start_engine,
         mock_is_active,
-        mock_is_registered,
-        mock_install,
         mock_ensure_dir,
     ):
         """Test initialization with auto_activate=True."""
-        mock_is_registered.return_value = True
         mock_is_active.return_value = False
         mock_start_engine.return_value = True
         mock_get_current.return_value = "xkb:us::eng"
@@ -491,13 +461,11 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
-    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     def test_setup_engine_captures_and_restores_xkb(
         self,
         mock_ensure_dir,
-        mock_registered,
         mock_active,
         mock_get_engine,
         mock_switch,

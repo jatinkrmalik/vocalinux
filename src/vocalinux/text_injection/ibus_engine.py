@@ -795,11 +795,12 @@ class IBusTextInjector:
 
     This class connects to the Vocalinux IBus engine via Unix socket
     and sends text to be injected. On initialization, it automatically:
-    1. Installs the IBus component if not registered
-    2. Saves the current engine
+    1. Starts the engine process (registers via D-Bus register_component)
+    2. Saves the current engine and XKB layout
     3. Switches to the Vocalinux engine
+    4. Restores the XKB layout
 
-    On cleanup (stop), it restores the previous engine.
+    On cleanup (stop), it restores the previous engine and layout.
     """
 
     def __init__(self, auto_activate: bool = True):
@@ -821,24 +822,11 @@ class IBusTextInjector:
 
     def _setup_engine(self) -> None:
         """Install and activate the IBus engine."""
-        # Install or update component if needed
-        if not is_engine_registered():
-            logger.info("IBus engine not registered, installing...")
-            if not install_ibus_component(system_wide=False):
-                logger.info("User-level install failed, trying system-wide...")
-                install_ibus_component(system_wide=True)
-        elif not is_component_up_to_date():
-            logger.info("IBus component XML is outdated, updating...")
-            install_ibus_component(system_wide=False)
-
-        # Check again after installation
-        if not is_engine_registered():
-            raise IBusSetupError(
-                "Failed to register IBus engine. "
-                "Try running 'ibus list-engine' to verify installation."
-            )
-
-        # Start the engine process (Vocalinux starts it, not IBus)
+        # Start the engine process — it calls register_component() via
+        # D-Bus which makes the engine available even when the IBus daemon
+        # doesn't scan ~/.local/share/ibus/component/.
+        # Follow-up to PR #304: register_component() is the reliable path,
+        # so we no longer gate on is_engine_registered() / ibus list-engine.
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
