@@ -32,38 +32,39 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.9.0-beta
+## 📚 What's New in v0.10.0-beta
 
-> 🎉 **Release: Left/Right modifier keys, sound effects toggle, Wayland clipboard fallback, and more.**
+> 🎉 **Release: reliability hardening across keyboard/audio/tray handling, stronger IBus activation, and better CI/testing quality.**
 
-### 🚀 Highlights (v0.8.0 → v0.9.0)
+### 🚀 Highlights (v0.9.0 → v0.10.0)
 
 | Feature | Description |
 |---------|-------------|
-| **⌨️ Left/Right Modifier Keys** | Choose Left Ctrl vs Right Ctrl (etc.) as your shortcut trigger |
-| **🔔 Sound Effects Toggle** | Enable or disable audio feedback from the Settings dialog |
-| **📋 Wayland Clipboard Fallback** | Automatic clipboard copy when virtual keyboard injection isn't available |
-| **🛠️ Installation Polish** | Better pipx/Debian guidance and headless display detection |
+| **⌨️ Keyboard Robustness** | Better modifier alias matching across layouts and SYN_DROPPED recovery in evdev |
+| **🎙️ Audio Compatibility** | Device channel probing now validates supported sample rates for safer defaults |
+| **🖥️ IBus + Tray Stability** | IBus activation uses `register_component`; tray updates use icon names reliably |
+| **🧪 Quality & CI Upgrades** | Test coverage rose to 80%+, with Node 24 and path-filtered CI pipelines |
 
-### ✨ New Features (v0.9.0)
+### ✨ New in v0.10.0-beta
 
-- **Left/Right Modifier Key Distinction** - Shortcuts now support `Left Ctrl`, `Right Alt`, etc., with grouped UI in Settings
-- **Sound Effects Toggle** - New Audio Settings toggle to silence start/stop/error sounds
-- **Clipboard Fallback for Wayland** - Auto-copies text via `wl-copy`/`xclip` when injection unavailable (KDE Plasma etc.)
-- **Display Availability Check** - Graceful error message when running in headless environments
+- **IBus registration flow improvements** - Text injection now uses explicit component registration for more reliable engine activation
+- **Expanded IBus test coverage** - Launch mode and main entrypoint paths are now covered in tests
+- **Improved project defaults** - Minimum supported Python version is now 3.9+
 
-### 🐛 Bug Fixes (v0.9.0)
+### 🐛 Bug Fixes (v0.10.0)
 
-- **#308**: Distinguish left vs right modifier keys (evdev + pynput backends)
-- **#307**: Remove unwanted leading space when starting a new transcription session
-- **#305**: Pass configured shortcut mode to `KeyboardShortcutManager` on startup
-- **#299**: Add clipboard fallback for Wayland compositors without virtual keyboard support
-- **#289**: Improve Debian/pipx installation error messages and cross-distro dependency guidance
+- **#342**: Generalized pynput modifier alias matching across keyboard layouts
+- **#341**: Channel probing now verifies sample-rate support for selected audio devices
+- **#339**: evdev backend now handles `SYN_DROPPED` to avoid stale modifier state
+- **#333**: Settings dialog now forces window decorations to fix missing-titlebar scenarios
+- **#330**: Tray icon updates now use icon names for AppIndicator compatibility
+- **#304**: IBus activation now uses `register_component` for more reliable startup behavior
 
 ### 🔧 Improvements
 
-- **Grouped shortcut selector** - Settings dropdown now organises shortcuts by Either/Left/Right side
-- **pipx documentation** - New `DISTRO_COMPATIBILITY.md` section for pipx users
+- **Installation fallback hardening** - Installer now resolves latest tag via GitHub API and improves piped-shell behavior
+- **CI runtime modernization** - Deploy workflow upgraded to Node.js 24 with smarter path-based workflow filtering
+- **Repo cleanup** - Removed stale `setup.py` and legacy website build script
 
 ---
 
@@ -367,7 +368,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.9.0 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.10.0 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 

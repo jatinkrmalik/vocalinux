@@ -5,7 +5,7 @@ Guidelines for AI agents working on this codebase.
 ## Project Overview
 
 Vocalinux is a voice dictation system for Linux. It uses:
-- **Python 3.8+** for the main application
+- **Python 3.9+** for the main application
 - **GTK 3** (via PyGObject) for the desktop UI and system tray
 - **whisper.cpp** (default), **OpenAI Whisper**, and **Vosk** for speech recognition
 - **Next.js/TypeScript** for the website (in `web/`)

@@ -448,6 +448,75 @@ class TestIBusTextInjector(unittest.TestCase):
         # Should not raise
         injector.stop()
 
+    @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_stop_restores_xkb_layout(
+        self, mock_ensure_dir, mock_switch, mock_stop_proc, mock_restore_xkb
+    ):
+        """Test stop() restores the captured XKB layout (#292)."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._previous_xkb_layout = ("es", "catalan", "compose:menu")
+
+        injector.stop()
+
+        mock_restore_xkb.assert_called_once_with("es", "catalan", "compose:menu")
+        self.assertIsNone(injector._previous_xkb_layout)
+
+    @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_stop_skips_xkb_restore_when_no_layout(
+        self, mock_ensure_dir, mock_switch, mock_stop_proc, mock_restore_xkb
+    ):
+        """Test stop() skips XKB restore when no layout was captured."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._previous_xkb_layout = None
+
+        injector.stop()
+
+        mock_restore_xkb.assert_not_called()
+
+    @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_setup_engine_captures_and_restores_xkb(
+        self,
+        mock_ensure_dir,
+        mock_registered,
+        mock_active,
+        mock_get_engine,
+        mock_switch,
+        mock_start_proc,
+        mock_get_xkb,
+        mock_restore_xkb,
+    ):
+        """Test _setup_engine captures XKB layout and restores it after activation (#292)."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        mock_get_xkb.return_value = ("fr", "azerty", "")
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._setup_engine()
+
+        mock_get_xkb.assert_called_once()
+        self.assertEqual(injector._previous_xkb_layout, ("fr", "azerty", ""))
+        mock_restore_xkb.assert_called_once_with("fr", "azerty", "")
+
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     def test_inject_text_empty(self, mock_ensure_dir):

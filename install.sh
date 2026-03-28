@@ -235,7 +235,7 @@ resolve_install_tag() {
             return
         fi
     fi
-    INSTALL_TAG="v0.9.0-beta"
+    INSTALL_TAG="v0.10.0-beta"
 }
 
 resolve_install_tag
@@ -2548,11 +2548,57 @@ update_icon_cache() {
     fi
 }
 
+# Function to install resources (icons, sounds) to the virtual environment
+# so the resource_manager can find them at runtime
+install_resources_to_venv() {
+    print_info "Installing resources to virtual environment..."
+
+    # Target directory: $VENV_DIR/share/vocalinux/resources
+    local VENV_RESOURCES_DIR="$VENV_DIR/share/vocalinux/resources"
+
+    # Create directories
+    mkdir -p "$VENV_RESOURCES_DIR/icons/scalable" || {
+        print_warning "Failed to create venv resources directory"
+        return 1
+    }
+    mkdir -p "$VENV_RESOURCES_DIR/sounds" || {
+        print_warning "Failed to create venv sounds directory"
+        return 1
+    }
+
+    # Copy icons if available
+    if [ -d "resources/icons/scalable" ]; then
+        cp resources/icons/scalable/*.svg "$VENV_RESOURCES_DIR/icons/scalable/" 2>/dev/null || {
+            print_warning "Failed to copy icons to venv resources"
+        }
+    fi
+
+    # Copy sounds if available
+    if [ -d "resources/sounds" ]; then
+        cp resources/sounds/*.wav "$VENV_RESOURCES_DIR/sounds/" 2>/dev/null || {
+            print_warning "Failed to copy sounds to venv resources"
+        }
+    fi
+
+    # Verify
+    local ICON_COUNT=$(ls "$VENV_RESOURCES_DIR/icons/scalable/"*.svg 2>/dev/null | wc -l)
+    local SOUND_COUNT=$(ls "$VENV_RESOURCES_DIR/sounds/"*.wav 2>/dev/null | wc -l)
+
+    if [ "$ICON_COUNT" -gt 0 ] && [ "$SOUND_COUNT" -gt 0 ]; then
+        print_success "Installed resources to venv ($ICON_COUNT icons, $SOUND_COUNT sounds)"
+    else
+        print_warning "Some resources may be missing from venv ($ICON_COUNT icons, $SOUND_COUNT sounds)"
+    fi
+}
+
 # Install desktop entry
 install_desktop_entry || print_warning "Desktop entry installation failed"
 
 # Install icons
 install_icons || print_warning "Icon installation failed"
+
+# Install resources to venv for runtime discovery
+install_resources_to_venv || print_warning "Venv resource installation failed"
 
 # Install models based on selected engine
 # whisper.cpp is now the default engine

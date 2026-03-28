@@ -6,6 +6,21 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.10.0-beta",
+    date: "2026-03-25",
+    type: "beta",
+    highlights: [
+      "Generalized keyboard modifier alias matching across layouts for more reliable shortcuts",
+      "Audio channel probing now validates device-supported sample rates before selection",
+      "evdev now handles SYN_DROPPED to prevent stale modifier state",
+      "IBus engine activation now uses register_component for stronger text-injection startup",
+      "Settings dialog forces window decorations to prevent missing-titlebar behavior",
+      "Tray icon refresh now uses icon names for better AppIndicator compatibility",
+      "Coverage increased to 80%+ with additional IBus launch/main-entry tests",
+      "Installer and CI polish: latest-tag fallback via GitHub API, Node 24 deploy, and path-filtered workflows",
+    ],
+  },
+  {
     version: "v0.9.0-beta",
     date: "2026-03-14",
     type: "beta",
@@ -175,7 +190,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-03-14",
+    dateModified: "2026-03-25",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",

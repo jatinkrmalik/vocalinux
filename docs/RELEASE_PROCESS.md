@@ -19,11 +19,11 @@ Use this checklist for every release:
 
 ### Core Version Files
 - [ ] `src/vocalinux/version.py` - Update `__version__` and `__version_info__`
-- [ ] `pyproject.toml` - Update classifiers (Alpha→Beta→Stable) - usually already correct
+- [ ] `pyproject.toml` - Confirm `Development Status` classifier and `requires-python` are correct for this release phase
 
 ### Documentation
-- [ ] `README.md` - Update badges, install commands, and announcements
-- [ ] `docs/INSTALL.md` - Update version references in curl commands
+- [ ] `README.md` - Update release announcement and status references
+- [ ] `docs/INSTALL.md` - Verify install examples use `main/install.sh` (not version-pinned raw URLs)
 - [ ] `docs/UPDATE.md` - Add "What's New" section for new version
 - [ ] `SECURITY.md` - Update supported versions table
 
@@ -32,12 +32,16 @@ Use this checklist for every release:
 - [ ] `web/src/app/page.tsx` - Update version badge in header (around line 293)
 - [ ] `web/src/app/changelog/page.tsx` - Add new release entry to changelog
 - [ ] `web/package.json` - Update version field
+- [ ] `web/package-lock.json` - Keep top-level/version metadata aligned with `web/package.json`
 
 ### Testing & Verification
 - [ ] Run `make test` - All tests pass
 - [ ] Run `make lint` - No linting errors
 - [ ] Run `make typecheck` - No type errors
 - [ ] Run `make build` - Package builds successfully
+- [ ] Run `npm run build` in `web/` - Website builds successfully
+
+> Note: CI workflows also sync website version metadata from `src/vocalinux/version.py`, but source files should still be updated in-repo during release prep for review clarity.
 
 ### Git Operations
 - [ ] Create release branch: `git checkout -b release/vX.Y.Z-PHASE`
@@ -110,9 +114,9 @@ Change the Development Status classifier:
 ```
 
 **Install Commands:**
-Update all curl commands to use the new tag:
+Keep install commands on `main/install.sh` (installer resolves latest release tag automatically):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/vX.Y.Z-PHASE/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
 ```
 
 **Release Announcement (lines ~31-34):**
@@ -125,7 +129,7 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/vX.Y.Z-PHASE
 
 #### 3.2 Update `docs/INSTALL.md`
 
-Update all curl command examples with the new version tag.
+Confirm install examples point to `main/install.sh` and not release-tag raw URLs.
 
 #### 3.3 Update `docs/UPDATE.md`
 
@@ -189,6 +193,8 @@ Add new release entry to the `releases` array at the top of the file.
 }
 ```
 
+Also align `web/package-lock.json` top-level `version` fields with `web/package.json`.
+
 ### Step 5: Verify Everything Works
 
 Run the full verification suite:
@@ -206,8 +212,12 @@ make typecheck
 # Build package
 make build
 
-# Test install script (optional but recommended)
-./install.sh --tag=v0.5.0-beta --dry-run 2>/dev/null || true
+# Website build
+cd web && npm run build && cd ..
+
+# Install script sanity checks (optional but recommended)
+bash -n install.sh
+./install.sh --help | grep -- --tag
 ```
 
 ### Step 6: Create Release Branch and PR
@@ -328,6 +338,7 @@ git push origin v0.5.1-beta
 | 0.7.0-beta | 2026 | Beta | Autostart, tabbed settings, Intel GPU support, single instance |
 | 0.8.0-beta | 2026-03-01 | Beta | Push-to-talk mode, optional voice commands, input/audio compatibility fixes |
 | 0.9.0-beta | 2026-03-14 | Beta | Left/right modifier keys, sound effects toggle, Wayland clipboard fallback, leading-space fix |
+| 0.10.0-beta | 2026-03-25 | Beta | Keyboard/audio reliability hardening, IBus/tray stability fixes, CI + test coverage improvements |
 
 ## Questions?
 
