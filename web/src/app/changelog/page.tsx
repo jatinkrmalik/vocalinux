@@ -6,6 +6,18 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.10.1-beta",
+    date: "2026-03-27",
+    type: "beta",
+    highlights: [
+      "Bundled package resources to prevent missing system tray icons (fixes #349, PR #354)",
+      "Stopped recognition before engine switches to prevent segfaults (fixes #350, PR #355)",
+      "Added a dedicated Close button in Settings for better WM compatibility (fixes #323, PR #356)",
+      "Preserved XKB layout state during Vocalinux IBus activation (fixes #292, PR #343)",
+      "Maintenance updates: npm/yarn dependency refresh and brace-expansion dev dependency bump (PR #346, #357)",
+    ],
+  },
+  {
     version: "v0.10.0-beta",
     date: "2026-03-25",
     type: "beta",
