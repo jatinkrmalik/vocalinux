@@ -27,6 +27,9 @@ DEFAULT_CONFIG = {
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
+        "remote_api_url": "",  # Remote speech recognition server URL (e.g. http://192.168.1.100:8080)
+        "remote_api_key": "",  # Remote server API key (optional)
+        "remote_api_endpoint": "/inference",  # Remote server API endpoint format (/v1/audio/transcriptions or /inference)
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
