@@ -498,12 +498,10 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertIsNone(injector._previous_engine)
 
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    @patch("vocalinux.text_injection.ibus_engine.is_engine_registered", return_value=True)
-    @patch("vocalinux.text_injection.ibus_engine.is_component_up_to_date", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
     def test_ibus_text_injector_init_with_auto_activate(
-        self, mock_active, mock_start, mock_update, mock_registered, mock_ensure_dir
+        self, mock_active, mock_start, mock_ensure_dir
     ):
         """Test IBusTextInjector initialization with auto-activation."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
