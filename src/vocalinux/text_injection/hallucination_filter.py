@@ -19,7 +19,7 @@ class BackgroundNoiseHallucinationFilter(HallucinationFilter):
     IGNORE_PATTERN = re.compile(r"^\(.*\)$")
 
     def filter(self, input_str: Optional[str]) -> Optional[str]:
-        if input_str is None or input_str.strip() is None:
+        if not input_str or not input_str.strip():
             return None
 
         input_str = input_str.strip()
@@ -40,7 +40,7 @@ class SilenceHallucinationFilter(HallucinationFilter):
     }
 
     def filter(self, input_str: Optional[str]) -> Optional[str]:
-        if input_str is None or input_str.strip() is None:
+        if not input_str or not input_str.strip():
             return None
 
         input_str = input_str.strip()
