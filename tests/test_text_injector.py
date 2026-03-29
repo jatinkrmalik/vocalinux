@@ -283,6 +283,18 @@ class TestTextInjector(unittest.TestCase):
         # Still no subprocess calls
         self.mock_subprocess.assert_not_called()
 
+        # Try with empty string (for full coverage)
+        injector.inject_text("")
+
+        # Still no subprocess calls
+        self.mock_subprocess.assert_not_called()
+
+        # Try with a non-filtered string
+        injector.inject_text("non-filtered text")
+
+        # The subprocess should be invoked now
+        self.mock_subprocess.assert_called()
+
     def test_empty_text_injection(self):
         """Test injecting empty text (should do nothing)."""
         injector = TextInjector()
