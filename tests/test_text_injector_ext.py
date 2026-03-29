@@ -43,6 +43,7 @@ def _make_injector(env):
 
     obj = TextInjector.__new__(TextInjector)
     obj._ibus_injector = None
+    obj._filters = []
     obj.environment = env
     return obj
 
