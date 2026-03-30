@@ -273,7 +273,7 @@ class TestReinitializeAfterResume(unittest.TestCase):
 
 
 class TestTrayIndicatorResumeFlow(unittest.TestCase):
-    """Tests for TrayIndicator._reinit_after_resume keyboard restart."""
+    """Tests for TrayIndicator resume handling."""
 
     def _make_tray_indicator(self):
         from vocalinux.ui.tray_indicator import TrayIndicator
@@ -285,44 +285,62 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
         indicator._setup_keyboard_shortcuts = MagicMock()
         return indicator
 
-    def test_reinit_after_resume_calls_speech_engine_reinit(self):
+    def test_reinit_speech_calls_engine_reinit(self):
         indicator = self._make_tray_indicator()
 
-        indicator._reinit_after_resume()
+        indicator._reinit_speech_after_resume()
 
         indicator.speech_engine.reinitialize_after_resume.assert_called_once()
 
-    def test_reinit_after_resume_restarts_keyboard_shortcuts(self):
-        indicator = self._make_tray_indicator()
-
-        indicator._reinit_after_resume()
-
-        indicator._setup_keyboard_shortcuts.assert_called_once()
-
-    def test_keyboard_restart_happens_even_if_speech_reinit_fails(self):
-        indicator = self._make_tray_indicator()
-        indicator.speech_engine.reinitialize_after_resume.side_effect = RuntimeError("boom")
-
-        indicator._reinit_after_resume()
-
-        indicator._setup_keyboard_shortcuts.assert_called_once()
-
-    def test_keyboard_restart_failure_does_not_crash(self):
-        indicator = self._make_tray_indicator()
-        indicator._setup_keyboard_shortcuts.side_effect = RuntimeError("no devices")
-
-        indicator._reinit_after_resume()
-
-        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
-
-    def test_returns_source_remove(self):
+    def test_reinit_speech_returns_source_remove(self):
         from gi.repository import GLib
 
         indicator = self._make_tray_indicator()
 
-        result = indicator._reinit_after_resume()
+        result = indicator._reinit_speech_after_resume()
 
         assert result == GLib.SOURCE_REMOVE
+
+    def test_reinit_speech_failure_is_caught(self):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.reinitialize_after_resume.side_effect = RuntimeError("boom")
+
+        indicator._reinit_speech_after_resume()
+
+    def test_reinit_keyboard_calls_setup(self):
+        indicator = self._make_tray_indicator()
+
+        indicator._reinit_keyboard_after_resume()
+
+        indicator._setup_keyboard_shortcuts.assert_called_once()
+
+    def test_reinit_keyboard_returns_source_remove(self):
+        from gi.repository import GLib
+
+        indicator = self._make_tray_indicator()
+
+        result = indicator._reinit_keyboard_after_resume()
+
+        assert result == GLib.SOURCE_REMOVE
+
+    def test_reinit_keyboard_failure_is_caught(self):
+        indicator = self._make_tray_indicator()
+        indicator._setup_keyboard_shortcuts.side_effect = RuntimeError("no devices")
+
+        indicator._reinit_keyboard_after_resume()
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_on_system_resume_schedules_both_reinits(self, mock_glib):
+        indicator = self._make_tray_indicator()
+
+        indicator._on_system_resume()
+
+        calls = mock_glib.timeout_add_seconds.call_args_list
+        assert len(calls) == 2
+        assert calls[0][0][0] == 2
+        assert calls[0][0][1] == indicator._reinit_speech_after_resume
+        assert calls[1][0][0] == 6
+        assert calls[1][0][1] == indicator._reinit_keyboard_after_resume
 
 
 if __name__ == "__main__":

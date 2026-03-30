@@ -463,28 +463,30 @@ class TrayIndicator:
             self.speech_engine.stop_recognition()
 
     def _on_system_resume(self):
-        """Reinitialize the speech engine after the system wakes up.
+        """Reinitialize subsystems after the system wakes up.
 
-        Schedules the actual work with a short delay so the audio
-        subsystem has time to come back online.
+        Schedules speech engine reinit after 2s (audio hardware) and
+        keyboard backend restart after 6s (USB re-enumeration).
         """
-        logger.info("System resumed — scheduling speech engine reinit")
-        GLib.timeout_add_seconds(2, self._reinit_after_resume)
+        logger.info("System resumed — scheduling reinit")
+        GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
+        GLib.timeout_add_seconds(6, self._reinit_keyboard_after_resume)
 
-    def _reinit_after_resume(self):
+    def _reinit_speech_after_resume(self):
         try:
             self.speech_engine.reinitialize_after_resume()
         except Exception:
             logger.error("Failed to reinitialize after resume", exc_info=True)
+        return GLib.SOURCE_REMOVE
 
-        # evdev devices disconnect on suspend; monitor thread exits when all fds close.
-        # Full stop+start re-scans /dev/input and opens fresh file descriptors.
+    def _reinit_keyboard_after_resume(self):
+        # USB devices re-enumerate slowly after resume — stale /dev/input
+        # nodes are torn down ~4s after wake, so 6s delay avoids opening them.
         try:
             logger.info("Restarting keyboard shortcuts after resume")
             self._setup_keyboard_shortcuts()
         except Exception:
             logger.error("Failed to restart keyboard shortcuts after resume", exc_info=True)
-
         return GLib.SOURCE_REMOVE
 
     def _on_quit_clicked(self, widget):
