@@ -666,13 +666,20 @@ class TextInjector:
             try:
                 if tool in ("xclip", "xsel"):
                     subprocess.run(
-                        cmd, input=text, check=True,
-                        stderr=subprocess.PIPE, text=True, timeout=3,
+                        cmd,
+                        input=text,
+                        check=True,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=3,
                     )
                 else:
                     subprocess.run(
-                        cmd, check=True,
-                        stderr=subprocess.PIPE, text=True, timeout=3,
+                        cmd,
+                        check=True,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=3,
                     )
                 copied = True
                 logger.debug(f"Text copied to clipboard using {tool}")
@@ -693,16 +700,20 @@ class TextInjector:
             if self.wayland_tool == "ydotool":
                 subprocess.run(
                     ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
-                    check=True, stderr=subprocess.PIPE, text=True, timeout=3,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=3,
                 )
             else:  # wtype
                 subprocess.run(
                     ["wtype", "-M", "ctrl", "v", "-m", "ctrl"],
-                    check=True, stderr=subprocess.PIPE, text=True, timeout=3,
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=3,
                 )
-            logger.info(
-                f"Text injected via clipboard paste: '{text[:20]}...' ({len(text)} chars)"
-            )
+            logger.info(f"Text injected via clipboard paste: '{text[:20]}...' ({len(text)} chars)")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.warning(f"Paste simulation failed: {e}")
