@@ -139,24 +139,6 @@ class TestIBusEngineModuleFunctions(unittest.TestCase):
             self.assertFalse(result)
 
     @patch("subprocess.run")
-    def test_is_engine_registered_success(self, mock_run):
-        """Test engine registration detection."""
-        mock_run.return_value = MagicMock(returncode=0, stdout="vocalinux other-engine")
-        from vocalinux.text_injection.ibus_engine import is_engine_registered
-
-        result = is_engine_registered()
-        self.assertTrue(result)
-
-    @patch("subprocess.run")
-    def test_is_engine_registered_not_found(self, mock_run):
-        """Test when engine is not registered."""
-        mock_run.return_value = MagicMock(returncode=0, stdout="other-engine")
-        from vocalinux.text_injection.ibus_engine import is_engine_registered
-
-        result = is_engine_registered()
-        self.assertFalse(result)
-
-    @patch("subprocess.run")
     def test_is_engine_active_success(self, mock_run):
         """Test when engine is active."""
         mock_run.return_value = MagicMock(returncode=0, stdout="vocalinux")
@@ -498,10 +480,11 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertIsNone(injector._previous_engine)
 
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
     def test_ibus_text_injector_init_with_auto_activate(
-        self, mock_active, mock_start, mock_ensure_dir
+        self, mock_active, mock_start, mock_socket_path, mock_ensure_dir
     ):
         """Test IBusTextInjector initialization with auto-activation."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector

@@ -234,76 +234,6 @@ def _get_exec_command() -> str:
     return f"{sys.executable} {engine_script} --ibus"
 
 
-def _get_expected_component_xml() -> str:
-    """Generate the expected component XML content for the current installation."""
-    e = _ENGINE_META
-    c = _COMPONENT_META
-
-    return f"""<?xml version="1.0" encoding="utf-8"?>
-<component>
-    <name>{COMPONENT_NAME}</name>
-    <description>{ENGINE_DESCRIPTION}</description>
-    <exec>{_get_exec_command()}</exec>
-    <version>{c['version']}</version>
-    <author>{c['author']}</author>
-    <license>{c['license']}</license>
-    <homepage>{c['homepage']}</homepage>
-    <textdomain>{c['textdomain']}</textdomain>
-    <engines>
-        <engine>
-            <name>{ENGINE_NAME}</name>
-            <longname>{ENGINE_LONGNAME}</longname>
-            <language>{e['language']}</language>
-            <license>{e['license']}</license>
-            <author>{e['author']}</author>
-            <icon>{e['icon']}</icon>
-            <layout>{e['layout']}</layout>
-            <description>{ENGINE_DESCRIPTION}</description>
-            <rank>{ENGINE_RANK}</rank>
-        </engine>
-    </engines>
-</component>
-"""
-
-
-def is_component_up_to_date() -> bool:
-    """
-    Check if the installed IBus component XML matches the current installation.
-
-    Returns:
-        True if component exists and matches expected content, False otherwise
-    """
-    component_file = Path.home() / ".local" / "share" / "ibus" / "component" / "vocalinux.xml"
-
-    if not component_file.exists():
-        return False
-
-    try:
-        installed_content = component_file.read_text()
-        expected_content = _get_expected_component_xml()
-        return installed_content.strip() == expected_content.strip()
-    except Exception as e:
-        logger.debug(f"Failed to check component XML: {e}")
-        return False
-
-
-def is_engine_registered() -> bool:
-    """Check if the Vocalinux IBus engine is registered."""
-    if not IBUS_AVAILABLE:
-        return False
-
-    try:
-        result = subprocess.run(
-            ["ibus", "list-engine"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return ENGINE_NAME in result.stdout
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return False
-
-
 def is_engine_active() -> bool:
     """Check if the Vocalinux IBus engine is currently active."""
     try:
@@ -830,6 +760,20 @@ class IBusTextInjector:
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
+        # Verify the engine is fully ready before proceeding.
+        # start_engine_process() only confirms the subprocess is alive —
+        # register_component() and socket setup may still be in progress.
+        for _attempt in range(15):
+            if SOCKET_PATH.exists():
+                logger.debug("Engine socket is ready")
+                break
+            time.sleep(0.2)
+        else:
+            logger.warning(
+                "Engine process started but socket not ready after retries; "
+                "proceeding with activation attempt"
+            )
+
         # Capture current XKB layout before switching engines
         # This is critical for preserving the user's keyboard layout
         # when IBus engine switching might override it
@@ -939,77 +883,6 @@ class IBusTextInjector:
         except Exception as e:
             logger.error(f"Failed to inject text via IBus: {e}")
             return False
-
-
-def install_ibus_component(system_wide: bool = False) -> bool:
-    """
-    Install the IBus component XML file.
-
-    Args:
-        system_wide: If True, install to /usr/share/ibus/component/ (requires root).
-                    If False, install to user directory and set IBUS_COMPONENT_PATH.
-
-    Returns:
-        True if installation was successful, False otherwise
-    """
-    component_xml = _get_expected_component_xml()
-
-    try:
-        if system_wide:
-            component_dir = Path("/usr/share/ibus/component")
-            component_file = component_dir / "vocalinux.xml"
-
-            # Write to temp file and move with sudo
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
-                f.write(component_xml)
-                temp_path = f.name
-
-            result = subprocess.run(
-                ["sudo", "cp", temp_path, str(component_file)],
-                capture_output=True,
-                text=True,
-            )
-            os.unlink(temp_path)
-
-            if result.returncode != 0:
-                logger.error(f"Failed to install component: {result.stderr}")
-                return False
-
-            subprocess.run(
-                ["sudo", "chmod", "644", str(component_file)],
-                capture_output=True,
-            )
-        else:
-            # User-level installation
-            component_dir = Path.home() / ".local" / "share" / "ibus" / "component"
-            component_dir.mkdir(parents=True, exist_ok=True)
-            component_file = component_dir / "vocalinux.xml"
-            component_file.write_text(component_xml)
-            logger.info(f"Component installed to {component_file}")
-
-        # Refresh IBus - restart with component path set so it picks up user components
-        import time
-
-        user_component_dir = Path.home() / ".local" / "share" / "ibus" / "component"
-        env = os.environ.copy()
-        env["IBUS_COMPONENT_PATH"] = f"{user_component_dir}:/usr/share/ibus/component"
-
-        subprocess.run(["ibus", "write-cache"], capture_output=True, env=env)
-        subprocess.run(["ibus", "restart"], capture_output=True, env=env)
-        time.sleep(1)  # Give IBus time to restart
-
-        logger.info(
-            "IBus component installed successfully.\n"
-            "Set 'Vocalinux' as your input method in system settings "
-            "to enable voice dictation."
-        )
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to install IBus component: {e}")
-        return False
 
 
 def _get_engines_xml() -> str:

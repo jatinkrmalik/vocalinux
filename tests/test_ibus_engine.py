@@ -68,6 +68,7 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
@@ -78,10 +79,12 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
         mock_get_current,
         mock_is_active,
         mock_start_engine,
+        mock_socket_path,
         mock_ensure_dir,
     ):
         """Test that IBusSetupError is raised when engine activation fails."""
         mock_start_engine.return_value = True
+        mock_socket_path.exists.return_value = True
         mock_is_active.return_value = False
         mock_get_current.return_value = "xkb:us::eng"
         mock_switch.return_value = False  # Activation fails
@@ -111,102 +114,6 @@ class TestIBusEngineHelpers(unittest.TestCase):
         from vocalinux.text_injection.ibus_engine import IBUS_AVAILABLE, is_ibus_available
 
         self.assertEqual(is_ibus_available(), IBUS_AVAILABLE)
-
-
-class TestIsEngineRegistered(unittest.TestCase):
-    """Tests for is_engine_registered function."""
-
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
-    @patch("subprocess.run")
-    def test_engine_registered(self, mock_run):
-        """Test detection when engine is registered."""
-        mock_run.return_value = MagicMock(stdout="vocalinux\nxkb:us::eng\n", returncode=0)
-
-        from vocalinux.text_injection.ibus_engine import is_engine_registered
-
-        result = is_engine_registered()
-        self.assertTrue(result)
-        mock_run.assert_called_once()
-
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
-    @patch("subprocess.run")
-    def test_engine_not_registered(self, mock_run):
-        """Test detection when engine is not registered."""
-        mock_run.return_value = MagicMock(stdout="xkb:us::eng\n", returncode=0)
-
-        from vocalinux.text_injection.ibus_engine import is_engine_registered
-
-        result = is_engine_registered()
-        self.assertFalse(result)
-
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
-    @patch("subprocess.run")
-    def test_subprocess_error(self, mock_run):
-        """Test handling of subprocess errors."""
-        import subprocess
-
-        mock_run.side_effect = subprocess.SubprocessError("Command failed")
-
-        from vocalinux.text_injection.ibus_engine import is_engine_registered
-
-        result = is_engine_registered()
-        self.assertFalse(result)
-
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False)
-    def test_ibus_not_available(self):
-        """Test returns False when IBus is not available."""
-        from vocalinux.text_injection.ibus_engine import is_engine_registered
-
-        result = is_engine_registered()
-        self.assertFalse(result)
-
-
-class TestIsComponentUpToDate(unittest.TestCase):
-    """Tests for is_component_up_to_date function."""
-
-    def test_component_missing(self):
-        """Test returns False when component file doesn't exist."""
-        with patch("pathlib.Path.home") as mock_home:
-            mock_home.return_value = Path("/nonexistent")
-            from vocalinux.text_injection.ibus_engine import is_component_up_to_date
-
-            result = is_component_up_to_date()
-            self.assertFalse(result)
-
-    def test_component_matches(self):
-        """Test returns True when component content matches."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            component_dir = Path(tmpdir) / ".local" / "share" / "ibus" / "component"
-            component_dir.mkdir(parents=True)
-            component_file = component_dir / "vocalinux.xml"
-
-            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
-                from vocalinux.text_injection.ibus_engine import (
-                    _get_expected_component_xml,
-                    is_component_up_to_date,
-                )
-
-                # Write expected content
-                component_file.write_text(_get_expected_component_xml())
-
-                result = is_component_up_to_date()
-                self.assertTrue(result)
-
-    def test_component_differs(self):
-        """Test returns False when component content differs."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            component_dir = Path(tmpdir) / ".local" / "share" / "ibus" / "component"
-            component_dir.mkdir(parents=True)
-            component_file = component_dir / "vocalinux.xml"
-
-            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
-                from vocalinux.text_injection.ibus_engine import is_component_up_to_date
-
-                # Write stale content
-                component_file.write_text("<component>stale</component>")
-
-                result = is_component_up_to_date()
-                self.assertFalse(result)
 
 
 class TestIsEngineActive(unittest.TestCase):
@@ -343,6 +250,7 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
@@ -353,9 +261,11 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_get_current,
         mock_start_engine,
         mock_is_active,
+        mock_socket_path,
         mock_ensure_dir,
     ):
         """Test initialization with auto_activate=True."""
+        mock_socket_path.exists.return_value = True
         mock_is_active.return_value = False
         mock_start_engine.return_value = True
         mock_get_current.return_value = "xkb:us::eng"
@@ -457,6 +367,7 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
@@ -470,12 +381,14 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_get_engine,
         mock_switch,
         mock_start_proc,
+        mock_socket_path,
         mock_get_xkb,
         mock_restore_xkb,
     ):
         """Test _setup_engine captures XKB layout and restores it after activation (#292)."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
+        mock_socket_path.exists.return_value = True
         mock_get_xkb.return_value = ("fr", "azerty", "")
 
         injector = IBusTextInjector(auto_activate=False)
@@ -585,63 +498,6 @@ class TestIBusTextInjector(unittest.TestCase):
 
             injector = IBusTextInjector(auto_activate=False)
             result = injector.inject_text("Hello")
-
-        self.assertFalse(result)
-
-
-class TestInstallIBusComponent(unittest.TestCase):
-    """Tests for install_ibus_component function."""
-
-    @patch("subprocess.run")
-    def test_user_install_success(self, mock_run):
-        """Test successful user-level installation."""
-        mock_run.return_value = MagicMock(returncode=0)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            component_dir = Path(temp_dir)
-
-            with patch(
-                "vocalinux.text_injection.ibus_engine.Path.home",
-                return_value=Path(temp_dir),
-            ):
-                from vocalinux.text_injection.ibus_engine import install_ibus_component
-
-                # Force reload to use patched home
-                result = install_ibus_component(system_wide=False)
-
-        self.assertTrue(result)
-
-    @patch("subprocess.run")
-    def test_system_install_needs_sudo(self, mock_run):
-        """Test system-wide installation calls sudo."""
-        mock_run.return_value = MagicMock(returncode=0)
-
-        from vocalinux.text_injection.ibus_engine import install_ibus_component
-
-        with patch("tempfile.NamedTemporaryFile"):
-            with patch("os.unlink"):
-                result = install_ibus_component(system_wide=True)
-
-        # Verify sudo was called
-        sudo_calls = [
-            call for call in mock_run.call_args_list if call[0][0] and "sudo" in call[0][0]
-        ]
-        self.assertTrue(len(sudo_calls) > 0)
-
-    @patch("subprocess.run")
-    def test_system_install_failure(self, mock_run):
-        """Test system-wide installation failure."""
-        mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied")
-
-        from vocalinux.text_injection.ibus_engine import install_ibus_component
-
-        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
-            mock_tmp.return_value.__enter__ = MagicMock()
-            mock_tmp.return_value.__exit__ = MagicMock()
-            mock_tmp.return_value.name = "/tmp/test.xml"
-            mock_tmp.return_value.write = MagicMock()
-            with patch("os.unlink"):
-                result = install_ibus_component(system_wide=True)
 
         self.assertFalse(result)
 
