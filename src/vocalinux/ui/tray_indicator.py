@@ -25,7 +25,7 @@ except (ImportError, ValueError):
         gi.require_version("AyatanaAppindicator3", "0.1")
         from gi.repository import AyatanaAppindicator3 as AppIndicator3
 
-from gi.repository import GdkPixbuf, GLib, GObject, Gtk
+from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
@@ -53,6 +53,11 @@ ICON_DIR = _resource_manager.icons_dir
 DEFAULT_ICON = "vocalinux-microphone-off"
 ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
+
+# /dev/input settle-detection tuning (used after resume)
+_INPUT_SETTLE_SECONDS = 2
+_INPUT_MONITOR_CAP_SECONDS = 10
+_FALLBACK_KEYBOARD_RESTART_SECONDS = 6
 
 
 class TrayIndicator:
@@ -465,12 +470,13 @@ class TrayIndicator:
     def _on_system_resume(self):
         """Reinitialize subsystems after the system wakes up.
 
-        Schedules speech engine reinit after 2s (audio hardware) and
-        keyboard backend restart after 6s (USB re-enumeration).
+        Speech engine reinitializes after 2s (audio hardware recovers fast).
+        Keyboard backend waits for /dev/input to settle using inotify-backed
+        directory monitoring, with a timer fallback if monitoring unavailable.
         """
         logger.info("System resumed — scheduling reinit")
         GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
-        GLib.timeout_add_seconds(6, self._reinit_keyboard_after_resume)
+        GLib.timeout_add_seconds(2, self._start_input_device_monitor)
 
     def _reinit_speech_after_resume(self):
         try:
@@ -479,15 +485,61 @@ class TrayIndicator:
             logger.error("Failed to reinitialize after resume", exc_info=True)
         return GLib.SOURCE_REMOVE
 
-    def _reinit_keyboard_after_resume(self):
-        # USB devices re-enumerate slowly after resume — stale /dev/input
-        # nodes are torn down ~4s after wake, so 6s delay avoids opening them.
+    def _start_input_device_monitor(self):
+        """Watch /dev/input for changes; restart keyboard when devices settle."""
         try:
-            logger.info("Restarting keyboard shortcuts after resume")
-            self._setup_keyboard_shortcuts()
+            gfile = Gio.File.new_for_path("/dev/input")
+            self._input_monitor = gfile.monitor_directory(Gio.FileMonitorFlags.NONE, None)
+            self._input_monitor.connect("changed", self._on_input_device_changed)
+
+            self._settle_timer_id = GLib.timeout_add_seconds(
+                _INPUT_SETTLE_SECONDS, self._on_devices_settled
+            )
+            self._monitor_timeout_id = GLib.timeout_add_seconds(
+                _INPUT_MONITOR_CAP_SECONDS, self._on_input_monitor_timeout
+            )
+            logger.info("Monitoring /dev/input for device changes after resume")
         except Exception:
-            logger.error("Failed to restart keyboard shortcuts after resume", exc_info=True)
+            logger.error("Failed to monitor /dev/input, falling back to timer", exc_info=True)
+            GLib.timeout_add_seconds(
+                _FALLBACK_KEYBOARD_RESTART_SECONDS, self._reinit_keyboard_fallback
+            )
         return GLib.SOURCE_REMOVE
+
+    def _on_input_device_changed(self, monitor, file, other_file, event_type):
+        if getattr(self, "_settle_timer_id", None) is not None:
+            GLib.source_remove(self._settle_timer_id)
+        self._settle_timer_id = GLib.timeout_add_seconds(
+            _INPUT_SETTLE_SECONDS, self._on_devices_settled
+        )
+
+    def _on_devices_settled(self):
+        logger.info("Input devices settled — restarting keyboard shortcuts")
+        self._cleanup_input_monitor()
+        self._setup_keyboard_shortcuts()
+        return GLib.SOURCE_REMOVE
+
+    def _on_input_monitor_timeout(self):
+        logger.warning("Input device monitor timed out — restarting keyboard shortcuts")
+        self._cleanup_input_monitor()
+        self._setup_keyboard_shortcuts()
+        return GLib.SOURCE_REMOVE
+
+    def _reinit_keyboard_fallback(self):
+        logger.info("Restarting keyboard shortcuts (fallback timer)")
+        self._setup_keyboard_shortcuts()
+        return GLib.SOURCE_REMOVE
+
+    def _cleanup_input_monitor(self):
+        if getattr(self, "_settle_timer_id", None) is not None:
+            GLib.source_remove(self._settle_timer_id)
+            self._settle_timer_id = None
+        if getattr(self, "_monitor_timeout_id", None) is not None:
+            GLib.source_remove(self._monitor_timeout_id)
+            self._monitor_timeout_id = None
+        if getattr(self, "_input_monitor", None) is not None:
+            self._input_monitor.cancel()
+            self._input_monitor = None
 
     def _on_quit_clicked(self, widget):
         """Handle click on the Quit menu item."""
@@ -500,6 +552,8 @@ class TrayIndicator:
 
         if self._suspend_handler is not None:
             self._suspend_handler.shutdown()
+
+        self._cleanup_input_monitor()
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()

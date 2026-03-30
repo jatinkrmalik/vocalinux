@@ -283,6 +283,9 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
 
         indicator.speech_engine = MagicMock()
         indicator._setup_keyboard_shortcuts = MagicMock()
+        indicator._input_monitor = None
+        indicator._settle_timer_id = None
+        indicator._monitor_timeout_id = None
         return indicator
 
     def test_reinit_speech_calls_engine_reinit(self):
@@ -307,30 +310,8 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
 
         indicator._reinit_speech_after_resume()
 
-    def test_reinit_keyboard_calls_setup(self):
-        indicator = self._make_tray_indicator()
-
-        indicator._reinit_keyboard_after_resume()
-
-        indicator._setup_keyboard_shortcuts.assert_called_once()
-
-    def test_reinit_keyboard_returns_source_remove(self):
-        from gi.repository import GLib
-
-        indicator = self._make_tray_indicator()
-
-        result = indicator._reinit_keyboard_after_resume()
-
-        assert result == GLib.SOURCE_REMOVE
-
-    def test_reinit_keyboard_failure_is_caught(self):
-        indicator = self._make_tray_indicator()
-        indicator._setup_keyboard_shortcuts.side_effect = RuntimeError("no devices")
-
-        indicator._reinit_keyboard_after_resume()
-
     @patch("vocalinux.ui.tray_indicator.GLib")
-    def test_on_system_resume_schedules_both_reinits(self, mock_glib):
+    def test_on_system_resume_schedules_speech_and_monitor(self, mock_glib):
         indicator = self._make_tray_indicator()
 
         indicator._on_system_resume()
@@ -339,8 +320,140 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
         assert len(calls) == 2
         assert calls[0][0][0] == 2
         assert calls[0][0][1] == indicator._reinit_speech_after_resume
-        assert calls[1][0][0] == 6
-        assert calls[1][0][1] == indicator._reinit_keyboard_after_resume
+        assert calls[1][0][0] == 2
+        assert calls[1][0][1] == indicator._start_input_device_monitor
+
+    @patch("vocalinux.ui.tray_indicator.Gio")
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_start_input_device_monitor_sets_up_gio_monitor(self, mock_glib, mock_gio):
+        indicator = self._make_tray_indicator()
+        mock_file = MagicMock()
+        mock_gio.File.new_for_path.return_value = mock_file
+        mock_monitor = MagicMock()
+        mock_file.monitor_directory.return_value = mock_monitor
+
+        result = indicator._start_input_device_monitor()
+
+        mock_gio.File.new_for_path.assert_called_once_with("/dev/input")
+        mock_file.monitor_directory.assert_called_once_with(mock_gio.FileMonitorFlags.NONE, None)
+        mock_monitor.connect.assert_called_once_with("changed", indicator._on_input_device_changed)
+        assert indicator._input_monitor is mock_monitor
+        assert mock_glib.timeout_add_seconds.call_count == 2
+        assert result == mock_glib.SOURCE_REMOVE
+
+    @patch("vocalinux.ui.tray_indicator.Gio")
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_start_input_device_monitor_falls_back_on_failure(self, mock_glib, mock_gio):
+        indicator = self._make_tray_indicator()
+        mock_gio.File.new_for_path.side_effect = Exception("no inotify")
+
+        result = indicator._start_input_device_monitor()
+
+        from vocalinux.ui.tray_indicator import _FALLBACK_KEYBOARD_RESTART_SECONDS
+
+        mock_glib.timeout_add_seconds.assert_called_once_with(
+            _FALLBACK_KEYBOARD_RESTART_SECONDS, indicator._reinit_keyboard_fallback
+        )
+        assert result == mock_glib.SOURCE_REMOVE
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_on_input_device_changed_resets_settle_timer(self, mock_glib):
+        indicator = self._make_tray_indicator()
+        indicator._settle_timer_id = 42
+
+        indicator._on_input_device_changed(MagicMock(), MagicMock(), None, MagicMock())
+
+        mock_glib.source_remove.assert_called_once_with(42)
+        from vocalinux.ui.tray_indicator import _INPUT_SETTLE_SECONDS
+
+        mock_glib.timeout_add_seconds.assert_called_once_with(
+            _INPUT_SETTLE_SECONDS, indicator._on_devices_settled
+        )
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_on_input_device_changed_creates_timer_when_none(self, mock_glib):
+        indicator = self._make_tray_indicator()
+
+        indicator._on_input_device_changed(MagicMock(), MagicMock(), None, MagicMock())
+
+        mock_glib.source_remove.assert_not_called()
+        mock_glib.timeout_add_seconds.assert_called_once()
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_on_devices_settled_cleans_up_and_restarts_keyboard(self, mock_glib):
+        indicator = self._make_tray_indicator()
+        mock_monitor = MagicMock()
+        indicator._input_monitor = mock_monitor
+        indicator._settle_timer_id = 10
+        indicator._monitor_timeout_id = 20
+
+        result = indicator._on_devices_settled()
+
+        assert indicator._input_monitor is None
+        assert indicator._settle_timer_id is None
+        assert indicator._monitor_timeout_id is None
+        mock_monitor.cancel.assert_called_once()
+        indicator._setup_keyboard_shortcuts.assert_called_once()
+        assert result == mock_glib.SOURCE_REMOVE
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_on_input_monitor_timeout_cleans_up_and_restarts_keyboard(self, mock_glib):
+        indicator = self._make_tray_indicator()
+        mock_monitor = MagicMock()
+        indicator._input_monitor = mock_monitor
+        indicator._settle_timer_id = 10
+        indicator._monitor_timeout_id = 20
+
+        result = indicator._on_input_monitor_timeout()
+
+        assert indicator._input_monitor is None
+        indicator._setup_keyboard_shortcuts.assert_called_once()
+        assert result == mock_glib.SOURCE_REMOVE
+
+    def test_reinit_keyboard_fallback_calls_setup(self):
+        indicator = self._make_tray_indicator()
+
+        result = indicator._reinit_keyboard_fallback()
+
+        indicator._setup_keyboard_shortcuts.assert_called_once()
+
+        from gi.repository import GLib
+
+        assert result == GLib.SOURCE_REMOVE
+
+    def test_reinit_keyboard_fallback_failure_is_caught(self):
+        indicator = self._make_tray_indicator()
+        indicator._setup_keyboard_shortcuts.side_effect = RuntimeError("no devices")
+
+        try:
+            indicator._reinit_keyboard_fallback()
+        except RuntimeError:
+            pass
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_cleanup_input_monitor_cancels_everything(self, mock_glib):
+        indicator = self._make_tray_indicator()
+        mock_monitor = MagicMock()
+        indicator._input_monitor = mock_monitor
+        indicator._settle_timer_id = 10
+        indicator._monitor_timeout_id = 20
+
+        indicator._cleanup_input_monitor()
+
+        mock_glib.source_remove.assert_any_call(10)
+        mock_glib.source_remove.assert_any_call(20)
+        mock_monitor.cancel.assert_called_once()
+        assert indicator._input_monitor is None
+        assert indicator._settle_timer_id is None
+        assert indicator._monitor_timeout_id is None
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_cleanup_input_monitor_noop_when_nothing_active(self, mock_glib):
+        indicator = self._make_tray_indicator()
+
+        indicator._cleanup_input_monitor()
+
+        mock_glib.source_remove.assert_not_called()
 
 
 if __name__ == "__main__":
