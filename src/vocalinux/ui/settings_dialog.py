@@ -1453,7 +1453,7 @@ class SettingsDialog(Gtk.Dialog):
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
-        copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", True)
+        copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)

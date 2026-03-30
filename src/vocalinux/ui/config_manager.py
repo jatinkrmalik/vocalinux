@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
         "first_run": True,
     },
     "text_injection": {
-        "copy_to_clipboard": True,  # Always copy recognized text to clipboard
+        "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
     },
     "advanced": {
         "debug_logging": False,

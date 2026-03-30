@@ -384,10 +384,10 @@ class TextInjector:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = json.load(f)
-                return config.get("text_injection", {}).get("copy_to_clipboard", True)
+                return config.get("text_injection", {}).get("copy_to_clipboard", False)
         except Exception as e:
             logger.debug(f"Could not read copy_to_clipboard setting: {e}")
-        return True  # Default to enabled
+        return False
 
     def _show_clipboard_fallback_notification(self):
         """Show a desktop notification when text is copied to clipboard as fallback."""
