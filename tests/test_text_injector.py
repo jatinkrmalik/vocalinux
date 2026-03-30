@@ -579,6 +579,110 @@ class TestTextInjector(unittest.TestCase):
             has_ydotool_type = any("'type'" in c for c in calls)
             self.assertTrue(has_ydotool_type, "Should fall back to ydotool type")
 
+    @patch("vocalinux.text_injection.text_injector.time.sleep")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_uses_xclip_fallback(self, mock_run, mock_which, mock_sleep):
+        """Test clipboard paste falls back to xclip when wl-copy is unavailable (#362)."""
+        mock_which.side_effect = lambda x: x in ("xclip", "ydotool")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertTrue(result)
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            has_xclip = any(c[0] == "xclip" for c in calls)
+            self.assertTrue(has_xclip, "Should use xclip as fallback")
+
+    @patch("vocalinux.text_injection.text_injector.time.sleep")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_uses_xsel_fallback(self, mock_run, mock_which, mock_sleep):
+        """Test clipboard paste falls back to xsel when wl-copy/xclip unavailable (#362)."""
+        mock_which.side_effect = lambda x: x in ("xsel", "ydotool")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertTrue(result)
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            has_xsel = any(c[0] == "xsel" for c in calls)
+            self.assertTrue(has_xsel, "Should use xsel as fallback")
+
+    @patch("vocalinux.text_injection.text_injector.time.sleep")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_with_wtype(self, mock_run, mock_which, mock_sleep):
+        """Test clipboard paste uses wtype for Ctrl+V when wayland_tool is wtype (#362)."""
+        mock_which.side_effect = lambda x: x in ("wl-copy", "wtype")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "wtype"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertTrue(result)
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            has_wtype_ctrl_v = any(c[0] == "wtype" and "-M" in c for c in calls)
+            self.assertTrue(has_wtype_ctrl_v, "Should use wtype for Ctrl+V paste")
+
+    @patch("vocalinux.text_injection.text_injector.time.sleep")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_returns_false_on_paste_failure(self, mock_run, mock_which, mock_sleep):
+        """Test clipboard paste returns False when Ctrl+V simulation fails (#362)."""
+        mock_which.side_effect = lambda x: x in ("wl-copy", "ydotool")
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0]
+            if cmd[0] == "wl-copy":
+                return MagicMock(returncode=0)
+            # ydotool key fails
+            raise subprocess.CalledProcessError(1, cmd)
+
+        mock_run.side_effect = side_effect
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertFalse(result)
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_clipboard_paste_returns_false_when_no_clipboard_tools(
+        self, mock_which, mock_ibus_avail, mock_ibus_active
+    ):
+        """Test clipboard paste returns False when no clipboard tools available."""
+        # ydotool available for init, but no clipboard tools (wl-copy/xclip/xsel)
+        mock_which.side_effect = lambda x: x if x == "ydotool" else None
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertFalse(result)
+
 
 class TestDesktopEnvironmentEnum(unittest.TestCase):
     """Tests for DesktopEnvironment enum."""
