@@ -6,6 +6,23 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.10.1-beta",
+    date: "2026-03-30",
+    type: "beta",
+    highlights: [
+      "Bundled package resources to prevent missing system tray icons (fixes #349, PR #354)",
+      "Stopped recognition before engine switches to prevent segfaults (fixes #350, PR #355)",
+      "Added a dedicated Close button in Settings for better WM compatibility (fixes #323, PR #356)",
+      "Preserved XKB layout state during Vocalinux IBus activation (fixes #292, PR #343)",
+      "Auto-recover speech recognition after system suspend/resume via new D-Bus handler (fixes #367, PR #369)",
+      "Restart keyboard shortcut backend after resume to keep shortcuts working (PR #371)",
+      "Delayed keyboard restart to allow USB re-enumeration after resume (PR #372)",
+      "Fixed premature transcription during push-to-talk silence (fixes #358, PR #359)",
+      "Disabled copy-to-clipboard by default in Settings (PR #370)",
+      "Maintenance updates: npm/yarn dependency refresh and brace-expansion dev dependency bump (PR #346, #357)",
+    ],
+  },
+  {
     version: "v0.10.0-beta",
     date: "2026-03-25",
     type: "beta",
@@ -190,7 +207,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-03-25",
+    dateModified: "2026-03-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
