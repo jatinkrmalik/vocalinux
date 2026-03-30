@@ -2211,6 +2211,42 @@ class SpeechRecognitionManager:
             logger.error(f"Unexpected error during audio reconnection: {e}")
             return False
 
+    def reinitialize_after_resume(self):
+        """Reinitialize the speech engine after system resume from suspend.
+
+        Stops any active recognition, releases stale model resources,
+        and re-creates the engine so that the audio pipeline and model
+        are in a clean state for new dictation.
+        """
+        logger.info("Reinitializing speech engine after system resume")
+
+        if self.state != RecognitionState.IDLE:
+            logger.info("Stopping active recognition before resume reinit")
+            self.stop_recognition()
+
+        with self._model_lock:
+            self.model = None
+            self.recognizer = None
+            self._model_initialized = False
+
+            try:
+                if self.engine == "vosk":
+                    self._init_vosk()
+                elif self.engine == "whisper":
+                    self._init_whisper()
+                elif self.engine == "whisper_cpp":
+                    self._init_whispercpp()
+                else:
+                    logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
+                    return
+
+                logger.info("Speech engine reinitialized after resume")
+            except Exception:
+                logger.error("Failed to reinitialize speech engine after resume", exc_info=True)
+                self._update_state(RecognitionState.ERROR)
+
+        self._reconnection_attempts = 0
+
     def set_buffer_limit(self, max_chunks: int):
         """
         Set the maximum number of audio chunks to buffer.

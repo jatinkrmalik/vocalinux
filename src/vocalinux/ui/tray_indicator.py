@@ -29,6 +29,7 @@ from gi.repository import GdkPixbuf, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
+from ..suspend_handler import SuspendHandler  # noqa: E402
 
 # Import necessary components
 from .config_manager import ConfigManager  # noqa: E402
@@ -110,6 +111,11 @@ class TrayIndicator:
 
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
+
+        self._suspend_handler = SuspendHandler(
+            on_suspend=self._on_system_suspend,
+            on_resume=self._on_system_resume,
+        )
 
         # Set up keyboard shortcuts with mode support
         self._setup_keyboard_shortcuts()
@@ -450,6 +456,28 @@ class TrayIndicator:
         logger.debug("About clicked")
         show_about_dialog(parent=None)
 
+    def _on_system_suspend(self):
+        """Stop active recognition before the system goes to sleep."""
+        if self.speech_engine.state != RecognitionState.IDLE:
+            logger.info("System suspending — stopping active recognition")
+            self.speech_engine.stop_recognition()
+
+    def _on_system_resume(self):
+        """Reinitialize the speech engine after the system wakes up.
+
+        Schedules the actual work with a short delay so the audio
+        subsystem has time to come back online.
+        """
+        logger.info("System resumed — scheduling speech engine reinit")
+        GLib.timeout_add_seconds(2, self._reinit_after_resume)
+
+    def _reinit_after_resume(self):
+        try:
+            self.speech_engine.reinitialize_after_resume()
+        except Exception:
+            logger.error("Failed to reinitialize after resume", exc_info=True)
+        return GLib.SOURCE_REMOVE
+
     def _on_quit_clicked(self, widget):
         """Handle click on the Quit menu item."""
         logger.debug("Quit clicked")
@@ -458,6 +486,9 @@ class TrayIndicator:
     def _quit(self):
         """Quit the application."""
         logger.info("Quitting application")
+
+        if self._suspend_handler is not None:
+            self._suspend_handler.shutdown()
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
