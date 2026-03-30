@@ -486,6 +486,99 @@ class TestTextInjector(unittest.TestCase):
             # After failure, should have switched to WAYLAND_XDOTOOL
             self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_XDOTOOL)
 
+    def test_has_non_ascii_with_ascii_text(self):
+        """Test _has_non_ascii returns False for pure ASCII text."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            injector = TextInjector()
+            self.assertFalse(injector._has_non_ascii("Hello world"))
+            self.assertFalse(injector._has_non_ascii("123 test!"))
+
+    def test_has_non_ascii_with_accented_text(self):
+        """Test _has_non_ascii returns True for accented characters (#362)."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
+            injector = TextInjector()
+            self.assertTrue(injector._has_non_ascii("Esdrújula"))
+            self.assertTrue(injector._has_non_ascii("crème brûlée"))
+            self.assertTrue(injector._has_non_ascii("café"))
+            self.assertTrue(injector._has_non_ascii("niño"))
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_ydotool_non_ascii_uses_clipboard_paste(
+        self, mock_run, mock_which, mock_ibus_avail, mock_ibus_active
+    ):
+        """Test that ydotool uses clipboard paste for non-ASCII text (#362)."""
+        mock_which.side_effect = lambda x: x in ("ydotool", "wl-copy")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            # Reset call list so init calls don't interfere
+            mock_run.reset_mock()
+            injector._inject_with_wayland_tool("Esdrújula")
+
+            # Should have called wl-copy and ydotool key (Ctrl+V), not ydotool type
+            calls = [c.args[0] for c in mock_run.call_args_list]
+            has_wl_copy = any(c[0] == "wl-copy" for c in calls)
+            has_ydotool_key = any(c[:2] == ["ydotool", "key"] for c in calls)
+            has_ydotool_type = any(c[:2] == ["ydotool", "type"] for c in calls)
+
+            self.assertTrue(has_wl_copy, "Should use wl-copy for clipboard")
+            self.assertTrue(has_ydotool_key, "Should use ydotool key for Ctrl+V")
+            self.assertFalse(has_ydotool_type, "Should NOT use ydotool type for non-ASCII")
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_ydotool_ascii_uses_type_directly(
+        self, mock_run, mock_which, mock_ibus_avail, mock_ibus_active
+    ):
+        """Test that ydotool still uses type for plain ASCII text."""
+        mock_which.side_effect = lambda x: x in ("ydotool", "wl-copy")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            injector._inject_with_wayland_tool("Hello world")
+
+            # Should use ydotool type directly
+            calls = [str(c) for c in mock_run.call_args_list]
+            has_ydotool_type = any("'type'" in c for c in calls)
+            self.assertTrue(has_ydotool_type, "Should use ydotool type for ASCII text")
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_ydotool_non_ascii_falls_back_to_type_when_clipboard_fails(
+        self, mock_run, mock_which, mock_ibus_avail, mock_ibus_active
+    ):
+        """Test ydotool falls back to type when clipboard paste fails (#362)."""
+        mock_which.side_effect = lambda x: x == "ydotool"  # no wl-copy
+
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            injector._inject_with_wayland_tool("café")
+
+            # Should fall back to ydotool type since no clipboard tool available
+            calls = [str(c) for c in mock_run.call_args_list]
+            has_ydotool_type = any("'type'" in c for c in calls)
+            self.assertTrue(has_ydotool_type, "Should fall back to ydotool type")
+
 
 class TestDesktopEnvironmentEnum(unittest.TestCase):
     """Tests for DesktopEnvironment enum."""
