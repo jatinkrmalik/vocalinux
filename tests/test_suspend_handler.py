@@ -272,5 +272,58 @@ class TestReinitializeAfterResume(unittest.TestCase):
         mgr._update_state.assert_called_once_with(RecognitionState.ERROR)
 
 
+class TestTrayIndicatorResumeFlow(unittest.TestCase):
+    """Tests for TrayIndicator._reinit_after_resume keyboard restart."""
+
+    def _make_tray_indicator(self):
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        with patch.object(TrayIndicator, "__init__", lambda self: None):
+            indicator = TrayIndicator.__new__(TrayIndicator)
+
+        indicator.speech_engine = MagicMock()
+        indicator._setup_keyboard_shortcuts = MagicMock()
+        return indicator
+
+    def test_reinit_after_resume_calls_speech_engine_reinit(self):
+        indicator = self._make_tray_indicator()
+
+        indicator._reinit_after_resume()
+
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+
+    def test_reinit_after_resume_restarts_keyboard_shortcuts(self):
+        indicator = self._make_tray_indicator()
+
+        indicator._reinit_after_resume()
+
+        indicator._setup_keyboard_shortcuts.assert_called_once()
+
+    def test_keyboard_restart_happens_even_if_speech_reinit_fails(self):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.reinitialize_after_resume.side_effect = RuntimeError("boom")
+
+        indicator._reinit_after_resume()
+
+        indicator._setup_keyboard_shortcuts.assert_called_once()
+
+    def test_keyboard_restart_failure_does_not_crash(self):
+        indicator = self._make_tray_indicator()
+        indicator._setup_keyboard_shortcuts.side_effect = RuntimeError("no devices")
+
+        indicator._reinit_after_resume()
+
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+
+    def test_returns_source_remove(self):
+        from gi.repository import GLib
+
+        indicator = self._make_tray_indicator()
+
+        result = indicator._reinit_after_resume()
+
+        assert result == GLib.SOURCE_REMOVE
+
+
 if __name__ == "__main__":
     unittest.main()

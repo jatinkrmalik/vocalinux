@@ -476,6 +476,15 @@ class TrayIndicator:
             self.speech_engine.reinitialize_after_resume()
         except Exception:
             logger.error("Failed to reinitialize after resume", exc_info=True)
+
+        # evdev devices disconnect on suspend; monitor thread exits when all fds close.
+        # Full stop+start re-scans /dev/input and opens fresh file descriptors.
+        try:
+            logger.info("Restarting keyboard shortcuts after resume")
+            self._setup_keyboard_shortcuts()
+        except Exception:
+            logger.error("Failed to restart keyboard shortcuts after resume", exc_info=True)
+
         return GLib.SOURCE_REMOVE
 
     def _on_quit_clicked(self, widget):
