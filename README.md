@@ -34,7 +34,7 @@ No internet required. No data leaves your machine. Just speak and type.
 
 ## 📚 What's New in v0.10.1-beta
 
-> 🎉 **Release: focused stability patch for tray resources, engine switching safety, keyboard layout preservation, and settings dialog compatibility.**
+> 🎉 **Release: focused stability patch for tray resources, engine switching safety, keyboard layout preservation, settings dialog compatibility, and suspend/resume reliability.**
 
 ### 🚀 Highlights (v0.10.0 → v0.10.1)
 
@@ -44,11 +44,14 @@ No internet required. No data leaves your machine. Just speak and type.
 | **🧠 Engine Switch Safety** | Recognition is stopped before engine changes to prevent segfaults |
 | **⌨️ Layout Preservation** | IBus activation now preserves XKB keyboard layout state |
 | **🪟 UI Compatibility** | Settings dialog includes a dedicated Close button for better WM compatibility |
+| **⚡ Suspend/Resume Recovery** | App now automatically recovers speech recognition and keyboard shortcuts after system suspend/resume |
+| **🎤 Push-to-Talk Reliability** | Fixed premature transcription triggering on silence during push-to-talk mode |
 
 ### ✨ Scope
 
 - **Patch release focused on reliability** - No new features, only targeted fixes and maintenance updates
 - **Desktop UX hardening** - Better behavior across tray, settings dialog, and keyboard layout workflows
+- **Suspend/Resume stability** - New D-Bus handler ensures app survives system sleep cycles
 - **Operational maintenance** - Dependency updates for the web and dev toolchains
 
 ### 🐛 Bug Fixes (v0.10.1)
@@ -57,6 +60,10 @@ No internet required. No data leaves your machine. Just speak and type.
 - **#350 / #355**: Stop recognition before switching engines to prevent segfaults
 - **#323 / #356**: Add Close button to settings dialog for better window-manager compatibility
 - **#292 / #343**: Preserve XKB layout when activating the Vocalinux IBus engine
+- **#359**: Prevent premature transcription during push-to-talk silence
+- **#367 / #369**: Auto-recover speech recognition after system resume via new suspend handler
+- **#371**: Restart keyboard shortcut backend after system resume
+- **#372**: Delay keyboard restart to allow USB device re-enumeration after resume
 
 ### 🔧 Improvements
 

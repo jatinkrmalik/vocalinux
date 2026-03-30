@@ -12,11 +12,14 @@ This guide explains how to update Vocalinux to the latest version.
 | **🧠 Engine Switch Safety** | Recognition now stops before engine changes to avoid segfaults |
 | **⌨️ Keyboard Layout Preservation** | XKB layout is preserved when activating the Vocalinux IBus engine |
 | **🪟 Settings Dialog Compatibility** | Added an explicit Close button for improved WM interoperability |
+| **⚡ Suspend/Resume Recovery** | App now automatically recovers speech recognition and keyboard shortcuts after system suspend/resume |
+| **🎤 Push-to-Talk Reliability** | Fixed premature transcription triggering on silence during push-to-talk mode |
 
 ### ✨ Scope
 
 - **Patch-focused release** — No new feature surface; this version is dedicated to stability and compatibility fixes
 - **Desktop reliability hardening** — Improved behavior across tray, engine switching, settings dialog actions, and keyboard layout handling
+- **Suspend/Resume stability** — New D-Bus handler ensures app survives system sleep cycles
 
 ### 🐛 Bug Fixes
 
@@ -24,11 +27,16 @@ This guide explains how to update Vocalinux to the latest version.
 - **#350 / #355**: Stop recognition before switching engines to prevent segfaults
 - **#323 / #356**: Add Close button to settings dialog for WM compatibility
 - **#292 / #343**: Preserve XKB layout when activating Vocalinux IBus engine
+- **#359**: Prevent premature transcription during push-to-talk silence
+- **#367 / #369**: Auto-recover speech recognition after system resume via new suspend handler
+- **#371**: Restart keyboard shortcut backend after system resume
+- **#372**: Delay keyboard restart to allow USB device re-enumeration after resume
 
 ### 🔧 Improvements
 
 - Bumped npm/yarn dependency group across the web workspace (#346)
 - Bumped `brace-expansion` in development dependencies (#357)
+- Disabled copy-to-clipboard by default in Settings (#370)
 
 See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.10.1-beta).
 
