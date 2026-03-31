@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
+_SUPER_SHORTCUT_IDS = {"super+super", "left_super+left_super", "right_super+right_super"}
 
 
 # Import the centralized resource manager
@@ -82,7 +83,7 @@ class TrayIndicator:
         """
         self.speech_engine = speech_engine
         self.text_injector = text_injector
-        self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
+        self.config_manager = ConfigManager()
         self._syncing_autostart_menu = False
 
         # Get configured shortcut and mode from config
@@ -91,6 +92,9 @@ class TrayIndicator:
 
         # Initialize keyboard shortcut manager with configured shortcut and mode
         self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut, mode=mode)
+        self.settings_shortcut_manager = KeyboardShortcutManager(
+            shortcut="super+super", mode="toggle"
+        )
 
         # Ensure icon directory exists
         os.makedirs(ICON_DIR, exist_ok=True)
@@ -124,6 +128,8 @@ class TrayIndicator:
 
         # Set up keyboard shortcuts with mode support
         self._setup_keyboard_shortcuts()
+        self._setup_settings_shortcut()
+        self._setup_settings_signal_handler()
 
     def _setup_keyboard_shortcuts(self):
         """Set up keyboard shortcuts based on configured mode."""
@@ -151,6 +157,59 @@ class TrayIndicator:
 
         # Start the keyboard shortcut manager
         self.shortcut_manager.start()
+
+    def _has_super_shortcut_conflict(self) -> bool:
+        """Check if the current recognition shortcut conflicts with the settings shortcut."""
+        return self.shortcut_manager.shortcut in _SUPER_SHORTCUT_IDS
+
+    def _setup_settings_shortcut(self):
+        """Set up the dedicated Super key double-tap shortcut for opening settings."""
+        if self.settings_shortcut_manager.active:
+            self.settings_shortcut_manager.stop()
+        self.settings_shortcut_manager.register_toggle_callback(None)
+        self.settings_shortcut_manager.register_press_callback(None)
+        self.settings_shortcut_manager.register_release_callback(None)
+
+        if self._has_super_shortcut_conflict():
+            logger.info(
+                "Settings shortcut (double-tap Super) disabled: "
+                "recognition shortcut uses a Super key variant"
+            )
+            return
+
+        self.settings_shortcut_manager.register_toggle_callback(self._open_settings_from_shortcut)
+        self.settings_shortcut_manager.start()
+        if self.settings_shortcut_manager.active:
+            logger.info("Settings shortcut (double-tap Super) enabled")
+        else:
+            logger.warning("Settings shortcut (double-tap Super) could not be started")
+
+    def _setup_settings_signal_handler(self):
+        """Set up SIGUSR1 signal handler to open settings from CLI."""
+        signal.signal(signal.SIGUSR1, self._on_settings_signal)
+        logger.info("SIGUSR1 signal handler registered for --settings CLI option")
+
+    def _on_settings_signal(self, sig, frame):
+        """Handle SIGUSR1 signal to open settings dialog."""
+        logger.info("Received SIGUSR1 signal, opening settings dialog")
+        GLib.idle_add(self._open_settings)
+
+    def _open_settings_from_shortcut(self):
+        """Open settings dialog from keyboard shortcut (runs in shortcut thread)."""
+        logger.info("Double-tap Super detected, opening settings dialog")
+        GLib.idle_add(self._open_settings)
+
+    def _open_settings(self):
+        """Open the settings dialog (must be called from GTK main thread)."""
+        dialog = SettingsDialog(
+            parent=None,
+            config_manager=self.config_manager,
+            speech_engine=self.speech_engine,
+            shortcut_update_callback=self.update_shortcut,
+        )
+        dialog.connect("response", self._on_settings_dialog_response)
+        dialog.show()
+        return False
 
     def _init_icons(self):
         """Initialize the icon files for the tray indicator."""
@@ -385,20 +444,7 @@ class TrayIndicator:
     def _on_settings_clicked(self, widget):
         """Handle click on the Settings menu item."""
         logger.debug("Settings clicked")
-
-        # Create the settings dialog
-        dialog = SettingsDialog(
-            parent=None,  # Or get the main window if available
-            config_manager=self.config_manager,
-            speech_engine=self.speech_engine,
-            shortcut_update_callback=self.update_shortcut,
-        )
-
-        # Connect to the response signal
-        dialog.connect("response", self._on_settings_dialog_response)
-
-        # Show the dialog (non-modal)
-        dialog.show()
+        self._open_settings()
 
     def _on_logs_clicked(self, widget):
         """Handle click on the View Logs menu item."""
@@ -423,6 +469,8 @@ class TrayIndicator:
         Update the keyboard shortcut for toggling voice recognition.
 
         This performs a live shortcut switch without requiring an app restart.
+        Also re-evaluates whether the dedicated settings shortcut (Super key)
+        should be enabled or disabled based on potential conflicts.
 
         Args:
             shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
@@ -449,6 +497,7 @@ class TrayIndicator:
 
         if mode_changed or shortcut_changed:
             self._setup_keyboard_shortcuts()
+            self._setup_settings_shortcut()
             return self.shortcut_manager.active
 
         logger.debug("No changes needed - shortcut and mode unchanged")
@@ -557,6 +606,7 @@ class TrayIndicator:
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
+        self.settings_shortcut_manager.stop()
 
         # Stop the text injector (restores previous IBus engine)
         if hasattr(self, "text_injector") and self.text_injector is not None:

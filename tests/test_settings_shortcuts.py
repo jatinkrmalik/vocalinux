@@ -139,12 +139,15 @@ class TestKeyboardBackendsBase(unittest.TestCase):
                 "ctrl+ctrl",
                 "alt+alt",
                 "shift+shift",
+                "super+super",
                 "left_ctrl+left_ctrl",
                 "left_alt+left_alt",
                 "left_shift+left_shift",
+                "left_super+left_super",
                 "right_ctrl+right_ctrl",
                 "right_alt+right_alt",
                 "right_shift+right_shift",
+                "right_super+right_super",
             },
         )
 
@@ -173,9 +176,9 @@ class TestKeyboardBackendsBase(unittest.TestCase):
         self.assertIn("Right Side", SHORTCUT_GROUPS)
         self.assertEqual(len(SHORTCUT_GROUPS.keys()), 3)
         self.assertEqual(list(SHORTCUT_GROUPS.keys()), ["Either Side", "Left Side", "Right Side"])
-        self.assertEqual(len(SHORTCUT_GROUPS["Either Side"]), 3)
-        self.assertEqual(len(SHORTCUT_GROUPS["Left Side"]), 3)
-        self.assertEqual(len(SHORTCUT_GROUPS["Right Side"]), 3)
+        self.assertEqual(len(SHORTCUT_GROUPS["Either Side"]), 4)
+        self.assertEqual(len(SHORTCUT_GROUPS["Left Side"]), 4)
+        self.assertEqual(len(SHORTCUT_GROUPS["Right Side"]), 4)
 
 
 class TestConfigManagerShortcuts(unittest.TestCase):

@@ -59,9 +59,11 @@ if PYNPUT_AVAILABLE:
         "left_ctrl": _primary_key("ctrl_l"),
         "left_alt": _primary_key("alt_l"),
         "left_shift": _primary_key("shift_l"),
+        "left_super": _primary_key("cmd_l"),
         "right_ctrl": _primary_key("ctrl_r"),
         "right_alt": _primary_key("alt_r", "alt_gr"),
         "right_shift": _primary_key("shift_r"),
+        "right_super": _primary_key("cmd_r"),
     }
 
     MODIFIER_KEY_VARIANTS = {
@@ -72,9 +74,11 @@ if PYNPUT_AVAILABLE:
         "left_ctrl": _key_set("ctrl_l"),
         "left_alt": _key_set("alt_l"),
         "left_shift": _key_set("shift_l"),
+        "left_super": _key_set("cmd_l"),
         "right_ctrl": _key_set("ctrl_r"),
         "right_alt": _key_set("alt_r", "alt_gr"),
         "right_shift": _key_set("shift_r"),
+        "right_super": _key_set("cmd_r"),
     }
 
     MODIFIER_NORMALIZE_MAP = {

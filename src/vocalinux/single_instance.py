@@ -40,6 +40,41 @@ def _get_lock_file_fd() -> int:
     return fd
 
 
+def get_running_pid() -> Optional[int]:
+    """
+    Get the PID from the lock file if the process is still running.
+
+    Returns:
+        PID of a running Vocalinux instance, or None if unavailable/stale.
+    """
+    try:
+        if not LOCK_FILE_PATH.exists():
+            return None
+
+        with open(LOCK_FILE_PATH, "r", encoding="utf-8") as lock_file:
+            pid_text = lock_file.readline().strip()
+
+        if not pid_text:
+            return None
+
+        pid = int(pid_text)
+        if pid <= 0:
+            return None
+
+        try:
+            os.kill(pid, 0)
+            return pid
+        except ProcessLookupError:
+            logger.debug(f"Stale lock file PID detected: {pid}")
+            return None
+        except PermissionError:
+            # Process exists but we may not have signal permission
+            return pid
+    except (OSError, ValueError) as e:
+        logger.debug(f"Failed to read running PID from lock file: {e}")
+        return None
+
+
 def acquire_lock() -> bool:
     """
     Acquire the single instance lock.

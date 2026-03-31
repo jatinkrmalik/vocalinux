@@ -6,6 +6,7 @@ Main entry point for Vocalinux application.
 import argparse
 import atexit
 import logging
+import signal
 import sys
 
 # Configure logging
@@ -66,6 +67,11 @@ def parse_arguments():
         "--start-minimized",
         action="store_true",
         help="Start minimized to system tray",
+    )
+    parser.add_argument(
+        "--settings",
+        action="store_true",
+        help="Open settings dialog (or signal a running instance to open it)",
     )
     return parser.parse_args()
 
@@ -173,10 +179,28 @@ def check_display_available():
 
 def main():
     """Main entry point for the application."""
+    args = parse_arguments()
+
     # Check for single instance BEFORE any initialization
     from . import single_instance
 
     if not single_instance.acquire_lock():
+        if args.settings:
+            running_pid = single_instance.get_running_pid()
+            if running_pid is not None:
+                try:
+                    import os
+
+                    os.kill(running_pid, signal.SIGUSR1)
+                    logger.info(
+                        f"Sent SIGUSR1 to running Vocalinux instance (PID {running_pid}) to open settings"
+                    )
+                    sys.exit(0)
+                except Exception as e:
+                    logger.warning(f"Failed to signal running Vocalinux instance: {e}")
+            else:
+                logger.warning("Could not determine PID for running Vocalinux instance")
+
         # Another instance is already running - show notification and exit
         try:
             import time
@@ -199,8 +223,6 @@ def main():
 
     # Register cleanup to release lock on exit
     atexit.register(single_instance.release_lock)
-
-    args = parse_arguments()
 
     # Configure debug logging if requested
     if args.debug:
@@ -225,10 +247,6 @@ def main():
     from .ui.config_manager import ConfigManager
     from .ui.logging_manager import initialize_logging
 
-    # Initialize logging manager early
-    initialize_logging()
-    logger.info("Logging system initialized")
-
     # Try to start IBus daemon if not running (for text injection)
     # This helps on desktop environments where IBus doesn't start automatically
     try:
@@ -243,7 +261,6 @@ def main():
     initialize_logging()
     logger.info("Logging system initialized")
 
-    config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
     audio_settings = config_manager.get_settings().get("audio", {})
 
@@ -366,6 +383,11 @@ def main():
             speech_engine=speech_engine,
             text_injector=text_system,
         )
+
+        if args.settings:
+            from gi.repository import GLib
+
+            GLib.idle_add(indicator._open_settings)
 
         # Start the GTK main loop
         indicator.run()

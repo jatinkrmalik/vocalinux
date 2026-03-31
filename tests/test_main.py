@@ -110,6 +110,7 @@ class TestMainModule(unittest.TestCase):
         mock_check_deps.return_value = False
         mock_args = MagicMock()
         mock_args.debug = False
+        mock_args.settings = False
         mock_parse.return_value = mock_args
 
         # Make sys.exit raise SystemExit to stop execution
@@ -138,6 +139,7 @@ class TestMainModule(unittest.TestCase):
         mock_args.engine = "vosk"
         mock_args.language = "en-us"
         mock_args.wayland = False
+        mock_args.settings = False
         mock_parse.return_value = mock_args
 
         # Mock config
@@ -207,6 +209,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
             mock_args.wayland = True
+            mock_args.settings = False
             mock_parse.return_value = mock_args
 
             # Call main function
@@ -289,6 +292,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
             mock_args.wayland = False
+            mock_args.settings = False
             mock_parse.return_value = mock_args
 
             # Create mock loggers
@@ -344,6 +348,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
             mock_args.wayland = False
+            mock_args.settings = False
             mock_parse.return_value = mock_args
 
             with patch("vocalinux.main.logger"):
@@ -398,6 +403,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.language = "en-us"
             mock_args.wayland = False
             mock_args.start_minimized = True
+            mock_args.settings = False
             mock_parse.return_value = mock_args
 
             with patch("vocalinux.main.logger"):
