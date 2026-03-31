@@ -8,7 +8,7 @@ import copy
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class ConfigManager:
 
             self._migrate_shortcuts_config()
 
-        except Exception as e:
+        except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Failed to load config: {e}")
 
     def _check_needs_migration(self, user_config: dict) -> bool:
@@ -165,7 +165,7 @@ class ConfigManager:
             logger.info(f"Saved configuration to {CONFIG_FILE}")
             return True
 
-        except Exception as e:
+        except (OSError, TypeError) as e:
             logger.error(f"Failed to save config: {e}")
             return False
 
@@ -198,6 +198,48 @@ class ConfigManager:
         try:
             return self.config[section][key]
         except KeyError:
+            return default
+
+    # -- Typed accessors -------------------------------------------------------
+    # These provide compile-time type safety for commonly accessed config values,
+    # avoiding the need for callers to cast the Any return from get().
+
+    def get_str(self, section: str, key: str, default: str = "") -> str:
+        """Get a configuration value as a string."""
+        value = self.get(section, key, default)
+        return str(value) if value is not None else default
+
+    def get_bool(self, section: str, key: str, default: bool = False) -> bool:
+        """Get a configuration value as a boolean."""
+        value = self.get(section, key, default)
+        return bool(value)
+
+    def get_int(self, section: str, key: str, default: int = 0) -> int:
+        """Get a configuration value as an integer."""
+        value = self.get(section, key, default)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def get_float(self, section: str, key: str, default: float = 0.0) -> float:
+        """Get a configuration value as a float."""
+        value = self.get(section, key, default)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def get_optional_int(
+        self, section: str, key: str, default: Optional[int] = None
+    ) -> Optional[int]:
+        """Get a configuration value as an optional integer (allows None)."""
+        value = self.get(section, key, default)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
             return default
 
     def set(self, section: str, key: str, value: Any) -> bool:

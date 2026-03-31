@@ -59,7 +59,7 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
 
     def test_shortcut_config_read(self):
         """Test that shortcut is read from config."""
-        self.assertIn('self.config_manager.get("shortcuts", "toggle_recognition"', self.source_code)
+        self.assertIn('self.config_manager.get_str("shortcuts", "toggle_recognition"', self.source_code)
 
     def test_shortcut_changed_handler_exists(self):
         """Test that shortcut changed handler exists."""

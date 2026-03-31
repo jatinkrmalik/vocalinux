@@ -81,8 +81,8 @@ class TrayIndicator:
         self._syncing_autostart_menu = False
 
         # Get configured shortcut and mode from config
-        shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
-        mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
 
         # Initialize keyboard shortcut manager with configured shortcut and mode
         self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut, mode=mode)
@@ -133,7 +133,7 @@ class TrayIndicator:
         self.shortcut_manager.register_release_callback(None)
 
         # Get configured mode from config
-        mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
         logger.info(f"Setting up keyboard shortcuts with mode: {mode}")
 
         if mode == "toggle":
@@ -289,7 +289,7 @@ class TrayIndicator:
         from . import autostart_manager
 
         autostart_enabled = autostart_manager.is_autostart_enabled()
-        config_enabled = self.config_manager.get("general", "autostart", False)
+        config_enabled = self.config_manager.get_bool("general", "autostart", False)
         if config_enabled != autostart_enabled:
             self.config_manager.set("general", "autostart", autostart_enabled)
             self.config_manager.save_settings()
