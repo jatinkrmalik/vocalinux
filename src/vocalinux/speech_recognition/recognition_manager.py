@@ -342,7 +342,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
                 audio_data = np.frombuffer(data, dtype=np.int16)
                 amplitudes = np.abs(audio_data)
                 all_amplitudes.extend(amplitudes)
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 result["error"] = f"Error reading audio: {e}"
                 break
 
@@ -362,7 +362,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
 
     except ImportError as e:
         result["error"] = f"Missing dependency: {e}"
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         result["error"] = f"Unexpected error: {e}"
 
     return result
@@ -715,7 +715,7 @@ class SpeechRecognitionManager:
             logger.error("Please install with: pip install openai-whisper torch")
             self.state = RecognitionState.ERROR
             raise
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize Whisper engine: {e}")
             self.state = RecognitionState.ERROR
             raise
@@ -786,7 +786,7 @@ class SpeechRecognitionManager:
 
             return text
 
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
             return ""
 
@@ -1132,7 +1132,7 @@ class SpeechRecognitionManager:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during whisper.cpp model download: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
@@ -1295,7 +1295,7 @@ class SpeechRecognitionManager:
             if os.path.exists(zip_path):
                 os.remove(zip_path)
             raise RuntimeError("Downloaded VOSK model file is corrupted.")
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during VOSK model download/extraction: {e}")
             # Clean up potentially corrupted extraction
             if os.path.exists(zip_path):
@@ -1411,7 +1411,7 @@ class SpeechRecognitionManager:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise RuntimeError(f"Failed to download Whisper model: {e}") from e
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during Whisper model download: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
