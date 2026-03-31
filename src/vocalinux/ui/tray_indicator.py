@@ -29,21 +29,16 @@ from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
-from ..suspend_handler import SuspendHandler  # noqa: E402
-
-# Import necessary components
-from .config_manager import ConfigManager  # noqa: E402
-from .keyboard_shortcuts import KeyboardShortcutManager  # noqa: E402
-from .settings_dialog import SettingsDialog  # noqa: E402
+from ..suspend_handler import SuspendHandler
+from ..utils.resource_manager import ResourceManager
+from .config_manager import ConfigManager
+from .keyboard_shortcuts import KeyboardShortcutManager
+from .settings_dialog import SettingsDialog
 
 logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
-
-
-# Import the centralized resource manager
-from ..utils.resource_manager import ResourceManager  # noqa: E402
 
 # Initialize resource manager
 _resource_manager = ResourceManager()

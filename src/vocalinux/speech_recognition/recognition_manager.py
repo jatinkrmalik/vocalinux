@@ -96,7 +96,7 @@ def get_audio_input_devices() -> list:
         audio.terminate()
     except ImportError:
         logger.error("PyAudio not installed, cannot enumerate audio devices")
-    except Exception as e:
+    except OSError as e:
         logger.error(f"Error enumerating audio devices: {e}")
 
     return devices
@@ -433,7 +433,7 @@ def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
         logger.debug(f"Could not show notification: {e}")
 
 

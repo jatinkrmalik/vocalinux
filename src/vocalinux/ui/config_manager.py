@@ -4,6 +4,7 @@ Configuration manager for Vocalinux.
 This module handles loading, saving, and accessing user preferences.
 """
 
+import copy
 import json
 import logging
 import os
@@ -67,10 +68,12 @@ class ConfigManager:
     preferences for the application.
     """
 
+    # Valid configuration sections — prevents accidental typos from silently
+    # creating new top-level config keys.
+    _VALID_SECTIONS = frozenset(DEFAULT_CONFIG.keys())
+
     def __init__(self):
         """Initialize the configuration manager."""
-        import copy
-
         self.config = copy.deepcopy(DEFAULT_CONFIG)
         self._ensure_config_dir()
         self.load_config()
@@ -167,7 +170,17 @@ class ConfigManager:
             return False
 
     def save_settings(self):
-        """Save the current configuration to the config file."""
+        """Save the current configuration to the config file.
+
+        .. deprecated:: Use :meth:`save_config` instead.
+        """
+        import warnings
+
+        warnings.warn(
+            "save_settings() is deprecated, use save_config() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.save_config()
 
     def get(self, section: str, key: str, default: Any = None) -> Any:
@@ -192,7 +205,7 @@ class ConfigManager:
         Set a configuration value.
 
         Args:
-            section: The configuration section
+            section: The configuration section (must be a known section)
             key: The configuration key within the section
             value: The value to set
 
@@ -201,12 +214,17 @@ class ConfigManager:
         """
         try:
             if section not in self.config:
+                if section not in self._VALID_SECTIONS:
+                    logger.warning(
+                        f"Unknown config section '{section}' — valid sections: "
+                        f"{sorted(self._VALID_SECTIONS)}"
+                    )
                 self.config[section] = {}
 
             self.config[section][key] = value
             return True
 
-        except Exception as e:
+        except (KeyError, TypeError) as e:
             logger.error(f"Failed to set config value: {e}")
             return False
 
