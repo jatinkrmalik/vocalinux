@@ -898,9 +898,7 @@ class SpeechRecognitionManager:
             f"whisper.cpp configured with n_threads={n_threads} "
             f"(detected {multiprocessing.cpu_count()} CPUs)"
         )
-        logger.info(
-            f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)"
-        )
+        logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
 
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
@@ -931,13 +929,10 @@ class SpeechRecognitionManager:
         if not gpu_incompatible:
             raise error
 
-        logger.warning(
-            f"Vulkan GPU initialization failed: {error}. Falling back to CPU backend."
-        )
+        logger.warning(f"Vulkan GPU initialization failed: {error}. Falling back to CPU backend.")
         _show_notification(
             "Vocalinux: GPU Fallback",
-            "Your GPU doesn't support whisper.cpp Vulkan.\n"
-            "Switched to CPU mode - still fast!",
+            "Your GPU doesn't support whisper.cpp Vulkan.\n" "Switched to CPU mode - still fast!",
             "dialog-information",
         )
         # Force CPU backend by disabling GPU backends

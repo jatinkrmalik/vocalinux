@@ -1217,7 +1217,9 @@ class SettingsDialog(Gtk.Dialog):
                 self.shortcut_combo.append(shortcut_id, display_name)
 
         # Load current shortcut from config
-        current_shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        current_shortcut = self.config_manager.get_str(
+            "shortcuts", "toggle_recognition", "ctrl+ctrl"
+        )
         if not self.shortcut_combo.set_active_id(current_shortcut):
             self.shortcut_combo.set_active_id("ctrl+ctrl")
 
