@@ -25,25 +25,26 @@ except (ImportError, ValueError):
         gi.require_version("AyatanaAppindicator3", "0.1")
         from gi.repository import AyatanaAppindicator3 as AppIndicator3
 
-from gi.repository import GdkPixbuf, GLib, GObject, Gtk
+from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
+from ..suspend_handler import SuspendHandler
+from ..utils.resource_manager import ResourceManager
 
 # Import necessary components
-from .config_manager import ConfigManager  # noqa: E402
-from .keyboard_shortcuts import KeyboardShortcutManager  # noqa: E402
-from .settings_dialog import SettingsDialog  # noqa: E402
+from .config_manager import ConfigManager
+from .keyboard_shortcuts import KeyboardShortcutManager
+from .settings_dialog import SettingsDialog
 
 logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
+_INPUT_SETTLE_SECONDS = 1.0
+_INPUT_MONITOR_TIMEOUT_SECONDS = 10.0
+_INPUT_REINIT_DELAY_SECONDS = 0.5
 _SUPER_SHORTCUT_IDS = {"super+super", "left_super+left_super", "right_super+right_super"}
-
-
-# Import the centralized resource manager
-from ..utils.resource_manager import ResourceManager  # noqa: E402
 
 # Initialize resource manager
 _resource_manager = ResourceManager()
@@ -80,6 +81,20 @@ class TrayIndicator:
         self.config_manager = ConfigManager()
         self._syncing_autostart_menu = False
 
+        self._input_settings_monitor: Optional[object] = None
+        self._input_settings_handler_id: Optional[int] = None
+        self._input_settle_source_id: Optional[int] = None
+        self._input_monitor_timeout_id: Optional[int] = None
+        self._resume_reinit_source_id: Optional[int] = None
+
+        self._suspend_handler = SuspendHandler(self._on_system_suspend, self._on_system_resume)
+        suspend_start = getattr(self._suspend_handler, "start", None)
+        if callable(suspend_start):
+            try:
+                suspend_start()
+            except Exception as exc:
+                logger.warning(f"Failed to start suspend handler: {exc}")
+
         # Get configured shortcut and mode from config
         shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
         mode = self.config_manager.get("shortcuts", "mode", "toggle")
@@ -87,7 +102,8 @@ class TrayIndicator:
         # Initialize keyboard shortcut manager with configured shortcut and mode
         self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut, mode=mode)
         self.settings_shortcut_manager = KeyboardShortcutManager(
-            shortcut="super+super", mode="toggle"
+            shortcut="super+super",
+            mode="toggle",
         )
 
         # Ensure icon directory exists
@@ -147,14 +163,174 @@ class TrayIndicator:
         # Start the keyboard shortcut manager
         self.shortcut_manager.start()
 
+    def _on_system_suspend(self):
+        """Handle system suspend notifications."""
+        logger.info("System suspend detected")
+        if self.speech_engine.state != RecognitionState.IDLE:
+            try:
+                self.speech_engine.stop_recognition()
+            except Exception as exc:
+                logger.debug(f"Failed to stop recognition during suspend: {exc}")
+
+        GLib.idle_add(self._cleanup_input_monitor)
+
+    def _on_system_resume(self):
+        """Handle system resume notifications."""
+        logger.info("System resume detected")
+        GLib.idle_add(self._start_input_device_monitor)
+
+        if self._resume_reinit_source_id:
+            try:
+                GLib.source_remove(self._resume_reinit_source_id)
+            except Exception:
+                pass
+            self._resume_reinit_source_id = None
+
+        self._resume_reinit_source_id = GLib.timeout_add(
+            int(_INPUT_REINIT_DELAY_SECONDS * 1000),
+            self._reinit_speech_after_resume,
+        )
+
+    def _reinit_speech_after_resume(self):
+        """Reinitialize speech components after resume."""
+        self._resume_reinit_source_id = None
+        logger.info("Attempting speech engine reinitialization after resume")
+
+        for method_name in (
+            "reinitialize_after_resume",
+            "on_system_resume",
+            "refresh_audio_device",
+            "refresh_audio_devices",
+            "reinitialize_audio",
+        ):
+            method = getattr(self.speech_engine, method_name, None)
+            if callable(method):
+                try:
+                    method()
+                    logger.info(
+                        "Speech engine reinitialized after resume via method: %s",
+                        method_name,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Speech engine reinitialization after resume failed via %s: %s",
+                        method_name,
+                        exc,
+                    )
+                return False
+
+        logger.debug("Speech engine has no explicit resume reinitialization hook")
+        return False
+
+    def _start_input_device_monitor(self):
+        """Start temporary input device monitoring after resume."""
+        self._cleanup_input_monitor()
+
+        try:
+            self._input_settings_monitor = Gio.Settings.new(
+                "org.gnome.desktop.input-sources"
+            )
+            self._input_settings_handler_id = self._input_settings_monitor.connect(
+                "changed",
+                self._on_input_device_changed,
+            )
+            logger.debug("Input monitor started for org.gnome.desktop.input-sources")
+        except Exception as exc:
+            self._input_settings_monitor = None
+            self._input_settings_handler_id = None
+            logger.debug(f"Input device monitor unavailable: {exc}")
+
+        self._input_settle_source_id = GLib.timeout_add(
+            int(_INPUT_SETTLE_SECONDS * 1000),
+            self._on_devices_settled,
+        )
+        self._input_monitor_timeout_id = GLib.timeout_add(
+            int(_INPUT_MONITOR_TIMEOUT_SECONDS * 1000),
+            self._on_input_monitor_timeout,
+        )
+        return False
+
+    def _on_input_device_changed(self, *_args):
+        """Handle post-resume input device change signals."""
+        logger.debug("Input device change detected while monitoring post-resume state")
+
+        if self._input_settle_source_id:
+            try:
+                GLib.source_remove(self._input_settle_source_id)
+            except Exception:
+                pass
+
+        self._input_settle_source_id = GLib.timeout_add(
+            int(_INPUT_SETTLE_SECONDS * 1000),
+            self._on_devices_settled,
+        )
+
+    def _on_devices_settled(self):
+        """Handle settled input devices after resume."""
+        self._input_settle_source_id = None
+        logger.info("Input devices settled after resume")
+        self._reinit_keyboard_fallback()
+        self._cleanup_input_monitor()
+        return False
+
+    def _on_input_monitor_timeout(self):
+        """Fallback when no useful input device events are observed."""
+        self._input_monitor_timeout_id = None
+        logger.warning(
+            "Input monitor timeout reached after resume; reinitializing keyboard shortcuts"
+        )
+        self._reinit_keyboard_fallback()
+        self._cleanup_input_monitor()
+        return False
+
+    def _reinit_keyboard_fallback(self):
+        """Fallback reinitialization for keyboard shortcut listeners."""
+        logger.info("Reinitializing keyboard shortcut listeners")
+        try:
+            self._setup_keyboard_shortcuts()
+            self._setup_settings_shortcut()
+        except Exception as exc:
+            logger.warning(f"Failed to reinitialize keyboard shortcuts: {exc}")
+
+    def _cleanup_input_monitor(self):
+        """Clean up temporary input monitor signal connections and timers."""
+        if self._input_settle_source_id:
+            try:
+                GLib.source_remove(self._input_settle_source_id)
+            except Exception:
+                pass
+            self._input_settle_source_id = None
+
+        if self._input_monitor_timeout_id:
+            try:
+                GLib.source_remove(self._input_monitor_timeout_id)
+            except Exception:
+                pass
+            self._input_monitor_timeout_id = None
+
+        if (
+            self._input_settings_monitor is not None
+            and self._input_settings_handler_id is not None
+        ):
+            try:
+                self._input_settings_monitor.disconnect(self._input_settings_handler_id)
+            except Exception as exc:
+                logger.debug(f"Failed to disconnect input monitor signal: {exc}")
+
+        self._input_settings_monitor = None
+        self._input_settings_handler_id = None
+        return False
+
     def _has_super_shortcut_conflict(self) -> bool:
         """Check if the current recognition shortcut conflicts with the settings shortcut."""
-        return self.shortcut_manager.shortcut in _SUPER_SHORTCUT_IDS
+        shortcut = (self.shortcut_manager.shortcut or "").lower()
+        return shortcut in _SUPER_SHORTCUT_IDS
 
     def _setup_settings_shortcut(self):
         """Set up the dedicated Super key double-tap shortcut for opening settings."""
         if self.settings_shortcut_manager.active:
             self.settings_shortcut_manager.stop()
+
         self.settings_shortcut_manager.register_toggle_callback(None)
         self.settings_shortcut_manager.register_press_callback(None)
         self.settings_shortcut_manager.register_release_callback(None)
@@ -166,17 +342,26 @@ class TrayIndicator:
             )
             return
 
-        self.settings_shortcut_manager.register_toggle_callback(self._open_settings_from_shortcut)
+        self.settings_shortcut_manager.register_toggle_callback(
+            self._open_settings_from_shortcut
+        )
         self.settings_shortcut_manager.start()
         if self.settings_shortcut_manager.active:
             logger.info("Settings shortcut (double-tap Super) enabled")
+            logger.info(
+                "Note: double-tap Super may interact with your desktop environment's "
+                "Activities shortcut"
+            )
         else:
             logger.warning("Settings shortcut (double-tap Super) could not be started")
 
     def _setup_settings_signal_handler(self):
         """Set up SIGUSR1 signal handler to open settings from CLI."""
-        signal.signal(signal.SIGUSR1, self._on_settings_signal)
-        logger.info("SIGUSR1 signal handler registered for --settings CLI option")
+        try:
+            signal.signal(signal.SIGUSR1, self._on_settings_signal)
+            logger.info("SIGUSR1 signal handler registered for --settings CLI option")
+        except Exception as exc:
+            logger.warning(f"Failed to register SIGUSR1 signal handler: {exc}")
 
     def _on_settings_signal(self, sig, frame):
         """Handle SIGUSR1 signal to open settings dialog."""
@@ -264,7 +449,8 @@ class TrayIndicator:
         self._add_menu_separator()
 
         self._autostart_menu_item = self._add_menu_checkbox(
-            "Start on Login", self._on_autostart_toggled
+            "Start on Login",
+            self._on_autostart_toggled,
         )
         self._update_autostart_checkbox()
 
@@ -296,7 +482,7 @@ class TrayIndicator:
     def _start_recognition(self):
         """Start voice recognition (for push-to-talk mode)."""
         if self.speech_engine.state == RecognitionState.IDLE:
-            self.speech_engine.start_recognition()
+            self.speech_engine.start_recognition(mode="push_to_talk")
 
     def _stop_recognition(self):
         """Stop voice recognition (for push-to-talk mode)."""
@@ -397,7 +583,9 @@ class TrayIndicator:
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon_full(self.icon_names["processing"], "Processing speech")
+            self.indicator.set_icon_full(
+                self.icon_names["processing"], "Processing speech"
+            )
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
@@ -508,9 +696,24 @@ class TrayIndicator:
         """Quit the application."""
         logger.info("Quitting application")
 
-        # Stop the keyboard shortcut manager
+        # Stop the keyboard shortcut managers
         self.shortcut_manager.stop()
         self.settings_shortcut_manager.stop()
+
+        # Stop suspend watcher
+        try:
+            self._suspend_handler.shutdown()
+        except Exception as exc:
+            logger.debug(f"Failed to shutdown suspend handler cleanly: {exc}")
+
+        # Clear pending reinit callback and input monitor timers
+        if self._resume_reinit_source_id:
+            try:
+                GLib.source_remove(self._resume_reinit_source_id)
+            except Exception:
+                pass
+            self._resume_reinit_source_id = None
+        self._cleanup_input_monitor()
 
         # Stop the text injector (restores previous IBus engine)
         if hasattr(self, "text_injector") and self.text_injector is not None:

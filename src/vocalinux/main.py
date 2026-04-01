@@ -60,7 +60,10 @@ def parse_arguments():
         "--engine",
         type=str,
         choices=["vosk", "whisper", "whisper_cpp"],
-        help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
+        help=(
+            "Speech recognition engine to use "
+            "(whisper_cpp recommended for best performance)"
+        ),
     )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
     parser.add_argument(
@@ -132,7 +135,8 @@ def check_dependencies():
             logger.error("")
             logger.error("  Ubuntu/Debian:")
             logger.error(
-                "    sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1"
+                "    sudo apt install python3-gi gir1.2-gtk-3.0 "
+                "gir1.2-ayatanaappindicator3-0.1"
             )
             logger.error("")
             logger.error("  Fedora:")
@@ -147,7 +151,8 @@ def check_dependencies():
             logger.error("")
             logger.error("For the best experience, use the recommended installer:")
             logger.error(
-                "  curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
+                "  curl -fsSL "
+                "https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash"
             )
         return False
 
@@ -193,7 +198,8 @@ def main():
 
                     os.kill(running_pid, signal.SIGUSR1)
                     logger.info(
-                        f"Sent SIGUSR1 to running Vocalinux instance (PID {running_pid}) to open settings"
+                        "Sent SIGUSR1 to running Vocalinux instance "
+                        f"(PID {running_pid}) to open settings"
                     )
                     sys.exit(0)
                 except Exception as e:
