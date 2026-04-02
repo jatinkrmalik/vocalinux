@@ -89,7 +89,7 @@ class TestGetAudioInputDevices(unittest.TestCase):
 
     def test_handles_error(self):
         mock_pyaudio = MagicMock()
-        mock_pyaudio.PyAudio.side_effect = Exception("no audio")
+        mock_pyaudio.PyAudio.side_effect = OSError("no audio")
         with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
             devices = get_audio_input_devices()
         self.assertEqual(devices, [])

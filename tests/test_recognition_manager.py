@@ -584,7 +584,7 @@ class TestModuleLevelFunctions(unittest.TestCase):
         """Test _show_notification handles errors gracefully."""
         from vocalinux.speech_recognition.recognition_manager import _show_notification
 
-        with patch("subprocess.Popen", side_effect=Exception("Test error")):
+        with patch("subprocess.Popen", side_effect=FileNotFoundError("notify-send not found")):
             # Should not raise
             _show_notification("Test Title", "Test Message")
 

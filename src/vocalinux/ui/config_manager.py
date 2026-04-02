@@ -4,10 +4,11 @@ Configuration manager for Vocalinux.
 This module handles loading, saving, and accessing user preferences.
 """
 
+import copy
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,12 @@ class ConfigManager:
     preferences for the application.
     """
 
+    # Valid configuration sections — prevents accidental typos from silently
+    # creating new top-level config keys.
+    _VALID_SECTIONS = frozenset(DEFAULT_CONFIG.keys())
+
     def __init__(self):
         """Initialize the configuration manager."""
-        import copy
-
         self.config = copy.deepcopy(DEFAULT_CONFIG)
         self._ensure_config_dir()
         self.load_config()
@@ -106,7 +109,7 @@ class ConfigManager:
 
             self._migrate_shortcuts_config()
 
-        except Exception as e:
+        except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Failed to load config: {e}")
 
     def _check_needs_migration(self, user_config: dict) -> bool:
@@ -162,12 +165,22 @@ class ConfigManager:
             logger.info(f"Saved configuration to {CONFIG_FILE}")
             return True
 
-        except Exception as e:
+        except (OSError, TypeError) as e:
             logger.error(f"Failed to save config: {e}")
             return False
 
     def save_settings(self):
-        """Save the current configuration to the config file."""
+        """Save the current configuration to the config file.
+
+        .. deprecated:: Use :meth:`save_config` instead.
+        """
+        import warnings
+
+        warnings.warn(
+            "save_settings() is deprecated, use save_config() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.save_config()
 
     def get(self, section: str, key: str, default: Any = None) -> Any:
@@ -187,12 +200,54 @@ class ConfigManager:
         except KeyError:
             return default
 
+    # -- Typed accessors -------------------------------------------------------
+    # These provide compile-time type safety for commonly accessed config values,
+    # avoiding the need for callers to cast the Any return from get().
+
+    def get_str(self, section: str, key: str, default: str = "") -> str:
+        """Get a configuration value as a string."""
+        value = self.get(section, key, default)
+        return str(value) if value is not None else default
+
+    def get_bool(self, section: str, key: str, default: bool = False) -> bool:
+        """Get a configuration value as a boolean."""
+        value = self.get(section, key, default)
+        return bool(value)
+
+    def get_int(self, section: str, key: str, default: int = 0) -> int:
+        """Get a configuration value as an integer."""
+        value = self.get(section, key, default)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def get_float(self, section: str, key: str, default: float = 0.0) -> float:
+        """Get a configuration value as a float."""
+        value = self.get(section, key, default)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def get_optional_int(
+        self, section: str, key: str, default: Optional[int] = None
+    ) -> Optional[int]:
+        """Get a configuration value as an optional integer (allows None)."""
+        value = self.get(section, key, default)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     def set(self, section: str, key: str, value: Any) -> bool:
         """
         Set a configuration value.
 
         Args:
-            section: The configuration section
+            section: The configuration section (must be a known section)
             key: The configuration key within the section
             value: The value to set
 
@@ -201,12 +256,17 @@ class ConfigManager:
         """
         try:
             if section not in self.config:
+                if section not in self._VALID_SECTIONS:
+                    logger.warning(
+                        f"Unknown config section '{section}' — valid sections: "
+                        f"{sorted(self._VALID_SECTIONS)}"
+                    )
                 self.config[section] = {}
 
             self.config[section][key] = value
             return True
 
-        except Exception as e:
+        except (KeyError, TypeError) as e:
             logger.error(f"Failed to set config value: {e}")
             return False
 

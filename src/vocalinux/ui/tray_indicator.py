@@ -29,21 +29,16 @@ from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
-from ..suspend_handler import SuspendHandler  # noqa: E402
-
-# Import necessary components
-from .config_manager import ConfigManager  # noqa: E402
-from .keyboard_shortcuts import KeyboardShortcutManager  # noqa: E402
-from .settings_dialog import SettingsDialog  # noqa: E402
+from ..suspend_handler import SuspendHandler
+from ..utils.resource_manager import ResourceManager
+from .config_manager import ConfigManager
+from .keyboard_shortcuts import KeyboardShortcutManager
+from .settings_dialog import SettingsDialog
 
 logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
-
-
-# Import the centralized resource manager
-from ..utils.resource_manager import ResourceManager  # noqa: E402
 
 # Initialize resource manager
 _resource_manager = ResourceManager()
@@ -86,8 +81,8 @@ class TrayIndicator:
         self._syncing_autostart_menu = False
 
         # Get configured shortcut and mode from config
-        shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
-        mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
 
         # Initialize keyboard shortcut manager with configured shortcut and mode
         self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut, mode=mode)
@@ -138,7 +133,7 @@ class TrayIndicator:
         self.shortcut_manager.register_release_callback(None)
 
         # Get configured mode from config
-        mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
         logger.info(f"Setting up keyboard shortcuts with mode: {mode}")
 
         if mode == "toggle":
@@ -294,7 +289,7 @@ class TrayIndicator:
         from . import autostart_manager
 
         autostart_enabled = autostart_manager.is_autostart_enabled()
-        config_enabled = self.config_manager.get("general", "autostart", False)
+        config_enabled = self.config_manager.get_bool("general", "autostart", False)
         if config_enabled != autostart_enabled:
             self.config_manager.set("general", "autostart", autostart_enabled)
             self.config_manager.save_settings()

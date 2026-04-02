@@ -96,7 +96,7 @@ def get_audio_input_devices() -> list:
         audio.terminate()
     except ImportError:
         logger.error("PyAudio not installed, cannot enumerate audio devices")
-    except Exception as e:
+    except OSError as e:
         logger.error(f"Error enumerating audio devices: {e}")
 
     return devices
@@ -342,7 +342,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
                 audio_data = np.frombuffer(data, dtype=np.int16)
                 amplitudes = np.abs(audio_data)
                 all_amplitudes.extend(amplitudes)
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 result["error"] = f"Error reading audio: {e}"
                 break
 
@@ -362,7 +362,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
 
     except ImportError as e:
         result["error"] = f"Missing dependency: {e}"
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         result["error"] = f"Unexpected error: {e}"
 
     return result
@@ -433,7 +433,7 @@ def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
         logger.debug(f"Could not show notification: {e}")
 
 
@@ -715,7 +715,7 @@ class SpeechRecognitionManager:
             logger.error("Please install with: pip install openai-whisper torch")
             self.state = RecognitionState.ERROR
             raise
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize Whisper engine: {e}")
             self.state = RecognitionState.ERROR
             raise
@@ -786,16 +786,14 @@ class SpeechRecognitionManager:
 
             return text
 
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
             return ""
 
     def _init_whispercpp(self):
         """Initialize the whisper.cpp speech recognition engine."""
-        import time
-
         try:
-            from pywhispercpp.model import Model
+            from pywhispercpp.model import Model  # noqa: F401 — used in _load_whispercpp_model
 
             # Validate model size for whisper.cpp
             valid_models = list(WHISPERCPP_MODEL_INFO.keys())
@@ -821,105 +819,7 @@ class SpeechRecognitionManager:
                     logger.info(f"Downloading whisper.cpp '{self.model_size}' model...")
                     self._download_whispercpp_model()
 
-            # Detect and log compute backend
-            from ..utils.whispercpp_model_info import (
-                ComputeBackend,
-                detect_compute_backend,
-                get_backend_display_name,
-            )
-
-            backend, backend_info = detect_compute_backend()
-            logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
-            logger.info(
-                f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
-            )
-
-            # Log hardware summary
-            import psutil
-
-            total_ram_gb = psutil.virtual_memory().total // (1024**3)
-            logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
-
-            # Validate model file exists and get size
-            if os.path.exists(model_path):
-                model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
-                logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
-            else:
-                logger.error(f"whisper.cpp model file not found: {model_path}")
-                raise FileNotFoundError(f"Model file not found: {model_path}")
-
-            logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
-            # Ensure previous model is released if re-initializing
-            self.model = None
-
-            # Load model with pywhispercpp
-            # It auto-detects the best backend (Vulkan, CUDA, or CPU)
-            # Use all available CPU cores for best performance
-            import multiprocessing
-
-            n_threads = multiprocessing.cpu_count()
-            cpu_count = multiprocessing.cpu_count()
-
-            load_start_time = time.time()
-
-            loaded_backend = backend
-
-            # Attempt to load model with automatic backend selection
-            # If Vulkan GPU fails (e.g., incompatible Intel GPU), fallback to CPU
-            try:
-                self.model = Model(
-                    model_path,
-                    n_threads=n_threads,
-                    suppress_blank=True,
-                    no_speech_thold=0.6,
-                    entropy_thold=2.4,
-                )
-            except RuntimeError as model_error:
-                error_str = str(model_error).lower()
-                # Check for Vulkan 16-bit storage incompatibility
-                if (
-                    "16-bit storage" in error_str
-                    or "unsupported device" in error_str
-                    or "incompatible driver" in error_str
-                ):
-                    logger.warning(
-                        f"Vulkan GPU initialization failed: {model_error}. "
-                        "Falling back to CPU backend."
-                    )
-                    _show_notification(
-                        "Vocalinux: GPU Fallback",
-                        "Your GPU doesn't support whisper.cpp Vulkan.\n"
-                        "Switched to CPU mode - still fast!",
-                        "dialog-information",
-                    )
-                    # Force CPU backend by disabling GPU backends
-                    os.environ["GGML_VULKAN"] = "0"
-                    os.environ["GGML_CUDA"] = "0"
-                    # Retry with CPU-only backend
-                    self.model = Model(
-                        model_path,
-                        n_threads=n_threads,
-                        suppress_blank=True,
-                        no_speech_thold=0.6,
-                        entropy_thold=2.4,
-                    )
-                    loaded_backend = ComputeBackend.CPU
-                    backend_info = "CPU (fallback from incompatible Vulkan GPU)"
-                    logger.info("Successfully loaded model with CPU backend")
-                else:
-                    raise
-
-            load_duration = time.time() - load_start_time
-
-            logger.info(
-                f"whisper.cpp configured with n_threads={n_threads} (detected {cpu_count} CPUs)"
-            )
-            logger.info(
-                f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)"
-            )
-
-            self._model_initialized = True
-            logger.info("whisper.cpp engine initialized successfully.")
+            self._load_whispercpp_model(model_path)
 
         except ImportError as e:
             logger.error(f"Failed to import pywhispercpp: {e}")
@@ -927,10 +827,126 @@ class SpeechRecognitionManager:
             logger.error("Please install with: pip install pywhispercpp")
             self.state = RecognitionState.ERROR
             raise
-        except Exception as e:
+        except (FileNotFoundError, RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
             self.state = RecognitionState.ERROR
             raise
+
+    def _load_whispercpp_model(self, model_path: str):
+        """Load the whisper.cpp model file and configure the compute backend.
+
+        Detects the optimal backend (Vulkan → CUDA → CPU), loads the model,
+        and falls back to CPU if the GPU backend is incompatible.
+
+        Args:
+            model_path: Filesystem path to the GGML model file.
+        """
+        import multiprocessing
+        import time
+
+        from pywhispercpp.model import Model
+
+        from ..utils.whispercpp_model_info import (
+            ComputeBackend,
+            detect_compute_backend,
+            get_backend_display_name,
+        )
+
+        # Detect and log compute backend
+        backend, backend_info = detect_compute_backend()
+        logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
+        logger.info(
+            f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
+        )
+
+        # Log hardware summary
+        import psutil
+
+        total_ram_gb = psutil.virtual_memory().total // (1024**3)
+        logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
+
+        # Validate model file exists and get size
+        if os.path.exists(model_path):
+            model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
+            logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
+        else:
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
+        self.model = None  # Release previous model if re-initializing
+
+        n_threads = multiprocessing.cpu_count()
+        load_start_time = time.time()
+        loaded_backend = backend
+
+        # Attempt to load model; fall back to CPU if GPU backend is incompatible
+        try:
+            self.model = Model(
+                model_path,
+                n_threads=n_threads,
+                suppress_blank=True,
+                no_speech_thold=0.6,
+                entropy_thold=2.4,
+            )
+        except RuntimeError as model_error:
+            loaded_backend = self._handle_gpu_fallback(
+                model_error, model_path, n_threads, ComputeBackend.CPU
+            )
+
+        load_duration = time.time() - load_start_time
+        logger.info(
+            f"whisper.cpp configured with n_threads={n_threads} "
+            f"(detected {multiprocessing.cpu_count()} CPUs)"
+        )
+        logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
+
+        self._model_initialized = True
+        logger.info("whisper.cpp engine initialized successfully.")
+
+    def _handle_gpu_fallback(self, error, model_path: str, n_threads: int, cpu_backend):
+        """Handle GPU backend failure by falling back to CPU.
+
+        Args:
+            error: The RuntimeError from model loading.
+            model_path: Path to the GGML model file.
+            n_threads: Number of CPU threads for the model.
+            cpu_backend: The CPU ComputeBackend enum value.
+
+        Returns:
+            The backend that was actually used.
+
+        Raises:
+            RuntimeError: If the error is not a known GPU incompatibility.
+        """
+        from pywhispercpp.model import Model
+
+        error_str = str(error).lower()
+        gpu_incompatible = (
+            "16-bit storage" in error_str
+            or "unsupported device" in error_str
+            or "incompatible driver" in error_str
+        )
+        if not gpu_incompatible:
+            raise error
+
+        logger.warning(f"Vulkan GPU initialization failed: {error}. Falling back to CPU backend.")
+        _show_notification(
+            "Vocalinux: GPU Fallback",
+            "Your GPU doesn't support whisper.cpp Vulkan.\n" "Switched to CPU mode - still fast!",
+            "dialog-information",
+        )
+        # Force CPU backend by disabling GPU backends
+        os.environ["GGML_VULKAN"] = "0"
+        os.environ["GGML_CUDA"] = "0"
+        self.model = Model(
+            model_path,
+            n_threads=n_threads,
+            suppress_blank=True,
+            no_speech_thold=0.6,
+            entropy_thold=2.4,
+        )
+        logger.info("Successfully loaded model with CPU backend")
+        return cpu_backend
 
     def _transcribe_with_whispercpp(self, audio_buffer: list[bytes]) -> str:
         """
@@ -1111,7 +1127,7 @@ class SpeechRecognitionManager:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during whisper.cpp model download: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
@@ -1274,7 +1290,7 @@ class SpeechRecognitionManager:
             if os.path.exists(zip_path):
                 os.remove(zip_path)
             raise RuntimeError("Downloaded VOSK model file is corrupted.")
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during VOSK model download/extraction: {e}")
             # Clean up potentially corrupted extraction
             if os.path.exists(zip_path):
@@ -1390,7 +1406,7 @@ class SpeechRecognitionManager:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise RuntimeError(f"Failed to download Whisper model: {e}") from e
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during Whisper model download: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
