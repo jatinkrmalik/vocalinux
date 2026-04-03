@@ -156,10 +156,11 @@ def is_ibus_active_input_method() -> bool:
     """
     Check if IBus is the currently active input method.
 
-    This checks environment variables to determine if IBus is configured
-    as the active input method for GTK and Qt applications. On some systems,
-    IBus may be installed and the daemon running, but not be the active
-    input method (e.g., when using ydotool, Fcitx, or other input methods).
+    This checks environment variables and, on Wayland where env vars may not
+    be set, also checks if the IBus daemon is running and actively managing
+    an engine. On some desktop environments (e.g., KDE Plasma Wayland), IBus
+    is configured via the DE's Virtual Keyboard setting and IBus itself
+    recommends unsetting the legacy env vars.
 
     Returns:
         True if IBus appears to be the active input method, False otherwise
@@ -182,11 +183,35 @@ def is_ibus_active_input_method() -> bool:
         logger.debug(f"IBus detected as active input method via XMODIFIERS={xmodifiers}")
         return True
 
+    # If another input method is explicitly configured, respect that
+    if gtk_im or qt_im or (xmodifiers and "@im=" in xmodifiers):
+        logger.debug(
+            "Another input method is explicitly configured "
+            f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
+            f"QT_IM_MODULE={qt_im or 'not set'}, "
+            f"XMODIFIERS={xmodifiers or 'not set'})"
+        )
+        return False
+
+    # No env vars set at all — common on Wayland (KDE Plasma, etc.) where
+    # IBus is configured via the DE's Virtual Keyboard setting and IBus
+    # recommends unsetting GTK_IM_MODULE / QT_IM_MODULE.
+    # Check if ibus-daemon is running and has an active engine.
+    if is_ibus_daemon_running():
+        engine = get_current_engine()
+        if engine:
+            logger.debug(
+                f"IBus detected as active input method via running daemon "
+                f"(no env vars set, current engine: {engine})"
+            )
+            return True
+
     logger.debug(
         "IBus does not appear to be the active input method "
         f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
         f"QT_IM_MODULE={qt_im or 'not set'}, "
-        f"XMODIFIERS={xmodifiers or 'not set'})"
+        f"XMODIFIERS={xmodifiers or 'not set'}, "
+        f"daemon running: {is_ibus_daemon_running()})"
     )
     return False
 
@@ -338,6 +363,11 @@ def get_current_engine() -> Optional[str]:
     return None
 
 
+def _is_wayland_session() -> bool:
+    """Check if the current session is running under Wayland."""
+    return os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+
+
 def get_current_xkb_layout() -> tuple:
     """
     Get the current XKB keyboard layout, variant, and options.
@@ -347,9 +377,21 @@ def get_current_xkb_layout() -> tuple:
     especially when the user configured their keyboard via desktop environment
     settings or setxkbmap directly rather than through IBus.
 
+    On Wayland, setxkbmap does not reflect the compositor's keyboard state
+    and can return incorrect results. Returns empty values in that case to
+    signal that XKB layout management should be skipped.
+
     Returns:
-        A tuple of (layout, variant, option). Defaults to ("us", "", "") on error.
+        A tuple of (layout, variant, option). Returns ("", "", "") on Wayland
+        or on error, ("us", "", "") as X11 default.
     """
+    if _is_wayland_session():
+        logger.debug(
+            "Wayland session detected — skipping setxkbmap query. "
+            "Keyboard layout is managed by the Wayland compositor."
+        )
+        return "", "", ""
+
     try:
         result = subprocess.run(
             ["setxkbmap", "-query"],
