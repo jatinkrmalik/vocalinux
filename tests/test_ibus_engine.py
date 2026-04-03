@@ -954,16 +954,46 @@ class TestIsIbusActiveInputMethod(unittest.TestCase):
             result = is_ibus_active_input_method()
             self.assertFalse(result)
 
-    def test_not_active_when_no_env_vars_set(self):
-        """Test returns False when no input method env vars are set."""
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=False)
+    def test_not_active_when_no_env_vars_and_no_daemon(self, mock_daemon):
+        """Test returns False when no env vars set and daemon is not running."""
         with patch.dict(os.environ, {}, clear=True):
             from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
 
             result = is_ibus_active_input_method()
             self.assertFalse(result)
 
-    def test_empty_string_env_vars_return_false(self):
-        """Test returns False when env vars are empty strings."""
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=True)
+    def test_active_via_daemon_when_no_env_vars(self, mock_daemon, mock_engine):
+        """Test returns True when no env vars but daemon is running with active engine."""
+        with patch.dict(os.environ, {}, clear=True):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertTrue(result)
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=True)
+    def test_not_active_when_daemon_running_but_no_engine(self, mock_daemon, mock_engine):
+        """Test returns False when daemon is running but no engine is active."""
+        with patch.dict(os.environ, {}, clear=True):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertFalse(result)
+
+    def test_not_active_when_other_im_configured(self):
+        """Test returns False when another IM is explicitly configured, even if daemon runs."""
+        with patch.dict(os.environ, {"GTK_IM_MODULE": "fcitx"}, clear=True):
+            from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+            result = is_ibus_active_input_method()
+            self.assertFalse(result)
+
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=False)
+    def test_empty_string_env_vars_return_false(self, mock_daemon):
+        """Test returns False when env vars are empty strings and daemon not running."""
         with patch.dict(
             os.environ,
             {"GTK_IM_MODULE": "", "QT_IM_MODULE": "", "XMODIFIERS": ""},
@@ -1139,6 +1169,75 @@ class TestTextInjectorWithIbusActiveInputMethod(unittest.TestCase):
             # Should fall back to WAYLAND with ydotool after IBus setup fails
             self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
             self.assertEqual(injector.wayland_tool, "ydotool")
+
+
+class TestWaylandXkbLayoutSkipping(unittest.TestCase):
+    """Tests for skipping setxkbmap operations on Wayland sessions."""
+
+    def test_get_current_xkb_layout_returns_empty_on_wayland(self):
+        """Test that get_current_xkb_layout returns empty tuple on Wayland."""
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"}, clear=False):
+            from vocalinux.text_injection.ibus_engine import get_current_xkb_layout
+
+            layout, variant, option = get_current_xkb_layout()
+            self.assertEqual(layout, "")
+            self.assertEqual(variant, "")
+            self.assertEqual(option, "")
+
+    @patch("subprocess.run")
+    def test_get_current_xkb_layout_queries_setxkbmap_on_x11(self, mock_run):
+        """Test that get_current_xkb_layout uses setxkbmap on X11."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="layout:    de\nvariant:   nodeadkeys\noptions:   ctrl:nocaps\n",
+        )
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=False):
+            from vocalinux.text_injection.ibus_engine import get_current_xkb_layout
+
+            layout, variant, option = get_current_xkb_layout()
+            self.assertEqual(layout, "de")
+            self.assertEqual(variant, "nodeadkeys")
+            self.assertEqual(option, "ctrl:nocaps")
+            mock_run.assert_called_once()
+
+    @patch("subprocess.run")
+    def test_get_current_xkb_layout_skips_subprocess_on_wayland(self, mock_run):
+        """Test that setxkbmap is never called on Wayland."""
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"}, clear=False):
+            from vocalinux.text_injection.ibus_engine import get_current_xkb_layout
+
+            get_current_xkb_layout()
+            mock_run.assert_not_called()
+
+    def test_restore_xkb_layout_skips_empty_layout(self):
+        """Test that restore_xkb_layout returns False for empty layout string."""
+        from vocalinux.text_injection.ibus_engine import restore_xkb_layout
+
+        result = restore_xkb_layout("", "", "")
+        self.assertFalse(result)
+
+    def test_is_wayland_session_detects_wayland(self):
+        """Test _is_wayland_session returns True for Wayland."""
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"}, clear=False):
+            from vocalinux.text_injection.ibus_engine import _is_wayland_session
+
+            self.assertTrue(_is_wayland_session())
+
+    def test_is_wayland_session_detects_x11(self):
+        """Test _is_wayland_session returns False for X11."""
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=False):
+            from vocalinux.text_injection.ibus_engine import _is_wayland_session
+
+            self.assertFalse(_is_wayland_session())
+
+    def test_is_wayland_session_returns_false_when_unset(self):
+        """Test _is_wayland_session returns False when env var not set."""
+        env = os.environ.copy()
+        env.pop("XDG_SESSION_TYPE", None)
+        with patch.dict(os.environ, env, clear=True):
+            from vocalinux.text_injection.ibus_engine import _is_wayland_session
+
+            self.assertFalse(_is_wayland_session())
 
 
 if __name__ == "__main__":
