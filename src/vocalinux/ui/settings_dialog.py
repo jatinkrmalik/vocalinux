@@ -1190,7 +1190,7 @@ class SettingsDialog(Gtk.Dialog):
             self.shortcut_mode_combo.append(mode_id, display_name)
 
         # Load current mode from config
-        current_mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        current_mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
         if not self.shortcut_mode_combo.set_active_id(current_mode):
             self.shortcut_mode_combo.set_active_id("toggle")
 
@@ -1217,7 +1217,9 @@ class SettingsDialog(Gtk.Dialog):
                 self.shortcut_combo.append(shortcut_id, display_name)
 
         # Load current shortcut from config
-        current_shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        current_shortcut = self.config_manager.get_str(
+            "shortcuts", "toggle_recognition", "ctrl+ctrl"
+        )
         if not self.shortcut_combo.set_active_id(current_shortcut):
             self.shortcut_combo.set_active_id("ctrl+ctrl")
 
@@ -1321,7 +1323,7 @@ class SettingsDialog(Gtk.Dialog):
         # Ignore separator entries (used for grouped display)
         if shortcut_id.startswith("__separator_"):
             # Revert to the previously saved shortcut
-            current = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+            current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
             self.shortcut_combo.set_active_id(current)
             return
 
@@ -1453,7 +1455,7 @@ class SettingsDialog(Gtk.Dialog):
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
-        copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", True)
+        copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
@@ -2207,7 +2209,7 @@ For now, the engine has been reverted to VOSK."""
                 label += " (default)"
             self.audio_device_combo.append(str(device_index), label)
 
-        saved_device = self.config_manager.get("audio", "device_index", None)
+        saved_device = self.config_manager.get_optional_int("audio", "device_index", None)
 
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")

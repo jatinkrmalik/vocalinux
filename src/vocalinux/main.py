@@ -338,11 +338,37 @@ def main():
         # Initialize action handler
         action_handler = ActionHandler(text_system)
 
-        # Create a wrapper function to track injected text for action handler
-        def text_callback_wrapper(text: str):
-            """Wrapper to track injected text and handle spacing between segments."""
-            # Strip any leading/trailing whitespace from the incoming text as a
-            # safety net (whisper tokenizer sometimes prepends spaces to tokens)
+        # --- Callback wiring ---------------------------------------------------
+        # The speech engine emits three kinds of events, each handled by a
+        # dedicated callback registered below:
+        #
+        #   text_callback(text: str)
+        #       Called on the recognition thread when a transcription segment
+        #       is finalised.  The wrapper below strips whitespace, inserts
+        #       inter-segment spaces, injects the text, and records it so
+        #       "delete that" can undo it.
+        #
+        #   action_callback(action: str) -> bool
+        #       Called when a voice command (e.g. "undo", "select all") is
+        #       recognised.  Delegated directly to ActionHandler.handle_action.
+        #
+        #   state_callback(state: RecognitionState)
+        #       Called whenever the engine transitions state (IDLE → LISTENING,
+        #       etc.).  Used here to clear the "last injected" buffer when a
+        #       new listening session starts.
+        # ------------------------------------------------------------------
+
+        def text_callback_wrapper(text: str) -> None:
+            """Bridge between speech engine text events and the text injector.
+
+            Called on the recognition thread with each finalised transcription
+            segment.  Strips leading/trailing whitespace (whisper tokenizer
+            sometimes prepends spaces), inserts a single space between
+            consecutive segments, then injects via TextInjector.
+
+            Args:
+                text: Raw transcription segment from the speech engine.
+            """
             text_to_inject = text.strip()
             if not text_to_inject:
                 return
@@ -358,14 +384,14 @@ def main():
             if success:
                 action_handler.set_last_injected_text(text)
 
-        # Connect speech recognition to text injection and action handling
-        speech_engine.register_text_callback(text_callback_wrapper)
-        speech_engine.register_action_callback(action_handler.handle_action)
-
-        def on_state_change(state: RecognitionState):
+        def on_state_change(state: RecognitionState) -> None:
+            """Reset the last-injected buffer when a new listening session starts."""
             if state == RecognitionState.LISTENING:
                 action_handler.set_last_injected_text("")
 
+        # Connect speech recognition to text injection and action handling
+        speech_engine.register_text_callback(text_callback_wrapper)
+        speech_engine.register_action_callback(action_handler.handle_action)
         speech_engine.register_state_callback(on_state_change)
 
         # Initialize and start the system tray indicator

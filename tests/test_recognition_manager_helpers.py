@@ -99,7 +99,7 @@ class TestShowNotification(unittest.TestCase):
             mock_popen.assert_called_once()
 
     def test_show_notification_error(self):
-        with patch("subprocess.Popen", side_effect=Exception("no notify-send")):
+        with patch("subprocess.Popen", side_effect=FileNotFoundError("no notify-send")):
             # Should not raise
             _show_notification("Title", "Message")
 

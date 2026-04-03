@@ -177,13 +177,14 @@ class TestGetAudioInputDevices:
                 assert devices == []
 
     def test_get_audio_input_devices_generic_exception(self):
-        """Test handling of generic exceptions during device enumeration."""
+        """Test handling of OS-level audio errors during device enumeration."""
         from vocalinux.speech_recognition.recognition_manager import get_audio_input_devices
 
-        with patch.dict("sys.modules", {"pyaudio": MagicMock()}):
-            with patch("builtins.__import__", side_effect=RuntimeError("Unexpected error")):
-                devices = get_audio_input_devices()
-                assert devices == []
+        mock_pyaudio = MagicMock()
+        mock_pyaudio.PyAudio.side_effect = OSError("Audio subsystem error")
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            devices = get_audio_input_devices()
+            assert devices == []
 
 
 class TestGetSupportedChannels:

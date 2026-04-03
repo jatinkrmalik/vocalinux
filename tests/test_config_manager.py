@@ -429,3 +429,85 @@ class TestConfigManager(unittest.TestCase):
 
         new_config_manager = ConfigManager()
         self.assertFalse(new_config_manager.is_sound_effects_enabled())
+
+
+class TestTypedAccessors(unittest.TestCase):
+    """Tests for typed config accessors."""
+
+    def setUp(self):
+        self.config_manager = ConfigManager.__new__(ConfigManager)
+        self.config_manager.config = {
+            "general": {"autostart": True, "language": "en"},
+            "audio": {"sample_rate": 16000, "device_index": 2, "gain": 1.5},
+            "shortcuts": {"toggle_recognition": "ctrl+ctrl", "mode": "toggle"},
+        }
+
+    def test_get_str_returns_string(self):
+        result = self.config_manager.get_str("shortcuts", "mode", "hold")
+        assert result == "toggle"
+        assert isinstance(result, str)
+
+    def test_get_str_default(self):
+        result = self.config_manager.get_str("shortcuts", "nonexistent", "default")
+        assert result == "default"
+
+    def test_get_str_converts_non_string(self):
+        result = self.config_manager.get_str("audio", "sample_rate", "0")
+        assert result == "16000"
+        assert isinstance(result, str)
+
+    def test_get_str_none_returns_default(self):
+        self.config_manager.config["audio"]["device_index"] = None
+        result = self.config_manager.get_str("audio", "device_index", "fallback")
+        assert result == "fallback"
+
+    def test_get_bool_returns_bool(self):
+        result = self.config_manager.get_bool("general", "autostart", False)
+        assert result is True
+
+    def test_get_bool_default(self):
+        result = self.config_manager.get_bool("general", "nonexistent", True)
+        assert result is True
+
+    def test_get_int_returns_int(self):
+        result = self.config_manager.get_int("audio", "sample_rate", 0)
+        assert result == 16000
+        assert isinstance(result, int)
+
+    def test_get_int_default_on_invalid(self):
+        self.config_manager.config["audio"]["sample_rate"] = "not_a_number"
+        result = self.config_manager.get_int("audio", "sample_rate", 44100)
+        assert result == 44100
+
+    def test_get_int_default_on_none(self):
+        result = self.config_manager.get_int("audio", "nonexistent", 99)
+        assert result == 99
+
+    def test_get_float_returns_float(self):
+        result = self.config_manager.get_float("audio", "gain", 0.0)
+        assert result == 1.5
+        assert isinstance(result, float)
+
+    def test_get_float_default_on_invalid(self):
+        self.config_manager.config["audio"]["gain"] = "bad"
+        result = self.config_manager.get_float("audio", "gain", 2.0)
+        assert result == 2.0
+
+    def test_get_optional_int_returns_int(self):
+        result = self.config_manager.get_optional_int("audio", "device_index", None)
+        assert result == 2
+        assert isinstance(result, int)
+
+    def test_get_optional_int_returns_none(self):
+        self.config_manager.config["audio"]["device_index"] = None
+        result = self.config_manager.get_optional_int("audio", "device_index", None)
+        assert result is None
+
+    def test_get_optional_int_default_on_missing(self):
+        result = self.config_manager.get_optional_int("audio", "nonexistent", None)
+        assert result is None
+
+    def test_get_optional_int_default_on_invalid(self):
+        self.config_manager.config["audio"]["device_index"] = "not_int"
+        result = self.config_manager.get_optional_int("audio", "device_index", 5)
+        assert result == 5

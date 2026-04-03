@@ -235,7 +235,7 @@ resolve_install_tag() {
             return
         fi
     fi
-    INSTALL_TAG="v0.10.0-beta"
+    INSTALL_TAG="v0.10.1-beta"
 }
 
 resolve_install_tag
@@ -1144,21 +1144,30 @@ install_system_dependencies() {
     fi
 
     # Define package names for different distributions
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 libgirepository1.0-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
-    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
+    # Determine the correct GObject Introspection dev package for Ubuntu-family distros
+    # Ubuntu 24.04+ and Pop!_OS Cosmic+ ship libgirepository-2.0-dev instead of 1.0
+    local GI_DEV_PKG="libgirepository1.0-dev"
+    if apt-cache show libgirepository-2.0-dev &>/dev/null 2>&1; then
+        if ! apt-cache show libgirepository1.0-dev &>/dev/null 2>&1; then
+            GI_DEV_PKG="libgirepository-2.0-dev"
+        fi
+    fi
+
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
-    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip wl-clipboard"
-    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip wl-clipboard"
-    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip vulkan-tools vulkan-devel glslang xclip wl-clipboard"
+    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip wl-clipboard"
+    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config cmake wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip wl-clipboard"
+    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-devel glslang xclip wl-clipboard"
     # Gentoo uses Portage and different package naming convention
-    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
+    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf cmake dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
     # Alpine Linux uses apk and has musl libc
-    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf wget curl unzip glslang vulkan-tools xclip wl-clipboard"
+    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf cmake wget curl unzip glslang vulkan-tools xclip wl-clipboard"
     # Void Linux uses xbps
-    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator-gtk3 gobject-introspection portaudio-devel python3-devel pkg-config wget curl unzip glslang Vulkan-Tools xclip wl-clipboard"
+    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator-gtk3 gobject-introspection portaudio-devel python3-devel pkg-config cmake wget curl unzip glslang Vulkan-Tools xclip wl-clipboard"
     # Solus uses eopkg
-    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config wget curl unzip glslang vulkan-tools xclip wl-clipboard"
+    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip glslang vulkan-tools xclip wl-clipboard"
 
     local MISSING_PACKAGES=""
     local INSTALL_CMD=""
