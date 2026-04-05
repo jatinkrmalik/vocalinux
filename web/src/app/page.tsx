@@ -83,6 +83,10 @@ const homeJsonLd = [
       "Clipboard fallback for unsupported Wayland compositors",
       "Sound effects toggle for audio feedback",
       "whisper.cpp, Whisper, and VOSK support",
+      "Auto-recover speech recognition after system suspend/resume",
+      "Safe engine switching without segfaults",
+      "Keyboard layout preserved during IBus activation",
+      "Push-to-talk mode with improved silence detection",
       "Linux desktop integration",
     ],
   },
@@ -112,6 +116,22 @@ const homeJsonLd = [
         acceptedAnswer: {
           "@type": "Answer",
           text: "Use the settings GUI or the CLI flags: vocalinux --engine whisper_cpp, vocalinux --engine whisper, or vocalinux --engine vosk.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "What happens when I close my laptop lid?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Vocalinux v0.10.1+ automatically recovers speech recognition and keyboard shortcuts after system suspend/resume. No manual restart needed.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "Does Vocalinux preserve my keyboard layout?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Yes! v0.10.1+ preserves your XKB keyboard layout when activating IBus, so you won't unexpectedly switch to US layout mid-dictation.",
         },
       },
     ],
@@ -1131,6 +1151,16 @@ export default function HomePage() {
                 ),
               },
               {
+                question: "What happens when I close my laptop lid?",
+                answer:
+                  "Vocalinux v0.10.1+ automatically recovers speech recognition and keyboard shortcuts after system suspend/resume. No manual restart needed.",
+              },
+              {
+                question: "Does Vocalinux preserve my keyboard layout?",
+                answer:
+                  "Yes! v0.10.1+ preserves your XKB keyboard layout when activating IBus, so you won't unexpectedly switch to US layout mid-dictation.",
+              },
+              {
                 question: "What are the system requirements?",
                 answer: (
                   <>
@@ -1466,6 +1496,31 @@ export default function HomePage() {
                 <li>
                   <Link href="/compare/" className="text-zinc-400 hover:text-white transition-colors">
                     Engine Comparison
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/vs-nerd-dictation/" className="text-zinc-400 hover:text-white transition-colors">
+                    vs Nerd Dictation
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/whisper-model-guide/" className="text-zinc-400 hover:text-white transition-colors">
+                    Whisper Model Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/voice-typing-vscode/" className="text-zinc-400 hover:text-white transition-colors">
+                    VS Code Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/writers/" className="text-zinc-400 hover:text-white transition-colors">
+                    For Writers
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/gnome-kde/" className="text-zinc-400 hover:text-white transition-colors">
+                    GNOME vs KDE
                   </Link>
                 </li>
                 <li>

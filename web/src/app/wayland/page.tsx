@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { CheckCircle2, ChevronRight, Monitor, Terminal, Zap } from "lucide-react";
+import { CheckCircle2, ChevronRight, Keyboard, Monitor, Terminal, Zap } from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
@@ -10,6 +10,12 @@ const waylandFeatures = [
     description:
       "Text injection via IBus engine works seamlessly on Wayland compositors like GNOME, KDE, Sway, and Hyprland.",
     icon: Terminal,
+  },
+  {
+    title: "Keyboard Layout Preservation",
+    description:
+      "v0.10.1+ preserves your XKB keyboard layout when activating IBus. No more switching to US layout unexpectedly.",
+    icon: Keyboard,
   },
   {
     title: "X11 Fallback Support",
@@ -109,7 +115,7 @@ export default function WaylandPage() {
     headline: "Wayland Voice Dictation Support for Linux",
     description:
       "Complete guide to Vocalinux Wayland support. Voice dictation for GNOME, KDE, Sway, Hyprland, and other Wayland compositors.",
-    dateModified: "2026-02-22",
+    dateModified: "2026-03-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -218,6 +224,10 @@ export default function WaylandPage() {
             </div>
           ))}
         </div>
+        <p className="mt-4 text-sm text-muted-foreground">
+          If text doesn&apos;t appear, ensure IBus is your active input method (System Settings →
+          Keyboard → Input Methods).
+        </p>
       </section>
 
       <section className="mb-12 rounded-2xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900/20">
@@ -244,6 +254,11 @@ export default function WaylandPage() {
             <strong>X11 Fallback</strong> — xdotool for XWayland applications
           </li>
         </ul>
+        <p className="mt-4 text-sm text-blue-700 dark:text-blue-400">
+          v0.9.0+ includes clipboard fallback for Wayland compositors without virtual keyboard
+          support. Copy-to-clipboard is now disabled by default for privacy - enable in Settings
+          if needed.
+        </p>
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">

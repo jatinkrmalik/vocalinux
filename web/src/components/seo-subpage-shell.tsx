@@ -50,7 +50,17 @@ const navCategories = [
     items: [
       { href: "/for-developers/", label: "For Developers", icon: Code2 },
       { href: "/rsi-prevention/", label: "RSI Prevention", icon: Heart },
+      { href: "/writers/", label: "For Writers", icon: Heart },
+      { href: "/gnome-kde/", label: "GNOME vs KDE", icon: Monitor },
       { href: "/use-cases/", label: "All Use Cases", icon: Zap },
+    ],
+  },
+  {
+    label: "Comparisons",
+    items: [
+      { href: "/vs-nerd-dictation/", label: "vs Nerd Dictation", icon: BookOpen },
+      { href: "/whisper-model-guide/", label: "Whisper Models", icon: Cpu },
+      { href: "/voice-typing-vscode/", label: "VS Code", icon: Code2 },
     ],
   },
   {

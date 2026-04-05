@@ -81,13 +81,35 @@ const troubleshootingItems = [
     ],
   },
   {
+    title: "Vocalinux stops working after system suspend/resume",
+    symptoms: [
+      "Dictation doesn't start after laptop wakes",
+      "Keyboard shortcuts stop working",
+      "App appears running but not responding",
+    ],
+    solutions: [
+      "v0.10.1+ automatically recovers after suspend - ensure you're on latest version",
+      "Check system tray icon status after resume",
+      "If issues persist, restart Vocalinux from tray menu",
+    ],
+  },
+  {
     title: "Tray icon not appearing",
     symptoms: ["No system tray icon", "Cannot access settings"],
     solutions: [
+      "v0.10.1+ bundles resources to prevent missing tray icons - ensure you're on latest version",
       "Ensure your desktop environment supports system trays (GNOME requires extension)",
       "Install AppIndicator extension for GNOME: sudo apt install gnome-shell-extension-appindicator",
       "Check if ayatana-appindicator is installed: sudo apt install libayatana-appindicator3-1",
       "Try launching from terminal to see any errors: vocalinux --debug",
+    ],
+  },
+  {
+    title: "Settings dialog missing close button",
+    symptoms: ["Cannot close settings window", "Close button not visible"],
+    solutions: [
+      "v0.10.1+ includes dedicated close button - update to latest version",
+      "Settings dialog now forces window decorations",
     ],
   },
 ];
@@ -112,7 +134,7 @@ export default function TroubleshootingPage() {
     headline: "Vocalinux Troubleshooting Guide",
     description:
       "Complete troubleshooting guide for Vocalinux Linux voice dictation software.",
-    dateModified: "2026-02-19",
+    dateModified: "2026-03-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
