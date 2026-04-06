@@ -2,7 +2,7 @@ import Link from "next/link";
 import { type Metadata } from "next";
 import { BookOpen, ChevronRight, CircleHelp, Cpu, Laptop, Lock, Mic, Volume2, Zap } from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
-import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
+import { buildPageMetadata } from "@/lib/seo";
 
 const faqCategories = [
   {
@@ -76,6 +76,14 @@ const faqCategories = [
         a: "Yes. Vocalinux supports both X11 and Wayland, including IBus-based flows on Wayland with improved active-method detection for more reliable text injection.",
       },
       {
+        q: "What happens when I close my laptop lid?",
+        a: "Vocalinux v0.10.1+ automatically recovers speech recognition after system suspend/resume. The app detects when your system wakes up and restarts the recognition engine and keyboard shortcuts. No manual restart needed - just start dictating as usual.",
+      },
+      {
+        q: "Does Vocalinux preserve my keyboard layout?",
+        a: "Yes! v0.10.1+ preserves your XKB keyboard layout when activating IBus for text injection. Unlike other tools that switch to US layout, Vocalinux keeps your configured layout so you can dictate without unexpected character changes.",
+      },
+      {
         q: "Can I use voice commands?",
         a: "Yes. Vocalinux supports commands like 'new line', 'delete that', 'select all', and more. Voice commands are optional and can be enabled or disabled in Settings.",
       },
@@ -119,6 +127,7 @@ export default function FaqPage() {
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
+    dateModified: "2026-03-30",
     mainEntity: faqCategories.flatMap((cat) =>
       cat.questions.map((q) => ({
         "@type": "Question",

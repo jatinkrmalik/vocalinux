@@ -226,16 +226,16 @@ export default function OfflinePage() {
           Vocalinux uses speech recognition models that run entirely on your CPU or GPU:
         </p>
         <ul className="space-y-2 text-sm text-emerald-700 dark:text-emerald-400">
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <strong>whisper.cpp</strong> — C++ port of OpenAI Whisper, runs locally with GPU
             acceleration
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <strong>VOSK</strong> — Lightweight offline engine, minimal resources
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <strong>OpenAI Whisper</strong> — PyTorch-based, runs on NVIDIA GPU or CPU
           </li>
@@ -254,7 +254,7 @@ export default function OfflinePage() {
           Don&apos;t trust—verify. Vocalinux is open source. You can:
         </p>
         <ul className="space-y-2 text-sm text-amber-700 dark:text-amber-400">
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             Read every line of code on{" "}
             <a
@@ -266,16 +266,16 @@ export default function OfflinePage() {
               GitHub
             </a>
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             Run with <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">--debug</code> to see all network activity (there is none)
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             Monitor with <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">tcpdump</code> or{" "}
             <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">wireshark</code>—you&apos;ll see silence
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             Disconnect from the internet and verify dictation still works perfectly
           </li>
@@ -291,7 +291,7 @@ export default function OfflinePage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />

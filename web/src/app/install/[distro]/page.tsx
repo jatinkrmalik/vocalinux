@@ -323,7 +323,7 @@ export default async function DistroInstallPage({
           </h2>
           <ul className="space-y-2 text-muted-foreground">
             {config.prerequisites.map((item) => (
-              <li key={item} className="inline-flex items-start gap-2">
+              <li key={item} className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 {item}
               </li>
@@ -338,7 +338,7 @@ export default async function DistroInstallPage({
           </h2>
           <ul className="space-y-2 text-muted-foreground">
             {config.testedOn.map((item) => (
-              <li key={item} className="inline-flex items-start gap-2">
+              <li key={item} className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 {item}
               </li>
@@ -354,7 +354,7 @@ export default async function DistroInstallPage({
         </h2>
         <ol className="space-y-3 text-muted-foreground">
           {config.setupNotes.map((item) => (
-            <li key={item} className="inline-flex items-start gap-2">
+            <li key={item} className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
               {item}
             </li>
@@ -369,7 +369,7 @@ export default async function DistroInstallPage({
         </h2>
         <ul className="space-y-3 text-muted-foreground">
           {config.postInstallChecks.map((item) => (
-            <li key={item} className="inline-flex items-start gap-2">
+            <li key={item} className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
               {item}
             </li>

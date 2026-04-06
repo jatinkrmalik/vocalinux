@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { CheckCircle2, ChevronRight, Cloud, DollarSign, Lock, Server, Shield, XCircle, Zap } from "lucide-react";
+import { CheckCircle2, ChevronRight, DollarSign, Lock, Server, Shield, XCircle, Zap } from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
@@ -232,6 +232,29 @@ export default function AlternativesPage() {
         ))}
       </section>
 
+      <section className="mt-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <h2 className="mb-3 text-2xl font-bold">Read the Nerd Dictation comparison</h2>
+        <p className="mb-5 text-muted-foreground">
+          Want a direct Linux-focused breakdown of CLI vs GUI workflows, Wayland behavior, and GPU
+          support? Read our dedicated page.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/vs-nerd-dictation/"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+          >
+            Read the Nerd Dictation comparison
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+          <Link
+            href="/compare/"
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          >
+            Engine comparison
+          </Link>
+        </div>
+      </section>
+
       <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-4 text-2xl font-bold">The Bottom Line</h2>
         <p className="mb-6 text-muted-foreground">
@@ -241,7 +264,7 @@ export default function AlternativesPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
           >
             Install Vocalinux
             <ChevronRight className="h-4 w-4" />

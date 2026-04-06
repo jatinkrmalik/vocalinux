@@ -226,15 +226,15 @@ export default function LanguagesPage() {
           <div>
             <h3 className="mb-3 font-semibold">Language Selection</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Select your language in Settings → Speech Engine → Language
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Use "Auto" for automatic language detection (whisper.cpp/Whisper)
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Switch languages on-the-fly without restarting
               </li>
@@ -243,15 +243,15 @@ export default function LanguagesPage() {
           <div>
             <h3 className="mb-3 font-semibold">Model Selection</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Larger models provide better accuracy for all languages
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 "tiny" model works for all supported languages
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Models are downloaded automatically on first use
               </li>
@@ -269,7 +269,7 @@ export default function LanguagesPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />

@@ -172,7 +172,7 @@ export default function UseCasesPage() {
                   <h3 className="mb-3 font-semibold">Key Benefits</h3>
                   <ul className="space-y-2">
                     {useCase.benefits.map((benefit) => (
-                      <li key={benefit} className="inline-flex items-start gap-2 text-sm text-muted-foreground">
+                      <li key={benefit} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                         {benefit}
                       </li>
@@ -207,7 +207,7 @@ export default function UseCasesPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />

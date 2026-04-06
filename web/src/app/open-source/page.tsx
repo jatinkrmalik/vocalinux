@@ -163,7 +163,7 @@ export default function OpenSourcePage() {
             "Free to share with others",
             "Modifications must remain open",
           ].map((item) => (
-            <li key={item} className="inline-flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+            <li key={item} className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
               {item}
             </li>
@@ -299,7 +299,7 @@ export default function OpenSourcePage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
           >
             Install Free
             <ChevronRight className="h-4 w-4" />

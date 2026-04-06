@@ -83,6 +83,10 @@ const homeJsonLd = [
       "Clipboard fallback for unsupported Wayland compositors",
       "Sound effects toggle for audio feedback",
       "whisper.cpp, Whisper, and VOSK support",
+      "Auto-recover speech recognition after system suspend/resume",
+      "Safe engine switching without segfaults",
+      "Keyboard layout preserved during IBus activation",
+      "Push-to-talk mode with improved silence detection",
       "Linux desktop integration",
     ],
   },
@@ -112,6 +116,22 @@ const homeJsonLd = [
         acceptedAnswer: {
           "@type": "Answer",
           text: "Use the settings GUI or the CLI flags: vocalinux --engine whisper_cpp, vocalinux --engine whisper, or vocalinux --engine vosk.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "What happens when I close my laptop lid?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Vocalinux v0.10.1+ automatically recovers speech recognition and keyboard shortcuts after system suspend/resume. No manual restart needed.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "Does Vocalinux preserve my keyboard layout?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Yes! v0.10.1+ preserves your XKB keyboard layout when activating IBus, so you won't unexpectedly switch to US layout mid-dictation.",
         },
       },
     ],
@@ -1131,6 +1151,16 @@ export default function HomePage() {
                 ),
               },
               {
+                question: "What happens when I close my laptop lid?",
+                answer:
+                  "Vocalinux v0.10.1+ automatically recovers speech recognition and keyboard shortcuts after system suspend/resume. No manual restart needed.",
+              },
+              {
+                question: "Does Vocalinux preserve my keyboard layout?",
+                answer:
+                  "Yes! v0.10.1+ preserves your XKB keyboard layout when activating IBus, so you won't unexpectedly switch to US layout mid-dictation.",
+              },
+              {
                 question: "What are the system requirements?",
                 answer: (
                   <>
@@ -1403,13 +1433,13 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="py-12 px-4 sm:px-6 bg-zinc-900 text-white">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-12">
-            <div className="md:col-span-2">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
+            <div className="col-span-2 lg:col-span-1 mb-4 lg:mb-0">
               <Link href="/" className="flex items-center gap-2 mb-4">
                 <VocalinuxLogo width={32} height={32} className="h-8 w-8" />
                 <span className="text-xl font-bold">Vocalinux</span>
               </Link>
-              <p className="text-zinc-400 mb-4 max-w-md">
+              <p className="text-zinc-400 mb-4 text-sm max-w-xs">
                 Free, open-source voice dictation for Linux. 100% offline and privacy-focused.
               </p>
               <div className="flex items-center gap-4">
@@ -1426,129 +1456,46 @@ export default function HomePage() {
             </div>
 
             <div>
-              <h3 className="font-semibold mb-4">Quick Links</h3>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <a href="#features" className="text-zinc-400 hover:text-white transition-colors">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#install" className="text-zinc-400 hover:text-white transition-colors">
-                    Installation
-                  </a>
-                </li>
-                <li>
-                  <a href="#faq" className="text-zinc-400 hover:text-white transition-colors">
-                    FAQ
-                  </a>
-                </li>
-                <li>
-                  <Link href="/install/" className="text-zinc-400 hover:text-white transition-colors">
-                    Linux Install Guides
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/install/ubuntu/" className="text-zinc-400 hover:text-white transition-colors">
-                    Ubuntu Guide
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/install/fedora/" className="text-zinc-400 hover:text-white transition-colors">
-                    Fedora Guide
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/install/arch/" className="text-zinc-400 hover:text-white transition-colors">
-                    Arch Guide
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/compare/" className="text-zinc-400 hover:text-white transition-colors">
-                    Engine Comparison
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/use-cases/" className="text-zinc-400 hover:text-white transition-colors">
-                    Use Cases
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/alternatives/" className="text-zinc-400 hover:text-white transition-colors">
-                    Alternatives
-                  </Link>
-                </li>
+              <h3 className="font-semibold mb-4 text-xs uppercase tracking-wider text-zinc-400">Get Started</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><a href="#features" className="text-zinc-400 hover:text-white transition-colors">Features</a></li>
+                <li><Link href="/install/" className="text-zinc-400 hover:text-white transition-colors">Install Guide</Link></li>
+                <li><Link href="/changelog/" className="text-zinc-400 hover:text-white transition-colors">Changelog</Link></li>
+                <li><Link href="/use-cases/" className="text-zinc-400 hover:text-white transition-colors">Use Cases</Link></li>
+                <li><Link href="/autostart/" className="text-zinc-400 hover:text-white transition-colors">Autostart</Link></li>
               </ul>
             </div>
 
             <div>
-              <h3 className="font-semibold mb-4">Resources</h3>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="/faq/" className="text-zinc-400 hover:text-white transition-colors">
-                    FAQ
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/changelog/" className="text-zinc-400 hover:text-white transition-colors">
-                    Changelog
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/shortcuts/" className="text-zinc-400 hover:text-white transition-colors">
-                    Keyboard Shortcuts
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/troubleshooting/" className="text-zinc-400 hover:text-white transition-colors">
-                    Troubleshooting
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/privacy/" className="text-zinc-400 hover:text-white transition-colors">
-                    Privacy Policy
-                  </Link>
-                </li>
-                <li>
-                  <a
-                    href="https://github.com/jatinkrmalik/vocalinux"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-white transition-colors"
-                  >
-                    GitHub Repository
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://github.com/jatinkrmalik/vocalinux/issues"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-white transition-colors"
-                  >
-                    Report Issues
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://github.com/jatinkrmalik/vocalinux/discussions"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-white transition-colors"
-                  >
-                    Discussions
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://github.com/jatinkrmalik/vocalinux/blob/main/CONTRIBUTING.md"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-white transition-colors"
-                  >
-                    Contributing
-                  </a>
-                </li>
+              <h3 className="font-semibold mb-4 text-xs uppercase tracking-wider text-zinc-400">Learn</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><Link href="/compare/" className="text-zinc-400 hover:text-white transition-colors">Engine Comparison</Link></li>
+                <li><Link href="/whisper-model-guide/" className="text-zinc-400 hover:text-white transition-colors">Whisper Models</Link></li>
+                <li><Link href="/vs-nerd-dictation/" className="text-zinc-400 hover:text-white transition-colors">vs Nerd Dictation</Link></li>
+                <li><Link href="/wayland/" className="text-zinc-400 hover:text-white transition-colors">Wayland Support</Link></li>
+                <li><Link href="/gpu-acceleration/" className="text-zinc-400 hover:text-white transition-colors">GPU Acceleration</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4 text-xs uppercase tracking-wider text-zinc-400">Use Cases</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><Link href="/for-developers/" className="text-zinc-400 hover:text-white transition-colors">For Developers</Link></li>
+                <li><Link href="/writers/" className="text-zinc-400 hover:text-white transition-colors">For Writers</Link></li>
+                <li><Link href="/voice-typing-vscode/" className="text-zinc-400 hover:text-white transition-colors">VS Code</Link></li>
+                <li><Link href="/gnome-kde/" className="text-zinc-400 hover:text-white transition-colors">GNOME vs KDE</Link></li>
+                <li><Link href="/rsi-prevention/" className="text-zinc-400 hover:text-white transition-colors">RSI Prevention</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4 text-xs uppercase tracking-wider text-zinc-400">Support</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><Link href="/faq/" className="text-zinc-400 hover:text-white transition-colors">FAQ</Link></li>
+                <li><Link href="/troubleshooting/" className="text-zinc-400 hover:text-white transition-colors">Troubleshooting</Link></li>
+                <li><Link href="/shortcuts/" className="text-zinc-400 hover:text-white transition-colors">Voice Commands</Link></li>
+                <li><Link href="/alternatives/" className="text-zinc-400 hover:text-white transition-colors">Alternatives</Link></li>
+                <li><Link href="/privacy/" className="text-zinc-400 hover:text-white transition-colors">Privacy Policy</Link></li>
               </ul>
             </div>
           </div>
