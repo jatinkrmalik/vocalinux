@@ -129,6 +129,10 @@ def check_dependencies():
                 "    sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1"
             )
             logger.error("")
+            logger.error("  NOTE: On GNOME Shell (default on Debian), you also need:")
+            logger.error("    sudo apt install gnome-shell-extension-appindicator")
+            logger.error("  Then log out and back in. Ubuntu includes this by default.")
+            logger.error("")
             logger.error("  Fedora:")
             logger.error("    sudo dnf install python3-gobject gtk3 libappindicator-gtk3")
             logger.error("")
@@ -169,6 +173,35 @@ def check_display_available():
     except Exception as e:
         logger.error(f"Failed to initialize display: {e}")
         return False
+
+
+def check_appindicator_support():
+    try:
+        from gi.repository import Gio
+
+        proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SESSION,
+            Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION,
+            None,
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            None,
+        )
+        names_variant = proxy.call_sync(
+            "ListNames",
+            None,
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+        )
+        if names_variant is not None:
+            name_list = names_variant.unpack()[0]
+            return "org.kde.StatusNotifierWatcher" in name_list
+    except Exception:
+        pass
+
+    return True
 
 
 def main():
@@ -215,6 +248,17 @@ def main():
     # Check if display is available before creating any GTK widgets
     if not check_display_available():
         sys.exit(1)
+
+    if not check_appindicator_support():
+        logger.warning("No StatusNotifierWatcher found on D-Bus session bus.")
+        logger.warning("The system tray icon may not appear.")
+        logger.warning("")
+        logger.warning("If you are using GNOME Shell, install the AppIndicator extension:")
+        logger.warning("  Debian:  sudo apt install gnome-shell-extension-appindicator")
+        logger.warning("  Fedora:  sudo dnf install gnome-shell-extension-appindicator")
+        logger.warning("  Arch:    sudo pacman -S gnome-shell-extension-appindicator")
+        logger.warning("")
+        logger.warning("After installing, log out and back in (or restart GNOME Shell).")
 
     # Now it's safe to import GTK-dependent modules
     from .common_types import RecognitionState

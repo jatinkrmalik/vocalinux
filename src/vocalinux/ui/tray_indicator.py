@@ -190,17 +190,26 @@ class TrayIndicator:
                 exists = os.path.exists(path)
                 logger.info(f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}")
 
-        # Create the indicator with absolute path to the default icon
-        self.indicator = AppIndicator3.Indicator.new_with_path(
-            APP_ID,
-            DEFAULT_ICON,
-            AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
-            ICON_DIR,
-        )
-        self.indicator.set_icon_theme_path(ICON_DIR)
+        try:
+            self.indicator = AppIndicator3.Indicator.new_with_path(
+                APP_ID,
+                DEFAULT_ICON,
+                AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
+                ICON_DIR,
+            )
+            self.indicator.set_icon_theme_path(ICON_DIR)
+            self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        except Exception as e:
+            logger.error(f"Failed to create AppIndicator: {e}")
+            GLib.idle_add(self._show_appindicator_error_dialog, str(e))
+            return False
 
-        # Set the indicator status
-        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        if not self._check_status_notifier_watcher():
+            logger.warning(
+                "No StatusNotifierWatcher on D-Bus session bus; tray icon may not appear. "
+                "On GNOME, install gnome-shell-extension-appindicator."
+            )
+            GLib.idle_add(self._show_missing_watcher_dialog)
 
         # Create the menu
         self.menu = Gtk.Menu()
@@ -232,6 +241,74 @@ class TrayIndicator:
         self._update_ui(RecognitionState.IDLE)
 
         return False  # Remove idle callback
+
+    @staticmethod
+    def _check_status_notifier_watcher() -> bool:
+        try:
+            proxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SESSION,
+                Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION,
+                None,
+                "org.freedesktop.DBus",
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus",
+                None,
+            )
+            names_variant = proxy.call_sync(
+                "ListNames",
+                None,
+                Gio.DBusCallFlags.NONE,
+                -1,
+                None,
+            )
+            if names_variant is not None:
+                name_list = names_variant.unpack()[0]
+                return "org.kde.StatusNotifierWatcher" in name_list
+        except Exception:
+            pass
+
+        return True
+
+    def _show_missing_watcher_dialog(self):
+        dialog = Gtk.MessageDialog(
+            flags=Gtk.DialogFlags.MODAL,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK,
+            text="System tray icon may not appear",
+        )
+        dialog.format_secondary_text(
+            "Vocalinux could not detect AppIndicator support in your desktop environment.\n"
+            "\n"
+            "If you are using GNOME Shell, install the AppIndicator extension:\n"
+            "  sudo apt install gnome-shell-extension-appindicator\n"
+            "\n"
+            "Then log out and back in (or press Alt+F2, type 'r', press Enter).\n"
+            "\n"
+            "Keyboard shortcuts will still work even without the tray icon."
+        )
+        dialog.connect("response", lambda d, _: d.destroy())
+        dialog.show()
+        return False
+
+    def _show_appindicator_error_dialog(self, error_detail: str):
+        dialog = Gtk.MessageDialog(
+            flags=Gtk.DialogFlags.MODAL,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text="Failed to initialize system tray",
+        )
+        dialog.format_secondary_text(
+            f"AppIndicator could not be started:\n{error_detail}\n"
+            "\n"
+            "Make sure the required packages are installed:\n"
+            "  sudo apt install gir1.2-ayatanaappindicator3-0.1\n"
+            "\n"
+            "On GNOME Shell, you also need:\n"
+            "  sudo apt install gnome-shell-extension-appindicator"
+        )
+        dialog.connect("response", lambda d, _: d.destroy())
+        dialog.show()
+        return False
 
     def _toggle_recognition(self):
         """Toggle the recognition state between IDLE and LISTENING."""
@@ -335,6 +412,9 @@ class TrayIndicator:
         Args:
             state: The current recognition state
         """
+        if not hasattr(self, "indicator"):
+            return False
+
         if state == RecognitionState.IDLE:
             self.indicator.set_icon_full(self.icon_names["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
@@ -362,6 +442,9 @@ class TrayIndicator:
             label: The label of the menu item
             enabled: Whether the item should be enabled
         """
+        if not hasattr(self, "menu"):
+            return
+
         for item in self.menu.get_children():
             if isinstance(item, Gtk.MenuItem) and item.get_label() == label:
                 item.set_sensitive(enabled)
