@@ -274,12 +274,10 @@ class TestMainFunction(unittest.TestCase):
         """Test main() when another instance is already running."""
         from vocalinux.main import main
 
-        # Mock single_instance module since it's imported inside main()
         mock_single_instance = MagicMock()
         mock_single_instance.acquire_lock.return_value = False
 
         with patch.dict(sys.modules, {"vocalinux.single_instance": mock_single_instance}):
-            # Should exit with status 1
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 1

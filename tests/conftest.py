@@ -65,6 +65,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # precisely because PyGObject was installed and already loaded.
 _mock_gi = MagicMock()
 _mock_gi_repository = MagicMock()
+_mock_gi_repository.Notify = MagicMock()
 sys.modules["gi"] = _mock_gi
 sys.modules["gi.repository"] = _mock_gi_repository
 
