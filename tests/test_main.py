@@ -207,6 +207,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
             mock_args.wayland = True
+            mock_args.hallucination_filter = True
             mock_parse.return_value = mock_args
 
             # Call main function
@@ -222,7 +223,7 @@ class TestMainModule(unittest.TestCase):
                 audio_device_index=None,
                 voice_commands_enabled=None,
             )
-            mock_text.assert_called_once_with(wayland_mode=True)
+            mock_text.assert_called_once_with(wayland_mode=True, hallucination_filter=True)
             mock_action_handler.assert_called_once_with(mock_text_instance)
             mock_tray.assert_called_once_with(
                 speech_engine=mock_speech_instance, text_injector=mock_text_instance

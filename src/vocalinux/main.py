@@ -67,6 +67,11 @@ def parse_arguments():
         action="store_true",
         help="Start minimized to system tray",
     )
+    parser.add_argument(
+        "--hallucination-filter",
+        action="store_true",
+        help="Filter out commonly hallucinated phrases",
+    )
     return parser.parse_args()
 
 
@@ -326,7 +331,9 @@ def main():
         )
 
         # Initialize text injection system
-        text_system = text_injector.TextInjector(wayland_mode=args.wayland)
+        text_system = text_injector.TextInjector(
+            wayland_mode=args.wayland, hallucination_filter=args.hallucination_filter
+        )
 
         # Initialize action handler
         action_handler = ActionHandler(text_system)
