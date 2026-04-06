@@ -1163,12 +1163,43 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(voice_commands_row)
 
+        self.streaming_switch = Gtk.Switch()
+        self.streaming_switch.set_active(False)
+        self.streaming_switch.set_tooltip_text(
+            "Enable experimental real-time streaming transcription.\n"
+            "Shows text as you speak for a more responsive chunks.\n"
+            "This is an experimental feature."
+        )
+        streaming_row = PreferenceRow(
+            title="Real-time Streaming",
+            subtitle="Show text as you speak (experimental)",
+            widget=self.streaming_switch,
+        )
+        group.add_row(streaming_row)
+
+        self.streaming_duration_spin = Gtk.SpinButton.new_with_range(0.2, 5.0, 0.1)
+        self.streaming_duration_spin.set_digits(1)
+        self.streaming_duration_spin.set_value(1.0)
+        self.streaming_duration_spin.set_sensitive(False)
+        self.streaming_duration_spin.set_tooltip_text(
+            "Audio chunk size for streaming (seconds).\n"
+            "Shorter = faster output but may be less accurate."
+        )
+        _prevent_scroll_on_hover(self.streaming_duration_spin)
+        duration_row = PreferenceRow(
+            title="Chunk Duration",
+            subtitle="Audio chunk size for streaming (seconds)",
+            widget=self.streaming_duration_spin,
+        )
+        group.add_row(duration_row)
+
         self.recognition_settings_tab.pack_start(group, False, False, 0)
 
-        # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
         self.voice_commands_switch.connect("state-set", self._on_voice_commands_toggled)
+        self.streaming_switch.connect("state-set", self._on_streaming_toggled)
+        self.streaming_duration_spin.connect("value-changed", self._on_streaming_duration_changed)
 
     def _build_shortcuts_section(self):
         """Build the Keyboard Shortcuts section."""
@@ -1526,6 +1557,11 @@ class SettingsDialog(Gtk.Dialog):
         voice_commands_enabled = self.config_manager.is_voice_commands_enabled()
         self.voice_commands_switch.set_active(voice_commands_enabled)
 
+        # Set streaming controls based on config
+        self.streaming_switch.set_active(self.current_streaming)
+        self.streaming_duration_spin.set_value(self.current_streaming_duration_ms / 1000.0)
+        self.streaming_duration_spin.set_sensitive(self.current_streaming)
+
     def _get_current_settings(self):
         """Get current settings from config manager."""
         self.config_manager.load_config()
@@ -1535,20 +1571,18 @@ class SettingsDialog(Gtk.Dialog):
         engine = sr_settings.get("engine", "vosk")
         language = sr_settings.get("language", "en-us")
         model_size = self.config_manager.get_model_size_for_engine(engine)
-        vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
-        silence_timeout = sr_settings.get("silence_timeout", 2.0)
+        self.current_vad = settings.get("vad_sensitivity", 3)
+        self.current_silence = settings.get("silence_timeout", 2.0)
 
-        logger.info(
-            f"Loaded current settings: engine={engine}, language={language}, model_size={model_size}, "
-            f"vad={vad_sensitivity}, silence={silence_timeout}"
-        )
+        self.current_streaming = sr_settings.get("experimental_streaming", False)
+        self.current_streaming_duration_ms = sr_settings.get("streaming_chunk_duration_ms", 1000)
 
         return {
             "engine": engine,
             "language": language,
             "model_size": model_size,
-            "vad_sensitivity": vad_sensitivity,
-            "silence_timeout": silence_timeout,
+            "vad_sensitivity": self.current_vad,
+            "silence_timeout": self.current_silence,
         }
 
     def _populate_model_options(self):
@@ -1683,21 +1717,23 @@ class SettingsDialog(Gtk.Dialog):
         self._auto_apply_settings()
 
     def _on_voice_commands_toggled(self, widget, state):
-        """Handle toggle of the voice commands switch."""
+        """Handle toggle in voice commands switch."""
         if self._initializing or self._applying_settings:
             return False
-
         enabled = bool(state)
         logger.info(f"Voice commands toggled: {enabled}")
+        self._auto_apply_settings()
 
-        self.config_manager.set("speech_recognition", "voice_commands_enabled", enabled)
-        self.config_manager.save_settings()
-        try:
-            self.speech_engine.reconfigure(voice_commands_enabled=enabled, force_download=False)
-        except Exception as e:
-            logger.warning(f"Failed to apply voice commands toggle immediately: {e}")
-        logger.info(f"Voice commands {'enabled' if enabled else 'disabled'}")
-        return False
+    def _on_streaming_toggled(self, widget, state):
+        if self._initializing or self._applying_settings:
+            return False
+        self.streaming_duration_spin.set_sensitive(state)
+        self._auto_apply_settings()
+
+    def _on_streaming_duration_changed(self, widget):
+        if self._initializing or self._applying_settings:
+            return
+        self._auto_apply_settings()
 
     def _populate_language_options(self):
         """Populate language dropdown with supported languages."""
@@ -1950,12 +1986,17 @@ class SettingsDialog(Gtk.Dialog):
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
 
+        experimental_streaming = self.streaming_switch.get_active()
+        streaming_chunk_duration_ms = int(self.streaming_duration_spin.get_value() * 1000)
+
         return {
             "engine": engine,
             "model_size": model_size,
             "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
+            "experimental_streaming": experimental_streaming,
+            "streaming_chunk_duration_ms": streaming_chunk_duration_ms,
         }
 
     def _on_test_clicked(self, widget):

@@ -221,6 +221,9 @@ class TestMainModule(unittest.TestCase):
                 silence_timeout=2.0,
                 audio_device_index=None,
                 voice_commands_enabled=None,
+                experimental_streaming=False,
+                streaming_chunk_duration_ms=1000,
+                streaming_overlap_ms=200,
             )
             mock_text.assert_called_once_with(wayland_mode=True)
             mock_action_handler.assert_called_once_with(mock_text_instance)

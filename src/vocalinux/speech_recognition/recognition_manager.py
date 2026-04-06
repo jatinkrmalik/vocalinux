@@ -551,10 +551,11 @@ class SpeechRecognitionManager:
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
-        self.real_time_streaming = kwargs.get("real_time_streaming", True)
-        self.streaming_chunk_duration = kwargs.get("streaming_chunk_duration", 3.0)
-
-        # Audio device selection (None means use system default)
+        self.experimental_streaming = kwargs.get("experimental_streaming", False)
+        self.streaming_chunk_duration_ms = kwargs.get("streaming_chunk_duration_ms", 1000)
+        self.streaming_overlap_ms = kwargs.get("streaming_overlap_ms", 200)
+        self._streaming_callbacks: list[Callable[[str, bool], None]] = []
+        self._transcript_buffer: Optional["TranscriptBuffer"] = None  # noqa: F821
         self.audio_device_index = kwargs.get("audio_device_index", None)
 
         # Audio diagnostics tracking
@@ -1463,25 +1464,20 @@ class SpeechRecognitionManager:
         self.action_callbacks.append(callback)
 
     def register_audio_level_callback(self, callback: Callable[[float], None]):
-        """
-        Register a callback function that will be called with audio level updates.
-
-        Args:
-            callback: A function that takes a float argument (0-100 representing audio level %)
-        """
         self._audio_level_callbacks.append(callback)
 
     def unregister_audio_level_callback(self, callback: Callable[[float], None]):
-        """
-        Unregister an audio level callback function.
-
-        Args:
-            callback: The callback function to remove.
-        """
         try:
             self._audio_level_callbacks.remove(callback)
         except ValueError:
             pass
+
+    def add_streaming_callback(self, callback: Callable[[str, bool], None]):
+        self._streaming_callbacks.append(callback)
+
+    def remove_streaming_callback(self, callback: Callable[[str, bool], None]):
+        if callback in self._streaming_callbacks:
+            self._streaming_callbacks.remove(callback)
 
     def set_audio_device(self, device_index: Optional[int]):
         """
@@ -1569,9 +1565,17 @@ class SpeechRecognitionManager:
         # Stop recording FIRST to prevent capturing the stop sound
         self.should_record = False
 
-        # Wait for audio thread to finish recording and enqueue any pending audio
-        # This is critical to prevent race condition where recognition thread exits
-        # before the final audio segment is enqueued
+        if self.experimental_streaming and self._transcript_buffer is not None:
+            remaining = self._transcript_buffer.flush_all()
+            if remaining:
+                for cb in self._streaming_callbacks:
+                    try:
+                        cb(remaining, is_final=True)
+                    except Exception as e:
+                        logger.debug(f"Streaming final callback error: {e}")
+                self._emit_text(remaining)
+            self._transcript_buffer = None
+
         if self.audio_thread and self.audio_thread.is_alive():
             self.audio_thread.join(timeout=2.0)
 
@@ -1705,38 +1709,27 @@ class SpeechRecognitionManager:
             # Record audio while should_record is True
             silence_counter = 0
             speech_detected_in_session = False
-            log_level_interval = 0  # Counter for periodic level logging
+            log_level_interval = 0
             max_level_seen = 0.0
-
-            # Real-time streaming variables
-            streaming_timer = 0.0
-            last_stream_time = time.time()
+            streaming_elapsed = 0.0
 
             while self.should_record:
                 try:
-                    # Check buffer size and enforce limits (with lock for thread safety)
                     with self._buffer_lock:
                         if len(self.audio_buffer) >= self._max_buffer_size:
                             logger.warning(
                                 f"Audio buffer limit reached ({len(self.audio_buffer)} chunks). Clearing oldest data."
                             )
-                            # Remove oldest 25% of data to prevent memory issues
                             remove_count = self._max_buffer_size // 4
                             self.audio_buffer = self.audio_buffer[remove_count:]
                             logger.info(f"Buffer trimmed by {remove_count} chunks")
 
                         data = stream.read(CHUNK, exception_on_overflow=False)
-
-                        # Convert stereo to mono if necessary
-                        # Speech recognition engines expect mono (1 channel) audio
                         if CHANNELS == 2:
                             audio_array = np.frombuffer(data, dtype=np.int16)
-                            # Reshape to (n_samples, 2) and average channels
                             stereo_samples = audio_array.reshape(-1, 2)
                             mono_samples = stereo_samples.mean(axis=1).astype(np.int16)
                             data = mono_samples.tobytes()
-
-                        # Resample to 16kHz if capturing at non-16kHz for Vosk/Whisper compatibility
                         if self._capture_sample_rate != 16000:
                             audio_array = np.frombuffer(data, dtype=np.int16)
                             resample_ratio = 16000 / self._capture_sample_rate
@@ -1747,61 +1740,58 @@ class SpeechRecognitionManager:
                                 audio_array,
                             ).astype(np.int16)
                             data = resampled.tobytes()
-
                         self.audio_buffer.append(data)
-
-                    # Simple Voice Activity Detection (VAD)
                     audio_data = np.frombuffer(data, dtype=np.int16)
                     volume = np.abs(audio_data).mean()
-
-                    # Track max level and notify callbacks
-                    # Normalize to 0-100 scale (16-bit audio max is ~32768)
                     normalized_level = min(100.0, (volume / 327.68))
                     self._last_audio_level = normalized_level
                     max_level_seen = max(max_level_seen, normalized_level)
-
-                    # Notify audio level callbacks
                     for callback in self._audio_level_callbacks:
                         try:
                             callback(normalized_level)
                         except Exception as e:
                             logger.debug(f"Audio level callback error: {e}")
-
-                    # Log audio levels periodically for debugging
                     log_level_interval += 1
-                    if log_level_interval >= 50:  # Every ~3 seconds at 16kHz/1024 chunks
+                    if log_level_interval >= 50:
                         logger.debug(
                             f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%, buffer_size={len(self.audio_buffer)}"
                         )
                         log_level_interval = 0
-
-                    # Threshold based on sensitivity (1-5)
-                    # Ensure vad_sensitivity is treated as integer for calculation
                     try:
                         vad_sens = int(self.vad_sensitivity)
-                        threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
+                        threshold = 500 / max(1, min(5, vad_sens))
                     except ValueError:
                         logger.warning(
                             f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
                         )
                         threshold = 500 / 3
 
-                    if volume < threshold:  # Silence
-                        silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if silence_counter > self.silence_timeout and not self.real_time_streaming:
-                            # Only use silence-based chunking if real-time streaming is disabled
-                            if len(self.audio_buffer) > 0:
-                                if self._recognition_mode == "push_to_talk":
-                                    logger.debug(
-                                        "Silence detected in push-to-talk mode, "
-                                        "deferring transcription until key release"
-                                    )
-                                else:
-                                    logger.debug("Silence detected, queueing audio segment")
-                                    self._enqueue_audio_segment(self.audio_buffer)
-                                    self.audio_buffer = []
-                            silence_counter = 0
-                    else:  # Speech
+                    if volume < threshold:
+                        silence_counter += CHUNK / RATE
+                        if self.experimental_streaming:
+                            streaming_elapsed += CHUNK / RATE
+                            chunk_s = self.streaming_chunk_duration_ms / 1000.0
+                            if streaming_elapsed >= chunk_s and len(self.audio_buffer) > 0:
+                                self._enqueue_streaming_segment()
+                                streaming_elapsed = 0.0
+                            if silence_counter > self.silence_timeout:
+                                if len(self.audio_buffer) > 0:
+                                    self._enqueue_streaming_segment(is_final=True)
+                                silence_counter = 0
+                        else:
+                            if silence_counter > self.silence_timeout:
+                                if len(self.audio_buffer) > 0:
+                                    if self._recognition_mode == "push_to_talk":
+                                        logger.debug(
+                                            "Silence detected in push-to-talk mode, "
+                                            "deferring transcription until key release"
+                                        )
+                                    else:
+                                        logger.debug("Silence detected, queueing audio segment")
+                                        self._enqueue_audio_segment(self.audio_buffer)
+                                        self.audio_buffer = []
+                                silence_counter = 0
+                    else:
                         if not speech_detected_in_session:
                             logger.debug(
                                 f"Speech detected (level={normalized_level:.1f}%, "
@@ -1809,20 +1799,12 @@ class SpeechRecognitionManager:
                             )
                             speech_detected_in_session = True
                         silence_counter = 0
-
-                    # Real-time streaming logic: process chunks at regular intervals
-                    if self.real_time_streaming and speech_detected_in_session:
-                        current_time = time.time()
-                        streaming_timer += CHUNK / RATE
-
-                        if streaming_timer >= self.streaming_chunk_duration:
-                            if len(self.audio_buffer) > 0:
-                                logger.debug(
-                                    f"Streaming interval reached ({self.streaming_chunk_duration}s), queueing audio segment"
-                                )
-                                self._enqueue_audio_segment(self.audio_buffer)
-                                self.audio_buffer = []
-                            streaming_timer = 0.0
+                        if self.experimental_streaming:
+                            streaming_elapsed += CHUNK / RATE
+                            chunk_s = self.streaming_chunk_duration_ms / 1000.0
+                            if streaming_elapsed >= chunk_s and len(self.audio_buffer) > 0:
+                                self._enqueue_streaming_segment()
+                                streaming_elapsed = 0.0
                 except (IOError, OSError) as e:
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
@@ -1952,6 +1934,168 @@ class SpeechRecognitionManager:
                 for callback in self.action_callbacks:
                     callback(action)
 
+    def _emit_text(self, text: str):
+        if not text or not text.strip():
+            return
+        if self._voice_commands_enabled:
+            processed_text, actions = self.command_processor.process_text(text)
+        else:
+            processed_text = text.strip()
+            actions = []
+        if processed_text:
+            for callback in self.text_callbacks:
+                try:
+                    callback(processed_text)
+                except Exception as e:
+                    logger.debug(f"Text callback error: {e}")
+        for action in actions:
+            for callback in self.action_callbacks:
+                try:
+                    callback(action)
+                except Exception as e:
+                    logger.debug(f"Action callback error: {e}")
+
+    def _enqueue_streaming_segment(self, is_final: bool = False):
+        with self._buffer_lock:
+            if not self.audio_buffer:
+                return
+            chunk_duration_s = 1024 / 16000
+            overlap_count = max(1, int(self.streaming_overlap_ms / 1000.0 / chunk_duration_s))
+            overlap_data = list(self.audio_buffer[-overlap_count:])
+            segment = {
+                "audio": self.audio_buffer.copy(),
+                "overlap": overlap_data,
+                "is_streaming": True,
+                "is_final": is_final,
+            }
+            try:
+                self._segment_queue.put_nowait(segment)
+                logger.debug(
+                    f"Enqueued streaming segment: {len(self.audio_buffer)} chunks, "
+                    f"overlap={len(overlap_data)}, final={is_final}"
+                )
+            except queue.Full:
+                logger.warning("Streaming queue full, dropping segment")
+            self.audio_buffer = overlap_data
+
+    def _process_streaming_segment(self, segment_data: dict):
+        audio_chunks = segment_data["audio"]
+        is_final = segment_data.get("is_final", False)
+        if not audio_chunks:
+            return
+        if self.engine == "vosk":
+            self._process_streaming_vosk(audio_chunks, is_final)
+        elif self.engine in ("whisper", "whisper_cpp"):
+            self._process_streaming_whisper(audio_chunks, is_final)
+        else:
+            logger.error(f"Unknown engine for streaming: {self.engine}")
+
+    def _process_streaming_vosk(self, audio_chunks: list, is_final: bool):
+        with self._model_lock:
+            if self.recognizer is None:
+                logger.warning("Recognizer is None during streaming, skipping")
+                return
+            for data in audio_chunks:
+                result_code = self.recognizer.AcceptWaveform(data)
+                if result_code == 0:
+                    try:
+                        partial = json.loads(self.recognizer.PartialResult())
+                        partial_text = partial.get("partial", "")
+                        if partial_text.strip():
+                            for cb in self._streaming_callbacks:
+                                try:
+                                    cb(partial_text, is_final=False)
+                                except Exception as e:
+                                    logger.debug(f"Streaming partial callback error: {e}")
+                    except (json.JSONDecodeError, Exception) as e:
+                        logger.debug(f"Error reading Vosk partial result: {e}")
+                elif result_code > 0:
+                    try:
+                        result = json.loads(self.recognizer.Result())
+                        text = result.get("text", "")
+                        if text.strip():
+                            for cb in self._streaming_callbacks:
+                                try:
+                                    cb(text, is_final=True)
+                                except Exception as e:
+                                    logger.debug(f"Streaming final callback error: {e}")
+                            self._emit_text(text)
+                    except (json.JSONDecodeError, Exception) as e:
+                        logger.debug(f"Error reading Vosk result: {e}")
+        if is_final:
+            with self._model_lock:
+                if self.recognizer is not None:
+                    try:
+                        result = json.loads(self.recognizer.FinalResult())
+                        text = result.get("text", "")
+                        if text.strip():
+                            for cb in self._streaming_callbacks:
+                                try:
+                                    cb(text, is_final=True)
+                                except Exception as e:
+                                    logger.debug(f"Streaming final callback error: {e}")
+                            self._emit_text(text)
+                    except (json.JSONDecodeError, Exception) as e:
+                        logger.debug(f"Error reading Vosk final result: {e}")
+
+    def _process_streaming_whisper(self, audio_chunks: list, is_final: bool):
+        import numpy as np
+
+        from .transcript_buffer import TranscriptBuffer
+
+        if self._transcript_buffer is None:
+            self._transcript_buffer = TranscriptBuffer()
+        raw_audio = b"".join(audio_chunks)
+        audio_array = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
+        prompt = self._transcript_buffer.committed_text
+        if len(prompt) > 200:
+            prompt = prompt[-200:]
+        text = ""
+        if self.engine == "whisper":
+            try:
+                result = self.model.transcribe(
+                    audio_array,
+                    initial_prompt=prompt if prompt else None,
+                )
+                text = result.get("text", "").strip()
+            except Exception as e:
+                logger.error(f"Whisper streaming transcription error: {e}")
+                return
+        elif self.engine == "whisper_cpp":
+            try:
+                text = self._transcribe_with_whispercpp(audio_chunks) or ""
+            except Exception as e:
+                logger.error(f"whisper.cpp streaming transcription error: {e}")
+                return
+        if not text:
+            return
+        self._transcript_buffer.insert(text)
+        committed = self._transcript_buffer.flush()
+        if committed:
+            for cb in self._streaming_callbacks:
+                try:
+                    cb(committed, is_final=True)
+                except Exception as e:
+                    logger.debug(f"Streaming commit callback error: {e}")
+            self._emit_text(committed)
+        partial = self._transcript_buffer.pending_text
+        if partial:
+            for cb in self._streaming_callbacks:
+                try:
+                    cb(partial, is_final=False)
+                except Exception as e:
+                    logger.debug(f"Streaming partial callback error: {e}")
+        if is_final:
+            remaining = self._transcript_buffer.flush_all()
+            if remaining:
+                for cb in self._streaming_callbacks:
+                    try:
+                        cb(remaining, is_final=True)
+                    except Exception as e:
+                        logger.debug(f"Streaming final callback error: {e}")
+                self._emit_text(remaining)
+            self._transcript_buffer = None
+
     def _perform_recognition(self):
         """Perform speech recognition in real-time."""
         logger.info("DEBUG: _perform_recognition thread started")
@@ -1962,12 +2106,10 @@ class SpeechRecognitionManager:
             try:
                 segment = self._segment_queue.get(timeout=0.1)
             except queue.Empty:
-                # Only exit if we're not recording AND queue is empty
                 if not self.should_record and self._segment_queue.empty():
                     logger.info(
                         "DEBUG: Recognition loop - not recording and queue empty, checking for final items..."
                     )
-                    # Give a brief moment for any final items to be enqueued
                     try:
                         segment = self._segment_queue.get(timeout=0.5)
                     except queue.Empty:
@@ -1981,41 +2123,26 @@ class SpeechRecognitionManager:
                 logger.info(
                     "DEBUG: Recognition loop - got None signal, draining remaining items..."
                 )
-                # Drain any remaining items before exiting
                 while not self._segment_queue.empty():
                     try:
                         remaining = self._segment_queue.get_nowait()
                         if remaining is not None:
-                            logger.info(
-                                f"DEBUG: Recognition loop - processing remaining segment with {len(remaining)} chunks"
-                            )
-                            self._update_state(RecognitionState.PROCESSING)
-                            self._process_audio_buffer(remaining)
+                            if isinstance(remaining, dict) and remaining.get("is_streaming"):
+                                self._process_streaming_segment(remaining)
+                            else:
+                                self._update_state(RecognitionState.PROCESSING)
+                                self._process_audio_buffer(remaining)
                     except queue.Empty:
                         break
                 logger.info("DEBUG: Recognition loop - exiting after None signal")
                 break
 
-            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
-            self._update_state(RecognitionState.PROCESSING)
-            self._process_audio_buffer(segment)
-            if self.should_record:
-                self._update_state(RecognitionState.LISTENING)
-        logger.info("DEBUG: _perform_recognition thread exiting")
-        """Perform speech recognition in real-time."""
-        logger.info("DEBUG: _perform_recognition thread started")
-        while self.should_record or not self._segment_queue.empty():
-            logger.debug(
-                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
-            )
-            try:
-                segment = self._segment_queue.get(timeout=0.1)
-            except queue.Empty:
-                logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
-                continue
-
-            if segment is None:
-                logger.info("DEBUG: Recognition loop - got None signal, continuing")
+            # Route based on streaming vs non-streaming
+            if isinstance(segment, dict) and segment.get("is_streaming"):
+                self._update_state(RecognitionState.PROCESSING)
+                self._process_streaming_segment(segment)
+                if self.should_record:
+                    self._update_state(RecognitionState.LISTENING)
                 continue
 
             logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
@@ -2063,28 +2190,18 @@ class SpeechRecognitionManager:
         language: Optional[str] = None,
         vad_sensitivity: Optional[int] = None,
         silence_timeout: Optional[float] = None,
-        real_time_streaming: Optional[bool] = None,
-        streaming_chunk_duration: Optional[float] = None,
+        experimental_streaming: Optional[bool] = None,
+        streaming_chunk_duration_ms: Optional[int] = None,
+        streaming_overlap_ms: Optional[int] = None,
         audio_device_index: Optional[int] = None,
         force_download: bool = True,
-        **kwargs,  # Allow for future expansion
+        **kwargs,
     ):
-        """
-        Reconfigure the speech recognition engine on the fly.
-
-        Args:
-            engine: The new speech recognition engine ("vosk" or "whisper").
-            model_size: The new model size.
-            language: The new language code (e.g., "en-us", "hi", "auto").
-            vad_sensitivity: New VAD sensitivity (for VOSK).
-            silence_timeout: New silence timeout (for VOSK).
-            real_time_streaming: Enable real-time streaming transcription.
-            streaming_chunk_duration: Duration in seconds for streaming chunks.
-            audio_device_index: Audio input device index (None for default, -1 to clear).
-            force_download: If True, download missing models (default: True for UI-triggered reconfigures).
-        """
         logger.info(
-            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, language={language}, vad={vad_sensitivity}, silence={silence_timeout}, streaming={real_time_streaming}, chunk_duration={streaming_chunk_duration}, audio_device={audio_device_index}"
+            f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, "
+            f"language={language}, vad={vad_sensitivity}, silence={silence_timeout}, "
+            f"streaming={experimental_streaming}, chunk_ms={streaming_chunk_duration_ms}, "
+            f"audio_device={audio_device_index}"
         )
 
         restart_needed = False
@@ -2108,14 +2225,13 @@ class SpeechRecognitionManager:
             self.vad_sensitivity = max(1, min(5, int(vad_sensitivity)))
         if silence_timeout is not None:
             self.silence_timeout = max(0.5, min(5.0, float(silence_timeout)))
+        if experimental_streaming is not None:
+            self.experimental_streaming = bool(experimental_streaming)
+        if streaming_chunk_duration_ms is not None:
+            self.streaming_chunk_duration_ms = max(200, min(5000, int(streaming_chunk_duration_ms)))
+        if streaming_overlap_ms is not None:
+            self.streaming_overlap_ms = max(0, min(1000, int(streaming_overlap_ms)))
 
-        # Update streaming params if provided
-        if real_time_streaming is not None:
-            self.real_time_streaming = bool(real_time_streaming)
-        if streaming_chunk_duration is not None:
-            self.streaming_chunk_duration = max(1.0, min(10.0, float(streaming_chunk_duration)))
-
-        # Handle audio device index (-1 means use default/clear selection)
         if audio_device_index is not None:
             if audio_device_index == -1:
                 self.audio_device_index = None

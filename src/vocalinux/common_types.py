@@ -37,6 +37,25 @@ class SpeechRecognitionManagerProtocol(Protocol):
         """Register a callback for recognized text."""
         ...
 
+    def add_streaming_callback(self, callback: Callable[[str, bool], None]) -> None:
+        """Register a callback for streaming transcript updates."""
+        ...
+
+    def remove_streaming_callback(self, callback: Callable[[str, bool], None]) -> None:
+        """Remove a streaming transcript callback."""
+        ...
+
+
+class StreamingCallbackProtocol(Protocol):
+    """Protocol for streaming transcript callbacks.
+
+    Called with (text, is_final) where is_final indicates whether the text
+    is committed (True, append to document) or partial (False, replace
+    previous partial).
+    """
+
+    def __call__(self, text: str, is_final: bool) -> None: ...
+
 
 class TextInjectorProtocol(Protocol):
     """Protocol defining the interface for TextInjector."""
