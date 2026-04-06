@@ -96,6 +96,47 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
 
         self.assertIn("Failed to activate Vocalinux IBus engine", str(context.exception))
 
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.time")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    def test_warns_and_proceeds_when_socket_not_ready(
+        self,
+        mock_switch,
+        mock_get_engine,
+        mock_is_active,
+        mock_restore_xkb,
+        mock_get_xkb,
+        mock_start_engine,
+        mock_time,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Covers the for/else warning branch: all 15 socket-readiness retries exhaust,
+        warning is logged, and activation proceeds anyway (graceful degradation)."""
+        mock_start_engine.return_value = True
+        mock_socket_path.exists.return_value = False
+        mock_is_active.return_value = False
+        mock_get_engine.return_value = "xkb:us::eng"
+        mock_switch.return_value = True
+        mock_get_xkb.return_value = ("us", "", "")
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        with self.assertLogs("vocalinux.text_injection.ibus_engine", level="WARNING") as log:
+            injector = IBusTextInjector(auto_activate=True)
+
+        self.assertTrue(any("socket not ready" in msg for msg in log.output))
+        self.assertEqual(mock_socket_path.exists.call_count, 15)
+        self.assertEqual(mock_time.sleep.call_count, 15)
+        self.assertIsNotNone(injector)
+
 
 class TestIBusEngineHelpers(unittest.TestCase):
     """Tests for IBus engine helper functions."""
