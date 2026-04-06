@@ -25,6 +25,7 @@ class TranscriptBuffer:
 
     def __init__(self, confidence_threshold: int = 2):
         self._committed_words: list[str] = []
+        self._emitted_count = 0
         self._buffer_words: list[str] = []
         self._new_words: list[str] = []
         self._confidence_threshold = confidence_threshold
@@ -68,13 +69,17 @@ class TranscriptBuffer:
         self._new_words = new_words
 
     def flush(self) -> Optional[str]:
-        if self._committed_words:
-            return " ".join(self._committed_words)
+        if self._emitted_count < len(self._committed_words):
+            delta = self._committed_words[self._emitted_count :]
+            self._emitted_count = len(self._committed_words)
+            return " ".join(delta)
         return None
 
     def flush_all(self) -> Optional[str]:
-        all_words = self._committed_words + self._buffer_words
+        remaining_committed = self._committed_words[self._emitted_count :]
+        all_words = remaining_committed + self._buffer_words
         self._committed_words = []
+        self._emitted_count = 0
         self._buffer_words = []
         self._new_words = []
         self._insert_count = 0
@@ -84,6 +89,7 @@ class TranscriptBuffer:
 
     def reset(self) -> None:
         self._committed_words = []
+        self._emitted_count = 0
         self._buffer_words = []
         self._new_words = []
         self._insert_count = 0

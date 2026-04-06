@@ -4,6 +4,10 @@ This guide explains how to update Vocalinux to the latest version.
 
 ## What's New in v0.10.1-beta
 
+> **Note:** Real-time streaming transcription support is currently under active development and is
+> available as an **experimental** toggle in Settings. It is disabled by default while architecture
+> and model-specific behavior continue to be refined.
+
 ### 🚀 Highlights
 
 | Feature | Description |

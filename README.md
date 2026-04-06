@@ -75,6 +75,7 @@ No internet required. No data leaves your machine. Just speak and type.
 
 - 🎤 **Toggle or Push-to-Talk** activation modes
 - ⚡ **Real-time transcription** with minimal latency
+- 🧪 **Experimental real-time streaming mode** (work in progress; toggle in Settings)
 - 🌎 **Universal compatibility** across all Linux applications
 - 🔒 **100% Offline operation** for privacy and reliability
 - 🤖 **whisper.cpp by default** - High-performance C++ speech recognition
@@ -222,6 +223,22 @@ Or launch it from your application menu!
 2. Speak clearly into your microphone
 3. **Toggle mode**: Double-tap again (or pause speaking) to stop, or **Push-to-Talk mode**: release the key to stop
 
+### Experimental Real-Time Streaming (Work in Progress)
+
+Vocalinux now includes an **experimental** streaming path that can show text while you are still speaking.
+
+- Status: **experimental / work in progress**
+- Default: **disabled**
+- Location: **Settings → Recognition → Real-time Streaming**
+
+This mode currently uses model-specific streaming strategies:
+
+- **VOSK**: native partial-result streaming
+- **Whisper / whisper.cpp**: chunked sliding-window streaming with deduplication
+
+Because this requires deeper architectural changes in the recognition pipeline, behavior can vary by model,
+language, hardware, and noise conditions. If you need the most stable behavior today, keep streaming off.
+
 ### Voice Commands
 
 | Command | Action |
@@ -278,7 +295,10 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
     "engine": "whisper_cpp",
     "model_size": "tiny",
     "vad_sensitivity": 3,
-    "silence_timeout": 2.0
+    "silence_timeout": 2.0,
+    "experimental_streaming": false,
+    "streaming_chunk_duration_ms": 1000,
+    "streaming_overlap_ms": 200
   }
 }
 ```

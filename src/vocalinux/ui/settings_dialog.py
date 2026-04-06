@@ -1473,8 +1473,8 @@ class SettingsDialog(Gtk.Dialog):
         self.current_engine = settings["engine"]
         self.language = settings["language"]
         self.current_model_size = settings["model_size"]
-        self.current_vad = settings.get("vad_sensitivity", 3)
-        self.current_silence = settings.get("silence_timeout", 2.0)
+        self.current_vad = settings["vad_sensitivity"]
+        self.current_silence = settings["silence_timeout"]
 
         logger.info(
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"

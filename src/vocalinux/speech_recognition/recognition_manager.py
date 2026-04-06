@@ -18,7 +18,7 @@ from typing import Callable, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path
 from .command_processor import CommandProcessor
 
 
@@ -556,6 +556,9 @@ class SpeechRecognitionManager:
         self.streaming_overlap_ms = kwargs.get("streaming_overlap_ms", 200)
         self._streaming_callbacks: list[Callable[[str, bool], None]] = []
         self._transcript_buffer: Optional["TranscriptBuffer"] = None  # noqa: F821
+        self._streaming_buffer_lock = threading.Lock()
+        self._last_streaming_partial = ""
+        self._last_streaming_final = ""
         self.audio_device_index = kwargs.get("audio_device_index", None)
 
         # Audio diagnostics tracking
@@ -857,7 +860,7 @@ class SpeechRecognitionManager:
 
         # Detect and log compute backend
         backend, backend_info = detect_compute_backend()
-        logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
+        logger.info("whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
         logger.info(
             f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
         )
@@ -1544,6 +1547,10 @@ class SpeechRecognitionManager:
         self._recognition_mode = mode
         self.audio_buffer = []
         self._segment_queue = queue.Queue(maxsize=32)
+        self._last_streaming_partial = ""
+        self._last_streaming_final = ""
+        with self._streaming_buffer_lock:
+            self._transcript_buffer = None
 
         # Start the audio recording thread
         self.audio_thread = threading.Thread(target=self._record_audio)
@@ -1564,17 +1571,6 @@ class SpeechRecognitionManager:
 
         # Stop recording FIRST to prevent capturing the stop sound
         self.should_record = False
-
-        if self.experimental_streaming and self._transcript_buffer is not None:
-            remaining = self._transcript_buffer.flush_all()
-            if remaining:
-                for cb in self._streaming_callbacks:
-                    try:
-                        cb(remaining, is_final=True)
-                    except Exception as e:
-                        logger.debug(f"Streaming final callback error: {e}")
-                self._emit_text(remaining)
-            self._transcript_buffer = None
 
         if self.audio_thread and self.audio_thread.is_alive():
             self.audio_thread.join(timeout=2.0)
@@ -1959,9 +1955,11 @@ class SpeechRecognitionManager:
         with self._buffer_lock:
             if not self.audio_buffer:
                 return
-            chunk_duration_s = 1024 / 16000
-            overlap_count = max(1, int(self.streaming_overlap_ms / 1000.0 / chunk_duration_s))
-            overlap_data = list(self.audio_buffer[-overlap_count:])
+            overlap_data = []
+            if self.engine in ("whisper", "whisper_cpp") and self.streaming_overlap_ms > 0:
+                chunk_duration_s = 1024 / 16000
+                overlap_count = int(self.streaming_overlap_ms / 1000.0 / chunk_duration_s)
+                overlap_data = list(self.audio_buffer[-overlap_count:]) if overlap_count > 0 else []
             segment = {
                 "audio": self.audio_buffer.copy(),
                 "overlap": overlap_data,
@@ -1976,6 +1974,15 @@ class SpeechRecognitionManager:
                 )
             except queue.Full:
                 logger.warning("Streaming queue full, dropping segment")
+                if is_final:
+                    try:
+                        dropped = self._segment_queue.get_nowait()
+                        logger.debug(
+                            f"Dropped queued segment to prioritize final flush: {type(dropped)}"
+                        )
+                        self._segment_queue.put_nowait(segment)
+                    except (queue.Empty, queue.Full):
+                        logger.warning("Could not prioritize final streaming segment")
             self.audio_buffer = overlap_data
 
     def _process_streaming_segment(self, segment_data: dict):
@@ -2001,7 +2008,9 @@ class SpeechRecognitionManager:
                     try:
                         partial = json.loads(self.recognizer.PartialResult())
                         partial_text = partial.get("partial", "")
-                        if partial_text.strip():
+                        partial_text = partial_text.strip()
+                        if partial_text and partial_text != self._last_streaming_partial:
+                            self._last_streaming_partial = partial_text
                             for cb in self._streaming_callbacks:
                                 try:
                                     cb(partial_text, is_final=False)
@@ -2012,8 +2021,10 @@ class SpeechRecognitionManager:
                 elif result_code > 0:
                     try:
                         result = json.loads(self.recognizer.Result())
-                        text = result.get("text", "")
-                        if text.strip():
+                        text = result.get("text", "").strip()
+                        if text and text != self._last_streaming_final:
+                            self._last_streaming_final = text
+                            self._last_streaming_partial = ""
                             for cb in self._streaming_callbacks:
                                 try:
                                     cb(text, is_final=True)
@@ -2027,8 +2038,10 @@ class SpeechRecognitionManager:
                 if self.recognizer is not None:
                     try:
                         result = json.loads(self.recognizer.FinalResult())
-                        text = result.get("text", "")
-                        if text.strip():
+                        text = result.get("text", "").strip()
+                        if text and text != self._last_streaming_final:
+                            self._last_streaming_final = text
+                            self._last_streaming_partial = ""
                             for cb in self._streaming_callbacks:
                                 try:
                                     cb(text, is_final=True)
@@ -2043,21 +2056,45 @@ class SpeechRecognitionManager:
 
         from .transcript_buffer import TranscriptBuffer
 
-        if self._transcript_buffer is None:
-            self._transcript_buffer = TranscriptBuffer()
+        with self._streaming_buffer_lock:
+            if self._transcript_buffer is None:
+                self._transcript_buffer = TranscriptBuffer()
         raw_audio = b"".join(audio_chunks)
         audio_array = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
-        prompt = self._transcript_buffer.committed_text
+        with self._streaming_buffer_lock:
+            prompt = self._transcript_buffer.committed_text if self._transcript_buffer else ""
         if len(prompt) > 200:
             prompt = prompt[-200:]
         text = ""
         if self.engine == "whisper":
             try:
-                result = self.model.transcribe(
-                    audio_array,
-                    initial_prompt=prompt if prompt else None,
-                )
-                text = result.get("text", "").strip()
+                import warnings
+
+                with self._model_lock:
+                    if self.model is None:
+                        logger.warning("Model is None during streaming transcription")
+                        return
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        import torch
+
+                    use_fp16 = self.model.device != torch.device("cpu")
+                    lang = self.language
+                    if self.language == "en-us":
+                        lang = "en"
+                    elif self.language == "auto":
+                        lang = None
+                    result = self.model.transcribe(
+                        audio_array,
+                        language=lang,
+                        task="transcribe",
+                        verbose=False,
+                        temperature=0.0,
+                        no_speech_threshold=0.6,
+                        fp16=use_fp16,
+                        initial_prompt=prompt if prompt else None,
+                    )
+                    text = result.get("text", "").strip()
             except Exception as e:
                 logger.error(f"Whisper streaming transcription error: {e}")
                 return
@@ -2069,8 +2106,11 @@ class SpeechRecognitionManager:
                 return
         if not text:
             return
-        self._transcript_buffer.insert(text)
-        committed = self._transcript_buffer.flush()
+        with self._streaming_buffer_lock:
+            if self._transcript_buffer is None:
+                return
+            self._transcript_buffer.insert(text)
+            committed = self._transcript_buffer.flush()
         if committed:
             for cb in self._streaming_callbacks:
                 try:
@@ -2078,7 +2118,8 @@ class SpeechRecognitionManager:
                 except Exception as e:
                     logger.debug(f"Streaming commit callback error: {e}")
             self._emit_text(committed)
-        partial = self._transcript_buffer.pending_text
+        with self._streaming_buffer_lock:
+            partial = self._transcript_buffer.pending_text if self._transcript_buffer else ""
         if partial:
             for cb in self._streaming_callbacks:
                 try:
@@ -2086,7 +2127,8 @@ class SpeechRecognitionManager:
                 except Exception as e:
                     logger.debug(f"Streaming partial callback error: {e}")
         if is_final:
-            remaining = self._transcript_buffer.flush_all()
+            with self._streaming_buffer_lock:
+                remaining = self._transcript_buffer.flush_all() if self._transcript_buffer else None
             if remaining:
                 for cb in self._streaming_callbacks:
                     try:
@@ -2094,7 +2136,8 @@ class SpeechRecognitionManager:
                     except Exception as e:
                         logger.debug(f"Streaming final callback error: {e}")
                 self._emit_text(remaining)
-            self._transcript_buffer = None
+            with self._streaming_buffer_lock:
+                self._transcript_buffer = None
 
     def _perform_recognition(self):
         """Perform speech recognition in real-time."""
@@ -2177,11 +2220,7 @@ class SpeechRecognitionManager:
         try:
             self._segment_queue.put_nowait(None)
         except queue.Full:
-            try:
-                self._segment_queue.get_nowait()
-                self._segment_queue.put_nowait(None)
-            except queue.Empty:
-                logger.debug("Recognition queue emptied before stop signal")
+            logger.warning("Recognition queue full, could not enqueue stop sentinel immediately")
 
     def reconfigure(
         self,
