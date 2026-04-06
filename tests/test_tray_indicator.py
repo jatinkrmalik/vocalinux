@@ -510,3 +510,40 @@ class TestTrayIndicator(unittest.TestCase):
                 result = self.tray_indicator._init_indicator()
                 self.assertEqual(result, False)
                 mock_error_dialog.assert_called_once_with("boom")
+
+    def test_init_indicator_creation_failure_without_prior_init_state(self):
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        tray = TrayIndicator.__new__(TrayIndicator)
+        tray.icon_paths = {}
+        tray._show_appindicator_error_dialog = MagicMock(return_value=False)
+
+        with patch("vocalinux.ui.tray_indicator.os.path.exists", return_value=False):
+            with patch(
+                "vocalinux.ui.tray_indicator.AppIndicator3.Indicator.new_with_path",
+                side_effect=Exception("fresh-boom"),
+            ):
+                with patch(
+                    "vocalinux.ui.tray_indicator.GLib.idle_add",
+                    side_effect=lambda func, *args: func(*args),
+                ):
+                    result = TrayIndicator._init_indicator(tray)
+
+        self.assertEqual(result, False)
+        tray._show_appindicator_error_dialog.assert_called_once_with("fresh-boom")
+        self.assertFalse(hasattr(tray, "indicator"))
+
+    def test_update_ui_returns_false_when_indicator_missing(self):
+        from vocalinux.common_types import RecognitionState
+
+        if hasattr(self.tray_indicator, "indicator"):
+            delattr(self.tray_indicator, "indicator")
+
+        result = self.tray_indicator._update_ui(RecognitionState.IDLE)
+        self.assertEqual(result, False)
+
+    def test_set_menu_item_enabled_noop_when_menu_missing(self):
+        if hasattr(self.tray_indicator, "menu"):
+            delattr(self.tray_indicator, "menu")
+
+        self.tray_indicator._set_menu_item_enabled("Start Voice Typing", True)
