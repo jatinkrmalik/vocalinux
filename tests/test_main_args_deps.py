@@ -183,6 +183,65 @@ class TestCheckDisplayAvailable(unittest.TestCase):
             assert result is False
 
 
+class TestCheckAppIndicatorSupport(unittest.TestCase):
+    def test_check_appindicator_support_true_when_watcher_present(self):
+        from vocalinux.main import check_appindicator_support
+
+        mock_proxy = MagicMock()
+        mock_names_variant = MagicMock()
+        mock_names_variant.unpack.return_value = (
+            ["org.freedesktop.DBus", "org.kde.StatusNotifierWatcher"],
+        )
+        mock_proxy.call_sync.return_value = mock_names_variant
+
+        mock_gio = MagicMock()
+        mock_gio.DBusProxy.new_for_bus_sync.return_value = mock_proxy
+
+        with patch.dict(
+            sys.modules,
+            {
+                "gi": MagicMock(),
+                "gi.repository": MagicMock(Gio=mock_gio),
+            },
+        ):
+            assert check_appindicator_support() is True
+
+    def test_check_appindicator_support_false_when_watcher_missing(self):
+        from vocalinux.main import check_appindicator_support
+
+        mock_proxy = MagicMock()
+        mock_names_variant = MagicMock()
+        mock_names_variant.unpack.return_value = (["org.freedesktop.DBus"],)
+        mock_proxy.call_sync.return_value = mock_names_variant
+
+        mock_gio = MagicMock()
+        mock_gio.DBusProxy.new_for_bus_sync.return_value = mock_proxy
+
+        with patch.dict(
+            sys.modules,
+            {
+                "gi": MagicMock(),
+                "gi.repository": MagicMock(Gio=mock_gio),
+            },
+        ):
+            assert check_appindicator_support() is False
+
+    def test_check_appindicator_support_true_on_exception(self):
+        from vocalinux.main import check_appindicator_support
+
+        mock_gio = MagicMock()
+        mock_gio.DBusProxy.new_for_bus_sync.side_effect = RuntimeError("dbus unavailable")
+
+        with patch.dict(
+            sys.modules,
+            {
+                "gi": MagicMock(),
+                "gi.repository": MagicMock(Gio=mock_gio),
+            },
+        ):
+            assert check_appindicator_support() is True
+
+
 class TestMainFunction(unittest.TestCase):
     """Tests for the main() function."""
 
@@ -339,6 +398,75 @@ class TestMainFunction(unittest.TestCase):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
                 assert exc_info.value.code == 1
+
+    @patch("vocalinux.main.logging")
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.main.check_display_available")
+    @patch("vocalinux.main.check_appindicator_support")
+    @patch("vocalinux.main.parse_arguments")
+    @patch("vocalinux.main.atexit")
+    def test_main_logs_warning_when_appindicator_support_missing(
+        self,
+        mock_atexit,
+        mock_parse_args,
+        mock_check_appindicator,
+        mock_check_display,
+        mock_check_deps,
+        mock_logging,
+    ):
+        from vocalinux.main import main
+
+        mock_check_deps.return_value = True
+        mock_check_display.return_value = True
+        mock_check_appindicator.return_value = False
+
+        mock_args = MagicMock()
+        mock_args.debug = False
+        mock_args.wayland = False
+        mock_args.start_minimized = False
+        mock_args.engine = None
+        mock_args.model = None
+        mock_args.language = None
+        mock_parse_args.return_value = mock_args
+
+        mock_single_instance = MagicMock()
+        mock_single_instance.acquire_lock.return_value = True
+
+        mock_config_manager = MagicMock()
+        mock_config_manager.return_value.get_settings.return_value = {
+            "speech_recognition": {},
+            "audio": {},
+            "general": {"first_run": False},
+        }
+
+        with patch.dict(
+            sys.modules,
+            {
+                "vocalinux.single_instance": mock_single_instance,
+                "vocalinux.common_types": MagicMock(),
+                "vocalinux.speech_recognition": MagicMock(
+                    recognition_manager=MagicMock(
+                        SpeechRecognitionManager=MagicMock(side_effect=Exception("stop"))
+                    )
+                ),
+                "vocalinux.text_injection.text_injector": MagicMock(),
+                "vocalinux.ui.tray_indicator": MagicMock(),
+                "vocalinux.ui.action_handler": MagicMock(),
+                "vocalinux.ui.config_manager": mock_config_manager,
+                "vocalinux.ui.logging_manager": MagicMock(),
+                "vocalinux.text_injection": MagicMock(start_ibus_daemon=MagicMock()),
+                "vocalinux.ui.first_run_dialog": MagicMock(),
+                "vocalinux.ui.autostart_manager": MagicMock(),
+            },
+        ):
+            with patch("vocalinux.main.logger") as mock_logger:
+                with pytest.raises(SystemExit):
+                    main()
+
+                mock_logger.warning.assert_any_call(
+                    "No StatusNotifierWatcher found on D-Bus session bus."
+                )
+                mock_logger.warning.assert_any_call("The system tray icon may not appear.")
 
     @patch("vocalinux.main.logging")
     @patch("vocalinux.main.check_dependencies")
