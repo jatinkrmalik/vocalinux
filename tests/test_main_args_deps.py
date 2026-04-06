@@ -150,6 +150,19 @@ class TestCheckDependencies(unittest.TestCase):
                 result = check_dependencies()
                 assert result is False
 
+    def test_check_dependencies_logs_gnome_extension_guidance(self):
+        from vocalinux.main import check_dependencies
+
+        with patch("vocalinux.main.logger") as mock_logger:
+            with patch("builtins.__import__", side_effect=ImportError("No module")):
+                result = check_dependencies()
+
+        assert result is False
+        mock_logger.error.assert_any_call(
+            "  NOTE: On GNOME Shell (default on Debian), you also need:"
+        )
+        mock_logger.error.assert_any_call("    sudo apt install gnome-shell-extension-appindicator")
+
 
 class TestCheckDisplayAvailable(unittest.TestCase):
     """Tests for check_display_available() function."""
@@ -439,15 +452,15 @@ class TestMainFunction(unittest.TestCase):
             "general": {"first_run": False},
         }
 
+        mock_speech_manager_ctor = MagicMock(side_effect=Exception("stop"))
+
         with patch.dict(
             sys.modules,
             {
                 "vocalinux.single_instance": mock_single_instance,
                 "vocalinux.common_types": MagicMock(),
                 "vocalinux.speech_recognition": MagicMock(
-                    recognition_manager=MagicMock(
-                        SpeechRecognitionManager=MagicMock(side_effect=Exception("stop"))
-                    )
+                    recognition_manager=MagicMock(SpeechRecognitionManager=mock_speech_manager_ctor)
                 ),
                 "vocalinux.text_injection.text_injector": MagicMock(),
                 "vocalinux.ui.tray_indicator": MagicMock(),
@@ -467,6 +480,7 @@ class TestMainFunction(unittest.TestCase):
                     "No StatusNotifierWatcher found on D-Bus session bus."
                 )
                 mock_logger.warning.assert_any_call("The system tray icon may not appear.")
+                mock_speech_manager_ctor.assert_called_once()
 
     @patch("vocalinux.main.logging")
     @patch("vocalinux.main.check_dependencies")
