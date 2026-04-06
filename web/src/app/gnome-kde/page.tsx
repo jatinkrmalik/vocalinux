@@ -116,28 +116,28 @@ export default function GnomeVsKdePage() {
       <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
         <h2 className="mb-4 text-2xl font-bold">GNOME: what to expect</h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
             <span>
               <strong>Wayland is the default</strong> on modern GNOME sessions, so IBus-backed text
               injection is usually the primary path.
             </span>
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
             <span>
               <strong>IBus integration is central</strong> for reliable cross-app dictation behavior on
               Wayland.
             </span>
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
             <span>
               <strong>Tray icon often needs AppIndicator support</strong> via GNOME extension, because
               legacy tray behavior differs from KDE.
             </span>
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
             <span>
               <strong>Known issues and workarounds:</strong> if the tray icon is missing, install/enable
@@ -150,21 +150,21 @@ export default function GnomeVsKdePage() {
       <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
         <h2 className="mb-4 text-2xl font-bold">KDE Plasma: what to expect</h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
             <span>
               <strong>X11 vs Wayland matters</strong>: Plasma supports both widely, so behavior can differ
               between sessions.
             </span>
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
             <span>
               <strong>IBus setup may be more explicit</strong> compared with GNOME defaults, depending on
               distro and prior input method configuration.
             </span>
           </li>
-          <li className="inline-flex items-start gap-2">
+          <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
             <span>
               <strong>System Settings integration is strong</strong>, making it easier to inspect session

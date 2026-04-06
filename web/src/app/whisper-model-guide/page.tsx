@@ -161,11 +161,11 @@ export default function WhisperModelGuidePage() {
               Tiny or Base
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Best if you care about low latency over absolute transcription quality.
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Great for older CPUs, battery-conscious laptops, and quick chat replies.
               </li>
@@ -178,11 +178,11 @@ export default function WhisperModelGuidePage() {
               Small (recommended default)
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Best balance for most Linux dictation workflows.
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Better punctuation and proper nouns while staying near real-time.
               </li>
@@ -195,11 +195,11 @@ export default function WhisperModelGuidePage() {
               Medium
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Use when accuracy is more important than response time.
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Ideal for technical dictation, multilingual speech, and noisy environments.
               </li>
@@ -212,11 +212,11 @@ export default function WhisperModelGuidePage() {
               Large
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Choose only if you have strong GPU hardware and want maximum quality.
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Best for polished long-form writing where errors are costly.
               </li>

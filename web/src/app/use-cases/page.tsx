@@ -172,7 +172,7 @@ export default function UseCasesPage() {
                   <h3 className="mb-3 font-semibold">Key Benefits</h3>
                   <ul className="space-y-2">
                     {useCase.benefits.map((benefit) => (
-                      <li key={benefit} className="inline-flex items-start gap-2 text-sm text-muted-foreground">
+                      <li key={benefit} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                         {benefit}
                       </li>

@@ -226,7 +226,7 @@ export default function TroubleshootingPage() {
           Still having issues?
         </h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <ChevronRight className="h-4 w-4 text-primary" />
             Check the{" "}
             <Link href="/faq/" className="font-semibold text-primary hover:underline">
@@ -234,7 +234,7 @@ export default function TroubleshootingPage() {
             </Link>{" "}
             for common questions
           </li>
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <ChevronRight className="h-4 w-4 text-primary" />
             <a
               href="https://github.com/jatinkrmalik/vocalinux/issues"
@@ -246,7 +246,7 @@ export default function TroubleshootingPage() {
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </li>
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <ChevronRight className="h-4 w-4 text-primary" />
             <a
               href="https://github.com/jatinkrmalik/vocalinux/issues/new"

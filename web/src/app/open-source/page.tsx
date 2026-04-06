@@ -163,7 +163,7 @@ export default function OpenSourcePage() {
             "Free to share with others",
             "Modifications must remain open",
           ].map((item) => (
-            <li key={item} className="inline-flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+            <li key={item} className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
               {item}
             </li>

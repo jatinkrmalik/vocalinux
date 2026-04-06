@@ -237,7 +237,7 @@ export default function GpuAccelerationPage() {
                 <p className="mb-4 text-sm text-muted-foreground">{backend.description}</p>
                 <ul className="space-y-1.5">
                   {backend.advantages.map((advantage) => (
-                    <li key={advantage} className="inline-flex items-start gap-2 text-sm">
+                    <li key={advantage} className="flex items-start gap-2 text-sm">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                       {advantage}
                     </li>

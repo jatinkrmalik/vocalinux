@@ -273,7 +273,7 @@ export default function ChangelogPage() {
 
               <ul className="space-y-2">
                 {release.highlights.map((highlight) => (
-                  <li key={highlight} className="inline-flex items-start gap-2 text-muted-foreground">
+                  <li key={highlight} className="flex items-start gap-2 text-muted-foreground">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                     {highlight}
                   </li>
@@ -300,15 +300,15 @@ export default function ChangelogPage() {
       <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-4 text-2xl font-bold">Stay Updated</h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
             Watch the repository on GitHub for release notifications
           </li>
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
             Re-run the installer to update to the latest version
           </li>
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-primary" />
             Check the{" "}
             <Link href="/install/" className="font-semibold text-primary hover:underline">

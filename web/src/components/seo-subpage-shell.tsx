@@ -200,6 +200,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
       label: "Features",
       items: [
         { href: "/compare/", label: "Engine Comparison", icon: Cpu },
+        { href: "/whisper-model-guide/", label: "Whisper Models", icon: Cpu },
         { href: "/wayland/", label: "Wayland", icon: Monitor },
         { href: "/gpu-acceleration/", label: "GPU Acceleration", icon: Cpu },
       ],
@@ -208,16 +209,19 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
       label: "Use Cases",
       items: [
         { href: "/for-developers/", label: "For Developers", icon: Code2 },
+        { href: "/writers/", label: "For Writers", icon: Heart },
+        { href: "/voice-typing-vscode/", label: "VS Code", icon: Code2 },
+        { href: "/gnome-kde/", label: "GNOME vs KDE", icon: Monitor },
         { href: "/rsi-prevention/", label: "RSI Prevention", icon: Heart },
-        { href: "/use-cases/", label: "All Use Cases", icon: Zap },
       ],
     },
     {
-      label: "Privacy",
+      label: "Compare",
       items: [
+        { href: "/vs-nerd-dictation/", label: "vs Nerd Dictation", icon: BookOpen },
+        { href: "/alternatives/", label: "Alternatives", icon: BookOpen },
         { href: "/offline/", label: "100% Offline", icon: Shield },
         { href: "/open-source/", label: "Open Source", icon: Code2 },
-        { href: "/privacy/", label: "Privacy Policy", icon: Shield },
       ],
     },
     {
@@ -226,6 +230,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
         { href: "/faq/", label: "FAQ", icon: HelpCircle },
         { href: "/troubleshooting/", label: "Troubleshooting", icon: Zap },
         { href: "/shortcuts/", label: "Commands", icon: BookOpen },
+        { href: "/privacy/", label: "Privacy Policy", icon: Shield },
       ],
     },
   ];
