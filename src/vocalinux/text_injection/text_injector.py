@@ -642,77 +642,41 @@ class TextInjector:
 
     def _inject_via_clipboard_paste(self, text: str) -> bool:
         """
-        Inject text by copying to clipboard and simulating Ctrl+V.
+        Inject text by copying to clipboard and simulating Ctrl+V with ydotool.
 
-        This is used as a workaround for tools like ydotool that cannot
-        handle non-ASCII/Unicode characters (accented letters, CJK, etc.)
-        because they simulate evdev key events which only cover US ASCII.
+        This is the workaround for ydotool's inability to type non-ASCII/Unicode
+        characters (accented letters, CJK, etc.) because ydotool simulates evdev
+        key events which only cover US ASCII keycodes. See issue #362.
+
+        Note: this temporarily overwrites the user's clipboard. There is no
+        attempt to restore it afterward, as there is no safe race-free way to
+        do so on Wayland.
 
         Returns:
             True if successful, False otherwise
         """
-        # Try clipboard tools in order of preference
-        clipboard_cmds = [
-            ["wl-copy", text],
-            ["xclip", "-selection", "clipboard"],
-            ["xsel", "--clipboard", "--input"],
-        ]
+        logger.debug(
+            "Using clipboard-paste injection for non-ASCII text "
+            "(user clipboard will be temporarily overwritten)"
+        )
 
-        copied = False
-        for cmd in clipboard_cmds:
-            tool = cmd[0]
-            if not shutil.which(tool):
-                continue
-            try:
-                if tool in ("xclip", "xsel"):
-                    subprocess.run(
-                        cmd,
-                        input=text,
-                        check=True,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        timeout=3,
-                    )
-                else:
-                    subprocess.run(
-                        cmd,
-                        check=True,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        timeout=3,
-                    )
-                copied = True
-                logger.debug(f"Text copied to clipboard using {tool}")
-                break
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.debug(f"Clipboard copy with {tool} failed: {e}")
-                continue
-
-        if not copied:
+        if not self._copy_to_clipboard(text):
             logger.warning("Could not copy text to clipboard for paste injection")
             return False
 
-        # Small delay to ensure clipboard is populated
-        time.sleep(0.05)
-
-        # Simulate Ctrl+V to paste
+        # Simulate Ctrl+V via ydotool using evdev keycodes:
+        # KEY_LEFTCTRL=29, KEY_V=47; value 1=press, 0=release.
+        # wtype is intentionally not handled here: wtype uses the Wayland
+        # virtual-keyboard protocol which supports Unicode natively, so it
+        # never needs the clipboard-paste workaround.
         try:
-            if self.wayland_tool == "ydotool":
-                subprocess.run(
-                    ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
-                    check=True,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=3,
-                )
-            else:  # wtype
-                subprocess.run(
-                    ["wtype", "-M", "ctrl", "v", "-m", "ctrl"],
-                    check=True,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=3,
-                )
+            subprocess.run(
+                ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
             logger.info(f"Text injected via clipboard paste: '{text[:20]}...' ({len(text)} chars)")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
