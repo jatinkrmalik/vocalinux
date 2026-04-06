@@ -453,3 +453,60 @@ class TestTrayIndicator(unittest.TestCase):
                 mock_about_dialog.destroy.assert_called_once()
                 # set_logo should NOT be called due to the error
                 mock_about_dialog.set_logo.assert_not_called()
+
+    def test_check_status_notifier_watcher_true_when_present(self):
+        mock_proxy = MagicMock()
+        mock_names_variant = MagicMock()
+        mock_names_variant.unpack.return_value = (
+            ["org.freedesktop.DBus", "org.kde.StatusNotifierWatcher"],
+        )
+        mock_proxy.call_sync.return_value = mock_names_variant
+
+        with patch(
+            "vocalinux.ui.tray_indicator.Gio.DBusProxy.new_for_bus_sync",
+            return_value=mock_proxy,
+        ):
+            assert self.tray_indicator._check_status_notifier_watcher() is True
+
+    def test_check_status_notifier_watcher_false_when_missing(self):
+        mock_proxy = MagicMock()
+        mock_names_variant = MagicMock()
+        mock_names_variant.unpack.return_value = (["org.freedesktop.DBus"],)
+        mock_proxy.call_sync.return_value = mock_names_variant
+
+        with patch(
+            "vocalinux.ui.tray_indicator.Gio.DBusProxy.new_for_bus_sync",
+            return_value=mock_proxy,
+        ):
+            assert self.tray_indicator._check_status_notifier_watcher() is False
+
+    def test_check_status_notifier_watcher_true_on_exception(self):
+        with patch(
+            "vocalinux.ui.tray_indicator.Gio.DBusProxy.new_for_bus_sync",
+            side_effect=RuntimeError("dbus error"),
+        ):
+            assert self.tray_indicator._check_status_notifier_watcher() is True
+
+    def test_init_indicator_missing_watcher_shows_dialog(self):
+        with patch.object(
+            self.tray_indicator,
+            "_check_status_notifier_watcher",
+            return_value=False,
+        ):
+            with patch.object(self.tray_indicator, "_show_missing_watcher_dialog") as mock_dialog:
+                result = self.tray_indicator._init_indicator()
+                self.assertEqual(result, False)
+                mock_dialog.assert_called_once()
+
+    def test_init_indicator_creation_failure_shows_error_dialog(self):
+        with patch(
+            "vocalinux.ui.tray_indicator.AppIndicator3.Indicator.new_with_path",
+            side_effect=Exception("boom"),
+        ):
+            with patch.object(
+                self.tray_indicator,
+                "_show_appindicator_error_dialog",
+            ) as mock_error_dialog:
+                result = self.tray_indicator._init_indicator()
+                self.assertEqual(result, False)
+                mock_error_dialog.assert_called_once_with("boom")
