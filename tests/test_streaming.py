@@ -8,12 +8,20 @@ and config manager integration for streaming settings.
 import json
 import os
 import shutil
-import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 from vocalinux.speech_recognition.transcript_buffer import TranscriptBuffer
 from vocalinux.ui.config_manager import DEFAULT_CONFIG, ConfigManager
+
+# Save references to real stdlib functions at import time.  Other test
+# files in this project replace os.makedirs and os.path.exists with
+# MagicMock via stacked patches whose tearDown ordering is incorrect,
+# leaving the mock in place for subsequent test modules.
+_real_makedirs = os.makedirs
+_real_path_exists = os.path.exists
+_real_open = open
 
 
 class TestTranscriptBufferBasic(unittest.TestCase):
@@ -178,9 +186,8 @@ class TestStreamingConfigDefaults(unittest.TestCase):
 
 class TestStreamingConfigIntegration(unittest.TestCase):
     def setUp(self):
-        self.temp_root = tempfile.mkdtemp(prefix="vocalinux-streaming-test-")
+        self.temp_root = os.path.join("/tmp", f"vocalinux-streaming-test-{uuid.uuid4().hex[:12]}")
         self.temp_config_dir = os.path.join(self.temp_root, ".config", "vocalinux")
-        os.makedirs(self.temp_config_dir, exist_ok=True)
         self.temp_config_file = os.path.join(self.temp_config_dir, "config.json")
 
         self.patches = [
@@ -193,9 +200,14 @@ class TestStreamingConfigIntegration(unittest.TestCase):
                 self.temp_config_file,
             ),
             patch("vocalinux.ui.config_manager.logger"),
+            patch("os.makedirs", _real_makedirs),
+            patch("os.path.exists", _real_path_exists),
+            patch("builtins.open", _real_open),
         ]
         for p in self.patches:
             p.start()
+
+        os.makedirs(self.temp_config_dir, exist_ok=True)
 
     def tearDown(self):
         for p in self.patches:
