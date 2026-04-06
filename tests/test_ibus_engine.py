@@ -498,9 +498,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.switch_engine")
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    def test_inject_text_no_engine_retries_and_recovers(
-        self, mock_ensure_dir, mock_switch
-    ):
+    def test_inject_text_no_engine_retries_and_recovers(self, mock_ensure_dir, mock_switch):
         """Test inject_text retries once on NO_ENGINE and succeeds on second attempt."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
@@ -538,9 +536,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.switch_engine")
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    def test_inject_text_no_engine_fails_after_retry(
-        self, mock_ensure_dir, mock_switch
-    ):
+    def test_inject_text_no_engine_fails_after_retry(self, mock_ensure_dir, mock_switch):
         """Test inject_text returns False when NO_ENGINE persists after retry."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
