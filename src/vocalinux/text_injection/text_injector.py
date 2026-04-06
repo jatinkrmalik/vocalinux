@@ -632,9 +632,65 @@ class TextInjector:
             logger.error(f"xdotool error: {e.stderr}")
             raise
 
+    def _has_non_ascii(self, text: str) -> bool:
+        """Check if text contains any non-ASCII characters."""
+        try:
+            text.encode("ascii")
+            return False
+        except UnicodeEncodeError:
+            return True
+
+    def _inject_via_clipboard_paste(self, text: str) -> bool:
+        """
+        Inject text by copying to clipboard and simulating Ctrl+V with ydotool.
+
+        This is the workaround for ydotool's inability to type non-ASCII/Unicode
+        characters (accented letters, CJK, etc.) because ydotool simulates evdev
+        key events which only cover US ASCII keycodes. See issue #362.
+
+        Note: this temporarily overwrites the user's clipboard. There is no
+        attempt to restore it afterward, as there is no safe race-free way to
+        do so on Wayland.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        logger.debug(
+            "Using clipboard-paste injection for non-ASCII text "
+            "(user clipboard will be temporarily overwritten)"
+        )
+
+        if not self._copy_to_clipboard(text):
+            logger.warning("Could not copy text to clipboard for paste injection")
+            return False
+
+        # Simulate Ctrl+V via ydotool using evdev keycodes:
+        # KEY_LEFTCTRL=29, KEY_V=47; value 1=press, 0=release.
+        # wtype is intentionally not handled here: wtype uses the Wayland
+        # virtual-keyboard protocol which supports Unicode natively, so it
+        # never needs the clipboard-paste workaround.
+        try:
+            subprocess.run(
+                ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            logger.info(f"Text injected via clipboard paste: '{text[:20]}...' ({len(text)} chars)")
+            return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Paste simulation failed: {e}")
+            return False
+
     def _inject_with_wayland_tool(self, text: str):
         """
         Inject text using a Wayland-compatible tool (wtype or ydotool).
+
+        For ydotool: if the text contains non-ASCII characters (accented
+        letters like á, é, ú, CJK characters, etc.), uses clipboard-based
+        injection instead, because ydotool simulates evdev key events which
+        only cover US ASCII keycodes. See issue #362.
 
         Args:
             text: The text to inject
@@ -642,6 +698,20 @@ class TextInjector:
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
+        # ydotool can only handle ASCII characters because it works at the
+        # evdev keycode level. For non-ASCII text, use clipboard paste instead.
+        if self.wayland_tool == "ydotool" and self._has_non_ascii(text):
+            logger.info(
+                "Text contains non-ASCII characters, using clipboard paste "
+                "for ydotool (evdev keycodes are ASCII-only)"
+            )
+            if self._inject_via_clipboard_paste(text):
+                return
+            logger.warning(
+                "Clipboard paste failed, falling back to ydotool type "
+                "(non-ASCII characters may be dropped)"
+            )
+
         if self.wayland_tool == "wtype":
             cmd = ["wtype", text]
         else:  # ydotool
