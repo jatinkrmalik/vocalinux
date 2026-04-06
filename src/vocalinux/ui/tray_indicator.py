@@ -332,8 +332,7 @@ class TrayIndicator:
 
     def _on_streaming_update(self, text: str, is_final: bool):
         """Handle streaming transcript updates from the engine."""
-        if is_final and text:
-            GLib.idle_add(self.text_injector.inject_text, text)
+        _ = (text, is_final)
 
     def _add_menu_item(self, label: str, callback: Callable):
         """

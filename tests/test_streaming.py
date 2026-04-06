@@ -7,6 +7,7 @@ and config manager integration for streaming settings.
 
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -67,11 +68,34 @@ class TestTranscriptBufferFlush(unittest.TestCase):
     def test_flush_returns_none_when_empty(self):
         self.assertIsNone(self.buf.flush())
 
+    def test_flush_returns_delta_only_once(self):
+        self.buf.insert("hello")
+        self.buf.insert("hello world")
+        self.assertEqual(self.buf.flush(), "hello")
+        self.assertIsNone(self.buf.flush())
+
+    def test_flush_then_more_committed_returns_new_delta(self):
+        self.buf.insert("one")
+        self.buf.insert("one two")
+        self.assertEqual(self.buf.flush(), "one")
+
+        self.buf.insert("one two three")
+        self.assertEqual(self.buf.flush(), "two")
+
     def test_flush_all_returns_committed_and_pending(self):
         self.buf.insert("hello")
         self.buf.insert("hello world foo bar")
         result = self.buf.flush_all()
         self.assertEqual(result, "hello world foo bar")
+
+    def test_flush_all_after_flush_returns_unemitted_plus_pending(self):
+        self.buf.insert("hello")
+        self.buf.insert("hello world")
+        self.assertEqual(self.buf.flush(), "hello")
+
+        self.buf.insert("hello world again")
+        result = self.buf.flush_all()
+        self.assertEqual(result, "world again")
 
     def test_flush_all_clears_state(self):
         self.buf.insert("hello")
@@ -154,8 +178,8 @@ class TestStreamingConfigDefaults(unittest.TestCase):
 
 class TestStreamingConfigIntegration(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_config_dir = os.path.join(self.temp_dir.name, ".config/vocalinux")
+        self.temp_root = tempfile.mkdtemp(prefix="vocalinux-streaming-test-")
+        self.temp_config_dir = os.path.join(self.temp_root, ".config", "vocalinux")
         os.makedirs(self.temp_config_dir, exist_ok=True)
         self.temp_config_file = os.path.join(self.temp_config_dir, "config.json")
 
@@ -176,7 +200,7 @@ class TestStreamingConfigIntegration(unittest.TestCase):
     def tearDown(self):
         for p in self.patches:
             p.stop()
-        self.temp_dir.cleanup()
+        shutil.rmtree(self.temp_root, ignore_errors=True)
 
     def test_streaming_settings_round_trip(self):
         cm = ConfigManager()

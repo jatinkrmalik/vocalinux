@@ -36,6 +36,23 @@ Vocalinux supports login autostart using the standard Linux desktop-session mech
 4. **Speak clearly**: As you speak, your words will be transcribed into the currently focused application
 5. **Stop voice typing**: Click the tray icon and select "Stop Voice Typing" when you're done, double-tap again in toggle mode, or release the key in push-to-talk mode
 
+### Experimental Real-Time Streaming (Work in Progress)
+
+Vocalinux includes an experimental streaming mode that can emit text while you are still speaking.
+
+- Status: **experimental / work in progress**
+- Default: **disabled**
+- Enable in: **Settings → Recognition → Real-time Streaming**
+- Tune latency via: **Chunk Duration**
+
+Current model behavior:
+
+- **VOSK**: uses native partial-result updates
+- **Whisper / whisper.cpp**: uses chunked sliding-window streaming with deduplication
+
+Because this path is still evolving, streaming quality and latency can vary by engine, language,
+hardware, and background noise. For maximum stability, keep streaming disabled.
+
 ### Understanding the Status Icons
 
 - **Microphone off** (gray): Voice typing is inactive
