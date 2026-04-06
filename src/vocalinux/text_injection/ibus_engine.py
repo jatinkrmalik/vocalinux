@@ -927,9 +927,7 @@ class IBusTextInjector:
                     elif response == "NO_ENGINE" and attempt == 0:
                         # Engine instance was destroyed (layout switch).
                         # Re-activate to create a new instance and retry.
-                        logger.info(
-                            "Engine instance not active, re-activating and retrying..."
-                        )
+                        logger.info("Engine instance not active, re-activating and retrying...")
                         switch_engine(ENGINE_NAME)
                         time.sleep(0.3)
                         continue
