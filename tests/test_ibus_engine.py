@@ -98,8 +98,7 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
-    @patch("vocalinux.text_injection.ibus_engine.time")
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
@@ -114,27 +113,22 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
         mock_restore_xkb,
         mock_get_xkb,
         mock_start_engine,
-        mock_time,
-        mock_socket_path,
+        mock_wait_ready,
         mock_ensure_dir,
     ):
-        """Covers the for/else warning branch: all 15 socket-readiness retries exhaust,
-        warning is logged, and activation proceeds anyway (graceful degradation)."""
+        """Readiness probe is invoked as part of setup before returning."""
         mock_start_engine.return_value = True
-        mock_socket_path.exists.return_value = False
         mock_is_active.return_value = False
         mock_get_engine.return_value = "xkb:us::eng"
         mock_switch.return_value = True
         mock_get_xkb.return_value = ("us", "", "")
+        mock_wait_ready.return_value = None
 
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
-        with self.assertLogs("vocalinux.text_injection.ibus_engine", level="WARNING") as log:
-            injector = IBusTextInjector(auto_activate=True)
+        injector = IBusTextInjector(auto_activate=True)
 
-        self.assertTrue(any("socket not ready" in msg for msg in log.output))
-        self.assertEqual(mock_socket_path.exists.call_count, 15)
-        self.assertEqual(mock_time.sleep.call_count, 15)
+        mock_wait_ready.assert_called_once_with()
         self.assertIsNotNone(injector)
 
 
@@ -292,6 +286,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
@@ -302,6 +297,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_get_current,
         mock_start_engine,
         mock_is_active,
+        mock_wait_ready,
         mock_socket_path,
         mock_ensure_dir,
     ):
@@ -311,6 +307,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine.return_value = True
         mock_get_current.return_value = "xkb:us::eng"
         mock_switch.return_value = True
+        mock_wait_ready.return_value = None
 
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
@@ -322,6 +319,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine.assert_called_once()
         # Should switch to vocalinux engine
         mock_switch.assert_called_once_with("vocalinux")
+        mock_wait_ready.assert_called_once_with()
         self.assertEqual(injector._previous_engine, "xkb:us::eng")
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
@@ -409,6 +407,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
@@ -422,6 +421,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_get_engine,
         mock_switch,
         mock_start_proc,
+        mock_wait_ready,
         mock_socket_path,
         mock_get_xkb,
         mock_restore_xkb,
@@ -431,6 +431,7 @@ class TestIBusTextInjector(unittest.TestCase):
 
         mock_socket_path.exists.return_value = True
         mock_get_xkb.return_value = ("fr", "azerty", "")
+        mock_wait_ready.return_value = None
 
         injector = IBusTextInjector(auto_activate=False)
         injector._setup_engine()
