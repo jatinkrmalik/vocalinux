@@ -565,6 +565,14 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
         # want to be able to inject text. The engine process keeps running and
         # the instance remains valid for text injection.
 
+    def do_destroy(self) -> None:
+        """Called when the engine instance is destroyed by IBus (e.g. layout switch)."""
+        logger.debug("VocalinuxEngine instance destroyed")
+        if VocalinuxEngine._active_instance is self:
+            VocalinuxEngine._active_instance = None
+        if IBUS_AVAILABLE:
+            super().do_destroy()
+
     def do_focus_in(self) -> None:
         """Called when the engine gains focus."""
         logger.debug("VocalinuxEngine focus in")
@@ -894,37 +902,50 @@ class IBusTextInjector:
             logger.debug("Vocalinux engine not active, re-activating...")
             switch_engine(ENGINE_NAME)
 
-        try:
-            if not SOCKET_PATH.exists():
-                logger.error(
-                    "IBus engine socket not found. " "Make sure Vocalinux IBus engine is running."
-                )
-                return False
-
-            # Connect to engine socket and send text
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                sock.settimeout(5.0)
-                sock.connect(str(SOCKET_PATH))
-                sock.sendall(text.encode("utf-8"))
-
-                # Wait for response
-                response = sock.recv(64).decode("utf-8")
-                if response == "OK":
-                    logger.debug("Text injection successful")
-                    return True
-                else:
-                    logger.error(f"Text injection failed: {response}")
+        # Try injection, retry once if engine instance was destroyed
+        # (e.g. user switched keyboard layout and IBus called do_destroy)
+        for attempt in range(2):
+            try:
+                if not SOCKET_PATH.exists():
+                    logger.error(
+                        "IBus engine socket not found. "
+                        "Make sure Vocalinux IBus engine is running."
+                    )
                     return False
 
-        except socket.timeout:
-            logger.error("Timeout connecting to IBus engine")
-            return False
-        except FileNotFoundError:
-            logger.error("IBus engine socket not found")
-            return False
-        except Exception as e:
-            logger.error(f"Failed to inject text via IBus: {e}")
-            return False
+                # Connect to engine socket and send text
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(5.0)
+                    sock.connect(str(SOCKET_PATH))
+                    sock.sendall(text.encode("utf-8"))
+
+                    # Wait for response
+                    response = sock.recv(64).decode("utf-8")
+                    if response == "OK":
+                        logger.debug("Text injection successful")
+                        return True
+                    elif response == "NO_ENGINE" and attempt == 0:
+                        # Engine instance was destroyed (layout switch).
+                        # Re-activate to create a new instance and retry.
+                        logger.info("Engine instance not active, re-activating and retrying...")
+                        switch_engine(ENGINE_NAME)
+                        time.sleep(0.3)
+                        continue
+                    else:
+                        logger.error(f"Text injection failed: {response}")
+                        return False
+
+            except socket.timeout:
+                logger.error("Timeout connecting to IBus engine")
+                return False
+            except FileNotFoundError:
+                logger.error("IBus engine socket not found")
+                return False
+            except Exception as e:
+                logger.error(f"Failed to inject text via IBus: {e}")
+                return False
+
+        return False
 
 
 def _get_engines_xml() -> str:
