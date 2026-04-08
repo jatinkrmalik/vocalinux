@@ -2,6 +2,36 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.10.2-beta
+
+### 🚀 Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **🌍 Non-ASCII Text Injection** | ydotool now falls back to clipboard paste for non-ASCII characters (á, é, ñ, etc.) |
+| **🔌 IBus on Wayland** | IBus now detected and started correctly on Wayland without legacy env vars |
+| **🚀 IBus Engine Startup** | Engine process now starts before registration check — fixes startup on some systems |
+| **📦 Pop!\_OS / Ubuntu 24.04+** | Added missing system dependencies (cmake, libcairo2-dev, libgirepository1.0-dev) |
+| **⚡ Code Quality** | Systematic refactor across 20 quality dimensions |
+| **🖼️ Website OG Image** | Redesigned Open Graph image — cleaner and more professional |
+
+### 🐛 Bug Fixes
+
+- **#362 / #376**: Handle non-ASCII characters with ydotool via clipboard paste fallback
+- **#360 / #361**: Start IBus engine process before checking registration
+- **#381**: Detect IBus on Wayland without legacy env vars and fix text injection
+- **#379**: Add missing dependencies for Pop!_OS and Ubuntu 24.04+
+
+### 🔧 Improvements
+
+- Systematic code quality refactor across 20 dimensions (#377)
+- Clarify missing GNOME AppIndicator support on Debian (#385)
+- Redesigned OG image for vocalinux.com (#392)
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.10.2-beta).
+
+---
+
 ## What's New in v0.10.1-beta
 
 ### 🚀 Highlights

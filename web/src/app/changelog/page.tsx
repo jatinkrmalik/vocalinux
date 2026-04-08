@@ -6,6 +6,21 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.10.2-beta",
+    date: "2026-04-08",
+    type: "beta",
+    highlights: [
+      "Handle non-ASCII characters (á, é, ñ, etc.) with ydotool via clipboard paste fallback (fixes #362, PR #376)",
+      "Detect IBus on Wayland without legacy env vars and fix text injection (PR #381)",
+      "Start IBus engine process before checking registration to fix startup on some systems (fixes #360, PR #361)",
+      "Add missing dependencies for Pop!_OS and Ubuntu 24.04+ including cmake, libcairo2-dev, libgirepository (PR #379)",
+      "Systematic code quality refactor across 20 dimensions (PR #377)",
+      "Clarify missing GNOME AppIndicator support on Debian (PR #385)",
+      "Redesigned OG image for vocalinux.com — cleaner, professional, text-based layout (PR #392)",
+      "Test coverage improvements: mock Notify module, tray degraded-startup, IBus socket-readiness branches (PR #384, #386, #390)",
+    ],
+  },
+  {
     version: "v0.10.1-beta",
     date: "2026-03-30",
     type: "beta",
