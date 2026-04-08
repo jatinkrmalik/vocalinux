@@ -12,7 +12,13 @@ import subprocess
 import threading
 import time
 from enum import Enum
-from typing import Optional  # noqa: F401
+from typing import Optional
+
+from vocalinux.text_injection.hallucination_filter import (
+    BackgroundNoiseHallucinationFilter,
+    HallucinationFilter,
+    SilenceHallucinationFilter,
+)
 
 from .ibus_engine import (
     IBusTextInjector,
@@ -43,7 +49,7 @@ class TextInjector:
     application window, supporting both X11 and Wayland environments.
     """
 
-    def __init__(self, wayland_mode: bool = False):
+    def __init__(self, wayland_mode: bool = False, hallucination_filter: bool = False):
         """
         Initialize the text injector.
 
@@ -59,6 +65,11 @@ class TextInjector:
             self.environment = DesktopEnvironment.WAYLAND
 
         logger.info(f"Using text injection for {self.environment.value} environment")
+
+        self._filters: list[HallucinationFilter] = []
+        if hallucination_filter:
+            self._filters.append(SilenceHallucinationFilter())
+            self._filters.append(BackgroundNoiseHallucinationFilter())
 
         # Check for required tools
         self._check_dependencies()
@@ -408,7 +419,7 @@ class TextInjector:
         except Exception as e:
             logger.debug(f"Could not show clipboard notification: {e}")
 
-    def inject_text(self, text: str) -> bool:
+    def inject_text(self, text: Optional[str]) -> bool:
         """
         Inject text into the currently focused application.
 
@@ -418,6 +429,10 @@ class TextInjector:
         Returns:
             True if injection was successful, False otherwise
         """
+
+        for filter in self._filters:
+            text = filter.filter(text)
+
         if not text or not text.strip():
             logger.debug("Empty text provided, skipping injection")
             return True

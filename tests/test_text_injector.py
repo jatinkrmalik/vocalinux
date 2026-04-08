@@ -265,6 +265,36 @@ class TestTextInjector(unittest.TestCase):
                 "Text should not be shell-escaped when passed to xdotool",
             )
 
+    def test_hallucination_filter(self):
+        injector = TextInjector(hallucination_filter=True)
+
+        # Reset the subprocess mock to clear previous calls
+        self.mock_subprocess.reset_mock()
+
+        # Inject text hallucinated with silence
+        injector.inject_text("Thank you.")
+
+        # No subprocess calls should have been made
+        self.mock_subprocess.assert_not_called()
+
+        # Try with background noise
+        injector.inject_text("(keyboard clicking)")
+
+        # Still no subprocess calls
+        self.mock_subprocess.assert_not_called()
+
+        # Try with empty string (for full coverage)
+        injector.inject_text("")
+
+        # Still no subprocess calls
+        self.mock_subprocess.assert_not_called()
+
+        # Try with a non-filtered string
+        injector.inject_text("non-filtered text")
+
+        # The subprocess should be invoked now
+        self.mock_subprocess.assert_called()
+
     def test_empty_text_injection(self):
         """Test injecting empty text (should do nothing)."""
         injector = TextInjector()
