@@ -32,42 +32,40 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.10.1-beta
+## 📚 What's New in v0.10.2-beta
 
-> 🎉 **Release: focused stability patch for tray resources, engine switching safety, keyboard layout preservation, settings dialog compatibility, and suspend/resume reliability.**
+> 🎉 **Release: non-ASCII text injection, IBus Wayland detection fixes, Pop!_OS dependency support, and code quality improvements.**
 
-### 🚀 Highlights (v0.10.0 → v0.10.1)
+### 🚀 Highlights (v0.10.1 → v0.10.2)
 
 | Feature | Description |
 |---------|-------------|
-| **🖼️ Tray Resource Reliability** | Packaged resources now include tray assets to prevent missing icon scenarios |
-| **🧠 Engine Switch Safety** | Recognition is stopped before engine changes to prevent segfaults |
-| **⌨️ Layout Preservation** | IBus activation now preserves XKB keyboard layout state |
-| **🪟 UI Compatibility** | Settings dialog includes a dedicated Close button for better WM compatibility |
-| **⚡ Suspend/Resume Recovery** | App now automatically recovers speech recognition and keyboard shortcuts after system suspend/resume |
-| **🎤 Push-to-Talk Reliability** | Fixed premature transcription triggering on silence during push-to-talk mode |
+| **🌍 Non-ASCII Text Injection** | ydotool now falls back to clipboard paste for non-ASCII characters (á, é, ñ, etc.) |
+| **🔌 IBus on Wayland** | IBus now detected and started correctly on Wayland without legacy env vars |
+| **🚀 IBus Engine Startup** | Engine process now starts before registration check — fixes startup on some systems |
+| **📦 Pop!\_OS / Ubuntu 24.04+** | Added missing system dependencies (cmake, libcairo2-dev, libgirepository1.0-dev) |
+| **⚡ Code Quality** | Systematic refactor across 20 quality dimensions |
+| **🖼️ Website OG Image** | Redesigned Open Graph image — cleaner and more professional |
 
 ### ✨ Scope
 
-- **Patch release focused on reliability** - No new features, only targeted fixes and maintenance updates
-- **Desktop UX hardening** - Better behavior across tray, settings dialog, and keyboard layout workflows
-- **Suspend/Resume stability** - New D-Bus handler ensures app survives system sleep cycles
-- **Operational maintenance** - Dependency updates for the web and dev toolchains
+- **Patch release focused on compatibility** - IBus/Wayland improvements, non-ASCII text injection, and distro support
+- **Broader platform coverage** - Pop!_OS, Ubuntu 24.04+, Wayland IBus users
+- **Code quality** - Systematic refactor across 20 dimensions for long-term maintainability
 
-### 🐛 Bug Fixes (v0.10.1)
+### 🐛 Bug Fixes (v0.10.2)
 
-- **#349 / #354**: Bundle resources in package to fix missing system tray icons
-- **#350 / #355**: Stop recognition before switching engines to prevent segfaults
-- **#323 / #356**: Add Close button to settings dialog for better window-manager compatibility
-- **#292 / #343**: Preserve XKB layout when activating the Vocalinux IBus engine
-- **#359**: Prevent premature transcription during push-to-talk silence
-- **#367 / #369**: Auto-recover speech recognition after system resume via new suspend handler
-- **#371**: Restart keyboard shortcut backend after system resume
-- **#372**: Delay keyboard restart to allow USB device re-enumeration after resume
+- **#362 / #376**: Handle non-ASCII characters with ydotool via clipboard paste fallback
+- **#360 / #361**: Start IBus engine process before checking registration
+- **#381**: Detect IBus on Wayland without legacy env vars and fix text injection
+- **#379**: Add missing dependencies for Pop!_OS and Ubuntu 24.04+
 
 ### 🔧 Improvements
 
-- **Dependencies** - Updated npm/yarn dependency group and `brace-expansion` dev dependency
+- **Code quality** - Systematic refactor across 20 quality dimensions (#377)
+- **Debian support** - Clarify missing GNOME AppIndicator support messaging (#385)
+- **Website** - Redesigned OG image for vocalinux.com (#392)
+- **Tests** - Additional coverage for tray, IBus, and notification edge cases
 
 ---
 
@@ -371,7 +369,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.10.1 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.10.2 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 
