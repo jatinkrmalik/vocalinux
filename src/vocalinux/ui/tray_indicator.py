@@ -105,6 +105,9 @@ class TrayIndicator:
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
 
+        # Register for streaming transcript updates
+        self.speech_engine.add_streaming_callback(self._on_streaming_update)
+
         # Initialize the icon files and validate resources
         self._init_icons()
         self._validate_resources()
@@ -326,6 +329,10 @@ class TrayIndicator:
         """Stop voice recognition (for push-to-talk mode)."""
         if self.speech_engine.state != RecognitionState.IDLE:
             self.speech_engine.stop_recognition()
+
+    def _on_streaming_update(self, text: str, is_final: bool):
+        """Handle streaming transcript updates from the engine."""
+        _ = (text, is_final)
 
     def _add_menu_item(self, label: str, callback: Callable):
         """
