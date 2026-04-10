@@ -25,6 +25,8 @@ DEFAULT_CONFIG = {
         "vosk_model_size": "small",  # Default model for VOSK engine
         "whisper_model_size": "tiny",  # Default model for Whisper engine
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
+        "gpu_name": None,  # Persisted GPU selection by name (None for automatic selection)
+        "gpu_backend": None,  # Persisted backend hint ("vulkan" or "cuda") for stable re-selection
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
@@ -113,12 +115,14 @@ class ConfigManager:
             logger.error(f"Failed to load config: {e}")
 
     def _check_needs_migration(self, user_config: dict) -> bool:
-        """Check if the user config needs migration to add per-engine model sizes."""
+        """Check if the user config needs migration to the current schema."""
         sr_config = user_config.get("speech_recognition", {})
         # Need migration if we have model_size but not the per-engine keys
-        return "model_size" in sr_config and (
+        needs_model_migration = "model_size" in sr_config and (
             "vosk_model_size" not in sr_config or "whisper_model_size" not in sr_config
         )
+        needs_gpu_migration = "gpu_name" not in sr_config or "gpu_backend" not in sr_config
+        return needs_model_migration or needs_gpu_migration
 
     def _migrate_config(self, user_config: dict):
         """Migrate old config formats to the current format."""
@@ -142,8 +146,16 @@ class ConfigManager:
             )
             logger.info(f"Migrated whisper_model_size to: {sr_config['whisper_model_size']}")
 
+        if "gpu_name" not in user_sr_config:
+            sr_config["gpu_name"] = None
+            logger.info("Migrated gpu_name to automatic selection")
+
+        if "gpu_backend" not in user_sr_config:
+            sr_config["gpu_backend"] = None
+            logger.info("Migrated gpu_backend to automatic selection")
+
         self.save_config()
-        logger.info("Config migrated to new per-engine model format")
+        logger.info("Config migrated to current schema")
 
     def _migrate_shortcuts_config(self):
         shortcuts_config = self.config.get("shortcuts", {})

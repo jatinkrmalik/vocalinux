@@ -39,6 +39,7 @@ class TestParseArguments(unittest.TestCase):
             assert args.model is None
             assert args.language is None
             assert args.engine is None
+            assert args.gpu is None
             assert args.wayland is False
             assert args.start_minimized is False
 
@@ -104,6 +105,8 @@ class TestParseArguments(unittest.TestCase):
                 "es",
                 "--engine",
                 "vosk",
+                "--gpu",
+                "Intel Arc",
                 "--wayland",
             ],
         ):
@@ -114,6 +117,7 @@ class TestParseArguments(unittest.TestCase):
             assert args.model == "large"
             assert args.language == "es"
             assert args.engine == "vosk"
+            assert args.gpu == "Intel Arc"
             assert args.wayland is True
 
 

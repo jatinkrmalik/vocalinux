@@ -27,6 +27,7 @@ class TestMainModule(unittest.TestCase):
             self.assertIsNone(args.model)  # No default set, loaded from config instead
             self.assertIsNone(args.engine)
             self.assertIsNone(args.language)
+            self.assertIsNone(args.gpu)
             self.assertFalse(args.wayland)
             self.assertFalse(args.start_minimized)
 
@@ -44,6 +45,8 @@ class TestMainModule(unittest.TestCase):
                 "whisper",
                 "--language",
                 "fr",
+                "--gpu",
+                "NVIDIA RTX 4090",
                 "--wayland",
                 "--start-minimized",
             ],
@@ -53,6 +56,7 @@ class TestMainModule(unittest.TestCase):
             self.assertEqual(args.model, "large")
             self.assertEqual(args.engine, "whisper")
             self.assertEqual(args.language, "fr")
+            self.assertEqual(args.gpu, "NVIDIA RTX 4090")
             self.assertTrue(args.wayland)
             self.assertTrue(args.start_minimized)
 
@@ -221,6 +225,8 @@ class TestMainModule(unittest.TestCase):
                 silence_timeout=2.0,
                 audio_device_index=None,
                 voice_commands_enabled=None,
+                gpu_name=None,
+                gpu_backend=None,
             )
             mock_text.assert_called_once_with(wayland_mode=True)
             mock_action_handler.assert_called_once_with(mock_text_instance)
@@ -552,12 +558,16 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 "engine": "vosk",
                 "model_size": "small",
                 "language": "en-us",
+                "gpu_name": "Old GPU",
+                "gpu_backend": "cuda",
             },
             "general": {"first_run": False},
         }
         mock_config_manager.return_value = mock_config_instance
 
         mock_speech_instance = MagicMock()
+        mock_speech_instance.selected_gpu_name = "NVIDIA RTX 4090"
+        mock_speech_instance.selected_gpu_backend = "cuda"
         mock_text_instance = MagicMock()
         mock_tray_instance = MagicMock()
         mock_action_instance = MagicMock()
@@ -578,6 +588,8 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 "large",
                 "--language",
                 "fr",
+                "--gpu",
+                "NVIDIA RTX 4090",
             ],
         ):
             with patch("vocalinux.main.logger"):
@@ -589,6 +601,13 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 self.assertEqual(call_kwargs["engine"], "whisper")
                 self.assertEqual(call_kwargs["model_size"], "large")
                 self.assertEqual(call_kwargs["language"], "fr")
+                self.assertEqual(call_kwargs["gpu_name"], "NVIDIA RTX 4090")
+                self.assertIsNone(call_kwargs["gpu_backend"])
+                mock_config_instance.set.assert_any_call(
+                    "speech_recognition", "gpu_name", "NVIDIA RTX 4090"
+                )
+                mock_config_instance.set.assert_any_call("speech_recognition", "gpu_backend", "cuda")
+                mock_config_instance.save_config.assert_called_once()
 
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.ui.action_handler.ActionHandler")
@@ -617,6 +636,8 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 "engine": "whisper",
                 "model_size": "medium",
                 "language": "de",
+                "gpu_name": "Intel Arc",
+                "gpu_backend": "vulkan",
             },
             "audio": {
                 "device_index": 2,
@@ -626,6 +647,8 @@ class TestMainConfigPrecedence(unittest.TestCase):
         mock_config_manager.return_value = mock_config_instance
 
         mock_speech_instance = MagicMock()
+        mock_speech_instance.selected_gpu_name = "Intel Arc"
+        mock_speech_instance.selected_gpu_backend = "vulkan"
         mock_text_instance = MagicMock()
         mock_tray_instance = MagicMock()
         mock_action_instance = MagicMock()
@@ -647,6 +670,8 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 self.assertEqual(call_kwargs["model_size"], "medium")
                 self.assertEqual(call_kwargs["language"], "de")
                 self.assertEqual(call_kwargs["audio_device_index"], 2)
+                self.assertEqual(call_kwargs["gpu_name"], "Intel Arc")
+                self.assertEqual(call_kwargs["gpu_backend"], "vulkan")
 
 
 class TestTextCallbackSpacing(unittest.TestCase):

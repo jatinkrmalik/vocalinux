@@ -77,6 +77,12 @@ class TestSpeechRecognitionManagerInit:
         # Just verify manager initializes without error
         assert manager is not None
 
+    def test_manager_init_with_gpu_selection(self):
+        """Test manager initialization stores requested GPU selection."""
+        manager = _make_manager(gpu_name="NVIDIA RTX 4090", gpu_backend="cuda")
+        assert manager.requested_gpu_name == "NVIDIA RTX 4090"
+        assert manager.preferred_gpu_backend == "cuda"
+
     def test_manager_init_with_download_progress_callback(self):
         """Test manager initialization with download progress callback."""
         callback = MagicMock()

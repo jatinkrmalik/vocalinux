@@ -7,6 +7,7 @@ for whisper.cpp, supporting Vulkan, CUDA, and CPU backends.
 
 import logging
 import os
+import re
 import subprocess
 from typing import Optional
 
@@ -60,6 +61,150 @@ class ComputeBackend:
     CPU = "cpu"
 
 
+def _normalize_gpu_name(name: str) -> str:
+    """Normalize a GPU name for case-insensitive comparisons."""
+    return re.sub(r"\s+", " ", name.strip()).casefold()
+
+
+def list_vulkan_devices() -> list[tuple[int, str]]:
+    """
+    Enumerate Vulkan devices visible to the current process.
+
+    Returns:
+        List of ``(index, name)`` tuples in the order reported by Vulkan.
+    """
+    devices: list[tuple[int, str]] = []
+
+    try:
+        result = subprocess.run(
+            ["vulkaninfo", "--summary"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return devices
+
+        for line in result.stdout.splitlines():
+            match = re.search(r"deviceName\s*[:=]\s*(.+)$", line)
+            if not match:
+                continue
+
+            device_name = match.group(1).strip()
+            if device_name:
+                devices.append((len(devices), device_name))
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.debug(f"Vulkan device enumeration failed: {e}")
+
+    return devices
+
+
+def list_cuda_devices() -> list[tuple[int, str]]:
+    """
+    Enumerate CUDA devices visible to the current process.
+
+    Returns:
+        List of ``(index, name)`` tuples in the order reported by ``nvidia-smi``.
+    """
+    devices: list[tuple[int, str]] = []
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return devices
+
+        for line in result.stdout.splitlines():
+            raw_line = line.strip()
+            if not raw_line:
+                continue
+
+            parts = [part.strip() for part in raw_line.split(",", 1)]
+            if len(parts) != 2:
+                continue
+
+            try:
+                device_index = int(parts[0])
+            except ValueError:
+                continue
+
+            devices.append((device_index, parts[1]))
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.debug(f"CUDA device enumeration failed: {e}")
+
+    return devices
+
+
+def resolve_gpu_selection(
+    requested_name: str,
+    allowed_backends: Optional[list[str]] = None,
+    preferred_backend: Optional[str] = None,
+) -> tuple[str, int, str]:
+    """
+    Resolve a persisted GPU name to the currently visible backend and device index.
+
+    Args:
+        requested_name: User-provided or persisted GPU name.
+        allowed_backends: Optional list of allowed backends to search.
+        preferred_backend: Optional backend to prefer when names match multiple backends.
+
+    Returns:
+        Tuple of ``(backend, device_index, resolved_device_name)``.
+
+    Raises:
+        ValueError: If the named GPU cannot be found.
+    """
+    backend_sources = {
+        ComputeBackend.VULKAN: list_vulkan_devices,
+        ComputeBackend.CUDA: list_cuda_devices,
+    }
+
+    allowed = allowed_backends or [ComputeBackend.VULKAN, ComputeBackend.CUDA]
+    backend_order = list(allowed)
+    if preferred_backend in backend_order:
+        backend_order.remove(preferred_backend)
+        backend_order.insert(0, preferred_backend)
+
+    normalized_request = _normalize_gpu_name(requested_name)
+    exact_matches: list[tuple[str, int, str]] = []
+    partial_matches: list[tuple[str, int, str]] = []
+    available_devices: list[str] = []
+
+    for backend in backend_order:
+        enumerator = backend_sources.get(backend)
+        if enumerator is None:
+            continue
+
+        for device_index, device_name in enumerator():
+            available_devices.append(f"{backend}:{device_name}")
+            normalized_device = _normalize_gpu_name(device_name)
+            candidate = (backend, device_index, device_name)
+
+            if normalized_device == normalized_request:
+                exact_matches.append(candidate)
+            elif normalized_request and normalized_request in normalized_device:
+                partial_matches.append(candidate)
+
+    if exact_matches:
+        return exact_matches[0]
+
+    if len(partial_matches) == 1:
+        return partial_matches[0]
+
+    if len(partial_matches) > 1:
+        matches = ", ".join(f"{backend}:{name}" for backend, _, name in partial_matches)
+        raise ValueError(
+            f"GPU name '{requested_name}' is ambiguous. Matching devices: {matches}"
+        )
+
+    available = ", ".join(available_devices) if available_devices else "none"
+    raise ValueError(f"GPU '{requested_name}' not found. Available GPUs: {available}")
+
+
 def detect_vulkan_support() -> tuple[bool, Optional[str]]:
     """
     Detect if Vulkan is available and get device info.
@@ -69,22 +214,11 @@ def detect_vulkan_support() -> tuple[bool, Optional[str]]:
     """
     try:
         # Check for vulkaninfo command
-        result = subprocess.run(
-            ["vulkaninfo", "--summary"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            # Try to extract GPU name from output
-            for line in result.stdout.split("\n"):
-                if "deviceName" in line or "GPU" in line:
-                    device_name = line.split(":")[-1].strip()
-                    if device_name:
-                        logger.info(f"Vulkan support detected: {device_name}")
-                        return True, device_name
-            logger.info("Vulkan support detected")
-            return True, "Vulkan GPU"
+        devices = list_vulkan_devices()
+        if devices:
+            _, device_name = devices[0]
+            logger.info(f"Vulkan support detected: {device_name}")
+            return True, device_name
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
         logger.debug(f"Vulkan detection failed: {e}")
 
