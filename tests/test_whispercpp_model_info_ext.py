@@ -160,6 +160,68 @@ class TestDetectVulkanSupport(unittest.TestCase):
             self.assertFalse(is_available)
             self.assertIsNone(device_name)
 
+
+class TestListGpuDevices(unittest.TestCase):
+    """Tests for GPU enumeration helpers."""
+
+    def test_list_vulkan_devices_parses_indices(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=(
+                    "GPU0\n"
+                    "\tdeviceName = Intel Arc A770\n"
+                    "GPU1\n"
+                    "\tdeviceName = NVIDIA GeForce RTX 4090\n"
+                ),
+            )
+
+            from vocalinux.utils.whispercpp_model_info import list_vulkan_devices
+
+            assert list_vulkan_devices() == [
+                (0, "Intel Arc A770"),
+                (1, "NVIDIA GeForce RTX 4090"),
+            ]
+
+    def test_list_cuda_devices_parses_indices(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="0, NVIDIA GeForce RTX 4090\n1, NVIDIA GeForce RTX 3090\n",
+            )
+
+            from vocalinux.utils.whispercpp_model_info import list_cuda_devices
+
+            assert list_cuda_devices() == [
+                (0, "NVIDIA GeForce RTX 4090"),
+                (1, "NVIDIA GeForce RTX 3090"),
+            ]
+
+    def test_resolve_gpu_selection_prefers_requested_backend(self):
+        with (
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_vulkan_devices",
+                return_value=[(0, "NVIDIA GeForce RTX 4090")],
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_cuda_devices",
+                return_value=[(1, "NVIDIA GeForce RTX 4090")],
+            ),
+        ):
+            from vocalinux.utils.whispercpp_model_info import (
+                ComputeBackend,
+                resolve_gpu_selection,
+            )
+
+            backend, device_index, device_name = resolve_gpu_selection(
+                "nvidia geforce rtx 4090",
+                preferred_backend=ComputeBackend.CUDA,
+            )
+
+            assert backend == ComputeBackend.CUDA
+            assert device_index == 1
+            assert device_name == "NVIDIA GeForce RTX 4090"
+
     def test_detect_vulkan_support_on_timeout(self):
         """Test Vulkan detection when command times out."""
         with patch("subprocess.run") as mock_run:
