@@ -364,8 +364,17 @@ ensure_git_installed() {
     print_success "git installed successfully!"
 }
 
-if [ -f "setup.py" ] || [ -f "pyproject.toml" ]; then
-    # Running from within the repo
+# Check if running from within the vocalinux repository
+# Validate that pyproject.toml/setup.py actually belongs to vocalinux before entering local repo mode
+IS_VOCALINUX_LOCAL=false
+if [ -f "pyproject.toml" ] && grep -q 'name = "vocalinux"' "pyproject.toml" 2>/dev/null; then
+    IS_VOCALINUX_LOCAL=true
+elif [ -f "setup.py" ] && grep -q "vocalinux" "setup.py" 2>/dev/null; then
+    IS_VOCALINUX_LOCAL=true
+fi
+
+if [ "$IS_VOCALINUX_LOCAL" = true ]; then
+    # Running from within the vocalinux repo
     INSTALL_DIR="$(pwd)"
     print_info "Running from local repository: $INSTALL_DIR"
     # Convert VENV_DIR to absolute path for wrapper scripts
