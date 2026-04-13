@@ -245,7 +245,7 @@ def main():
     """Main entry point for the application."""
     args = parse_arguments()
 
-    if getattr(args, "gpus", False):
+    if getattr(args, "gpus", False) is True:
         sys.exit(list_available_gpus())
 
     # Check for single instance BEFORE any initialization
