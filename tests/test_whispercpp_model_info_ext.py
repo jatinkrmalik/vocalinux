@@ -164,6 +164,11 @@ class TestDetectVulkanSupport(unittest.TestCase):
 class TestListGpuDevices(unittest.TestCase):
     """Tests for GPU enumeration helpers."""
 
+    def test_normalize_gpu_name_collapses_whitespace(self):
+        from vocalinux.utils.whispercpp_model_info import _normalize_gpu_name
+
+        assert _normalize_gpu_name("  NVIDIA   RTX  4090  ") == "nvidia rtx 4090"
+
     def test_list_vulkan_devices_parses_indices(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -197,6 +202,31 @@ class TestListGpuDevices(unittest.TestCase):
                 (1, "NVIDIA GeForce RTX 3090"),
             ]
 
+    def test_list_vulkan_devices_returns_empty_on_error_code(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="deviceName = Ignored")
+
+            from vocalinux.utils.whispercpp_model_info import list_vulkan_devices
+
+            assert list_vulkan_devices() == []
+
+    def test_list_cuda_devices_skips_invalid_rows(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="\ninvalid\nabc, Bad GPU\n0, NVIDIA GeForce RTX 4090\n",
+            )
+
+            from vocalinux.utils.whispercpp_model_info import list_cuda_devices
+
+            assert list_cuda_devices() == [(0, "NVIDIA GeForce RTX 4090")]
+
+    def test_list_cuda_devices_returns_empty_on_missing_binary(self):
+        with patch("subprocess.run", side_effect=FileNotFoundError("nvidia-smi not found")):
+            from vocalinux.utils.whispercpp_model_info import list_cuda_devices
+
+            assert list_cuda_devices() == []
+
     def test_resolve_gpu_selection_prefers_requested_backend(self):
         with (
             patch(
@@ -221,6 +251,73 @@ class TestListGpuDevices(unittest.TestCase):
             assert backend == ComputeBackend.CUDA
             assert device_index == 1
             assert device_name == "NVIDIA GeForce RTX 4090"
+
+    def test_resolve_gpu_selection_returns_unique_partial_match(self):
+        with (
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_vulkan_devices",
+                return_value=[(0, "Intel Arc A770")],
+            ),
+            patch("vocalinux.utils.whispercpp_model_info.list_cuda_devices", return_value=[]),
+        ):
+            from vocalinux.utils.whispercpp_model_info import (
+                ComputeBackend,
+                resolve_gpu_selection,
+            )
+
+            assert resolve_gpu_selection("arc", [ComputeBackend.VULKAN]) == (
+                ComputeBackend.VULKAN,
+                0,
+                "Intel Arc A770",
+            )
+
+    def test_resolve_gpu_selection_raises_for_ambiguous_partial_match(self):
+        with (
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_vulkan_devices",
+                return_value=[(0, "NVIDIA RTX 4090"), (1, "NVIDIA RTX 3090")],
+            ),
+            patch("vocalinux.utils.whispercpp_model_info.list_cuda_devices", return_value=[]),
+        ):
+            from vocalinux.utils.whispercpp_model_info import resolve_gpu_selection
+
+            with self.assertRaisesRegex(ValueError, "ambiguous"):
+                resolve_gpu_selection("rtx")
+
+    def test_resolve_gpu_selection_raises_for_missing_gpu(self):
+        with (
+            patch("vocalinux.utils.whispercpp_model_info.list_vulkan_devices", return_value=[]),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_cuda_devices",
+                return_value=[(1, "NVIDIA Tesla P40")],
+            ),
+        ):
+            from vocalinux.utils.whispercpp_model_info import resolve_gpu_selection
+
+            with self.assertRaisesRegex(ValueError, "Available GPUs: cuda:NVIDIA Tesla P40"):
+                resolve_gpu_selection("Intel Arc")
+
+    def test_resolve_gpu_selection_ignores_unknown_backend_entries(self):
+        with (
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_vulkan_devices",
+                return_value=[(0, "Intel Arc A770")],
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_cuda_devices",
+                return_value=[(1, "NVIDIA Tesla P40")],
+            ),
+        ):
+            from vocalinux.utils.whispercpp_model_info import (
+                ComputeBackend,
+                resolve_gpu_selection,
+            )
+
+            assert resolve_gpu_selection("Tesla", ["metal", ComputeBackend.CUDA]) == (
+                ComputeBackend.CUDA,
+                1,
+                "NVIDIA Tesla P40",
+            )
 
     def test_detect_vulkan_support_on_timeout(self):
         """Test Vulkan detection when command times out."""
