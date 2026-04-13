@@ -411,7 +411,9 @@ class TestSpeechRecognitionManagerInit:
                 "sys.modules",
                 {"pywhispercpp.model": mock_pywhispercpp, "psutil": mock_psutil},
             ),
-            patch.object(manager, "_resolve_requested_gpu", return_value=("cuda", 1, "NVIDIA Tesla P40")),
+            patch.object(
+                manager, "_resolve_requested_gpu", return_value=("cuda", 1, "NVIDIA Tesla P40")
+            ),
             patch.object(manager, "_apply_whispercpp_gpu_selection") as mock_apply,
             patch(
                 "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
@@ -438,7 +440,9 @@ class TestSpeechRecognitionManagerInit:
 
         with patch.dict(sys.modules, {"pywhispercpp.model": MagicMock()}):
             with pytest.raises(RuntimeError, match="some other failure"):
-                manager._handle_gpu_fallback(RuntimeError("some other failure"), "/tmp/model.bin", 4, "cpu")
+                manager._handle_gpu_fallback(
+                    RuntimeError("some other failure"), "/tmp/model.bin", 4, "cpu"
+                )
 
 
 class TestGetAudioInputDevices:
