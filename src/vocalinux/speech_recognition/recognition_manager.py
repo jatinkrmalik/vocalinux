@@ -965,9 +965,7 @@ class SpeechRecognitionManager:
             get_backend_display_name,
         )
 
-        requested_gpu = self._resolve_requested_gpu(
-            [ComputeBackend.VULKAN, ComputeBackend.CUDA]
-        )
+        requested_gpu = self._resolve_requested_gpu([ComputeBackend.VULKAN, ComputeBackend.CUDA])
         if requested_gpu:
             self._apply_whispercpp_gpu_selection(requested_gpu)
         else:

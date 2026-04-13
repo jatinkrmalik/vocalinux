@@ -650,7 +650,9 @@ class TestMainConfigPrecedence(unittest.TestCase):
                 mock_config_instance.set.assert_any_call(
                     "speech_recognition", "gpu_name", "NVIDIA RTX 4090"
                 )
-                mock_config_instance.set.assert_any_call("speech_recognition", "gpu_backend", "cuda")
+                mock_config_instance.set.assert_any_call(
+                    "speech_recognition", "gpu_backend", "cuda"
+                )
                 mock_config_instance.save_config.assert_called_once()
 
     @patch("vocalinux.main.check_dependencies")

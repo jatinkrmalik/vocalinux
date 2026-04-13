@@ -197,9 +197,7 @@ def resolve_gpu_selection(
 
     if len(partial_matches) > 1:
         matches = ", ".join(f"{backend}:{name}" for backend, _, name in partial_matches)
-        raise ValueError(
-            f"GPU name '{requested_name}' is ambiguous. Matching devices: {matches}"
-        )
+        raise ValueError(f"GPU name '{requested_name}' is ambiguous. Matching devices: {matches}")
 
     available = ", ".join(available_devices) if available_devices else "none"
     raise ValueError(f"GPU '{requested_name}' not found. Available GPUs: {available}")
