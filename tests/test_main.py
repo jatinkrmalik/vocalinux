@@ -28,6 +28,7 @@ class TestMainModule(unittest.TestCase):
             self.assertIsNone(args.engine)
             self.assertIsNone(args.language)
             self.assertIsNone(args.gpu)
+            self.assertFalse(args.gpus)
             self.assertFalse(args.wayland)
             self.assertFalse(args.start_minimized)
 
@@ -47,6 +48,7 @@ class TestMainModule(unittest.TestCase):
                 "fr",
                 "--gpu",
                 "NVIDIA RTX 4090",
+                "--gpus",
                 "--wayland",
                 "--start-minimized",
             ],
@@ -57,8 +59,44 @@ class TestMainModule(unittest.TestCase):
             self.assertEqual(args.engine, "whisper")
             self.assertEqual(args.language, "fr")
             self.assertEqual(args.gpu, "NVIDIA RTX 4090")
+            self.assertTrue(args.gpus)
             self.assertTrue(args.wayland)
             self.assertTrue(args.start_minimized)
+
+    def test_list_available_gpus_formats_output(self):
+        from vocalinux.main import list_available_gpus
+
+        with (
+            patch("vocalinux.main.print") as mock_print,
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_vulkan_devices",
+                return_value=[(0, "Intel Arc A770")],
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.list_cuda_devices",
+                return_value=[(1, "NVIDIA Tesla P40")],
+            ),
+        ):
+            result = list_available_gpus()
+
+        self.assertEqual(result, 0)
+        mock_print.assert_any_call("Vulkan GPUs:")
+        mock_print.assert_any_call("  [0] Intel Arc A770")
+        mock_print.assert_any_call("CUDA GPUs:")
+        mock_print.assert_any_call("  [1] NVIDIA Tesla P40")
+
+    def test_list_available_gpus_when_none_detected(self):
+        from vocalinux.main import list_available_gpus
+
+        with (
+            patch("vocalinux.main.print") as mock_print,
+            patch("vocalinux.utils.whispercpp_model_info.list_vulkan_devices", return_value=[]),
+            patch("vocalinux.utils.whispercpp_model_info.list_cuda_devices", return_value=[]),
+        ):
+            result = list_available_gpus()
+
+        self.assertEqual(result, 1)
+        mock_print.assert_called_once_with("No GPUs detected.")
 
     def test_parse_arguments_model_choices(self):
         """Test that model only accepts valid choices."""
@@ -114,6 +152,7 @@ class TestMainModule(unittest.TestCase):
         mock_check_deps.return_value = False
         mock_args = MagicMock()
         mock_args.debug = False
+        mock_args.gpus = False
         mock_parse.return_value = mock_args
 
         # Make sys.exit raise SystemExit to stop execution
@@ -141,6 +180,7 @@ class TestMainModule(unittest.TestCase):
         mock_args.model = "small"
         mock_args.engine = "vosk"
         mock_args.language = "en-us"
+        mock_args.gpus = False
         mock_args.wayland = False
         mock_parse.return_value = mock_args
 
@@ -210,6 +250,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.model = "medium"
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
+            mock_args.gpus = False
             mock_args.wayland = True
             mock_parse.return_value = mock_args
 
@@ -294,6 +335,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.model = "small"
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
+            mock_args.gpus = False
             mock_args.wayland = False
             mock_parse.return_value = mock_args
 
@@ -349,6 +391,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.model = "small"
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
+            mock_args.gpus = False
             mock_args.wayland = False
             mock_parse.return_value = mock_args
 
@@ -402,6 +445,7 @@ class TestMainModule(unittest.TestCase):
             mock_args.model = "small"
             mock_args.engine = "vosk"
             mock_args.language = "en-us"
+            mock_args.gpus = False
             mock_args.wayland = False
             mock_args.start_minimized = True
             mock_parse.return_value = mock_args
