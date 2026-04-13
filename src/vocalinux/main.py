@@ -69,6 +69,11 @@ def parse_arguments():
             "Use 'auto' to clear the saved GPU preference."
         ),
     )
+    parser.add_argument(
+        "--gpus",
+        action="store_true",
+        help="List detected GPUs that can be used with --gpu and exit",
+    )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
     parser.add_argument(
         "--start-minimized",
@@ -76,6 +81,30 @@ def parse_arguments():
         help="Start minimized to system tray",
     )
     return parser.parse_args()
+
+
+def list_available_gpus() -> int:
+    """Print the currently detectable GPUs and return a process exit code."""
+    from .utils.whispercpp_model_info import list_cuda_devices, list_vulkan_devices
+
+    vulkan_devices = list_vulkan_devices()
+    cuda_devices = list_cuda_devices()
+
+    if not vulkan_devices and not cuda_devices:
+        print("No GPUs detected.")
+        return 1
+
+    if vulkan_devices:
+        print("Vulkan GPUs:")
+        for device_index, device_name in vulkan_devices:
+            print(f"  [{device_index}] {device_name}")
+
+    if cuda_devices:
+        print("CUDA GPUs:")
+        for device_index, device_name in cuda_devices:
+            print(f"  [{device_index}] {device_name}")
+
+    return 0
 
 
 def check_dependencies():
@@ -214,6 +243,11 @@ def check_appindicator_support():
 
 def main():
     """Main entry point for the application."""
+    args = parse_arguments()
+
+    if getattr(args, "gpus", False):
+        sys.exit(list_available_gpus())
+
     # Check for single instance BEFORE any initialization
     from . import single_instance
 
@@ -240,8 +274,6 @@ def main():
 
     # Register cleanup to release lock on exit
     atexit.register(single_instance.release_lock)
-
-    args = parse_arguments()
 
     # Configure debug logging if requested
     if args.debug:
