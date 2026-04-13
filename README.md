@@ -241,6 +241,9 @@ vocalinux --engine whisper_cpp    # Use whisper.cpp engine (default)
 vocalinux --engine whisper        # Use OpenAI Whisper engine
 vocalinux --engine vosk           # Use VOSK engine
 vocalinux --model medium          # Use medium-sized model
+vocalinux --gpus                  # List detected Vulkan and CUDA GPUs
+vocalinux --gpu "Tesla P40"       # Persist GPU selection by device name
+vocalinux --gpu auto              # Clear saved GPU preference
 vocalinux --wayland               # Force Wayland mode
 vocalinux --start-minimized       # Start without first-run modal prompts
 ```
@@ -274,14 +277,24 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 {
   "speech_recognition": {
     "engine": "whisper_cpp",
+    "language": "auto",
     "model_size": "tiny",
+    "gpu_name": null,
+    "gpu_backend": null,
     "vad_sensitivity": 3,
-    "silence_timeout": 2.0
+    "silence_timeout": 2.0,
+    "voice_commands_enabled": null
   }
 }
 ```
 
 You can also configure settings through the graphical Settings dialog (right-click the tray icon).
+
+GPU selection notes:
+
+- Use `vocalinux --gpus` to list currently detected GPUs.
+- Use `vocalinux --gpu "GPU NAME"` to persist a GPU selection by name instead of relying on unstable device indices.
+- Use `vocalinux --gpu auto` to return to automatic GPU selection.
 
 ## 🔧 Development Setup
 
