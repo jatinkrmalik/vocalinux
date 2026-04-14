@@ -17,6 +17,12 @@ from typing import Callable, Optional
 
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
+from ..utils.moonshine_model_info import (
+    get_moonshine_default_model_size,
+    get_moonshine_supported_model_sizes,
+    resolve_moonshine_language,
+    resolve_moonshine_model_arch_name,
+)
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
@@ -591,6 +597,8 @@ class SpeechRecognitionManager:
             self._init_whisper()
         elif engine == "whisper_cpp":
             self._init_whispercpp()
+        elif engine == "moonshine":
+            self._init_moonshine()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
 
@@ -719,6 +727,79 @@ class SpeechRecognitionManager:
             logger.error(f"Failed to initialize Whisper engine: {e}")
             self.state = RecognitionState.ERROR
             raise
+
+    def _init_moonshine(self):
+        """Initialize the Moonshine speech recognition engine."""
+        try:
+            from moonshine_voice import Transcriber, get_model_for_language
+            from moonshine_voice.moonshine_api import ModelArch
+
+            moonshine_language, language_fallback = resolve_moonshine_language(self.language)
+            valid_models = get_moonshine_supported_model_sizes(self.language)
+            arch_name, model_fallback = resolve_moonshine_model_arch_name(
+                self.model_size, self.language
+            )
+
+            if self.language == "auto":
+                logger.info("Moonshine does not support auto language detection; using English.")
+            elif language_fallback:
+                logger.warning(
+                    f"Moonshine does not support Vocalinux language '{self.language}'. "
+                    "Falling back to English."
+                )
+
+            if self.model_size in ("", "auto", None):
+                logger.info(
+                    f"Moonshine model selection is auto for language '{moonshine_language}'. "
+                    "Using moonshine_voice default."
+                )
+            elif model_fallback:
+                fallback_model = get_moonshine_default_model_size(self.language)
+                logger.warning(
+                    f"Model size '{self.model_size}' is not directly supported by Moonshine "
+                    f"for language '{moonshine_language}'. Valid options: {valid_models}. "
+                    f"Using '{fallback_model}' instead."
+                )
+                self.model_size = fallback_model
+
+            logger.info(
+                f"Resolving Moonshine model for language '{moonshine_language}' "
+                f"with model selection '{self.model_size}'"
+            )
+
+            if arch_name is None:
+                model_path, model_arch = get_model_for_language(
+                    wanted_language=moonshine_language
+                )
+            else:
+                model_arch = getattr(ModelArch, arch_name)
+                model_path, model_arch = get_model_for_language(
+                    wanted_language=moonshine_language,
+                    wanted_model_arch=model_arch,
+                )
+
+            logger.info(
+                f"Loading Moonshine model from {model_path} "
+                f"(language={moonshine_language}, arch={model_arch})"
+            )
+
+            self.model = None
+            self.recognizer = None
+            self.model = Transcriber(model_path=model_path, model_arch=model_arch)
+
+            self._model_initialized = True
+            logger.info("Moonshine engine initialized successfully.")
+
+        except ImportError as e:
+            logger.error(f"Failed to import Moonshine: {e}")
+            logger.error("Please install with: pip install moonshine-voice")
+            self.state = RecognitionState.ERROR
+            raise
+        except (AttributeError, RuntimeError, OSError, ValueError) as e:
+            logger.error(f"Failed to initialize Moonshine engine: {e}", exc_info=True)
+            self.state = RecognitionState.ERROR
+            raise
+
 
     def _transcribe_with_whisper(self, audio_buffer: list[bytes]) -> str:
         """
@@ -1036,6 +1117,80 @@ class SpeechRecognitionManager:
             )
             logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
             return ""
+
+    def _transcribe_with_moonshine(self, audio_buffer: list[bytes]) -> str:
+        """
+        Transcribe audio buffer using Moonshine.
+
+        Args:
+            audio_buffer: List of audio data chunks (16-bit PCM at 16kHz)
+
+        Returns:
+            Transcribed text
+        """
+        import time
+
+        try:
+            import numpy as np
+
+            if not audio_buffer:
+                return ""
+
+            # Convert audio buffer to normalized float audio for moonshine_voice
+            audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+            audio_float = (audio_data.astype(np.float32) / 32768.0).tolist()
+
+            duration = len(audio_float) / 16000.0
+            num_chunks = len(audio_buffer)
+            logger.debug(
+                f"Moonshine audio preprocessing: {len(audio_float)} samples, "
+                f"{duration:.2f}s, {num_chunks} chunks"
+            )
+
+            with self._model_lock:
+                if self.model is None:
+                    logger.warning("Model is None during Moonshine transcription, returning empty result")
+                    return ""
+
+                transcribe_start = time.time()
+                transcript = self.model.transcribe_without_streaming(
+                    audio_float, sample_rate=16000
+                )
+                transcribe_duration = time.time() - transcribe_start
+
+            text_parts = []
+            for line in getattr(transcript, "lines", []) or []:
+                line_text = getattr(line, "text", "") or ""
+                filtered_text = _filter_non_speech(line_text.strip())
+                if filtered_text:
+                    text_parts.append(filtered_text)
+
+            text = " ".join(text_parts).strip()
+            num_lines = len(text_parts)
+            rtf = transcribe_duration / duration if duration > 0 else 0
+
+            if text:
+                logger.info(f"Moonshine transcribed: '{text}'")
+                logger.info(
+                    f"Moonshine transcription completed in {transcribe_duration:.3f}s "
+                    f"for {duration:.2f}s audio (RTF: {rtf:.2f}x) - {num_lines} lines"
+                )
+            else:
+                logger.debug(
+                    f"Moonshine returned empty transcription ({transcribe_duration:.3f}s)"
+                )
+
+            return text
+
+        except Exception as e:
+            audio_info = (
+                f"audio buffer: {len(audio_buffer)} chunks"
+                if audio_buffer
+                else "empty audio buffer"
+            )
+            logger.error(f"Error in Moonshine transcription: {e} ({audio_info})", exc_info=True)
+            return ""
+
 
     def _download_whispercpp_model(self):
         """Download a whisper.cpp model with progress tracking."""
@@ -1898,6 +2053,9 @@ class SpeechRecognitionManager:
         elif self.engine == "whisper_cpp":
             text = self._transcribe_with_whispercpp(audio_buffer)
 
+        elif self.engine == "moonshine":
+            text = self._transcribe_with_moonshine(audio_buffer)
+
         else:
             logger.error(f"Unknown engine: {self.engine}")
             return
@@ -2124,6 +2282,8 @@ class SpeechRecognitionManager:
                         self._init_whisper()
                     elif self.engine == "whisper_cpp":
                         self._init_whispercpp()
+                    elif self.engine == "moonshine":
+                        self._init_moonshine()
                     else:
                         raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                     logger.info("Speech engine re-initialized successfully.")
@@ -2252,6 +2412,8 @@ class SpeechRecognitionManager:
                     self._init_whisper()
                 elif self.engine == "whisper_cpp":
                     self._init_whispercpp()
+                elif self.engine == "moonshine":
+                    self._init_moonshine()
                 else:
                     logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
                     return
