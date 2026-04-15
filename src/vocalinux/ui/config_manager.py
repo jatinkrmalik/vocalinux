@@ -158,9 +158,7 @@ class ConfigManager:
             sr_config["moonshine_model_size"] = (
                 current_model if current_engine == "moonshine" else "auto"
             )
-            logger.info(
-                f"Migrated moonshine_model_size to: {sr_config['moonshine_model_size']}"
-            )
+            logger.info(f"Migrated moonshine_model_size to: {sr_config['moonshine_model_size']}")
 
         self.save_config()
         logger.info("Config migrated to new per-engine model format")

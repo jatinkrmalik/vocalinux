@@ -768,9 +768,7 @@ class SpeechRecognitionManager:
             )
 
             if arch_name is None:
-                model_path, model_arch = get_model_for_language(
-                    wanted_language=moonshine_language
-                )
+                model_path, model_arch = get_model_for_language(wanted_language=moonshine_language)
             else:
                 model_arch = getattr(ModelArch, arch_name)
                 model_path, model_arch = get_model_for_language(
@@ -799,7 +797,6 @@ class SpeechRecognitionManager:
             logger.error(f"Failed to initialize Moonshine engine: {e}", exc_info=True)
             self.state = RecognitionState.ERROR
             raise
-
 
     def _transcribe_with_whisper(self, audio_buffer: list[bytes]) -> str:
         """
@@ -1149,13 +1146,13 @@ class SpeechRecognitionManager:
 
             with self._model_lock:
                 if self.model is None:
-                    logger.warning("Model is None during Moonshine transcription, returning empty result")
+                    logger.warning(
+                        "Model is None during Moonshine transcription, returning empty result"
+                    )
                     return ""
 
                 transcribe_start = time.time()
-                transcript = self.model.transcribe_without_streaming(
-                    audio_float, sample_rate=16000
-                )
+                transcript = self.model.transcribe_without_streaming(audio_float, sample_rate=16000)
                 transcribe_duration = time.time() - transcribe_start
 
             text_parts = []
@@ -1176,9 +1173,7 @@ class SpeechRecognitionManager:
                     f"for {duration:.2f}s audio (RTF: {rtf:.2f}x) - {num_lines} lines"
                 )
             else:
-                logger.debug(
-                    f"Moonshine returned empty transcription ({transcribe_duration:.3f}s)"
-                )
+                logger.debug(f"Moonshine returned empty transcription ({transcribe_duration:.3f}s)")
 
             return text
 
@@ -1190,7 +1185,6 @@ class SpeechRecognitionManager:
             )
             logger.error(f"Error in Moonshine transcription: {e} ({audio_info})", exc_info=True)
             return ""
-
 
     def _download_whispercpp_model(self):
         """Download a whisper.cpp model with progress tracking."""

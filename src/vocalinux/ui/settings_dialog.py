@@ -1848,7 +1848,9 @@ class SettingsDialog(Gtk.Dialog):
             info = {
                 "desc": "Moonshine ONNX backend",
                 "size_mb": 0,
-                "params": "Auto-selected by moonshine_voice" if model_name == "auto" else model_name,
+                "params": (
+                    "Auto-selected by moonshine_voice" if model_name == "auto" else model_name
+                ),
             }
             is_downloaded = is_moonshine_available()
             recommended = "auto"
