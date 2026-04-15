@@ -34,11 +34,13 @@ from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
     detect_compute_backend,
     get_backend_display_name,
-    list_cuda_devices,
-    list_vulkan_devices,
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
+from ..utils.whispercpp_model_info import (
+    list_cuda_devices,
+    list_vulkan_devices,
+)
 from .keyboard_backends import (  # noqa: E402
     SHORTCUT_DISPLAY_NAMES,
     SHORTCUT_GROUPS,
