@@ -159,6 +159,24 @@ class TestSettingsDialog(unittest.TestCase):
         mock_config_manager.save_settings.assert_called_once()
         mock_speech_engine.reconfigure.assert_called_once()
 
+    def test_apply_settings_with_gpu_selection(self):
+        """Test apply_settings forwards GPU settings to config and engine."""
+        settings = {
+            "engine": "whisper_cpp",
+            "language": "de",
+            "model_size": "large",
+            "gpu_name": "NVIDIA Tesla P40",
+            "gpu_backend": "cuda",
+        }
+
+        mock_speech_engine.reconfigure.side_effect = None
+
+        result = apply_settings_internal(self.dialog, settings)
+
+        self.assertTrue(result)
+        mock_config_manager.update_speech_recognition_settings.assert_called_once_with(settings)
+        mock_speech_engine.reconfigure.assert_called_once_with(**settings)
+
 
 class TestSettingsDialogCSS(unittest.TestCase):
     """Test cases for SettingsDialog CSS styling."""
@@ -356,6 +374,58 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
         from vocalinux.ui.settings_dialog import _get_recommended_vosk_model
 
         self.assertTrue(callable(_get_recommended_vosk_model))
+
+    def test_gpu_selection_id_roundtrip(self):
+        """Test GPU selection IDs round-trip through helper functions."""
+        from vocalinux.ui.settings_dialog import _make_gpu_selection_id, _parse_gpu_selection_id
+
+        selection_id = _make_gpu_selection_id("NVIDIA Tesla P40", "cuda")
+
+        self.assertEqual(
+            _parse_gpu_selection_id(selection_id),
+            ("NVIDIA Tesla P40", "cuda"),
+        )
+
+    def test_gpu_selection_id_auto_roundtrip(self):
+        """Test automatic GPU selection ID parsing."""
+        from vocalinux.ui.settings_dialog import GPU_AUTO_ID, _parse_gpu_selection_id
+
+        self.assertEqual(_parse_gpu_selection_id(GPU_AUTO_ID), (None, None))
+        self.assertEqual(_parse_gpu_selection_id(None), (None, None))
+
+    def test_get_detected_gpu_options_includes_saved_missing_gpu(self):
+        """Test saved GPU is preserved in the selector when currently unavailable."""
+        with (
+            patch("vocalinux.ui.settings_dialog.list_vulkan_devices", return_value=[]),
+            patch("vocalinux.ui.settings_dialog.list_cuda_devices", return_value=[]),
+        ):
+            from vocalinux.ui.settings_dialog import _get_detected_gpu_options
+
+            options = _get_detected_gpu_options("NVIDIA Tesla P40", "cuda")
+
+        self.assertEqual(options[0]["gpu_name"], None)
+        self.assertEqual(options[1]["gpu_name"], "NVIDIA Tesla P40")
+        self.assertIn("currently unavailable", options[1]["label"])
+
+    def test_get_detected_gpu_options_lists_detected_backends(self):
+        """Test detected GPUs are labeled with backend information."""
+        with (
+            patch(
+                "vocalinux.ui.settings_dialog.list_vulkan_devices",
+                return_value=[(0, "Intel Arc A770")],
+            ),
+            patch(
+                "vocalinux.ui.settings_dialog.list_cuda_devices",
+                return_value=[(1, "NVIDIA Tesla P40")],
+            ),
+        ):
+            from vocalinux.ui.settings_dialog import _get_detected_gpu_options
+
+            options = _get_detected_gpu_options()
+
+        labels = [option["label"] for option in options]
+        self.assertTrue(any("Intel Arc A770" in label and "Vulkan" in label for label in labels))
+        self.assertTrue(any("NVIDIA Tesla P40" in label and "CUDA" in label for label in labels))
 
 
 if __name__ == "__main__":

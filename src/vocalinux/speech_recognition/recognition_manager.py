@@ -2225,6 +2225,17 @@ class SpeechRecognitionManager:
         if "voice_commands_enabled" in kwargs:
             self._voice_commands_preference = kwargs.get("voice_commands_enabled")
 
+        if "gpu_name" in kwargs or "gpu_backend" in kwargs:
+            new_gpu_name = kwargs.get("gpu_name")
+            new_gpu_backend = kwargs.get("gpu_backend")
+            if (
+                new_gpu_name != self.requested_gpu_name
+                or new_gpu_backend != self.preferred_gpu_backend
+            ):
+                self.requested_gpu_name = new_gpu_name
+                self.preferred_gpu_backend = new_gpu_backend
+                restart_needed = True
+
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:
