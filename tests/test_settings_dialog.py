@@ -423,9 +423,20 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
 
             options = _get_detected_gpu_options()
 
-        labels = [option["label"] for option in options]
-        self.assertTrue(any("Intel Arc A770" in label and "Vulkan" in label for label in labels))
-        self.assertTrue(any("NVIDIA Tesla P40" in label and "CUDA" in label for label in labels))
+        self.assertTrue(
+            any(
+                option["gpu_name"] == "Intel Arc A770"
+                and option["gpu_backend"] == "vulkan"
+                for option in options
+            )
+        )
+        self.assertTrue(
+            any(
+                option["gpu_name"] == "NVIDIA Tesla P40"
+                and option["gpu_backend"] == "cuda"
+                for option in options
+            )
+        )
 
 
 if __name__ == "__main__":
