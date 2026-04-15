@@ -14,11 +14,12 @@ UX Design Notes:
 - Modal dialog for model downloads (explicit confirmation for large downloads)
 """
 
+import json
 import logging
 import os
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import gi
 
@@ -33,6 +34,8 @@ from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
     detect_compute_backend,
     get_backend_display_name,
+    list_cuda_devices,
+    list_vulkan_devices,
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
@@ -82,6 +85,82 @@ WHISPER_MODEL_INFO = {
     "medium": {"size_mb": 1500, "desc": "High accuracy, slower", "params": "769M"},
     "large": {"size_mb": 2900, "desc": "Highest accuracy, slowest", "params": "1550M"},
 }
+
+GPU_AUTO_ID = "__gpu_auto__"
+
+
+def _make_gpu_selection_id(gpu_name: Optional[str], gpu_backend: Optional[str]) -> str:
+    """Encode a GPU selection for storing in ComboBoxText IDs."""
+    if not gpu_name or not gpu_backend:
+        return GPU_AUTO_ID
+    return json.dumps(
+        {"gpu_name": gpu_name, "gpu_backend": gpu_backend},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def _parse_gpu_selection_id(selection_id: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Decode a GPU selection from a ComboBoxText ID."""
+    if not selection_id or selection_id == GPU_AUTO_ID:
+        return None, None
+
+    try:
+        payload = json.loads(selection_id)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None, None
+
+    gpu_name = payload.get("gpu_name")
+    gpu_backend = payload.get("gpu_backend")
+    if isinstance(gpu_name, str) and isinstance(gpu_backend, str):
+        return gpu_name, gpu_backend
+    return None, None
+
+
+def _get_detected_gpu_options(
+    saved_gpu_name: Optional[str] = None,
+    saved_gpu_backend: Optional[str] = None,
+) -> list[dict[str, Optional[str]]]:
+    """Build UI-ready GPU selector options from currently detected devices."""
+    options = [
+        {
+            "id": GPU_AUTO_ID,
+            "label": "Automatic",
+            "gpu_name": None,
+            "gpu_backend": None,
+        }
+    ]
+
+    detected_pairs: set[tuple[str, str]] = set()
+    for backend, devices in (("vulkan", list_vulkan_devices()), ("cuda", list_cuda_devices())):
+        backend_label = get_backend_display_name(backend)
+        for _, device_name in devices:
+            detected_pairs.add((device_name, backend))
+            options.append(
+                {
+                    "id": _make_gpu_selection_id(device_name, backend),
+                    "label": f"{device_name} ({backend_label})",
+                    "gpu_name": device_name,
+                    "gpu_backend": backend,
+                }
+            )
+
+    if (
+        saved_gpu_name
+        and saved_gpu_backend
+        and (saved_gpu_name, saved_gpu_backend) not in detected_pairs
+    ):
+        backend_label = get_backend_display_name(saved_gpu_backend)
+        options.append(
+            {
+                "id": _make_gpu_selection_id(saved_gpu_name, saved_gpu_backend),
+                "label": f"{saved_gpu_name} ({backend_label}, saved but currently unavailable)",
+                "gpu_name": saved_gpu_name,
+                "gpu_backend": saved_gpu_backend,
+            }
+        )
+
+    return options
 
 
 def get_available_engines():
@@ -753,6 +832,7 @@ class SettingsDialog(Gtk.Dialog):
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
         self._populating_models = False  # Flag to prevent model change handler during population
+        self._populating_gpus = False  # Flag to prevent GPU change handler during population
         self._processing_language_change = (
             False  # Flag to prevent recursive language change handling
         )
@@ -1104,6 +1184,31 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(language_row)
 
+        # GPU selection
+        gpu_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.gpu_combo = Gtk.ComboBoxText()
+        self.gpu_combo.set_size_request(260, -1)
+        self.gpu_combo.set_tooltip_text(
+            "Select a GPU by name for Whisper or whisper.cpp acceleration, or keep automatic selection."
+        )
+        _prevent_scroll_on_hover(self.gpu_combo)
+        gpu_box.pack_start(self.gpu_combo, True, True, 0)
+
+        self.gpu_refresh_btn = Gtk.Button.new_from_icon_name(
+            "view-refresh-symbolic", Gtk.IconSize.BUTTON
+        )
+        self.gpu_refresh_btn.set_tooltip_text("Refresh detected GPUs")
+        self.gpu_refresh_btn.get_style_context().add_class("flat-button")
+        self.gpu_refresh_btn.connect("clicked", self._on_refresh_gpu_devices)
+        gpu_box.pack_start(self.gpu_refresh_btn, False, False, 0)
+
+        self.gpu_row = PreferenceRow(
+            title="GPU",
+            subtitle="Choose automatic selection or a specific GPU by name",
+            widget=gpu_box,
+        )
+        group.add_row(self.gpu_row)
+
         self.content_box.pack_start(group, False, False, 0)
 
         # Model info card (shown below the group)
@@ -1153,6 +1258,7 @@ class SettingsDialog(Gtk.Dialog):
         self.engine_combo.connect("changed", self._on_engine_changed)
         self.model_combo.connect("changed", self._on_model_changed)
         self.language_combo.connect("changed", self._on_language_changed)
+        self.gpu_combo.connect("changed", self._on_gpu_changed)
 
     def _build_recognition_section(self):
         """Build the Recognition Settings section."""
@@ -1745,6 +1851,8 @@ class SettingsDialog(Gtk.Dialog):
         self.current_model_size = settings["model_size"]
         self.current_vad = settings.get("vad_sensitivity", 3)
         self.current_silence = settings.get("silence_timeout", 2.0)
+        self.current_gpu_name = settings.get("gpu_name")
+        self.current_gpu_backend = settings.get("gpu_backend")
 
         logger.info(
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
@@ -1819,6 +1927,8 @@ class SettingsDialog(Gtk.Dialog):
                 self.language_combo.set_active_id("auto")
                 self.language = "auto"
 
+        self._populate_gpu_options()
+
         # Set spin button values
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
@@ -1867,6 +1977,8 @@ class SettingsDialog(Gtk.Dialog):
         model_size = self.config_manager.get_model_size_for_engine(engine)
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
+        gpu_name = sr_settings.get("gpu_name")
+        gpu_backend = sr_settings.get("gpu_backend")
 
         logger.info(
             f"Loaded current settings: engine={engine}, language={language}, model_size={model_size}, "
@@ -1879,7 +1991,32 @@ class SettingsDialog(Gtk.Dialog):
             "model_size": model_size,
             "vad_sensitivity": vad_sensitivity,
             "silence_timeout": silence_timeout,
+            "gpu_name": gpu_name,
+            "gpu_backend": gpu_backend,
         }
+
+    def _populate_gpu_options(self):
+        """Populate the GPU dropdown with current detections plus any saved selection."""
+        self._populating_gpus = True
+        try:
+            self.gpu_combo.remove_all()
+            options = _get_detected_gpu_options(self.current_gpu_name, self.current_gpu_backend)
+            for option in options:
+                self.gpu_combo.append(option["id"], option["label"])
+
+            active_id = _make_gpu_selection_id(self.current_gpu_name, self.current_gpu_backend)
+            if not self.gpu_combo.set_active_id(active_id):
+                self.gpu_combo.set_active_id(GPU_AUTO_ID)
+
+            detected_count = max(0, len(options) - 1)
+            if detected_count == 0:
+                self.gpu_row.set_subtitle(
+                    "No supported GPUs detected. Automatic selection will use CPU."
+                )
+            else:
+                self.gpu_row.set_subtitle("Choose automatic selection or a specific GPU by name")
+        finally:
+            self._populating_gpus = False
 
     def _populate_model_options(self):
         """Populate model options based on the current engine selection."""
@@ -1984,6 +2121,7 @@ class SettingsDialog(Gtk.Dialog):
         self._update_engine_specific_ui()
         self._update_model_info()
         self._update_voice_commands_for_engine()
+        self._auto_apply_settings()
 
     def _update_voice_commands_for_engine(self):
         """Update voice commands switch based on current engine."""
@@ -2091,6 +2229,20 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
+        engine_text = self.engine_combo.get_active_text()
+        engine = engine_text.lower() if engine_text else "vosk"
+        gpu_supported = engine in {"whisper", "whisper_cpp"}
+        self.gpu_combo.set_sensitive(gpu_supported)
+        self.gpu_refresh_btn.set_sensitive(gpu_supported)
+        if gpu_supported:
+            if self.gpu_combo.get_model() and len(self.gpu_combo.get_model()) > 1:
+                self.gpu_row.set_subtitle("Choose automatic selection or a specific GPU by name")
+            else:
+                self.gpu_row.set_subtitle(
+                    "No supported GPUs detected. Automatic selection will use CPU."
+                )
+        else:
+            self.gpu_row.set_subtitle("GPU acceleration is available for Whisper and whisper.cpp")
         self._update_model_info()
         self._update_advanced_tab_sensitivity()
 
@@ -2199,7 +2351,7 @@ class SettingsDialog(Gtk.Dialog):
         if self._test_active:
             return
 
-        if self._populating_models:
+        if self._populating_models or self._populating_gpus:
             return
 
         self._applying_settings = True
@@ -2332,7 +2484,26 @@ class SettingsDialog(Gtk.Dialog):
             "whispercpp_entropy_thold": self.advanced_entropy_thold_spin.get_value(),
             "whispercpp_logprob_thold": self.advanced_logprob_thold_spin.get_value(),
             "whispercpp_no_speech_thold": self.advanced_no_speech_thold_spin.get_value(),
+            "gpu_name": _parse_gpu_selection_id(self.gpu_combo.get_active_id())[0],
+            "gpu_backend": _parse_gpu_selection_id(self.gpu_combo.get_active_id())[1],
         }
+
+    def _on_gpu_changed(self, widget):
+        """Handle changes in the selected GPU."""
+        if self._populating_gpus:
+            return
+
+        self.current_gpu_name, self.current_gpu_backend = _parse_gpu_selection_id(
+            self.gpu_combo.get_active_id()
+        )
+        self._auto_apply_settings()
+
+    def _on_refresh_gpu_devices(self, widget):
+        """Refresh the list of detected GPUs."""
+        self.current_gpu_name, self.current_gpu_backend = _parse_gpu_selection_id(
+            self.gpu_combo.get_active_id()
+        )
+        self._populate_gpu_options()
 
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""
