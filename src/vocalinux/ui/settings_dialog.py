@@ -1615,9 +1615,18 @@ class SettingsDialog(Gtk.Dialog):
                         is_downloaded = False
                         info = {"size_mb": 0}
 
-                    status = "✓" if is_downloaded else "↓"
                     star = " ★" if size == recommended_model else ""
-                    display_text = f"{size.capitalize()} ({_format_size(info.get('size_mb', 0))}) {status}{star}"
+                    if engine == "moonshine":
+                        if size == "auto":
+                            display_text = f"{size.capitalize()} (managed){star}"
+                        else:
+                            display_text = f"{size.capitalize()}{star}"
+                    else:
+                        status = "✓" if is_downloaded else "↓"
+                        display_text = (
+                            f"{size.capitalize()} ({_format_size(info.get('size_mb', 0))}) "
+                            f"{status}{star}"
+                        )
 
                     if is_downloaded:
                         downloaded_models.append(size)
@@ -1847,12 +1856,11 @@ class SettingsDialog(Gtk.Dialog):
             supported = get_moonshine_supported_model_sizes(self.language)
             info = {
                 "desc": "Moonshine ONNX backend",
-                "size_mb": 0,
                 "params": (
                     "Auto-selected by moonshine_voice" if model_name == "auto" else model_name
                 ),
             }
-            is_downloaded = is_moonshine_available()
+            package_available = is_moonshine_available()
             recommended = "auto"
             reason = "Moonshine chooses the best available model for the selected language"
             extra_info = (
@@ -1863,6 +1871,25 @@ class SettingsDialog(Gtk.Dialog):
             if model_name != "auto" and model_name not in supported:
                 self.model_info_card.hide()
                 return
+
+            self.model_info_title.set_markup(f"<b>{model_name.capitalize()}</b>: {info['desc']}")
+            if package_available:
+                status = "<span foreground='#26a269'>✓ Managed by moonshine_voice</span>"
+            else:
+                status = "<span foreground='#c01c28'>Moonshine package not installed</span>"
+            self.model_info_subtitle.set_markup(f"{extra_info} • {status}")
+
+            if model_name == recommended:
+                self.model_recommendation.set_markup(
+                    f"<span foreground='#26a269'>★ Recommended for your system ({reason})</span>"
+                )
+            else:
+                self.model_recommendation.set_markup(
+                    f"Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})"
+                )
+
+            self.model_info_card.show_all()
+            return
         else:
             self.model_info_card.hide()
             return
