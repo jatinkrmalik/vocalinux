@@ -527,6 +527,7 @@ class SpeechRecognitionManager:
         self.engine = engine
         self.model_size = model_size
         self.language = language
+        self.stop_sound_guard_ms = kwargs.get("stop_sound_guard_ms", 200)
         self.state = RecognitionState.IDLE
         self.audio_thread = None
         self.recognition_thread = None
@@ -1516,6 +1517,19 @@ class SpeechRecognitionManager:
         """Check if the model is initialized and ready for recognition."""
         return self._model_initialized and self.model is not None
 
+    def _get_stop_sound_guard_chunks(self) -> int:
+        """Convert the configured stop-sound guard to 16kHz chunk count."""
+        try:
+            guard_ms = max(0, int(self.stop_sound_guard_ms))
+        except (TypeError, ValueError):
+            logger.warning(
+                f"Invalid stop_sound_guard_ms value: {self.stop_sound_guard_ms}. Using default 200ms."
+            )
+            guard_ms = 200
+
+        chunk_duration_ms = (1024 / 16000) * 1000
+        return int(guard_ms / chunk_duration_ms)
+
     def start_recognition(self, mode: str = "toggle"):
         """Start the speech recognition process."""
         if self.state != RecognitionState.IDLE:
@@ -1573,20 +1587,17 @@ class SpeechRecognitionManager:
         if self.audio_thread and self.audio_thread.is_alive():
             self.audio_thread.join(timeout=2.0)
 
-        # Discard the last ~1 second of audio to avoid transcribing the stop sound
-        # Audio is recorded in 1024-sample chunks at 16000 Hz = ~64ms per chunk
-        # We discard the last 15 chunks (~1 second) which should contain the feedback sound
+        # Trim only a small tail to avoid the stop sound without clipping the user's final word.
         with self._buffer_lock:
-            if len(self.audio_buffer) > 15:
-                discarded_chunks = self.audio_buffer[-15:]
-                self.audio_buffer = self.audio_buffer[:-15]
+            stop_sound_guard_chunks = self._get_stop_sound_guard_chunks()
+            if stop_sound_guard_chunks > 0 and len(self.audio_buffer) > stop_sound_guard_chunks:
+                discarded_chunks = self.audio_buffer[-stop_sound_guard_chunks:]
+                self.audio_buffer = self.audio_buffer[:-stop_sound_guard_chunks]
                 logger.debug(
-                    f"Discarded {len(discarded_chunks)} audio chunks to avoid transcribing feedback sound"
+                    "Discarded %s audio chunks (~%sms) to avoid transcribing feedback sound",
+                    len(discarded_chunks),
+                    self.stop_sound_guard_ms,
                 )
-            elif self.audio_buffer:
-                # If buffer is small, just clear it entirely to be safe
-                logger.debug(f"Clearing small audio buffer ({len(self.audio_buffer)} chunks)")
-                self.audio_buffer = []
 
             if self.audio_buffer:
                 logger.info(f"DEBUG: Enqueuing final buffer with {len(self.audio_buffer)} chunks")
@@ -2094,6 +2105,8 @@ class SpeechRecognitionManager:
         if "voice_commands_enabled" in kwargs:
             self._voice_commands_preference = kwargs.get("voice_commands_enabled")
 
+        if "stop_sound_guard_ms" in kwargs:
+            self.stop_sound_guard_ms = kwargs.get("stop_sound_guard_ms", self.stop_sound_guard_ms)
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:
