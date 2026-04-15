@@ -10,6 +10,7 @@ UX Design Notes tested:
 - No action buttons - uses title bar close (GNOME HIG)
 """
 
+import importlib
 import sys
 import time
 import unittest
@@ -395,13 +396,14 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
 
     def test_get_detected_gpu_options_includes_saved_missing_gpu(self):
         """Test saved GPU is preserved in the selector when currently unavailable."""
-        with (
-            patch("vocalinux.ui.settings_dialog.list_vulkan_devices", return_value=[]),
-            patch("vocalinux.ui.settings_dialog.list_cuda_devices", return_value=[]),
-        ):
-            from vocalinux.ui.settings_dialog import _get_detected_gpu_options
+        import vocalinux.ui.settings_dialog as settings_dialog
 
-            options = _get_detected_gpu_options("NVIDIA Tesla P40", "cuda")
+        settings_dialog = importlib.reload(settings_dialog)
+        with (
+            patch.object(settings_dialog, "list_vulkan_devices", return_value=[]),
+            patch.object(settings_dialog, "list_cuda_devices", return_value=[]),
+        ):
+            options = settings_dialog._get_detected_gpu_options("NVIDIA Tesla P40", "cuda")
 
         self.assertEqual(options[0]["gpu_name"], None)
         self.assertEqual(options[1]["gpu_name"], "NVIDIA Tesla P40")
@@ -409,19 +411,18 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
 
     def test_get_detected_gpu_options_lists_detected_backends(self):
         """Test detected GPUs are labeled with backend information."""
+        import vocalinux.ui.settings_dialog as settings_dialog
+
+        settings_dialog = importlib.reload(settings_dialog)
         with (
-            patch(
-                "vocalinux.ui.settings_dialog.list_vulkan_devices",
-                return_value=[(0, "Intel Arc A770")],
+            patch.object(
+                settings_dialog, "list_vulkan_devices", return_value=[(0, "Intel Arc A770")]
             ),
-            patch(
-                "vocalinux.ui.settings_dialog.list_cuda_devices",
-                return_value=[(1, "NVIDIA Tesla P40")],
+            patch.object(
+                settings_dialog, "list_cuda_devices", return_value=[(1, "NVIDIA Tesla P40")]
             ),
         ):
-            from vocalinux.ui.settings_dialog import _get_detected_gpu_options
-
-            options = _get_detected_gpu_options()
+            options = settings_dialog._get_detected_gpu_options()
 
         self.assertTrue(
             any(
