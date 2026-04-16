@@ -49,6 +49,7 @@ class TestConfigManager(unittest.TestCase):
         """Test initialization with default configuration."""
         config_manager = ConfigManager()
         self.assertEqual(config_manager.config, DEFAULT_CONFIG)
+        self.assertEqual(config_manager.config["text_injection"]["backend"], "auto")
         self.mock_logger.info.assert_called_with(
             f"Config file not found at {self.temp_config_file}. Using defaults."
         )
@@ -91,6 +92,7 @@ class TestConfigManager(unittest.TestCase):
         )  # From defaults
         self.assertEqual(config_manager.config["ui"]["start_minimized"], True)
         self.assertEqual(config_manager.config["ui"]["show_notifications"], True)  # From defaults
+        self.assertEqual(config_manager.config["text_injection"]["backend"], "auto")
 
     def test_load_config_file_error(self):
         """Test handling of errors when loading config file."""

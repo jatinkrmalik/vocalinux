@@ -358,5 +358,34 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
         self.assertTrue(callable(_get_recommended_vosk_model))
 
 
+class TestTextInjectionBackendSetting(unittest.TestCase):
+    def test_backend_options_constant_exists(self):
+        from vocalinux.ui.settings_dialog import TEXT_INJECTION_BACKENDS
+
+        self.assertEqual(
+            set(TEXT_INJECTION_BACKENDS.keys()),
+            {"auto", "ibus", "xdotool", "wtype", "ydotool"},
+        )
+
+    def test_source_contains_backend_combo_and_handler(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("Text Injection Backend", source_code)
+        self.assertIn("def _on_text_injection_backend_changed", source_code)
+        self.assertIn('self.config_manager.set("text_injection", "backend", backend)', source_code)
+        self.assertIn("text_injection_backend_update_callback", source_code)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -51,6 +51,7 @@ DEFAULT_CONFIG = {
         "first_run": True,
     },
     "text_injection": {
+        "backend": "auto",  # auto, ibus, xdotool, wtype, or ydotool
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
     },
     "advanced": {
