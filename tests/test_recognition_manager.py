@@ -96,20 +96,22 @@ class TestSpeechRecognition(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        # Stop all patches
-        self.mockKaldi.stop()
-        self.mockModel.stop()
-        self.mockMakeDirs.stop()
-        self.mockThread.stop()
-        self.mockPath.stop()
-        self.mockDownload.stop()
-        self.mockCmdProcessor.stop()
-
-        self.patcher_makedirs.stop()
-        self.patcher_exists.stop()
-        self.patcher_unlink.stop()
-        self.patcher_temp.stop()
+        # Stop patches in reverse order of start (LIFO) to avoid corrupting
+        # os.makedirs — both mockMakeDirs and patcher_makedirs patch the same
+        # target, so they MUST be unwound in stack order.
         self.patcher_wave.stop()
+        self.patcher_temp.stop()
+        self.patcher_unlink.stop()
+        self.patcher_exists.stop()
+        self.patcher_makedirs.stop()
+
+        self.mockCmdProcessor.stop()
+        self.mockDownload.stop()
+        self.mockPath.stop()
+        self.mockThread.stop()
+        self.mockMakeDirs.stop()
+        self.mockModel.stop()
+        self.mockKaldi.stop()
 
     def test_init(self):
         """Test initialization with different engines."""

@@ -28,6 +28,9 @@ DEFAULT_CONFIG = {
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
+        "experimental_streaming": False,
+        "streaming_chunk_duration_ms": 1000,
+        "streaming_overlap_ms": 200,
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
