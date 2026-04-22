@@ -198,8 +198,8 @@ class TestListGpuDevices(unittest.TestCase):
             from vocalinux.utils.whispercpp_model_info import list_cuda_devices
 
             assert list_cuda_devices() == [
-                (0, "NVIDIA GeForce RTX 4090"),
-                (1, "NVIDIA GeForce RTX 3090"),
+                (0, "NVIDIA GeForce RTX 4090", None),
+                (1, "NVIDIA GeForce RTX 3090", None),
             ]
 
     def test_list_vulkan_devices_returns_empty_on_error_code(self):
@@ -219,7 +219,7 @@ class TestListGpuDevices(unittest.TestCase):
 
             from vocalinux.utils.whispercpp_model_info import list_cuda_devices
 
-            assert list_cuda_devices() == [(0, "NVIDIA GeForce RTX 4090")]
+            assert list_cuda_devices() == [(0, "NVIDIA GeForce RTX 4090", None)]
 
     def test_list_cuda_devices_returns_empty_on_missing_binary(self):
         with patch("subprocess.run", side_effect=FileNotFoundError("nvidia-smi not found")):
