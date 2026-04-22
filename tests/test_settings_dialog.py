@@ -437,6 +437,28 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
             )
         )
 
+    def test_get_detected_gpu_options_accepts_cuda_memory_tuples(self):
+        """Test detected GPU options handle CUDA tuples that include VRAM metadata."""
+        import vocalinux.ui.settings_dialog as settings_dialog
+
+        settings_dialog = importlib.reload(settings_dialog)
+        with (
+            patch.object(settings_dialog, "list_vulkan_devices", return_value=[]),
+            patch.object(
+                settings_dialog,
+                "list_cuda_devices",
+                return_value=[(1, "NVIDIA Tesla P40", 24576)],
+            ),
+        ):
+            options = settings_dialog._get_detected_gpu_options()
+
+        self.assertTrue(
+            any(
+                option["gpu_name"] == "NVIDIA Tesla P40" and option["gpu_backend"] == "cuda"
+                for option in options
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

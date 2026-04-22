@@ -135,7 +135,11 @@ def _get_detected_gpu_options(
     detected_pairs: set[tuple[str, str]] = set()
     for backend, devices in (("vulkan", list_vulkan_devices()), ("cuda", list_cuda_devices())):
         backend_label = get_backend_display_name(backend)
-        for _, device_name in devices:
+        for device in devices:
+            if len(device) < 2:
+                continue
+
+            _, device_name = device[:2]
             detected_pairs.add((device_name, backend))
             options.append(
                 {
