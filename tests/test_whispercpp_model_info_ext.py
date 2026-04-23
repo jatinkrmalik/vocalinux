@@ -342,10 +342,7 @@ class TestListGpuDevices(unittest.TestCase):
         ):
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout=(
-                    "0, NVIDIA T1000, 4096 MiB\n"
-                    "1, NVIDIA Tesla P40, 24576 MiB\n"
-                ),
+                stdout=("0, NVIDIA T1000, 4096 MiB\n" "1, NVIDIA Tesla P40, 24576 MiB\n"),
             )
 
             from vocalinux.utils.whispercpp_model_info import detect_cuda_support
