@@ -962,8 +962,8 @@ class SpeechRecognitionManager:
         from ..utils.whispercpp_model_info import (
             ComputeBackend,
             detect_compute_backend,
-            get_whispercpp_compiled_backends,
             get_backend_display_name,
+            get_whispercpp_compiled_backends,
         )
 
         requested_gpu = self._resolve_requested_gpu([ComputeBackend.VULKAN, ComputeBackend.CUDA])
