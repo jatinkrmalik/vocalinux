@@ -423,6 +423,10 @@ class TestSpeechRecognitionManagerInit:
                 "vocalinux.utils.whispercpp_model_info.get_backend_display_name",
                 return_value="CUDA",
             ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.get_whispercpp_compiled_backends",
+                return_value={"cpu", "cuda"},
+            ),
             patch("os.path.exists", return_value=True),
             patch("os.path.getsize", return_value=100 * 1024 * 1024),
             patch("multiprocessing.cpu_count", return_value=4),
@@ -434,6 +438,30 @@ class TestSpeechRecognitionManagerInit:
         assert manager.selected_gpu_backend == "cuda"
         assert manager.selected_gpu_index == 1
         assert manager.selected_gpu_name == "NVIDIA Tesla P40"
+
+    def test_load_whispercpp_model_rejects_requested_backend_missing_from_build(self):
+        manager = _make_manager(engine="whisper_cpp", gpu_name="Tesla P40", gpu_backend="cuda")
+        mock_pywhispercpp = MagicMock(Model=MagicMock(return_value="gpu-model"))
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {"pywhispercpp.model": mock_pywhispercpp, "psutil": mock_psutil},
+            ),
+            patch.object(
+                manager, "_resolve_requested_gpu", return_value=("cuda", 0, "Tesla P40")
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.get_whispercpp_compiled_backends",
+                return_value={"cpu", "vulkan"},
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("os.path.getsize", return_value=100 * 1024 * 1024),
+        ):
+            with pytest.raises(RuntimeError, match="does not support the requested CUDA backend"):
+                manager._load_whispercpp_model("/tmp/mock.bin")
 
     def test_handle_gpu_fallback_reraises_unrelated_runtime_error(self):
         manager = _make_manager(engine="whisper_cpp")

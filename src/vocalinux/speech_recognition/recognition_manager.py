@@ -962,10 +962,22 @@ class SpeechRecognitionManager:
         from ..utils.whispercpp_model_info import (
             ComputeBackend,
             detect_compute_backend,
+            get_whispercpp_compiled_backends,
             get_backend_display_name,
         )
 
         requested_gpu = self._resolve_requested_gpu([ComputeBackend.VULKAN, ComputeBackend.CUDA])
+        compiled_backends = get_whispercpp_compiled_backends()
+
+        if requested_gpu and requested_gpu[0] not in compiled_backends:
+            requested_backend = requested_gpu[0]
+            available_backends = ", ".join(sorted(compiled_backends))
+            raise RuntimeError(
+                "The installed pywhispercpp build does not support the requested "
+                f"{requested_backend.upper()} backend. Available backends: {available_backends}. "
+                "Reinstall pywhispercpp with the matching GGML build flag."
+            )
+
         if requested_gpu:
             self._apply_whispercpp_gpu_selection(requested_gpu)
         else:
