@@ -60,7 +60,7 @@ def generate_glide_tone(
 
         # Smooth pitch glide using smoothstep interpolation
         # This creates buttery smooth transitions with no abrupt changes
-        glide = progress ** 2 * (3 - 2 * progress)
+        glide = progress**2 * (3 - 2 * progress)
         freq_current = freq_start + (freq_end - freq_start) * glide
 
         # Generate pure sine wave
@@ -96,7 +96,7 @@ def main():
     generate_glide_tone(
         os.path.join(sounds_dir, "start_recording.wav"),
         freq_start=349.23,  # F4
-        freq_end=440.00,    # A4
+        freq_end=440.00,  # A4
         duration=0.6,
         amplitude=0.16,
     )
@@ -106,7 +106,7 @@ def main():
     generate_glide_tone(
         os.path.join(sounds_dir, "stop_recording.wav"),
         freq_start=440.00,  # A4
-        freq_end=349.23,    # F4
+        freq_end=349.23,  # F4
         duration=0.6,
         amplitude=0.16,
     )
@@ -116,7 +116,7 @@ def main():
     generate_glide_tone(
         os.path.join(sounds_dir, "error.wav"),
         freq_start=329.63,  # E4
-        freq_end=261.63,    # C4
+        freq_end=261.63,  # C4
         duration=0.7,
         amplitude=0.14,  # Slightly quieter
     )
