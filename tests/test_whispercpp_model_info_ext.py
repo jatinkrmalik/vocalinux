@@ -4,6 +4,7 @@ Comprehensive coverage tests for whispercpp_model_info module.
 Tests all functions and constants in the module.
 """
 
+import shutil
 import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
@@ -355,22 +356,23 @@ class TestListGpuDevices(unittest.TestCase):
             self.assertEqual(device_info, "NVIDIA Tesla P40 (24576 MiB)")
 
     def test_get_whispercpp_compiled_backends_detects_optional_gpu_libraries(self):
-        import tempfile
         from pathlib import Path
-        from types import SimpleNamespace
+        from types import ModuleType
+        from uuid import uuid4
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            package_dir = root / "pywhispercpp"
-            libs_dir = root / "pywhispercpp.libs"
-            package_dir.mkdir()
-            libs_dir.mkdir()
-            (package_dir / "__init__.py").write_text("# test")
-            (libs_dir / "libggml-vulkan-demo.so").write_text("")
-            (libs_dir / "libggml-cuda-demo.so").write_text("")
+        root = Path("/tmp") / f"pywhispercpp-test-{uuid4().hex}"
+        package_dir = root / "pywhispercpp"
+        libs_dir = root / "pywhispercpp.libs"
+        package_dir.mkdir(parents=True)
+        libs_dir.mkdir()
+        (package_dir / "__init__.py").write_text("# test")
+        (libs_dir / "libggml-vulkan-demo.so").write_text("")
+        (libs_dir / "libggml-cuda-demo.so").write_text("")
 
-            fake_module = SimpleNamespace(__file__=str(package_dir / "__init__.py"))
+        fake_module = ModuleType("pywhispercpp")
+        fake_module.__file__ = str(package_dir / "__init__.py")
 
+        try:
             with patch.dict("sys.modules", {"pywhispercpp": fake_module}):
                 from vocalinux.utils.whispercpp_model_info import (
                     ComputeBackend,
@@ -382,6 +384,8 @@ class TestListGpuDevices(unittest.TestCase):
                     ComputeBackend.CUDA,
                     ComputeBackend.VULKAN,
                 }
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
 
     def test_detect_vulkan_support_on_timeout(self):
         """Test Vulkan detection when command times out."""
