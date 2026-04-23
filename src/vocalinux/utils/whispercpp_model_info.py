@@ -76,7 +76,11 @@ def get_whispercpp_compiled_backends() -> set[str]:
     except ImportError:
         return backends
 
-    package_root = Path(pywhispercpp.__file__).resolve().parent.parent
+    module_file = getattr(pywhispercpp, "__file__", None)
+    if not module_file:
+        return backends
+
+    package_root = Path(module_file).resolve().parent.parent
     libs_dir = package_root / "pywhispercpp.libs"
     if not libs_dir.exists():
         return backends
