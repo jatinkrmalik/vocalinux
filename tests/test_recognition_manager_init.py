@@ -450,9 +450,7 @@ class TestSpeechRecognitionManagerInit:
                 "sys.modules",
                 {"pywhispercpp.model": mock_pywhispercpp, "psutil": mock_psutil},
             ),
-            patch.object(
-                manager, "_resolve_requested_gpu", return_value=("cuda", 0, "Tesla P40")
-            ),
+            patch.object(manager, "_resolve_requested_gpu", return_value=("cuda", 0, "Tesla P40")),
             patch(
                 "vocalinux.utils.whispercpp_model_info.get_whispercpp_compiled_backends",
                 return_value={"cpu", "vulkan"},
