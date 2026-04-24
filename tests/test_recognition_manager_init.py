@@ -389,3 +389,110 @@ class TestManagerStateCallbacks:
                     mock_init.reset_mock()
                     manager.reconfigure(initial_prompt="Same prompt")
                     mock_init.assert_not_called()
+
+    def test_reconfigure_whisper_prompt_change_no_reload(self):
+        """Test that changing initial_prompt on whisper does NOT trigger model reload.
+
+        Only whisper_cpp requires reload for prompt changes; OpenAI Whisper
+        passes the prompt at transcription time.
+        """
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            with patch.object(SpeechRecognitionManager, "_init_whisper") as mock_init:
+                with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+                    manager = SpeechRecognitionManager(
+                        engine="whisper", model_size="tiny", defer_download=True
+                    )
+                    mock_init.reset_mock()
+                    manager.reconfigure(initial_prompt="New prompt")
+                    # Whisper does not reload model on prompt change
+                    mock_init.assert_not_called()
+
+    def test_reconfigure_vosk_prompt_ignored(self):
+        """Test that changing initial_prompt on vosk does not trigger reload."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk") as mock_init:
+            with patch.object(SpeechRecognitionManager, "_init_whisper"):
+                with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+                    manager = SpeechRecognitionManager(
+                        engine="vosk", model_size="tiny", defer_download=True
+                    )
+                    mock_init.reset_mock()
+                    manager.reconfigure(initial_prompt="New prompt")
+                    mock_init.assert_not_called()
+
+
+class TestWhispercppInitialPrompt:
+    """Tests for whisper.cpp initialization with initial_prompt."""
+
+    def test_init_whispercpp_with_prompt(self):
+        """Test that initial_prompt is passed to Model constructor."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        mock_model = MagicMock()
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            with patch.object(SpeechRecognitionManager, "_init_whisper"):
+                with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+                    manager = SpeechRecognitionManager(
+                        engine="whisper_cpp",
+                        model_size="tiny",
+                        language="en-us",
+                        defer_download=True,
+                        initial_prompt="Custom vocab",
+                    )
+                    # Verify initial_prompt is set correctly
+                    assert manager.initial_prompt == "Custom vocab"
+
+    def test_init_whispercpp_empty_prompt(self):
+        """Test that empty initial_prompt defaults correctly."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            with patch.object(SpeechRecognitionManager, "_init_whisper"):
+                with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+                    manager = SpeechRecognitionManager(
+                        engine="whisper_cpp",
+                        model_size="tiny",
+                        language="en-us",
+                        defer_download=True,
+                    )
+                    assert manager.initial_prompt == ""
+
+
+class TestWhisperInitialPrompt:
+    """Tests for OpenAI Whisper initialization with initial_prompt."""
+
+    def test_transcribe_with_whisper_includes_prompt(self):
+        """Test that initial_prompt is passed to whisper transcribe."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+                with patch.object(SpeechRecognitionManager, "_init_whisper"):
+                    manager = SpeechRecognitionManager(
+                        engine="whisper",
+                        model_size="tiny",
+                        language="en-us",
+                        defer_download=True,
+                        initial_prompt="Custom vocab",
+                    )
+                    assert manager.initial_prompt == "Custom vocab"
+
+    def test_transcribe_with_whisper_omits_empty_prompt(self):
+        """Test that empty initial_prompt is not passed to whisper transcribe."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+                with patch.object(SpeechRecognitionManager, "_init_whisper"):
+                    manager = SpeechRecognitionManager(
+                        engine="whisper",
+                        model_size="tiny",
+                        language="en-us",
+                        defer_download=True,
+                        initial_prompt="",
+                    )
+                    assert manager.initial_prompt == ""
