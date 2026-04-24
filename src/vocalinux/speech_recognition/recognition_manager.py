@@ -555,6 +555,9 @@ class SpeechRecognitionManager:
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
 
+        # Custom prompt to bias transcription (whisper.cpp / Whisper only)
+        self.initial_prompt = kwargs.get("initial_prompt", "")
+
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
         self._audio_level_callbacks: list[Callable[[float], None]] = []
@@ -766,16 +769,20 @@ class SpeechRecognitionManager:
                 elif self.language == "auto":
                     lang = None  # Auto-detect
 
+                # Build kwargs for transcribe, conditionally adding initial_prompt
+                transcribe_kwargs = {
+                    "language": lang,
+                    "task": "transcribe",
+                    "verbose": False,
+                    "temperature": 0.0,  # Greedy decoding for consistency
+                    "no_speech_threshold": 0.6,
+                    "fp16": use_fp16,  # Explicitly set to avoid warning on CPU
+                }
+                if self.initial_prompt:
+                    transcribe_kwargs["initial_prompt"] = self.initial_prompt
+
                 # Transcribe with Whisper (handles variable length audio automatically)
-                result = self.model.transcribe(
-                    audio_float,
-                    language=lang,
-                    task="transcribe",
-                    verbose=False,
-                    temperature=0.0,  # Greedy decoding for consistency
-                    no_speech_threshold=0.6,
-                    fp16=use_fp16,  # Explicitly set to avoid warning on CPU
-                )
+                result = self.model.transcribe(audio_float, **transcribe_kwargs)
 
             text = result.get("text", "").strip()
 
@@ -879,18 +886,32 @@ class SpeechRecognitionManager:
         load_start_time = time.time()
         loaded_backend = backend
 
+        model_kwargs = {
+            "n_threads": n_threads,
+            "suppress_blank": True,
+            "no_speech_thold": 0.6,
+            "entropy_thold": 2.4,
+        }
+        if self.initial_prompt:
+            model_kwargs["initial_prompt"] = self.initial_prompt
+
         # Attempt to load model; fall back to CPU if GPU backend is incompatible
         try:
-            self.model = Model(
-                model_path,
-                n_threads=n_threads,
-                suppress_blank=True,
-                no_speech_thold=0.6,
-                entropy_thold=2.4,
-            )
+            try:
+                self.model = Model(model_path, **model_kwargs)
+            except TypeError as type_error:
+                if "initial_prompt" in str(type_error):
+                    logger.warning(
+                        "pywhispercpp does not support initial_prompt (old version?). "
+                        "Falling back to load without prompt."
+                    )
+                    model_kwargs.pop("initial_prompt", None)
+                    self.model = Model(model_path, **model_kwargs)
+                else:
+                    raise
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
-                model_error, model_path, n_threads, ComputeBackend.CPU
+                model_error, model_path, n_threads, ComputeBackend.CPU, model_kwargs
             )
 
         load_duration = time.time() - load_start_time
@@ -903,7 +924,9 @@ class SpeechRecognitionManager:
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
 
-    def _handle_gpu_fallback(self, error, model_path: str, n_threads: int, cpu_backend):
+    def _handle_gpu_fallback(
+        self, error, model_path: str, n_threads: int, cpu_backend, model_kwargs=None
+    ):
         """Handle GPU backend failure by falling back to CPU.
 
         Args:
@@ -911,6 +934,7 @@ class SpeechRecognitionManager:
             model_path: Path to the GGML model file.
             n_threads: Number of CPU threads for the model.
             cpu_backend: The CPU ComputeBackend enum value.
+            model_kwargs: Optional dict of kwargs to pass to Model().
 
         Returns:
             The backend that was actually used.
@@ -938,13 +962,7 @@ class SpeechRecognitionManager:
         # Force CPU backend by disabling GPU backends
         os.environ["GGML_VULKAN"] = "0"
         os.environ["GGML_CUDA"] = "0"
-        self.model = Model(
-            model_path,
-            n_threads=n_threads,
-            suppress_blank=True,
-            no_speech_thold=0.6,
-            entropy_thold=2.4,
-        )
+        self.model = Model(model_path, **(model_kwargs or {}))
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
 
@@ -2093,6 +2111,14 @@ class SpeechRecognitionManager:
 
         if "voice_commands_enabled" in kwargs:
             self._voice_commands_preference = kwargs.get("voice_commands_enabled")
+
+        if "initial_prompt" in kwargs:
+            new_prompt = kwargs.get("initial_prompt", "")
+            if new_prompt != self.initial_prompt:
+                self.initial_prompt = new_prompt
+                # whisper.cpp requires model reload for prompt changes
+                if self.engine == "whisper_cpp":
+                    restart_needed = True
 
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 

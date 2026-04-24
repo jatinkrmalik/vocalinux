@@ -430,6 +430,24 @@ class TestConfigManager(unittest.TestCase):
         new_config_manager = ConfigManager()
         self.assertFalse(new_config_manager.is_sound_effects_enabled())
 
+    def test_initial_prompt_default_empty(self):
+        """Test that initial_prompt defaults to empty string."""
+        config_manager = ConfigManager()
+        self.assertEqual(config_manager.get_initial_prompt(), "")
+
+    def test_initial_prompt_round_trip(self):
+        """Test saving and loading initial_prompt."""
+        config_manager = ConfigManager()
+        config_manager.set(
+            "speech_recognition", "initial_prompt", "British English: colour, favourite."
+        )
+        config_manager.save_config()
+
+        config_manager2 = ConfigManager()
+        self.assertEqual(
+            config_manager2.get_initial_prompt(), "British English: colour, favourite."
+        )
+
 
 class TestTypedAccessors(unittest.TestCase):
     """Tests for typed config accessors."""

@@ -358,5 +358,97 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
         self.assertTrue(callable(_get_recommended_vosk_model))
 
 
+class TestSettingsDialogInitialPrompt(unittest.TestCase):
+    """Test cases for initial prompt UI in settings dialog."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        if "vocalinux.ui.settings_dialog" in sys.modules:
+            del sys.modules["vocalinux.ui.settings_dialog"]
+
+    def _get_source_code(self):
+        """Helper to read settings dialog source code."""
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            return f.read()
+
+    def test_settings_dialog_has_initial_prompt_source(self):
+        """Test that SettingsDialog source includes initial prompt code."""
+        source_code = self._get_source_code()
+
+        # Should have initial prompt related code
+        self.assertIn("initial_prompt", source_code)
+        self.assertIn("Initial Prompt", source_code)
+
+    def test_settings_dialog_has_initial_prompt_section_in_source(self):
+        """Test that source includes initial_prompt_section setup."""
+        source_code = self._get_source_code()
+        self.assertIn("initial_prompt_section", source_code)
+
+    def test_settings_dialog_has_initial_prompt_textview_in_source(self):
+        """Test that source includes initial_prompt_textview setup."""
+        source_code = self._get_source_code()
+        self.assertIn("initial_prompt_textview", source_code)
+
+    def test_settings_dialog_has_initial_prompt_buffer_in_source(self):
+        """Test that source includes initial_prompt_buffer setup."""
+        source_code = self._get_source_code()
+        self.assertIn("initial_prompt_buffer", source_code)
+
+    def test_settings_dialog_has_initial_prompt_counter_in_source(self):
+        """Test that source includes initial_prompt_counter setup."""
+        source_code = self._get_source_code()
+        self.assertIn("initial_prompt_counter", source_code)
+
+    def test_settings_dialog_has_initial_prompt_hint_in_source(self):
+        """Test that source includes initial_prompt_hint setup."""
+        source_code = self._get_source_code()
+        self.assertIn("initial_prompt_hint", source_code)
+
+    def test_settings_dialog_has_on_dialog_response_in_source(self):
+        """Test that source includes _on_dialog_response method."""
+        source_code = self._get_source_code()
+        self.assertIn("def _on_dialog_response", source_code)
+
+    def test_settings_dialog_has_on_initial_prompt_changed_in_source(self):
+        """Test that source includes _on_initial_prompt_changed method."""
+        source_code = self._get_source_code()
+        self.assertIn("def _on_initial_prompt_changed", source_code)
+
+    def test_settings_dialog_has_apply_prompt_setting_in_source(self):
+        """Test that source includes _apply_prompt_setting method."""
+        source_code = self._get_source_code()
+        self.assertIn("def _apply_prompt_setting", source_code)
+
+    def test_settings_dialog_has_update_initial_prompt_visibility_in_source(self):
+        """Test that source includes _update_initial_prompt_visibility method."""
+        source_code = self._get_source_code()
+        self.assertIn("def _update_initial_prompt_visibility", source_code)
+
+    def test_settings_dialog_css_has_preference_separator(self):
+        """Test that CSS includes preference-separator class."""
+        source_code = self._get_source_code()
+        self.assertIn(".preference-separator", source_code)
+
+    def test_settings_dialog_has_500_char_limit(self):
+        """Test that source includes 500 character limit."""
+        source_code = self._get_source_code()
+        self.assertIn("500", source_code)
+
+    def test_settings_dialog_has_debounced_save(self):
+        """Test that source includes debounced save mechanism."""
+        source_code = self._get_source_code()
+        self.assertIn("GLib.timeout_add", source_code)
+
+
 if __name__ == "__main__":
     unittest.main()
