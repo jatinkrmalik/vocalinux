@@ -28,6 +28,7 @@ DEFAULT_CONFIG = {
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
+        "initial_prompt": "",  # Custom vocabulary/spelling prompt for Whisper engines
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
@@ -342,6 +343,10 @@ class ConfigManager:
         for key, value in settings.items():
             self.config["speech_recognition"][key] = value
         logger.info(f"Updated speech recognition settings: {settings}")
+
+    def get_initial_prompt(self) -> str:
+        """Get the initial prompt for speech recognition engines."""
+        return self.get_str("speech_recognition", "initial_prompt", "")
 
     def is_sound_effects_enabled(self) -> bool:
         """Check if sound effects are enabled."""

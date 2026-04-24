@@ -355,3 +355,37 @@ class TestManagerStateCallbacks:
         # Just verify manager has state property
         state = manager.state
         assert state is not None
+
+    def test_manager_init_with_initial_prompt(self):
+        """Test manager initialization with initial_prompt."""
+        manager = _make_manager(engine="whisper_cpp", initial_prompt="Custom vocab")
+        assert manager.initial_prompt == "Custom vocab"
+
+    def test_reconfigure_whispercpp_prompt_change_triggers_reload(self):
+        """Test that changing initial_prompt on whisper_cpp triggers model reload."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            with patch.object(SpeechRecognitionManager, "_init_whisper"):
+                with patch.object(SpeechRecognitionManager, "_init_whispercpp") as mock_init:
+                    manager = SpeechRecognitionManager(
+                        engine="whisper_cpp", model_size="tiny", defer_download=True
+                    )
+                    mock_init.reset_mock()
+                    manager.reconfigure(initial_prompt="New prompt")
+                    mock_init.assert_called_once()
+
+    def test_reconfigure_same_prompt_no_reload(self):
+        """Test that reconfiguring with the same prompt does not reload."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            with patch.object(SpeechRecognitionManager, "_init_whisper"):
+                with patch.object(SpeechRecognitionManager, "_init_whispercpp") as mock_init:
+                    manager = SpeechRecognitionManager(
+                        engine="whisper_cpp", model_size="tiny", defer_download=True
+                    )
+                    manager.initial_prompt = "Same prompt"
+                    mock_init.reset_mock()
+                    manager.reconfigure(initial_prompt="Same prompt")
+                    mock_init.assert_not_called()

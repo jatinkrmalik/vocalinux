@@ -206,6 +206,11 @@ SETTINGS_CSS = """
     border-bottom: none;
 }
 
+.preference-separator {
+    border-bottom: 1px solid alpha(@borders, 0.3);
+    min-height: 0;
+}
+
 .preference-row:hover {
     background-color: alpha(@theme_selected_bg_color, 0.1);
 }
@@ -244,6 +249,10 @@ SETTINGS_CSS = """
     border: 1px solid alpha(@borders, 0.5);
 }
 
+/* Use test-textview on non-editable TextViews only.
+   GTK3 gets rendering artifacts (black scroll bar) when
+   an editable TextView inside a ScrolledWindow has its own
+   background-color / padding / border-radius. */
 .test-textview {
     font-family: monospace;
     font-size: 0.95em;
@@ -735,6 +744,7 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
+        self.connect("response", self._on_dialog_response)
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -1163,12 +1173,83 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(voice_commands_row)
 
+        # Separator between Voice Commands and Initial Prompt
+        separator = Gtk.Box()
+        separator.get_style_context().add_class("preference-separator")
+        group.pack_start(separator, False, False, 0)
+
+        self.initial_prompt_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.initial_prompt_section.set_margin_top(32)
+        self.initial_prompt_section.set_margin_bottom(32)
+
+        prompt_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        prompt_row.set_margin_bottom(8)
+        prompt_row.set_margin_start(32)
+        prompt_row.set_margin_end(32)
+        prompt_text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        prompt_title = Gtk.Label(label="Initial Prompt", xalign=0)
+        prompt_title.get_style_context().add_class("preference-row-title")
+        prompt_text_box.pack_start(prompt_title, False, False, 0)
+        prompt_subtitle = Gtk.Label(
+            label="Custom vocabulary and spelling hints for the model",
+            xalign=0,
+            wrap=True,
+        )
+        prompt_subtitle.get_style_context().add_class("preference-row-subtitle")
+        prompt_text_box.pack_start(prompt_subtitle, False, False, 0)
+        prompt_row.pack_start(prompt_text_box, True, True, 0)
+        self.initial_prompt_section.pack_start(prompt_row, False, False, 0)
+
+        # Prompt input — bordered frame matching test-area pattern
+        self.initial_prompt_textview = Gtk.TextView()
+        self.initial_prompt_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.initial_prompt_textview.set_tooltip_text(
+            "Seed the model with custom vocabulary, spelling, or style.\n"
+            "Example: British English: colour, favourite. Terms: Kubernetes, GitLab."
+        )
+        self.initial_prompt_buffer = self.initial_prompt_textview.get_buffer()
+
+        prompt_frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        prompt_frame.get_style_context().add_class("test-area")
+        prompt_frame.set_margin_start(32)
+        prompt_frame.set_margin_end(32)
+
+        prompt_scrolled = Gtk.ScrolledWindow()
+        prompt_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        prompt_scrolled.set_min_content_height(110)
+        prompt_scrolled.add(self.initial_prompt_textview)
+        prompt_frame.pack_start(prompt_scrolled, True, True, 0)
+
+        self.initial_prompt_section.pack_start(prompt_frame, True, True, 0)
+
+        self.initial_prompt_counter = Gtk.Label(label="0 / 500", xalign=1)
+        self.initial_prompt_counter.get_style_context().add_class("tip-label")
+        self.initial_prompt_counter.set_margin_start(32)
+        self.initial_prompt_counter.set_margin_end(32)
+        self.initial_prompt_section.pack_start(self.initial_prompt_counter, False, False, 0)
+
+        self.initial_prompt_hint = Gtk.Label(
+            label="Bias transcription toward specific vocabulary, spelling, or style.",
+            xalign=0,
+            wrap=True,
+        )
+        self.initial_prompt_hint.get_style_context().add_class("tip-label")
+        self.initial_prompt_hint.set_margin_start(32)
+        self.initial_prompt_hint.set_margin_end(32)
+        self.initial_prompt_section.pack_start(self.initial_prompt_hint, False, False, 0)
+
+        group.pack_start(self.initial_prompt_section, False, False, 0)
+
         self.recognition_settings_tab.pack_start(group, False, False, 0)
 
         # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
         self.voice_commands_switch.connect("state-set", self._on_voice_commands_toggled)
+
+        self._prompt_debounce_id = None
+        self.initial_prompt_buffer.connect("changed", self._on_initial_prompt_changed)
+        self.initial_prompt_textview.connect("focus-out-event", self._on_initial_prompt_focus_out)
 
     def _build_shortcuts_section(self):
         """Build the Keyboard Shortcuts section."""
@@ -1526,6 +1607,11 @@ class SettingsDialog(Gtk.Dialog):
         voice_commands_enabled = self.config_manager.is_voice_commands_enabled()
         self.voice_commands_switch.set_active(voice_commands_enabled)
 
+        # Load initial prompt
+        initial_prompt = self.config_manager.get_initial_prompt()
+        self.initial_prompt_buffer.set_text(initial_prompt)
+        self.initial_prompt_counter.set_text(f"{len(initial_prompt)} / 500")
+
     def _get_current_settings(self):
         """Get current settings from config manager."""
         self.config_manager.load_config()
@@ -1699,6 +1785,84 @@ class SettingsDialog(Gtk.Dialog):
         logger.info(f"Voice commands {'enabled' if enabled else 'disabled'}")
         return False
 
+    def _on_initial_prompt_changed(self, buffer):
+        """Handle prompt text changes with debounced save."""
+        text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+
+        # Enforce 500-character limit
+        if len(text) > 500:
+            buffer.set_text(text[:500])
+            text = text[:500]
+
+        # Update counter
+        count = len(text)
+        self.initial_prompt_counter.set_text(f"{count} / 500")
+        if count > 100:
+            self.initial_prompt_counter.get_style_context().add_class("status-warning")
+        else:
+            self.initial_prompt_counter.get_style_context().remove_class("status-warning")
+
+        # Cancel existing debounce
+        if self._prompt_debounce_id is not None:
+            GLib.source_remove(self._prompt_debounce_id)
+            self._prompt_debounce_id = None
+
+        # Schedule new debounce (3 seconds)
+        self._prompt_debounce_id = GLib.timeout_add(3000, self._apply_prompt_setting)
+
+    def _on_initial_prompt_focus_out(self, widget, event):
+        """Apply prompt immediately when focus leaves the text view."""
+        if self._prompt_debounce_id is not None:
+            GLib.source_remove(self._prompt_debounce_id)
+            self._prompt_debounce_id = None
+        self._apply_prompt_setting()
+        return False
+
+    def _on_dialog_response(self, dialog, response_id):
+        """Flush any pending prompt changes before the dialog closes."""
+        if self._prompt_debounce_id is not None:
+            GLib.source_remove(self._prompt_debounce_id)
+            self._prompt_debounce_id = None
+            self._apply_prompt_setting()
+
+    def _apply_prompt_setting(self):
+        """Save initial_prompt to config and reconfigure engine if needed."""
+        if self._applying_settings:
+            return False
+        self._applying_settings = True
+        try:
+            if self._initializing:
+                return False
+
+            buffer = self.initial_prompt_textview.get_buffer()
+            text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+
+            current_prompt = self.config_manager.get_initial_prompt()
+            if text == current_prompt:
+                return False
+
+            logger.info(f"Applying initial_prompt (length={len(text)})")
+            self.config_manager.set("speech_recognition", "initial_prompt", text)
+            self.config_manager.save_settings()
+
+            try:
+                self.speech_engine.reconfigure(initial_prompt=text, force_download=False)
+            except Exception as e:
+                logger.warning(f"Failed to apply initial_prompt immediately: {e}")
+
+            self._prompt_debounce_id = None
+            return False
+        finally:
+            self._applying_settings = False
+
+    def _update_initial_prompt_visibility(self):
+        """Show or hide the initial prompt section based on the selected engine."""
+        engine_text = self.engine_combo.get_active_text()
+        visible = False
+        if engine_text:
+            visible = engine_text.lower() in ("whisper", "whisper_cpp")
+        self.initial_prompt_section.set_visible(visible)
+
     def _populate_language_options(self):
         """Populate language dropdown with supported languages."""
         self.language_combo.remove_all()
@@ -1762,6 +1926,7 @@ class SettingsDialog(Gtk.Dialog):
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
         self._update_model_info()
+        self._update_initial_prompt_visibility()
 
     def _update_model_info(self):
         """Update the model info card display."""
@@ -1950,12 +2115,18 @@ class SettingsDialog(Gtk.Dialog):
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
 
+        prompt_buffer = self.initial_prompt_textview.get_buffer()
+        prompt_text = prompt_buffer.get_text(
+            prompt_buffer.get_start_iter(), prompt_buffer.get_end_iter(), False
+        )
+
         return {
             "engine": engine,
             "model_size": model_size,
             "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
+            "initial_prompt": prompt_text,
         }
 
     def _on_test_clicked(self, widget):
@@ -1977,6 +2148,8 @@ class SettingsDialog(Gtk.Dialog):
                 "vad_sensitivity"
             ) or current_config.get("silence_timeout") != selected_settings.get("silence_timeout"):
                 settings_differ = True
+        elif current_config.get("initial_prompt") != selected_settings.get("initial_prompt"):
+            settings_differ = True
 
         if settings_differ:
             self.test_buffer.set_text("Applying settings...")
