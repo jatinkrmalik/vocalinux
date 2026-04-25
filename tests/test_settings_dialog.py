@@ -70,7 +70,8 @@ def apply_settings_internal(dialog, settings: dict) -> bool:
             # Give it a moment to fully stop
             time.sleep(0.01)  # Shortened for tests
 
-        dialog.speech_engine.reconfigure(**settings)
+        live_settings = dialog._get_live_reconfigure_settings(settings)
+        dialog.speech_engine.reconfigure(**live_settings)
         return True
     except Exception:
         return False
@@ -92,6 +93,7 @@ class TestSettingsDialog(unittest.TestCase):
         # Set mock attributes on dialog
         self.dialog.config_manager = mock_config_manager
         self.dialog.speech_engine = mock_speech_engine
+        self.dialog._get_live_reconfigure_settings = Mock(side_effect=lambda settings: settings)
 
         # Default test settings
         self.test_settings = {
@@ -177,6 +179,35 @@ class TestSettingsDialog(unittest.TestCase):
         self.assertTrue(result)
         mock_config_manager.update_speech_recognition_settings.assert_called_once_with(settings)
         mock_speech_engine.reconfigure.assert_called_once_with(**settings)
+
+    def test_apply_settings_preserves_active_gpu_until_restart(self):
+        """GPU changes are persisted, but live reconfigure keeps the active runtime GPU."""
+        persisted_settings = {
+            "engine": "whisper_cpp",
+            "language": "de",
+            "model_size": "large",
+            "gpu_name": "Intel(R) Graphics (RPL-S)",
+            "gpu_backend": "vulkan",
+        }
+        live_settings = {
+            "engine": "whisper_cpp",
+            "language": "de",
+            "model_size": "large",
+            "gpu_name": "Tesla P40",
+            "gpu_backend": "vulkan",
+        }
+
+        self.dialog._get_live_reconfigure_settings = Mock(return_value=live_settings)
+        mock_speech_engine.reconfigure.side_effect = None
+
+        result = apply_settings_internal(self.dialog, persisted_settings)
+
+        self.assertTrue(result)
+        mock_config_manager.update_speech_recognition_settings.assert_called_once_with(
+            persisted_settings
+        )
+        self.dialog._get_live_reconfigure_settings.assert_called_once_with(persisted_settings)
+        mock_speech_engine.reconfigure.assert_called_once_with(**live_settings)
 
 
 class TestSettingsDialogCSS(unittest.TestCase):
