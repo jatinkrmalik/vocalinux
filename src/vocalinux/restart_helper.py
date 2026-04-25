@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+from typing import List, Optional
 
 from .single_instance import LOCK_FILE_DIR, LOCK_FILE_PATH
 
@@ -68,7 +69,7 @@ def restart_after_exit(parent_pid: int) -> bool:
     return True
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     """Entry point for delayed restart."""
     argv = argv or sys.argv
     if len(argv) < 2:
