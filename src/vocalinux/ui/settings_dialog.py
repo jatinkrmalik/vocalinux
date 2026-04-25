@@ -1191,7 +1191,7 @@ class SettingsDialog(Gtk.Dialog):
 
         self.content_box.pack_start(group, False, False, 0)
 
-        self.gpu_restart_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.gpu_restart_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.gpu_restart_box.set_margin_start(16)
         self.gpu_restart_box.set_margin_end(16)
         self.gpu_restart_box.set_margin_top(4)
@@ -1201,10 +1201,13 @@ class SettingsDialog(Gtk.Dialog):
         self.gpu_restart_label.get_style_context().add_class("status-warning")
         self.gpu_restart_box.pack_start(self.gpu_restart_label, True, True, 0)
 
+        self.gpu_restart_action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.gpu_restart_button = Gtk.Button(label="Restart Now")
         self.gpu_restart_button.get_style_context().add_class("suggested-action")
+        self.gpu_restart_button.set_halign(Gtk.Align.START)
         self.gpu_restart_button.connect("clicked", self._on_restart_app_clicked)
-        self.gpu_restart_box.pack_start(self.gpu_restart_button, False, False, 0)
+        self.gpu_restart_action_box.pack_start(self.gpu_restart_button, False, False, 0)
+        self.gpu_restart_box.pack_start(self.gpu_restart_action_box, False, False, 0)
         self.gpu_restart_box.hide()
         self.content_box.pack_start(self.gpu_restart_box, False, False, 0)
 
