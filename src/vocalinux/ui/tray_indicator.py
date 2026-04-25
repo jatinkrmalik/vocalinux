@@ -8,6 +8,8 @@ recognition process and displaying its status.
 import logging
 import os
 import signal
+import subprocess
+import sys
 from typing import Callable, Optional
 
 import gi
@@ -470,6 +472,7 @@ class TrayIndicator:
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
             shortcut_update_callback=self.update_shortcut,
+            restart_callback=self.restart_application,
         )
 
         # Connect to the response signal
@@ -623,6 +626,17 @@ class TrayIndicator:
         """Handle click on the Quit menu item."""
         logger.debug("Quit clicked")
         self._quit()
+
+    def restart_application(self) -> bool:
+        """Start a fresh Vocalinux process and quit the current one."""
+        try:
+            subprocess.Popen([sys.executable, "-m", "vocalinux.main"], close_fds=True)
+        except Exception as e:
+            logger.error(f"Failed to restart application: {e}", exc_info=True)
+            return False
+
+        self._quit()
+        return True
 
     def _quit(self):
         """Quit the application."""

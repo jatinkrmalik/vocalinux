@@ -312,6 +312,24 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
 
         self.assertIn("def _auto_apply_settings(self", source_code)
 
+    def test_settings_dialog_shows_gpu_restart_notice(self):
+        """GPU changes should surface an explicit restart notice in the UI."""
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("Restart Now", source_code)
+        self.assertIn("GPU selection saved. Restart the app", source_code)
+
     def test_settings_dialog_has_close_button_only(self):
         """Test that SettingsDialog has a Close button but no Apply button.
 

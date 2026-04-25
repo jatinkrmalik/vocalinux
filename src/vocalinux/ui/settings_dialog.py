@@ -17,6 +17,8 @@ UX Design Notes:
 import json
 import logging
 import os
+import subprocess
+import sys
 import threading
 import time
 from typing import TYPE_CHECKING, Optional
@@ -809,6 +811,7 @@ class SettingsDialog(Gtk.Dialog):
         config_manager: "ConfigManager",
         speech_engine: "SpeechRecognitionManager",
         shortcut_update_callback: callable = None,
+        restart_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.set_decorated(True)  # Force window decorations (close button) on all WMs
@@ -820,6 +823,7 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
+        self.restart_callback = restart_callback
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -1186,6 +1190,23 @@ class SettingsDialog(Gtk.Dialog):
         group.add_row(self.gpu_row)
 
         self.content_box.pack_start(group, False, False, 0)
+
+        self.gpu_restart_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.gpu_restart_box.set_margin_start(16)
+        self.gpu_restart_box.set_margin_end(16)
+        self.gpu_restart_box.set_margin_top(4)
+        self.gpu_restart_box.set_margin_bottom(4)
+
+        self.gpu_restart_label = Gtk.Label(label="", use_markup=True, xalign=0, wrap=True)
+        self.gpu_restart_label.get_style_context().add_class("status-warning")
+        self.gpu_restart_box.pack_start(self.gpu_restart_label, True, True, 0)
+
+        self.gpu_restart_button = Gtk.Button(label="Restart Now")
+        self.gpu_restart_button.get_style_context().add_class("suggested-action")
+        self.gpu_restart_button.connect("clicked", self._on_restart_app_clicked)
+        self.gpu_restart_box.pack_start(self.gpu_restart_button, False, False, 0)
+        self.gpu_restart_box.hide()
+        self.content_box.pack_start(self.gpu_restart_box, False, False, 0)
 
         # Model info card (shown below the group)
         self.model_info_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -1912,6 +1933,7 @@ class SettingsDialog(Gtk.Dialog):
         self.gpu_combo.set_sensitive(gpu_supported)
         self.gpu_refresh_btn.set_sensitive(gpu_supported)
         self._update_gpu_row_subtitle()
+        self._update_gpu_restart_notice()
         self._update_model_info()
 
     def _get_runtime_gpu_selection(self) -> tuple[Optional[str], Optional[str]]:
@@ -1954,6 +1976,27 @@ class SettingsDialog(Gtk.Dialog):
                 "No supported GPUs detected. Automatic selection will use CPU."
             )
 
+    def _update_gpu_restart_notice(self):
+        """Show or hide the explicit restart notice for pending GPU changes."""
+        engine_text = self.engine_combo.get_active_text()
+        engine = engine_text.lower() if engine_text else "vosk"
+        show_notice = self._gpu_restart_pending and engine in {"whisper", "whisper_cpp"}
+
+        if show_notice:
+            self.gpu_restart_label.set_markup(
+                "<span foreground='#e5a50a'>⚠ GPU selection saved. "
+                "Restart the app to activate the new backend.</span>"
+            )
+            self.gpu_restart_button.set_sensitive(self.restart_callback is not None)
+            self.gpu_restart_button.set_tooltip_text(
+                "Restart Vocalinux now to apply the selected GPU."
+                if self.restart_callback is not None
+                else "Restart from the tray or command line to apply the selected GPU."
+            )
+            self.gpu_restart_box.show_all()
+        else:
+            self.gpu_restart_box.hide()
+
     def _get_live_reconfigure_settings(self, settings: dict) -> dict:
         """Map persisted settings to values that are safe to apply in the current process."""
         live_settings = dict(settings)
@@ -1964,6 +2007,24 @@ class SettingsDialog(Gtk.Dialog):
             live_settings["gpu_backend"] = runtime_gpu_backend
 
         return live_settings
+
+    def _on_restart_app_clicked(self, widget):
+        """Restart the application so persisted GPU changes take effect."""
+        if self.restart_callback is not None:
+            if self.restart_callback():
+                return
+
+        try:
+            subprocess.Popen([sys.executable, "-m", "vocalinux.main"], close_fds=True)
+        except Exception as e:
+            logger.error(f"Failed to restart Vocalinux: {e}", exc_info=True)
+            self.gpu_restart_label.set_markup(
+                f"<span foreground='#c01c28'>✗ Restart failed: {e}</span>"
+            )
+            self.gpu_restart_box.show_all()
+            return
+
+        Gtk.main_quit()
 
     def _update_model_info(self):
         """Update the model info card display."""
@@ -2135,6 +2196,7 @@ class SettingsDialog(Gtk.Dialog):
             self.speech_engine.reconfigure(**self._get_live_reconfigure_settings(settings))
             self._gpu_restart_pending = self._has_pending_gpu_restart(settings)
             self._update_gpu_row_subtitle()
+            self._update_gpu_restart_notice()
             logger.info("Settings auto-applied successfully")
         except Exception as e:
             logger.error(f"Failed to auto-apply settings: {e}")
@@ -2175,6 +2237,7 @@ class SettingsDialog(Gtk.Dialog):
         settings = self.get_selected_settings()
         self._gpu_restart_pending = self._has_pending_gpu_restart(settings)
         self._update_gpu_row_subtitle()
+        self._update_gpu_restart_notice()
 
         try:
             self.config_manager.update_speech_recognition_settings(settings)
@@ -2406,6 +2469,7 @@ For now, the engine has been reverted to VOSK."""
             self.speech_engine.reconfigure(**self._get_live_reconfigure_settings(settings))
             self._gpu_restart_pending = self._has_pending_gpu_restart(settings)
             self._update_gpu_row_subtitle()
+            self._update_gpu_restart_notice()
 
             logger.info("Settings applied successfully.")
             return True
