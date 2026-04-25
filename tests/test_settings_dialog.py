@@ -327,7 +327,7 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         with open(source_path, "r") as f:
             source_code = f.read()
 
-        self.assertIn("Restart Now", source_code)
+        self.assertIn('self.add_button("Restart Now"', source_code)
         self.assertIn("GPU selection saved. Restart the app", source_code)
 
     def test_settings_dialog_has_close_button_only(self):

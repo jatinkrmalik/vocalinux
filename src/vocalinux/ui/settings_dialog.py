@@ -805,6 +805,8 @@ class ModelDownloadDialog(Gtk.Dialog):
 class SettingsDialog(Gtk.Dialog):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
+    RESTART_RESPONSE = 1001
+
     def __init__(
         self,
         parent: Gtk.Window,
@@ -820,6 +822,10 @@ class SettingsDialog(Gtk.Dialog):
         # dismiss it, even on window managers that hide the title-bar close
         # button for Gtk.Dialog windows without action buttons (fixes #323).
         self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.restart_now_button = self.add_button("Restart Now", self.RESTART_RESPONSE)
+        self.restart_now_button.get_style_context().add_class("suggested-action")
+        self.restart_now_button.connect("clicked", self._on_restart_app_clicked)
+        self.restart_now_button.hide()
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
@@ -1201,13 +1207,6 @@ class SettingsDialog(Gtk.Dialog):
         self.gpu_restart_label.get_style_context().add_class("status-warning")
         self.gpu_restart_box.pack_start(self.gpu_restart_label, True, True, 0)
 
-        self.gpu_restart_action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.gpu_restart_button = Gtk.Button(label="Restart Now")
-        self.gpu_restart_button.get_style_context().add_class("suggested-action")
-        self.gpu_restart_button.set_halign(Gtk.Align.START)
-        self.gpu_restart_button.connect("clicked", self._on_restart_app_clicked)
-        self.gpu_restart_action_box.pack_start(self.gpu_restart_button, False, False, 0)
-        self.gpu_restart_box.pack_start(self.gpu_restart_action_box, False, False, 0)
         self.gpu_restart_box.hide()
         self.content_box.pack_start(self.gpu_restart_box, False, False, 0)
 
@@ -1990,14 +1989,16 @@ class SettingsDialog(Gtk.Dialog):
                 "<span foreground='#e5a50a'>⚠ GPU selection saved. "
                 "Restart the app to activate the new backend.</span>"
             )
-            self.gpu_restart_button.set_sensitive(self.restart_callback is not None)
-            self.gpu_restart_button.set_tooltip_text(
+            self.restart_now_button.set_sensitive(self.restart_callback is not None)
+            self.restart_now_button.set_tooltip_text(
                 "Restart Vocalinux now to apply the selected GPU."
                 if self.restart_callback is not None
                 else "Restart from the tray or command line to apply the selected GPU."
             )
+            self.restart_now_button.show()
             self.gpu_restart_box.show_all()
         else:
+            self.restart_now_button.hide()
             self.gpu_restart_box.hide()
 
     def _get_live_reconfigure_settings(self, settings: dict) -> dict:
