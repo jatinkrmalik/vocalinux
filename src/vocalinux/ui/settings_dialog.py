@@ -805,8 +805,6 @@ class ModelDownloadDialog(Gtk.Dialog):
 class SettingsDialog(Gtk.Dialog):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
-    RESTART_RESPONSE = 1001
-
     def __init__(
         self,
         parent: Gtk.Window,
@@ -822,10 +820,6 @@ class SettingsDialog(Gtk.Dialog):
         # dismiss it, even on window managers that hide the title-bar close
         # button for Gtk.Dialog windows without action buttons (fixes #323).
         self.add_button("Close", Gtk.ResponseType.CLOSE)
-        self.restart_now_button = self.add_button("Restart Now", self.RESTART_RESPONSE)
-        self.restart_now_button.get_style_context().add_class("suggested-action")
-        self.restart_now_button.connect("clicked", self._on_restart_app_clicked)
-        self.restart_now_button.hide()
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
@@ -840,6 +834,8 @@ class SettingsDialog(Gtk.Dialog):
         )
         self._applying_settings = False  # Flag to prevent recursive settings application
         self._gpu_restart_pending = False
+        self._gpu_restart_countdown_id = None
+        self._gpu_restart_seconds_remaining = 0
 
         # Setup CSS styling
         _setup_css()
@@ -1985,20 +1981,15 @@ class SettingsDialog(Gtk.Dialog):
         show_notice = self._gpu_restart_pending and engine in {"whisper", "whisper_cpp"}
 
         if show_notice:
-            self.gpu_restart_label.set_markup(
-                "<span foreground='#e5a50a'>⚠ GPU selection saved. "
-                "Restart the app to activate the new backend.</span>"
-            )
-            self.restart_now_button.set_sensitive(self.restart_callback is not None)
-            self.restart_now_button.set_tooltip_text(
-                "Restart Vocalinux now to apply the selected GPU."
-                if self.restart_callback is not None
-                else "Restart from the tray or command line to apply the selected GPU."
-            )
-            self.restart_now_button.show()
+            if self._gpu_restart_countdown_id is None:
+                self._gpu_restart_seconds_remaining = 5
+                self._gpu_restart_countdown_id = GLib.timeout_add_seconds(
+                    1, self._on_gpu_restart_countdown_tick
+                )
+            self._refresh_gpu_restart_notice_text()
             self.gpu_restart_box.show_all()
         else:
-            self.restart_now_button.hide()
+            self._cancel_gpu_restart_countdown()
             self.gpu_restart_box.hide()
 
     def _get_live_reconfigure_settings(self, settings: dict) -> dict:
@@ -2012,7 +2003,40 @@ class SettingsDialog(Gtk.Dialog):
 
         return live_settings
 
-    def _on_restart_app_clicked(self, widget):
+    def _cancel_gpu_restart_countdown(self):
+        """Cancel a pending GPU restart countdown."""
+        if self._gpu_restart_countdown_id is not None:
+            GLib.source_remove(self._gpu_restart_countdown_id)
+            self._gpu_restart_countdown_id = None
+        self._gpu_restart_seconds_remaining = 0
+
+    def _refresh_gpu_restart_notice_text(self):
+        """Render the current GPU restart countdown message."""
+        if self._gpu_restart_seconds_remaining > 0:
+            self.gpu_restart_label.set_markup(
+                "<span foreground='#e5a50a'>⚠ GPU selection saved. "
+                f"Restarting the app in {self._gpu_restart_seconds_remaining} seconds "
+                "to activate the new backend.</span>"
+            )
+        else:
+            self.gpu_restart_label.set_markup(
+                "<span foreground='#e5a50a'>⚠ GPU selection saved. "
+                "Restarting the app now to activate the new backend.</span>"
+            )
+
+    def _on_gpu_restart_countdown_tick(self):
+        """Advance the GPU restart countdown and restart when it reaches zero."""
+        self._gpu_restart_seconds_remaining -= 1
+        if self._gpu_restart_seconds_remaining <= 0:
+            self._gpu_restart_countdown_id = None
+            self._refresh_gpu_restart_notice_text()
+            self._restart_application_now()
+            return False
+
+        self._refresh_gpu_restart_notice_text()
+        return True
+
+    def _restart_application_now(self):
         """Restart the application so persisted GPU changes take effect."""
         if self.restart_callback is not None:
             if self.restart_callback():
