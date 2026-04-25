@@ -630,7 +630,10 @@ class TrayIndicator:
     def restart_application(self) -> bool:
         """Start a fresh Vocalinux process and quit the current one."""
         try:
-            subprocess.Popen([sys.executable, "-m", "vocalinux.main"], close_fds=True)
+            subprocess.Popen(
+                [sys.executable, "-m", "vocalinux.restart_helper", str(os.getpid())],
+                close_fds=True,
+            )
         except Exception as e:
             logger.error(f"Failed to restart application: {e}", exc_info=True)
             return False

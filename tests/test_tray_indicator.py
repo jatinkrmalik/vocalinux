@@ -218,6 +218,24 @@ class TestTrayIndicator(unittest.TestCase):
             self.mock_ksm.stop.assert_called_once()
             patched_gtk.main_quit.assert_called_once()
 
+    def test_restart_application_uses_helper_and_quits(self):
+        """Restart should launch the delayed helper before quitting."""
+        with patch("vocalinux.ui.tray_indicator.subprocess.Popen") as mock_popen:
+            with patch.object(self.tray_indicator, "_quit") as mock_quit:
+                result = self.tray_indicator.restart_application()
+
+        self.assertTrue(result)
+        mock_popen.assert_called_once_with(
+            [
+                sys.executable,
+                "-m",
+                "vocalinux.restart_helper",
+                str(os.getpid()),
+            ],
+            close_fds=True,
+        )
+        mock_quit.assert_called_once()
+
     def test_signal_handler(self):
         """Test signal handler calls GLib.idle_add with _quit."""
         with patch.object(self.tray_indicator, "_quit") as mock_quit:
