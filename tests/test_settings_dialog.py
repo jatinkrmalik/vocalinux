@@ -10,6 +10,7 @@ UX Design Notes tested:
 - No action buttons - uses title bar close (GNOME HIG)
 """
 
+import importlib
 import sys
 import time
 import unittest
@@ -69,7 +70,8 @@ def apply_settings_internal(dialog, settings: dict) -> bool:
             # Give it a moment to fully stop
             time.sleep(0.01)  # Shortened for tests
 
-        dialog.speech_engine.reconfigure(**settings)
+        live_settings = dialog._get_live_reconfigure_settings(settings)
+        dialog.speech_engine.reconfigure(**live_settings)
         return True
     except Exception:
         return False
@@ -91,6 +93,7 @@ class TestSettingsDialog(unittest.TestCase):
         # Set mock attributes on dialog
         self.dialog.config_manager = mock_config_manager
         self.dialog.speech_engine = mock_speech_engine
+        self.dialog._get_live_reconfigure_settings = Mock(side_effect=lambda settings: settings)
 
         # Default test settings
         self.test_settings = {
@@ -158,6 +161,53 @@ class TestSettingsDialog(unittest.TestCase):
         mock_config_manager.update_speech_recognition_settings.assert_called_once()
         mock_config_manager.save_settings.assert_called_once()
         mock_speech_engine.reconfigure.assert_called_once()
+
+    def test_apply_settings_with_gpu_selection(self):
+        """Test apply_settings forwards GPU settings to config and engine."""
+        settings = {
+            "engine": "whisper_cpp",
+            "language": "de",
+            "model_size": "large",
+            "gpu_name": "NVIDIA Tesla P40",
+            "gpu_backend": "cuda",
+        }
+
+        mock_speech_engine.reconfigure.side_effect = None
+
+        result = apply_settings_internal(self.dialog, settings)
+
+        self.assertTrue(result)
+        mock_config_manager.update_speech_recognition_settings.assert_called_once_with(settings)
+        mock_speech_engine.reconfigure.assert_called_once_with(**settings)
+
+    def test_apply_settings_preserves_active_gpu_until_restart(self):
+        """GPU changes are persisted, but live reconfigure keeps the active runtime GPU."""
+        persisted_settings = {
+            "engine": "whisper_cpp",
+            "language": "de",
+            "model_size": "large",
+            "gpu_name": "Intel(R) Graphics (RPL-S)",
+            "gpu_backend": "vulkan",
+        }
+        live_settings = {
+            "engine": "whisper_cpp",
+            "language": "de",
+            "model_size": "large",
+            "gpu_name": "Tesla P40",
+            "gpu_backend": "vulkan",
+        }
+
+        self.dialog._get_live_reconfigure_settings = Mock(return_value=live_settings)
+        mock_speech_engine.reconfigure.side_effect = None
+
+        result = apply_settings_internal(self.dialog, persisted_settings)
+
+        self.assertTrue(result)
+        mock_config_manager.update_speech_recognition_settings.assert_called_once_with(
+            persisted_settings
+        )
+        self.dialog._get_live_reconfigure_settings.assert_called_once_with(persisted_settings)
+        mock_speech_engine.reconfigure.assert_called_once_with(**live_settings)
 
 
 class TestSettingsDialogCSS(unittest.TestCase):
@@ -262,6 +312,24 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
 
         self.assertIn("def _auto_apply_settings(self", source_code)
 
+    def test_settings_dialog_shows_gpu_restart_notice(self):
+        """GPU changes should surface an explicit restart notice in the UI."""
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("Restarting the app in", source_code)
+        self.assertIn("def _on_gpu_restart_countdown_tick", source_code)
+
     def test_settings_dialog_has_close_button_only(self):
         """Test that SettingsDialog has a Close button but no Apply button.
 
@@ -356,6 +424,89 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
         from vocalinux.ui.settings_dialog import _get_recommended_vosk_model
 
         self.assertTrue(callable(_get_recommended_vosk_model))
+
+    def test_gpu_selection_id_roundtrip(self):
+        """Test GPU selection IDs round-trip through helper functions."""
+        from vocalinux.ui.settings_dialog import _make_gpu_selection_id, _parse_gpu_selection_id
+
+        selection_id = _make_gpu_selection_id("NVIDIA Tesla P40", "cuda")
+
+        self.assertEqual(
+            _parse_gpu_selection_id(selection_id),
+            ("NVIDIA Tesla P40", "cuda"),
+        )
+
+    def test_gpu_selection_id_auto_roundtrip(self):
+        """Test automatic GPU selection ID parsing."""
+        from vocalinux.ui.settings_dialog import GPU_AUTO_ID, _parse_gpu_selection_id
+
+        self.assertEqual(_parse_gpu_selection_id(GPU_AUTO_ID), (None, None))
+        self.assertEqual(_parse_gpu_selection_id(None), (None, None))
+
+    def test_get_detected_gpu_options_includes_saved_missing_gpu(self):
+        """Test saved GPU is preserved in the selector when currently unavailable."""
+        import vocalinux.ui.settings_dialog as settings_dialog
+
+        settings_dialog = importlib.reload(settings_dialog)
+        with (
+            patch.object(settings_dialog, "list_vulkan_devices", return_value=[]),
+            patch.object(settings_dialog, "list_cuda_devices", return_value=[]),
+        ):
+            options = settings_dialog._get_detected_gpu_options("NVIDIA Tesla P40", "cuda")
+
+        self.assertEqual(options[0]["gpu_name"], None)
+        self.assertEqual(options[1]["gpu_name"], "NVIDIA Tesla P40")
+        self.assertIn("currently unavailable", options[1]["label"])
+
+    def test_get_detected_gpu_options_lists_detected_backends(self):
+        """Test detected GPUs are labeled with backend information."""
+        import vocalinux.ui.settings_dialog as settings_dialog
+
+        settings_dialog = importlib.reload(settings_dialog)
+        with (
+            patch.object(
+                settings_dialog, "list_vulkan_devices", return_value=[(0, "Intel Arc A770")]
+            ),
+            patch.object(
+                settings_dialog, "list_cuda_devices", return_value=[(1, "NVIDIA Tesla P40")]
+            ),
+        ):
+            options = settings_dialog._get_detected_gpu_options()
+
+        self.assertTrue(
+            any(
+                option["gpu_name"] == "Intel Arc A770" and option["gpu_backend"] == "vulkan"
+                for option in options
+            )
+        )
+        self.assertTrue(
+            any(
+                option["gpu_name"] == "NVIDIA Tesla P40" and option["gpu_backend"] == "cuda"
+                for option in options
+            )
+        )
+
+    def test_get_detected_gpu_options_accepts_cuda_memory_tuples(self):
+        """Test detected GPU options handle CUDA tuples that include VRAM metadata."""
+        import vocalinux.ui.settings_dialog as settings_dialog
+
+        settings_dialog = importlib.reload(settings_dialog)
+        with (
+            patch.object(settings_dialog, "list_vulkan_devices", return_value=[]),
+            patch.object(
+                settings_dialog,
+                "list_cuda_devices",
+                return_value=[(1, "NVIDIA Tesla P40", 24576)],
+            ),
+        ):
+            options = settings_dialog._get_detected_gpu_options()
+
+        self.assertTrue(
+            any(
+                option["gpu_name"] == "NVIDIA Tesla P40" and option["gpu_backend"] == "cuda"
+                for option in options
+            )
+        )
 
 
 if __name__ == "__main__":

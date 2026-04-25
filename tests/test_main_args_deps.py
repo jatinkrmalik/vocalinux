@@ -39,6 +39,8 @@ class TestParseArguments(unittest.TestCase):
             assert args.model is None
             assert args.language is None
             assert args.engine is None
+            assert args.gpu is None
+            assert args.gpus is False
             assert args.wayland is False
             assert args.start_minimized is False
 
@@ -104,6 +106,9 @@ class TestParseArguments(unittest.TestCase):
                 "es",
                 "--engine",
                 "vosk",
+                "--gpu",
+                "Intel Arc",
+                "--gpus",
                 "--wayland",
             ],
         ):
@@ -114,6 +119,8 @@ class TestParseArguments(unittest.TestCase):
             assert args.model == "large"
             assert args.language == "es"
             assert args.engine == "vosk"
+            assert args.gpu == "Intel Arc"
+            assert args.gpus is True
             assert args.wayland is True
 
 
@@ -258,6 +265,23 @@ class TestCheckAppIndicatorSupport(unittest.TestCase):
 class TestMainFunction(unittest.TestCase):
     """Tests for the main() function."""
 
+    @patch("vocalinux.main.parse_arguments")
+    @patch("vocalinux.main.list_available_gpus")
+    def test_main_exits_after_listing_gpus(self, mock_list_gpus, mock_parse_args):
+        """Test that --gpus exits before the normal app startup path."""
+        from vocalinux.main import main
+
+        mock_args = MagicMock()
+        mock_args.gpus = True
+        mock_parse_args.return_value = mock_args
+        mock_list_gpus.return_value = 0
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 0
+        mock_list_gpus.assert_called_once_with()
+
     @patch("vocalinux.main.logging")
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.main.check_display_available")
@@ -355,6 +379,7 @@ class TestMainFunction(unittest.TestCase):
 
         mock_args = MagicMock()
         mock_args.debug = True
+        mock_args.gpus = False
         mock_args.wayland = False
         mock_args.start_minimized = False
         mock_parse_args.return_value = mock_args
@@ -433,6 +458,7 @@ class TestMainFunction(unittest.TestCase):
 
         mock_args = MagicMock()
         mock_args.debug = False
+        mock_args.gpus = False
         mock_args.wayland = False
         mock_args.start_minimized = False
         mock_args.engine = None
@@ -502,6 +528,7 @@ class TestMainFunction(unittest.TestCase):
 
         mock_args = MagicMock()
         mock_args.debug = False
+        mock_args.gpus = False
         mock_args.wayland = False
         mock_args.start_minimized = False
         mock_parse_args.return_value = mock_args

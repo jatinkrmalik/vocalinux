@@ -77,12 +77,398 @@ class TestSpeechRecognitionManagerInit:
         # Just verify manager initializes without error
         assert manager is not None
 
+    def test_manager_init_with_gpu_selection(self):
+        """Test manager initialization stores requested GPU selection."""
+        manager = _make_manager(gpu_name="NVIDIA RTX 4090", gpu_backend="cuda")
+        assert manager.requested_gpu_name == "NVIDIA RTX 4090"
+        assert manager.preferred_gpu_backend == "cuda"
+
     def test_manager_init_with_download_progress_callback(self):
         """Test manager initialization with download progress callback."""
         callback = MagicMock()
         manager = _make_manager(download_progress_callback=callback)
         # Just verify manager initializes without error
         assert manager is not None
+
+    def test_restore_managed_gpu_environment_restores_original_values(self):
+        manager = _make_manager(engine="whisper_cpp")
+
+        with patch.dict(os.environ, {"GGML_VULKAN": "9"}, clear=False):
+            manager._set_managed_env("GGML_VULKAN", "1")
+            manager._set_managed_env("GGML_CUDA", "0")
+
+            assert os.environ["GGML_VULKAN"] == "1"
+            assert os.environ["GGML_CUDA"] == "0"
+
+            manager._restore_managed_gpu_environment()
+
+            assert os.environ["GGML_VULKAN"] == "9"
+            assert "GGML_CUDA" not in os.environ
+            assert manager._managed_gpu_env_keys == set()
+
+    def test_remember_env_original_keeps_first_seen_value(self):
+        manager = _make_manager(engine="whisper_cpp")
+
+        with patch.dict(os.environ, {"GGML_VULKAN": "7"}, clear=False):
+            manager._remember_env_original("GGML_VULKAN")
+            os.environ["GGML_VULKAN"] = "8"
+            manager._remember_env_original("GGML_VULKAN")
+
+        assert manager._gpu_env_originals["GGML_VULKAN"] == "7"
+
+    def test_resolve_requested_gpu_returns_none_when_unconfigured(self):
+        manager = _make_manager(engine="whisper_cpp")
+        manager.selected_gpu_name = "Old GPU"
+        manager.selected_gpu_backend = "cuda"
+        manager.selected_gpu_index = 2
+
+        assert manager._resolve_requested_gpu() is None
+        assert manager.selected_gpu_name is None
+        assert manager.selected_gpu_backend is None
+        assert manager.selected_gpu_index is None
+
+    def test_resolve_requested_gpu_updates_selected_fields(self):
+        manager = _make_manager(
+            engine="whisper_cpp",
+            gpu_name="RTX 4090",
+            gpu_backend="cuda",
+        )
+
+        with patch(
+            "vocalinux.utils.whispercpp_model_info.resolve_gpu_selection",
+            return_value=("cuda", 1, "NVIDIA RTX 4090"),
+        ) as mock_resolve:
+            assert manager._resolve_requested_gpu(["cuda"]) == (
+                "cuda",
+                1,
+                "NVIDIA RTX 4090",
+            )
+
+        mock_resolve.assert_called_once_with(
+            "RTX 4090",
+            allowed_backends=["cuda"],
+            preferred_backend="cuda",
+        )
+        assert manager.selected_gpu_backend == "cuda"
+        assert manager.selected_gpu_index == 1
+        assert manager.selected_gpu_name == "NVIDIA RTX 4090"
+
+    def test_apply_whispercpp_gpu_selection_for_vulkan(self):
+        manager = _make_manager(engine="whisper_cpp")
+
+        with patch.dict(os.environ, {}, clear=True):
+            manager._apply_whispercpp_gpu_selection(("vulkan", 3, "Intel Arc A770"))
+
+            assert os.environ["GGML_VK_VISIBLE_DEVICES"] == "3"
+            assert os.environ["GGML_VULKAN"] == "1"
+            assert os.environ["GGML_CUDA"] == "0"
+
+    def test_apply_whispercpp_gpu_selection_for_cuda(self):
+        manager = _make_manager(engine="whisper_cpp")
+
+        with patch.dict(os.environ, {}, clear=True):
+            manager._apply_whispercpp_gpu_selection(("cuda", 1, "NVIDIA Tesla P40"))
+
+            assert os.environ["CUDA_VISIBLE_DEVICES"] == "1"
+            assert os.environ["GGML_VULKAN"] == "0"
+            assert os.environ["GGML_CUDA"] == "1"
+
+    def test_apply_whispercpp_gpu_selection_rejects_unknown_backend(self):
+        manager = _make_manager(engine="whisper_cpp")
+
+        with pytest.raises(ValueError, match="Unsupported GPU backend selection"):
+            manager._apply_whispercpp_gpu_selection(("metal", 0, "Apple GPU"))
+
+    def test_handle_gpu_fallback_clears_selection_and_forces_cpu(self):
+        manager = _make_manager(engine="whisper_cpp")
+        manager.selected_gpu_name = "Intel Arc A770"
+        manager.selected_gpu_backend = "vulkan"
+        manager.selected_gpu_index = 0
+
+        mock_model_ctor = MagicMock(return_value="cpu-model")
+        mock_module = MagicMock(Model=mock_model_ctor)
+
+        with (
+            patch.dict(sys.modules, {"pywhispercpp.model": mock_module}),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._show_notification"
+            ) as mock_notify,
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            backend = manager._handle_gpu_fallback(
+                RuntimeError("16-bit storage not supported"),
+                "/tmp/model.bin",
+                4,
+                "cpu",
+            )
+
+            assert os.environ["GGML_VULKAN"] == "0"
+            assert os.environ["GGML_CUDA"] == "0"
+
+        assert backend == "cpu"
+        assert manager.model == "cpu-model"
+        assert manager.selected_gpu_name is None
+        assert manager.selected_gpu_backend is None
+        assert manager.selected_gpu_index is None
+        mock_notify.assert_called_once()
+
+    def test_init_whisper_uses_requested_cuda_gpu(self):
+        manager = _make_manager(engine="whisper", gpu_name="RTX 4090", gpu_backend="cuda")
+        manager.model_size = "tiny"
+
+        mock_whisper = MagicMock()
+        mock_model = MagicMock()
+        mock_whisper.load_model.return_value = mock_model
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.device_count.return_value = 2
+
+        with (
+            patch.dict("sys.modules", {"whisper": mock_whisper, "torch": mock_torch}),
+            patch("os.makedirs"),
+            patch("os.path.exists", return_value=True),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.resolve_gpu_selection",
+                return_value=("cuda", 1, "NVIDIA RTX 4090"),
+            ),
+        ):
+            manager._init_whisper()
+
+        _, kwargs = mock_whisper.load_model.call_args
+        assert kwargs["device"] == "cuda:1"
+        assert manager.selected_gpu_backend == "cuda"
+        assert manager.selected_gpu_index == 1
+        assert manager.selected_gpu_name == "NVIDIA RTX 4090"
+
+    def test_init_whisper_tracks_auto_selected_cuda_gpu(self):
+        manager = _make_manager(engine="whisper")
+        manager.model_size = "tiny"
+
+        mock_whisper = MagicMock()
+        mock_whisper.load_model.return_value = MagicMock()
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.current_device.return_value = 0
+        mock_torch.cuda.get_device_name.return_value = "NVIDIA Tesla P40"
+
+        with (
+            patch.dict("sys.modules", {"whisper": mock_whisper, "torch": mock_torch}),
+            patch("os.makedirs"),
+            patch("os.path.exists", return_value=True),
+        ):
+            manager._init_whisper()
+
+        assert manager.selected_gpu_backend == "cuda"
+        assert manager.selected_gpu_index == 0
+        assert manager.selected_gpu_name == "NVIDIA Tesla P40"
+
+    def test_init_whisper_raises_when_requested_cuda_is_unavailable(self):
+        manager = _make_manager(engine="whisper", gpu_name="RTX 4090", gpu_backend="cuda")
+        manager.model_size = "tiny"
+
+        mock_whisper = MagicMock()
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = False
+
+        with (
+            patch.dict("sys.modules", {"whisper": mock_whisper, "torch": mock_torch}),
+            patch("os.makedirs"),
+            patch("os.path.exists", return_value=True),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.resolve_gpu_selection",
+                return_value=("cuda", 1, "NVIDIA RTX 4090"),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="CUDA is unavailable"):
+                manager._init_whisper()
+
+        assert manager.state.name == "ERROR"
+
+    def test_init_whisper_raises_when_requested_cuda_index_is_out_of_range(self):
+        manager = _make_manager(engine="whisper", gpu_name="RTX 4090", gpu_backend="cuda")
+        manager.model_size = "tiny"
+
+        mock_whisper = MagicMock()
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.device_count.return_value = 1
+
+        with (
+            patch.dict("sys.modules", {"whisper": mock_whisper, "torch": mock_torch}),
+            patch("os.makedirs"),
+            patch("os.path.exists", return_value=True),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.resolve_gpu_selection",
+                return_value=("cuda", 3, "NVIDIA RTX 4090"),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="only 1 CUDA device"):
+                manager._init_whisper()
+
+    def test_init_whisper_clears_selected_gpu_when_using_cpu(self):
+        manager = _make_manager(engine="whisper")
+        manager.model_size = "tiny"
+        manager.selected_gpu_name = "Old GPU"
+        manager.selected_gpu_backend = "cuda"
+        manager.selected_gpu_index = 5
+
+        mock_whisper = MagicMock()
+        mock_whisper.load_model.return_value = MagicMock()
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = False
+
+        with (
+            patch.dict("sys.modules", {"whisper": mock_whisper, "torch": mock_torch}),
+            patch("os.makedirs"),
+            patch("os.path.exists", return_value=True),
+        ):
+            manager._init_whisper()
+
+        assert manager.selected_gpu_name is None
+        assert manager.selected_gpu_backend is None
+        assert manager.selected_gpu_index is None
+
+    def test_load_whispercpp_model_tracks_detected_backend_without_request(self):
+        manager = _make_manager(engine="whisper_cpp")
+        mock_model_ctor = MagicMock(return_value="gpu-model")
+        mock_pywhispercpp = MagicMock(Model=mock_model_ctor)
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {"pywhispercpp.model": mock_pywhispercpp, "psutil": mock_psutil},
+            ),
+            patch.object(manager, "_resolve_requested_gpu", return_value=None),
+            patch.object(manager, "_restore_managed_gpu_environment") as mock_restore,
+            patch(
+                "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
+                return_value=("vulkan", "Intel Arc A770"),
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.get_backend_display_name",
+                return_value="Vulkan",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("os.path.getsize", return_value=100 * 1024 * 1024),
+            patch("multiprocessing.cpu_count", return_value=4),
+            patch("time.time", side_effect=[100.0, 101.5]),
+        ):
+            manager._load_whispercpp_model("/tmp/mock.bin")
+
+        mock_restore.assert_called_once()
+        assert manager.model == "gpu-model"
+        assert manager.selected_gpu_backend == "vulkan"
+        assert manager.selected_gpu_index is None
+        assert manager.selected_gpu_name == "Intel Arc A770"
+
+    def test_load_whispercpp_model_clears_selected_gpu_for_cpu_auto_backend(self):
+        manager = _make_manager(engine="whisper_cpp")
+        manager.selected_gpu_name = "Old GPU"
+        manager.selected_gpu_backend = "cuda"
+        manager.selected_gpu_index = 1
+        mock_model_ctor = MagicMock(return_value="cpu-model")
+        mock_pywhispercpp = MagicMock(Model=mock_model_ctor)
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {"pywhispercpp.model": mock_pywhispercpp, "psutil": mock_psutil},
+            ),
+            patch.object(manager, "_resolve_requested_gpu", return_value=None),
+            patch.object(manager, "_restore_managed_gpu_environment"),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
+                return_value=("cpu", "CPU"),
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.get_backend_display_name",
+                return_value="CPU",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("os.path.getsize", return_value=100 * 1024 * 1024),
+            patch("multiprocessing.cpu_count", return_value=4),
+            patch("time.time", side_effect=[200.0, 200.5]),
+        ):
+            manager._load_whispercpp_model("/tmp/mock.bin")
+
+        assert manager.selected_gpu_name is None
+        assert manager.selected_gpu_backend is None
+        assert manager.selected_gpu_index is None
+
+    def test_load_whispercpp_model_applies_requested_gpu_selection(self):
+        manager = _make_manager(engine="whisper_cpp", gpu_name="Tesla P40", gpu_backend="cuda")
+        mock_model_ctor = MagicMock(return_value="gpu-model")
+        mock_pywhispercpp = MagicMock(Model=mock_model_ctor)
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {"pywhispercpp.model": mock_pywhispercpp, "psutil": mock_psutil},
+            ),
+            patch.object(
+                manager, "_resolve_requested_gpu", return_value=("cuda", 1, "NVIDIA Tesla P40")
+            ),
+            patch.object(manager, "_apply_whispercpp_gpu_selection") as mock_apply,
+            patch(
+                "vocalinux.utils.whispercpp_model_info.detect_compute_backend",
+                return_value=("cuda", "NVIDIA Tesla P40"),
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.get_backend_display_name",
+                return_value="CUDA",
+            ),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.get_whispercpp_compiled_backends",
+                return_value={"cpu", "cuda"},
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("os.path.getsize", return_value=100 * 1024 * 1024),
+            patch("multiprocessing.cpu_count", return_value=4),
+            patch("time.time", side_effect=[300.0, 300.2]),
+        ):
+            manager._load_whispercpp_model("/tmp/mock.bin")
+
+        mock_apply.assert_called_once_with(("cuda", 1, "NVIDIA Tesla P40"))
+        assert manager.selected_gpu_backend == "cuda"
+        assert manager.selected_gpu_index == 1
+        assert manager.selected_gpu_name == "NVIDIA Tesla P40"
+
+    def test_load_whispercpp_model_rejects_requested_backend_missing_from_build(self):
+        manager = _make_manager(engine="whisper_cpp", gpu_name="Tesla P40", gpu_backend="cuda")
+        mock_pywhispercpp = MagicMock(Model=MagicMock(return_value="gpu-model"))
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {"pywhispercpp.model": mock_pywhispercpp, "psutil": mock_psutil},
+            ),
+            patch.object(manager, "_resolve_requested_gpu", return_value=("cuda", 0, "Tesla P40")),
+            patch(
+                "vocalinux.utils.whispercpp_model_info.get_whispercpp_compiled_backends",
+                return_value={"cpu", "vulkan"},
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("os.path.getsize", return_value=100 * 1024 * 1024),
+        ):
+            with pytest.raises(RuntimeError, match="does not support the requested CUDA backend"):
+                manager._load_whispercpp_model("/tmp/mock.bin")
+
+    def test_handle_gpu_fallback_reraises_unrelated_runtime_error(self):
+        manager = _make_manager(engine="whisper_cpp")
+
+        with patch.dict(sys.modules, {"pywhispercpp.model": MagicMock()}):
+            with pytest.raises(RuntimeError, match="some other failure"):
+                manager._handle_gpu_fallback(
+                    RuntimeError("some other failure"), "/tmp/model.bin", 4, "cpu"
+                )
 
 
 class TestGetAudioInputDevices:

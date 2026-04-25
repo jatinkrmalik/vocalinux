@@ -226,6 +226,72 @@ class TestRecognitionManagerReconfigure:
     @patch(
         "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._init_whispercpp"
     )
+    def test_reconfigure_gpu_selection_change(
+        self, mock_init_cpp, mock_init_whisper, mock_init_vosk
+    ):
+        """Test reconfigure restarts when GPU selection changes."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        mock_init_cpp.return_value = None
+
+        manager = SpeechRecognitionManager(
+            engine="whisper_cpp",
+            model_size="small",
+            language="en-us",
+            defer_download=True,
+        )
+        mock_init_cpp.reset_mock()
+
+        manager.reconfigure(
+            gpu_name="NVIDIA Tesla P40",
+            gpu_backend="cuda",
+            force_download=False,
+        )
+
+        assert manager.requested_gpu_name == "NVIDIA Tesla P40"
+        assert manager.preferred_gpu_backend == "cuda"
+        mock_init_cpp.assert_called_once()
+
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._init_vosk")
+    @patch(
+        "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._init_whisper"
+    )
+    @patch(
+        "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._init_whispercpp"
+    )
+    def test_reconfigure_same_gpu_selection_does_not_restart(
+        self, mock_init_cpp, mock_init_whisper, mock_init_vosk
+    ):
+        """Test reconfigure does not restart when GPU selection is unchanged."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        mock_init_cpp.return_value = None
+
+        manager = SpeechRecognitionManager(
+            engine="whisper_cpp",
+            model_size="small",
+            language="en-us",
+            defer_download=True,
+            gpu_name="NVIDIA Tesla P40",
+            gpu_backend="cuda",
+        )
+        mock_init_cpp.reset_mock()
+
+        manager.reconfigure(
+            gpu_name="NVIDIA Tesla P40",
+            gpu_backend="cuda",
+            force_download=False,
+        )
+
+        mock_init_cpp.assert_not_called()
+
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._init_vosk")
+    @patch(
+        "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._init_whisper"
+    )
+    @patch(
+        "vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager._init_whispercpp"
+    )
     def test_reconfigure_model_size_change(self, mock_init_cpp, mock_init_whisper, mock_init_vosk):
         """Test reconfigure when model size changes."""
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager

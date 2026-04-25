@@ -61,6 +61,19 @@ def parse_arguments():
         choices=["vosk", "whisper", "whisper_cpp"],
         help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
     )
+    parser.add_argument(
+        "--gpu",
+        type=str,
+        help=(
+            "GPU name to use for acceleration. The selected name is persisted in the config. "
+            "Use 'auto' to clear the saved GPU preference."
+        ),
+    )
+    parser.add_argument(
+        "--gpus",
+        action="store_true",
+        help="List detected GPUs that can be used with --gpu and exit",
+    )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
     parser.add_argument(
         "--start-minimized",
@@ -68,6 +81,30 @@ def parse_arguments():
         help="Start minimized to system tray",
     )
     return parser.parse_args()
+
+
+def list_available_gpus() -> int:
+    """Print the currently detectable GPUs and return a process exit code."""
+    from .utils.whispercpp_model_info import list_cuda_devices, list_vulkan_devices
+
+    vulkan_devices = list_vulkan_devices()
+    cuda_devices = list_cuda_devices()
+
+    if not vulkan_devices and not cuda_devices:
+        print("No GPUs detected.")
+        return 1
+
+    if vulkan_devices:
+        print("Vulkan GPUs:")
+        for device_index, device_name in vulkan_devices:
+            print(f"  [{device_index}] {device_name}")
+
+    if cuda_devices:
+        print("CUDA GPUs:")
+        for device_index, device_name in cuda_devices:
+            print(f"  [{device_index}] {device_name}")
+
+    return 0
 
 
 def check_dependencies():
@@ -206,6 +243,11 @@ def check_appindicator_support():
 
 def main():
     """Main entry point for the application."""
+    args = parse_arguments()
+
+    if getattr(args, "gpus", False) is True:
+        sys.exit(list_available_gpus())
+
     # Check for single instance BEFORE any initialization
     from . import single_instance
 
@@ -232,8 +274,6 @@ def main():
 
     # Register cleanup to release lock on exit
     atexit.register(single_instance.release_lock)
-
-    args = parse_arguments()
 
     # Configure debug logging if requested
     if args.debug:
@@ -322,6 +362,26 @@ def main():
     cli_engine_set = any(arg.startswith("--engine") for arg in sys.argv[1:])
     cli_model_set = any(arg.startswith("--model") for arg in sys.argv[1:])
     cli_language_set = any(arg.startswith("--language") for arg in sys.argv[1:])
+    cli_gpu_set = any(arg == "--gpu" or arg.startswith("--gpu=") for arg in sys.argv[1:])
+
+    raw_gpu_arg = getattr(args, "gpu", None)
+    clear_gpu_preference = (
+        cli_gpu_set
+        and isinstance(raw_gpu_arg, str)
+        and raw_gpu_arg.strip().casefold() in {"auto", "default", "none", "cpu"}
+    )
+    if cli_gpu_set:
+        gpu_name = None if clear_gpu_preference else raw_gpu_arg
+        gpu_backend = None
+        logger.info(
+            "Using GPU selection from command line: %s",
+            gpu_name if gpu_name is not None else "automatic",
+        )
+    else:
+        gpu_name = saved_settings.get("gpu_name")
+        gpu_backend = saved_settings.get("gpu_backend")
+        if gpu_name:
+            logger.info(f"Using GPU selection from saved config: {gpu_name} ({gpu_backend})")
 
     # Use CLI args if explicitly set, otherwise fall back to saved config, then defaults
     if cli_engine_set:
@@ -367,7 +427,24 @@ def main():
             silence_timeout=silence_timeout,
             voice_commands_enabled=voice_commands_enabled,
             audio_device_index=audio_device_index,
+            gpu_name=gpu_name,
+            gpu_backend=gpu_backend,
         )
+
+        should_persist_gpu_preference = cli_gpu_set or saved_settings.get("gpu_name") is not None
+        if should_persist_gpu_preference:
+            persisted_gpu_name = None if clear_gpu_preference else speech_engine.selected_gpu_name
+            persisted_gpu_backend = (
+                None if clear_gpu_preference else speech_engine.selected_gpu_backend
+            )
+
+            if (
+                saved_settings.get("gpu_name") != persisted_gpu_name
+                or saved_settings.get("gpu_backend") != persisted_gpu_backend
+            ):
+                config_manager.set("speech_recognition", "gpu_name", persisted_gpu_name)
+                config_manager.set("speech_recognition", "gpu_backend", persisted_gpu_backend)
+                config_manager.save_config()
 
         # Initialize text injection system
         text_system = text_injector.TextInjector(wayland_mode=args.wayland)
