@@ -176,9 +176,7 @@ def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
             except (IOError, OSError) as e:
                 error_str = str(e).lower()
                 if "invalid number of channels" in error_str or "-9998" in error_str:
-                    logger.debug(
-                        f"Device rejected {channels} channel(s) at {rate}Hz: {e}"
-                    )
+                    logger.debug(f"Device rejected {channels} channel(s) at {rate}Hz: {e}")
                 else:
                     logger.debug(f"Channel test failed at {rate}Hz: {e}")
                 continue
@@ -187,9 +185,7 @@ def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
     return 1
 
 
-def _get_supported_sample_rate(
-    audio, device_index: Optional[int], channels: int = 1
-) -> int:
+def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int = 1) -> int:
     """
     Get a supported sample rate for the audio device.
 
@@ -239,9 +235,7 @@ def _get_supported_sample_rate(
                 logger.debug(f"Using device default sample rate: {default_rate}Hz")
                 return default_rate
             except (IOError, OSError):
-                logger.debug(
-                    f"Device default rate {default_rate}Hz failed, trying common rates"
-                )
+                logger.debug(f"Device default rate {default_rate}Hz failed, trying common rates")
     except (IOError, OSError) as e:
         logger.debug(f"Could not get device default rate: {e}")
 
@@ -559,9 +553,7 @@ class SpeechRecognitionManager:
         self.action_callbacks: list[Callable[[str], None]] = []
 
         # Download progress tracking
-        self._download_progress_callback: Optional[
-            Callable[[float, float, str], None]
-        ] = None
+        self._download_progress_callback: Optional[Callable[[float, float, str], None]] = None
         self._download_cancelled = False
         self._defer_download = defer_download
         self._model_initialized = False
@@ -644,31 +636,18 @@ class SpeechRecognitionManager:
                     self._model_initialized = False
                     return  # Don't block startup
                 else:
-                    logger.info(
-                        f"VOSK model not found at {self.vosk_model_path}. Downloading..."
-                    )
+                    logger.info(f"VOSK model not found at {self.vosk_model_path}. Downloading...")
                     self._download_vosk_model()
                     # Update path after download
                     self.vosk_model_path = self._get_vosk_model_path()
             else:
                 # Check if this is a pre-installed model
-                if any(
-                    self.vosk_model_path.startswith(sys_dir)
-                    for sys_dir in SYSTEM_MODELS_DIRS
-                ):
-                    logger.info(
-                        f"Using pre-installed VOSK model from {self.vosk_model_path}"
-                    )
-                elif os.path.exists(
-                    os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")
-                ):
-                    logger.info(
-                        f"Using installer-provided VOSK model from {self.vosk_model_path}"
-                    )
+                if any(self.vosk_model_path.startswith(sys_dir) for sys_dir in SYSTEM_MODELS_DIRS):
+                    logger.info(f"Using pre-installed VOSK model from {self.vosk_model_path}")
+                elif os.path.exists(os.path.join(self.vosk_model_path, ".vocalinux_preinstalled")):
+                    logger.info(f"Using installer-provided VOSK model from {self.vosk_model_path}")
                 else:
-                    logger.info(
-                        f"Using existing VOSK model from {self.vosk_model_path}"
-                    )
+                    logger.info(f"Using existing VOSK model from {self.vosk_model_path}")
 
             logger.info(f"Loading VOSK model from {self.vosk_model_path}")
             # Ensure previous model/recognizer are released if re-initializing
@@ -680,9 +659,7 @@ class SpeechRecognitionManager:
             logger.info("VOSK engine initialized successfully.")
 
         except ImportError:
-            logger.error(
-                "Failed to import VOSK. Please install it with 'pip install vosk'"
-            )
+            logger.error("Failed to import VOSK. Please install it with 'pip install vosk'")
             self.state = RecognitionState.ERROR
             raise
 
@@ -714,9 +691,7 @@ class SpeechRecognitionManager:
             default_cache = os.path.expanduser("~/.cache/whisper")
             default_model_file = os.path.join(default_cache, f"{self.model_size}.pt")
 
-            model_exists = os.path.exists(model_file) or os.path.exists(
-                default_model_file
-            )
+            model_exists = os.path.exists(model_file) or os.path.exists(default_model_file)
 
             if not model_exists and self._defer_download:
                 logger.info(
@@ -763,18 +738,14 @@ class SpeechRecognitionManager:
             from moonshine_voice import Transcriber, get_model_for_language
             from moonshine_voice.moonshine_api import ModelArch
 
-            moonshine_language, language_fallback = resolve_moonshine_language(
-                self.language
-            )
+            moonshine_language, language_fallback = resolve_moonshine_language(self.language)
             valid_models = get_moonshine_supported_model_sizes(self.language)
             arch_name, model_fallback = resolve_moonshine_model_arch_name(
                 self.model_size, self.language
             )
 
             if self.language == "auto":
-                logger.info(
-                    "Moonshine does not support auto language detection; using English."
-                )
+                logger.info("Moonshine does not support auto language detection; using English.")
             elif language_fallback:
                 logger.warning(
                     f"Moonshine does not support Vocalinux language '{self.language}'. "
@@ -801,9 +772,7 @@ class SpeechRecognitionManager:
             )
 
             if arch_name is None:
-                model_path, model_arch = get_model_for_language(
-                    wanted_language=moonshine_language
-                )
+                model_path, model_arch = get_model_for_language(wanted_language=moonshine_language)
             else:
                 model_arch = getattr(ModelArch, arch_name)
                 model_path, model_arch = get_model_for_language(
@@ -864,9 +833,7 @@ class SpeechRecognitionManager:
             with self._model_lock:
                 # Check if model is still valid
                 if self.model is None:
-                    logger.warning(
-                        "Model is None during transcription, returning empty result"
-                    )
+                    logger.warning("Model is None during transcription, returning empty result")
                     return ""
 
                 # Determine if we should use fp16 (only on CUDA)
@@ -980,16 +947,12 @@ class SpeechRecognitionManager:
         import psutil
 
         total_ram_gb = psutil.virtual_memory().total // (1024**3)
-        logger.info(
-            f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB"
-        )
+        logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
 
         # Validate model file exists and get size
         if os.path.exists(model_path):
             model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
-            logger.info(
-                f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)"
-            )
+            logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
         else:
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
@@ -1019,9 +982,7 @@ class SpeechRecognitionManager:
             f"whisper.cpp configured with n_threads={n_threads} "
             f"(detected {multiprocessing.cpu_count()} CPUs)"
         )
-        logger.info(
-            f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)"
-        )
+        logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
 
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
@@ -1052,13 +1013,10 @@ class SpeechRecognitionManager:
         if not gpu_incompatible:
             raise error
 
-        logger.warning(
-            f"Vulkan GPU initialization failed: {error}. Falling back to CPU backend."
-        )
+        logger.warning(f"Vulkan GPU initialization failed: {error}. Falling back to CPU backend.")
         _show_notification(
             "Vocalinux: GPU Fallback",
-            "Your GPU doesn't support whisper.cpp Vulkan.\n"
-            "Switched to CPU mode - still fast!",
+            "Your GPU doesn't support whisper.cpp Vulkan.\n" "Switched to CPU mode - still fast!",
             "dialog-information",
         )
         # Force CPU backend by disabling GPU backends
@@ -1119,9 +1077,7 @@ class SpeechRecognitionManager:
             with self._model_lock:
                 # Check if model is still valid
                 if self.model is None:
-                    logger.warning(
-                        "Model is None during transcription, returning empty result"
-                    )
+                    logger.warning("Model is None during transcription, returning empty result")
                     return ""
 
                 # Transcribe with whisper.cpp
@@ -1162,9 +1118,7 @@ class SpeechRecognitionManager:
                 if audio_buffer
                 else "empty audio buffer"
             )
-            logger.error(
-                f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True
-            )
+            logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
             return ""
 
     def _transcribe_with_moonshine(self, audio_buffer: list[bytes]) -> str:
@@ -1204,9 +1158,7 @@ class SpeechRecognitionManager:
                     return ""
 
                 transcribe_start = time.time()
-                transcript = self.model.transcribe_without_streaming(
-                    audio_float, sample_rate=16000
-                )
+                transcript = self.model.transcribe_without_streaming(audio_float, sample_rate=16000)
                 transcribe_duration = time.time() - transcribe_start
 
             text_parts = []
@@ -1227,9 +1179,7 @@ class SpeechRecognitionManager:
                     f"for {duration:.2f}s audio (RTF: {rtf:.2f}x) - {num_lines} lines"
                 )
             else:
-                logger.debug(
-                    f"Moonshine returned empty transcription ({transcribe_duration:.3f}s)"
-                )
+                logger.debug(f"Moonshine returned empty transcription ({transcribe_duration:.3f}s)")
 
             return text
 
@@ -1239,9 +1189,7 @@ class SpeechRecognitionManager:
                 if audio_buffer
                 else "empty audio buffer"
             )
-            logger.error(
-                f"Error in Moonshine transcription: {e} ({audio_info})", exc_info=True
-            )
+            logger.error(f"Error in Moonshine transcription: {e} ({audio_info})", exc_info=True)
             return ""
 
     def _download_whispercpp_model(self):
@@ -1300,9 +1248,7 @@ class SpeechRecognitionManager:
 
                         if total_size > 0:
                             progress = downloaded_size / total_size
-                            remaining_mb = (total_size - downloaded_size) / (
-                                1024 * 1024
-                            )
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
                             if speed_mbps > 0:
                                 eta_seconds = remaining_mb / speed_mbps
                                 eta_str = (
@@ -1315,14 +1261,14 @@ class SpeechRecognitionManager:
                             status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
                         else:
                             progress = 0
-                            status = f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
 
                         self._download_progress_callback(progress, speed_mbps, status)
                         last_update_time = current_time
 
-                        logger.info(
-                            f"Download progress: {progress * 100:.1f}% - {status}"
-                        )
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
 
             # Rename temp file to final
             os.rename(temp_file, model_path)
@@ -1344,9 +1290,7 @@ class SpeechRecognitionManager:
 
     def _get_vosk_model_path(self) -> str:
         """Get the path to the VOSK model based on the selected size and language."""
-        model_name = self.vosk_model_map.get(
-            self.model_size, self.vosk_model_map["small"]
-        )
+        model_name = self.vosk_model_map.get(self.model_size, self.vosk_model_map["small"])
 
         # First, check user's local models directory
         user_model_path = os.path.join(MODELS_DIR, model_name)
@@ -1409,9 +1353,7 @@ class SpeechRecognitionManager:
         # Create models directory if it doesn't exist
         os.makedirs(MODELS_DIR, exist_ok=True)
 
-        logger.info(
-            f"Downloading VOSK {self.model_size} model to user directory: {model_path}"
-        )
+        logger.info(f"Downloading VOSK {self.model_size} model to user directory: {model_path}")
 
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
@@ -1451,9 +1393,7 @@ class SpeechRecognitionManager:
 
                         if total_size > 0:
                             progress = downloaded_size / total_size
-                            remaining_mb = (total_size - downloaded_size) / (
-                                1024 * 1024
-                            )
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
                             if speed_mbps > 0:
                                 eta_seconds = remaining_mb / speed_mbps
                                 eta_str = (
@@ -1466,15 +1406,15 @@ class SpeechRecognitionManager:
                             status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
                         else:
                             progress = 0
-                            status = f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
 
                         self._download_progress_callback(progress, speed_mbps, status)
                         last_update_time = current_time
 
                         # Also log progress periodically
-                        logger.info(
-                            f"Download progress: {progress * 100:.1f}% - {status}"
-                        )
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
 
             # Update status for extraction phase
             if self._download_progress_callback:
@@ -1506,9 +1446,7 @@ class SpeechRecognitionManager:
                 os.remove(zip_path)
             raise RuntimeError("Downloaded VOSK model file is corrupted.")
         except (OSError, RuntimeError, ValueError) as e:
-            logger.error(
-                f"An error occurred during VOSK model download/extraction: {e}"
-            )
+            logger.error(f"An error occurred during VOSK model download/extraction: {e}")
             # Clean up potentially corrupted extraction
             if os.path.exists(zip_path):
                 os.remove(zip_path)
@@ -1589,9 +1527,7 @@ class SpeechRecognitionManager:
 
                         if total_size > 0:
                             progress = downloaded_size / total_size
-                            remaining_mb = (total_size - downloaded_size) / (
-                                1024 * 1024
-                            )
+                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
                             if speed_mbps > 0:
                                 eta_seconds = remaining_mb / speed_mbps
                                 eta_str = (
@@ -1604,14 +1540,14 @@ class SpeechRecognitionManager:
                             status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
                         else:
                             progress = 0
-                            status = f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                            )
 
                         self._download_progress_callback(progress, speed_mbps, status)
                         last_update_time = current_time
 
-                        logger.info(
-                            f"Download progress: {progress * 100:.1f}% - {status}"
-                        )
+                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
 
             # Rename temp file to final
             os.rename(temp_file, model_file)
@@ -1708,9 +1644,7 @@ class SpeechRecognitionManager:
             device_index: The device index to use, or None for system default
         """
         if device_index != self.audio_device_index:
-            logger.info(
-                f"Audio device changed from {self.audio_device_index} to {device_index}"
-            )
+            logger.info(f"Audio device changed from {self.audio_device_index} to {device_index}")
             self.audio_device_index = device_index
 
     def get_audio_device(self) -> Optional[int]:
@@ -1746,14 +1680,12 @@ class SpeechRecognitionManager:
         # Check if model is ready
         if not self.model_ready:
             logger.warning(
-                "Cannot start recognition: model not downloaded. "
-                "Please download via Settings."
+                "Cannot start recognition: model not downloaded. " "Please download via Settings."
             )
             play_error_sound()
             _show_notification(
                 "No Speech Model",
-                "Please open Settings and download a speech recognition model "
-                "to use dictation.",
+                "Please open Settings and download a speech recognition model " "to use dictation.",
                 "dialog-warning",
             )
             return
@@ -1808,15 +1740,11 @@ class SpeechRecognitionManager:
                 )
             elif self.audio_buffer:
                 # If buffer is small, just clear it entirely to be safe
-                logger.debug(
-                    f"Clearing small audio buffer ({len(self.audio_buffer)} chunks)"
-                )
+                logger.debug(f"Clearing small audio buffer ({len(self.audio_buffer)} chunks)")
                 self.audio_buffer = []
 
             if self.audio_buffer:
-                logger.info(
-                    f"DEBUG: Enqueuing final buffer with {len(self.audio_buffer)} chunks"
-                )
+                logger.info(f"DEBUG: Enqueuing final buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
 
@@ -1827,9 +1755,7 @@ class SpeechRecognitionManager:
         self._signal_recognition_stop()
 
         if self.recognition_thread and self.recognition_thread.is_alive():
-            self.recognition_thread.join(
-                timeout=5.0
-            )  # Increased timeout for transcription
+            self.recognition_thread.join(timeout=5.0)  # Increased timeout for transcription
         self._signal_recognition_stop()
 
         if self.recognition_thread and self.recognition_thread.is_alive():
@@ -1848,9 +1774,7 @@ class SpeechRecognitionManager:
             import pyaudio
         except ImportError as e:
             logger.error(f"Failed to import required audio libraries: {e}")
-            logger.error(
-                "Please install required dependencies: pip install pyaudio numpy"
-            )
+            logger.error("Please install required dependencies: pip install pyaudio numpy")
             play_error_sound()
             self._update_state(RecognitionState.ERROR)
             return
@@ -1898,16 +1822,12 @@ class SpeechRecognitionManager:
             if self.audio_device_index is not None:
                 stream_kwargs["input_device_index"] = self.audio_device_index
                 try:
-                    device_info = audio.get_device_info_by_index(
-                        self.audio_device_index
-                    )
+                    device_info = audio.get_device_info_by_index(self.audio_device_index)
                     logger.info(
                         f"Using audio device [{self.audio_device_index}]: {device_info.get('name')}"
                     )
                 except (IOError, OSError):
-                    logger.warning(
-                        f"Could not get info for device index {self.audio_device_index}"
-                    )
+                    logger.warning(f"Could not get info for device index {self.audio_device_index}")
             else:
                 try:
                     default_device = audio.get_default_input_device_info()
@@ -1922,9 +1842,7 @@ class SpeechRecognitionManager:
                 stream = self._audio_stream
             except (IOError, OSError) as e:
                 logger.error(f"Failed to open audio stream: {e}")
-                logger.error(
-                    "This may indicate a problem with the audio device or permissions."
-                )
+                logger.error("This may indicate a problem with the audio device or permissions.")
 
                 # Attempt reconnection
                 if self._attempt_audio_reconnection(audio):
@@ -2000,9 +1918,7 @@ class SpeechRecognitionManager:
 
                     # Log audio levels periodically for debugging
                     log_level_interval += 1
-                    if (
-                        log_level_interval >= 50
-                    ):  # Every ~3 seconds at 16kHz/1024 chunks
+                    if log_level_interval >= 50:  # Every ~3 seconds at 16kHz/1024 chunks
                         logger.debug(
                             f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%, buffer_size={len(self.audio_buffer)}"
                         )
@@ -2012,9 +1928,7 @@ class SpeechRecognitionManager:
                     # Ensure vad_sensitivity is treated as integer for calculation
                     try:
                         vad_sens = int(self.vad_sensitivity)
-                        threshold = 500 / max(
-                            1, min(5, vad_sens)
-                        )  # Use self.vad_sensitivity
+                        threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
                     except ValueError:
                         logger.warning(
                             f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
@@ -2023,9 +1937,7 @@ class SpeechRecognitionManager:
 
                     if volume < threshold:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if (
-                            silence_counter > self.silence_timeout
-                        ):  # Use self.silence_timeout
+                        if silence_counter > self.silence_timeout:  # Use self.silence_timeout
                             if len(self.audio_buffer) > 0:
                                 if self._recognition_mode == "push_to_talk":
                                     logger.debug(
@@ -2033,9 +1945,7 @@ class SpeechRecognitionManager:
                                         "deferring transcription until key release"
                                     )
                                 else:
-                                    logger.debug(
-                                        "Silence detected, queueing audio segment"
-                                    )
+                                    logger.debug("Silence detected, queueing audio segment")
                                     self._enqueue_audio_segment(self.audio_buffer)
                                     self.audio_buffer = []
                             silence_counter = 0
@@ -2058,15 +1968,11 @@ class SpeechRecognitionManager:
                         self._last_audio_error_time = current_time
 
                         if self._attempt_audio_reconnection(audio):
-                            logger.info(
-                                "Audio reconnection successful, continuing recording"
-                            )
+                            logger.info("Audio reconnection successful, continuing recording")
                             stream = self._audio_stream  # Update stream reference
                             continue  # Continue recording with new stream
                         else:
-                            logger.error(
-                                "Audio reconnection failed, stopping recording"
-                            )
+                            logger.error("Audio reconnection failed, stopping recording")
                             break
                     else:
                         logger.warning(
@@ -2133,9 +2039,7 @@ class SpeechRecognitionManager:
             with self._model_lock:
                 # Check if recognizer is still valid
                 if self.recognizer is None:
-                    logger.warning(
-                        "Recognizer is None during processing, returning empty result"
-                    )
+                    logger.warning("Recognizer is None during processing, returning empty result")
                     return
                 for data in audio_buffer:
                     self.recognizer.AcceptWaveform(data)
@@ -2229,9 +2133,7 @@ class SpeechRecognitionManager:
                 logger.info("DEBUG: Recognition loop - exiting after None signal")
                 break
 
-            logger.info(
-                f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks"
-            )
+            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
             self._update_state(RecognitionState.PROCESSING)
             self._process_audio_buffer(segment)
             if self.should_record:
@@ -2253,9 +2155,7 @@ class SpeechRecognitionManager:
                 logger.info("DEBUG: Recognition loop - got None signal, continuing")
                 continue
 
-            logger.info(
-                f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks"
-            )
+            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
             self._update_state(RecognitionState.PROCESSING)
             self._process_audio_buffer(segment)
             if self.should_record:
@@ -2275,16 +2175,12 @@ class SpeechRecognitionManager:
             self._segment_queue.put_nowait(segment)
             logger.info("DEBUG: Enqueued segment successfully")
         except queue.Full:
-            logger.warning(
-                "Transcription queue is full, dropping oldest pending segment"
-            )
+            logger.warning("Transcription queue is full, dropping oldest pending segment")
             try:
                 self._segment_queue.get_nowait()
                 self._segment_queue.put_nowait(segment)
             except queue.Empty:
-                logger.warning(
-                    "Could not recover queue space for transcription segment"
-                )
+                logger.warning("Could not recover queue space for transcription segment")
 
     def _signal_recognition_stop(self):
         """Signal recognition thread to wake up and stop cleanly."""
@@ -2389,14 +2285,10 @@ class SpeechRecognitionManager:
                     elif self.engine == "moonshine":
                         self._init_moonshine()
                     else:
-                        raise ValueError(
-                            f"Unsupported engine during reconfigure: {self.engine}"
-                        )
+                        raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                     logger.info("Speech engine re-initialized successfully.")
                 except Exception as e:
-                    logger.error(
-                        f"Failed to re-initialize speech engine: {e}", exc_info=True
-                    )
+                    logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
                     self._update_state(RecognitionState.ERROR)
                     # Re-raise or handle appropriately
                     raise
@@ -2421,9 +2313,7 @@ class SpeechRecognitionManager:
         self._reconnection_attempts += 1
 
         if self._reconnection_attempts > self._max_reconnection_attempts:
-            logger.error(
-                f"Max reconnection attempts ({self._max_reconnection_attempts}) reached"
-            )
+            logger.error(f"Max reconnection attempts ({self._max_reconnection_attempts}) reached")
             return False
 
         # Calculate delay with exponential backoff
@@ -2455,9 +2345,7 @@ class SpeechRecognitionManager:
             logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
 
             # Detect supported sample rate for the device
-            RATE = _get_supported_sample_rate(
-                audio_instance, self.audio_device_index, CHANNELS
-            )
+            RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
@@ -2527,16 +2415,12 @@ class SpeechRecognitionManager:
                 elif self.engine == "moonshine":
                     self._init_moonshine()
                 else:
-                    logger.error(
-                        "Cannot reinitialize: unknown engine '%s'", self.engine
-                    )
+                    logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
                     return
 
                 logger.info("Speech engine reinitialized after resume")
             except Exception:
-                logger.error(
-                    "Failed to reinitialize speech engine after resume", exc_info=True
-                )
+                logger.error("Failed to reinitialize speech engine after resume", exc_info=True)
                 self._update_state(RecognitionState.ERROR)
 
         self._reconnection_attempts = 0
@@ -2574,8 +2458,6 @@ class SpeechRecognitionManager:
             "memory_usage_bytes": total_memory,
             "memory_usage_mb": total_memory / (1024 * 1024),
             "buffer_full_percentage": (
-                (buffer_size / self._max_buffer_size) * 100
-                if self._max_buffer_size > 0
-                else 0
+                (buffer_size / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
             ),
         }

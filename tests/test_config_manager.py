@@ -84,19 +84,13 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
 
         # Verify it merged with defaults correctly
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["engine"], "whisper"
-        )
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["model_size"], "large"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["engine"], "whisper")
+        self.assertEqual(config_manager.config["speech_recognition"]["model_size"], "large")
         self.assertEqual(
             config_manager.config["speech_recognition"]["vad_sensitivity"], 3
         )  # From defaults
         self.assertEqual(config_manager.config["ui"]["start_minimized"], True)
-        self.assertEqual(
-            config_manager.config["ui"]["show_notifications"], True
-        )  # From defaults
+        self.assertEqual(config_manager.config["ui"]["show_notifications"], True)  # From defaults
 
     def test_load_config_file_error(self):
         """Test handling of errors when loading config file."""
@@ -231,21 +225,15 @@ class TestConfigManager(unittest.TestCase):
 
         # Set model size for vosk
         config_manager.set_model_size_for_engine("vosk", "large")
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["vosk_model_size"], "large"
-        )
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["model_size"], "large"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
+        self.assertEqual(config_manager.config["speech_recognition"]["model_size"], "large")
 
         # Set model size for whisper
         config_manager.set_model_size_for_engine("whisper", "medium")
         self.assertEqual(
             config_manager.config["speech_recognition"]["whisper_model_size"], "medium"
         )
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["model_size"], "medium"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["model_size"], "medium")
 
     def test_migrate_old_config(self):
         """Test migration of old config format without per-engine model sizes."""
@@ -266,39 +254,27 @@ class TestConfigManager(unittest.TestCase):
         config_manager = ConfigManager()
 
         # Verify migration added per-engine model sizes
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["vosk_model_size"], "medium"
-        )
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["whisper_model_size"], "tiny"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "medium")
+        self.assertEqual(config_manager.config["speech_recognition"]["whisper_model_size"], "tiny")
 
     def test_update_speech_recognition_settings_per_engine(self):
         """Test that update_speech_recognition_settings saves per-engine model sizes."""
         config_manager = ConfigManager()
 
         # Update settings for vosk
-        config_manager.update_speech_recognition_settings(
-            {"engine": "vosk", "model_size": "large"}
-        )
+        config_manager.update_speech_recognition_settings({"engine": "vosk", "model_size": "large"})
 
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["vosk_model_size"], "large"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
 
         # Update settings for whisper
         config_manager.update_speech_recognition_settings(
             {"engine": "whisper", "model_size": "small"}
         )
 
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["whisper_model_size"], "small"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["whisper_model_size"], "small")
 
         # Verify the vosk setting wasn't changed
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["vosk_model_size"], "large"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
 
     def test_save_settings(self):
         """Test the save_settings method (alias for save_config)."""
@@ -362,9 +338,7 @@ class TestConfigManager(unittest.TestCase):
 
         # Verify section was created and value was set
         self.assertIn("speech_recognition", config_manager.config)
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["vosk_model_size"], "large"
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "large")
 
     def test_get_model_size_for_engine_fallback_to_generic(self):
         """Test fallback to generic model_size when no engine-specific key exists."""
@@ -404,12 +378,8 @@ class TestConfigManager(unittest.TestCase):
 
         # Verify section was created
         self.assertIn("speech_recognition", config_manager.config)
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["engine"], "whisper"
-        )
-        self.assertEqual(
-            config_manager.config["speech_recognition"]["vad_sensitivity"], 5
-        )
+        self.assertEqual(config_manager.config["speech_recognition"]["engine"], "whisper")
+        self.assertEqual(config_manager.config["speech_recognition"]["vad_sensitivity"], 5)
 
     def test_migrate_super_shortcut_to_ctrl(self):
         test_config = {
@@ -423,9 +393,7 @@ class TestConfigManager(unittest.TestCase):
             json.dump(test_config, f)
 
         config_manager = ConfigManager()
-        self.assertEqual(
-            config_manager.config["shortcuts"]["toggle_recognition"], "ctrl+ctrl"
-        )
+        self.assertEqual(config_manager.config["shortcuts"]["toggle_recognition"], "ctrl+ctrl")
 
     def test_non_super_shortcut_unchanged(self):
         test_config = {
@@ -439,9 +407,7 @@ class TestConfigManager(unittest.TestCase):
             json.dump(test_config, f)
 
         config_manager = ConfigManager()
-        self.assertEqual(
-            config_manager.config["shortcuts"]["toggle_recognition"], "alt+alt"
-        )
+        self.assertEqual(config_manager.config["shortcuts"]["toggle_recognition"], "alt+alt")
         self.assertEqual(config_manager.config["shortcuts"]["mode"], "push_to_talk")
 
     def test_sound_effects_enabled_by_default(self):

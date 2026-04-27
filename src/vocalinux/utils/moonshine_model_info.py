@@ -99,9 +99,7 @@ def resolve_moonshine_model_arch_name(
         arch_name is None when Moonshine should choose the default arch itself.
     """
     resolved_language, _ = resolve_moonshine_language(language)
-    valid_arches = _LANGUAGE_MODEL_ARCHES.get(
-        resolved_language, _LANGUAGE_MODEL_ARCHES["en"]
-    )
+    valid_arches = _LANGUAGE_MODEL_ARCHES.get(resolved_language, _LANGUAGE_MODEL_ARCHES["en"])
 
     normalized = (model_size or "auto").strip().lower()
     if normalized in ("", "auto"):
