@@ -136,7 +136,9 @@ class ConfigManager:
         # Set the per-engine model sizes based on the user's original config
         if "vosk_model_size" not in user_sr_config:
             # If current engine is vosk, use the current model; otherwise use default
-            sr_config["vosk_model_size"] = current_model if current_engine == "vosk" else "small"
+            sr_config["vosk_model_size"] = (
+                current_model if current_engine == "vosk" else "small"
+            )
             logger.info(f"Migrated vosk_model_size to: {sr_config['vosk_model_size']}")
 
         if "whisper_model_size" not in user_sr_config:
@@ -144,7 +146,9 @@ class ConfigManager:
             sr_config["whisper_model_size"] = (
                 current_model if current_engine == "whisper" else "tiny"
             )
-            logger.info(f"Migrated whisper_model_size to: {sr_config['whisper_model_size']}")
+            logger.info(
+                f"Migrated whisper_model_size to: {sr_config['whisper_model_size']}"
+            )
 
         if "whisper_cpp_model_size" not in user_sr_config:
             sr_config["whisper_cpp_model_size"] = (
@@ -158,7 +162,9 @@ class ConfigManager:
             sr_config["moonshine_model_size"] = (
                 current_model if current_engine == "moonshine" else "auto"
             )
-            logger.info(f"Migrated moonshine_model_size to: {sr_config['moonshine_model_size']}")
+            logger.info(
+                f"Migrated moonshine_model_size to: {sr_config['moonshine_model_size']}"
+            )
 
         self.save_config()
         logger.info("Config migrated to new per-engine model format")
@@ -380,7 +386,11 @@ class ConfigManager:
             source: The source dictionary with updates
         """
         for key, value in source.items():
-            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+            if (
+                key in target
+                and isinstance(target[key], dict)
+                and isinstance(value, dict)
+            ):
                 self._update_dict_recursive(target[key], value)
             else:
                 target[key] = value

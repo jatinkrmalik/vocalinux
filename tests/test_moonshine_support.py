@@ -31,7 +31,12 @@ def test_moonshine_language_support():
 
 
 def test_moonshine_supported_model_sizes():
-    assert get_moonshine_supported_model_sizes("en-us") == ["tiny", "base", "small", "medium"]
+    assert get_moonshine_supported_model_sizes("en-us") == [
+        "tiny",
+        "base",
+        "small",
+        "medium",
+    ]
     assert get_moonshine_supported_model_sizes("es") == ["base"]
     assert get_moonshine_supported_model_sizes("ko") == ["tiny"]
 
@@ -47,10 +52,16 @@ def test_moonshine_model_arch_auto():
 
 
 def test_moonshine_model_arch_direct():
-    assert resolve_moonshine_model_arch_name("medium", "en-us") == ("MEDIUM_STREAMING", False)
+    assert resolve_moonshine_model_arch_name("medium", "en-us") == (
+        "MEDIUM_STREAMING",
+        False,
+    )
     assert resolve_moonshine_model_arch_name("tiny", "ja") == ("TINY", False)
 
 
 def test_moonshine_model_arch_fallback():
-    assert resolve_moonshine_model_arch_name("large", "en-us") == ("MEDIUM_STREAMING", True)
+    assert resolve_moonshine_model_arch_name("large", "en-us") == (
+        "MEDIUM_STREAMING",
+        True,
+    )
     assert resolve_moonshine_model_arch_name("tiny", "es") == ("BASE", True)

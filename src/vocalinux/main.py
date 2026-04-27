@@ -61,7 +61,9 @@ def parse_arguments():
         choices=["vosk", "whisper", "whisper_cpp", "moonshine"],
         help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
     )
-    parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
+    parser.add_argument(
+        "--wayland", action="store_true", help="Force Wayland compatibility mode"
+    )
     parser.add_argument(
         "--start-minimized",
         action="store_true",
@@ -134,7 +136,9 @@ def check_dependencies():
             logger.error("  Then log out and back in. Ubuntu includes this by default.")
             logger.error("")
             logger.error("  Fedora:")
-            logger.error("    sudo dnf install python3-gobject gtk3 libappindicator-gtk3")
+            logger.error(
+                "    sudo dnf install python3-gobject gtk3 libappindicator-gtk3"
+            )
             logger.error("")
             logger.error("  Arch Linux:")
             logger.error("    sudo pacman -S python-gobject gtk3 libappindicator")
@@ -162,7 +166,9 @@ def check_display_available():
 
         display = Gdk.Display.get_default()
         if display is None:
-            logger.error("No display available. Vocalinux requires a graphical environment.")
+            logger.error(
+                "No display available. Vocalinux requires a graphical environment."
+            )
             logger.error("")
             logger.error("If running remotely, ensure DISPLAY is set:")
             logger.error("  export DISPLAY=:0")
@@ -253,12 +259,16 @@ def main():
         logger.warning("No StatusNotifierWatcher found on D-Bus session bus.")
         logger.warning("The system tray icon may not appear.")
         logger.warning("")
-        logger.warning("If you are using GNOME Shell, install the AppIndicator extension:")
+        logger.warning(
+            "If you are using GNOME Shell, install the AppIndicator extension:"
+        )
         logger.warning("  Debian:  sudo apt install gnome-shell-extension-appindicator")
         logger.warning("  Fedora:  sudo dnf install gnome-shell-extension-appindicator")
         logger.warning("  Arch:    sudo pacman -S gnome-shell-extension-appindicator")
         logger.warning("")
-        logger.warning("After installing, log out and back in (or restart GNOME Shell).")
+        logger.warning(
+            "After installing, log out and back in (or restart GNOME Shell)."
+        )
 
     # Now it's safe to import GTK-dependent modules
     from .common_types import RecognitionState
@@ -350,9 +360,13 @@ def main():
     voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto
     audio_device_index = audio_settings.get("device_index", None)
 
-    logger.info(f"Final settings: engine={engine}, language={language}, model={model_size}")
+    logger.info(
+        f"Final settings: engine={engine}, language={language}, model={model_size}"
+    )
     if audio_device_index is not None:
-        logger.info(f"Using audio device index={audio_device_index} (from saved config)")
+        logger.info(
+            f"Using audio device index={audio_device_index} (from saved config)"
+        )
 
     # Initialize main components
     logger.info("Initializing Vocalinux...")
@@ -413,7 +427,10 @@ def main():
             # Add a separating space between consecutive dictation segments,
             # but never for the very first segment (avoids unwanted leading space
             # when starting dictation in an empty text field).
-            if action_handler.last_injected_text and action_handler.last_injected_text.strip():
+            if (
+                action_handler.last_injected_text
+                and action_handler.last_injected_text.strip()
+            ):
                 text_to_inject = " " + text_to_inject
                 logger.debug("Added space separator before new segment")
 

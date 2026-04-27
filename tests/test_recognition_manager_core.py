@@ -32,7 +32,9 @@ from conftest import mock_audio_feedback  # noqa: E402
 
 # Update import paths to use the new package structure
 from vocalinux.common_types import RecognitionState  # noqa: E402
-from vocalinux.speech_recognition.command_processor import CommandProcessor  # noqa: E402
+from vocalinux.speech_recognition.command_processor import (  # noqa: E402
+    CommandProcessor,
+)
 from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
     SpeechRecognitionManager,
     _get_supported_channels,
@@ -81,7 +83,9 @@ class TestGetAudioInputDevices(unittest.TestCase):
             "name": "Microphone",
             "maxInputChannels": 1,
         }
-        mock_pyaudio_instance.get_default_input_device_info.side_effect = IOError("No default")
+        mock_pyaudio_instance.get_default_input_device_info.side_effect = IOError(
+            "No default"
+        )
 
         mock_pyaudio = MagicMock()
         mock_pyaudio.PyAudio.return_value = mock_pyaudio_instance
@@ -263,7 +267,9 @@ class TestBufferManagement(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -347,7 +353,9 @@ class TestProcessPartialResult(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -437,7 +445,9 @@ class TestStartStopRecognition(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -534,7 +544,9 @@ class TestPushToTalkMode(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -601,7 +613,9 @@ class TestWhisperInitialization(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -681,7 +695,9 @@ class TestWhispercppInitialization(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -719,7 +735,10 @@ class TestWhispercppInitialization(unittest.TestCase):
 
         with patch.dict(
             sys.modules,
-            {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model},
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp.model,
+            },
         ):
             with patch(
                 "vocalinux.speech_recognition.recognition_manager.get_model_path",
@@ -734,7 +753,9 @@ class TestWhispercppInitialization(unittest.TestCase):
                             mock_stat.return_value.st_size = 1000000
                             # Should convert invalid model to "tiny"
                             manager = SpeechRecognitionManager(
-                                engine="whisper_cpp", model_size="invalid", defer_download=True
+                                engine="whisper_cpp",
+                                model_size="invalid",
+                                defer_download=True,
                             )
                             # Invalid size should be converted to "tiny"
                             self.assertEqual(manager.model_size, "tiny")
@@ -746,7 +767,10 @@ class TestWhispercppInitialization(unittest.TestCase):
 
         with patch.dict(
             sys.modules,
-            {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model},
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp.model,
+            },
         ):
             # Mock get_model_path to return a non-existent path
             with patch(
@@ -770,7 +794,9 @@ class TestReconfiguration(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -856,7 +882,9 @@ class TestProcessFinalBuffer(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -940,7 +968,9 @@ class TestDownloadModels(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -1033,7 +1063,9 @@ class TestMoonshineRecognitionManager(unittest.TestCase):
         self.mockMakeDirs = patch("os.makedirs")
         self.mockThread = patch("threading.Thread")
         self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+        self.mockDownload = patch.object(
+            SpeechRecognitionManager, "_download_vosk_model"
+        )
 
         self.kaldiMock = self.mockKaldi.start()
         self.modelMock = self.mockModel.start()
@@ -1093,7 +1125,9 @@ class TestMoonshineRecognitionManager(unittest.TestCase):
         ):
             manager._init_moonshine()
 
-        moonshine_module.get_model_for_language.assert_called_once_with(wanted_language="en")
+        moonshine_module.get_model_for_language.assert_called_once_with(
+            wanted_language="en"
+        )
         transcriber_cls.assert_called_once_with(
             model_path="/mock/moonshine-model",
             model_arch=5,
