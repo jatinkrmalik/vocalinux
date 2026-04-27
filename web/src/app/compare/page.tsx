@@ -60,7 +60,7 @@ export default function CompareEnginesPage() {
     headline: "Whisper.cpp vs Whisper vs VOSK for Linux Voice Dictation",
     description:
       "Technical comparison of speech recognition engines for offline Linux voice typing.",
-    dateModified: "2026-02-12",
+    dateModified: "2026-03-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -138,12 +138,22 @@ export default function CompareEnginesPage() {
         </table>
       </section>
 
+      <section className="mt-8 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
+        <h2 className="mb-3 text-2xl font-semibold">Switching Between Engines</h2>
+        <p className="text-sm text-muted-foreground">
+          You can switch between whisper.cpp, Whisper, and VOSK at any time from Settings. v0.10.1+
+          safely stops recognition before switching to prevent segfaults. Each engine has its own
+          model files.
+        </p>
+      </section>
+
       <section className="mt-12 grid gap-6 md:grid-cols-3">
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
           <h2 className="mb-3 text-2xl font-semibold">When to pick whisper.cpp</h2>
           <p className="text-sm text-muted-foreground">
             Choose whisper.cpp when you want the best speed-to-accuracy ratio and broad hardware support.
-            It is the default in Vocalinux for a reason.
+            It is the default in Vocalinux for a reason. Safe engine switching - v0.10.1+ stops
+            recognition before switching to prevent crashes.
           </p>
         </article>
 

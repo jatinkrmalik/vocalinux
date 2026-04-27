@@ -24,20 +24,57 @@ from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend
 logger = logging.getLogger(__name__)
 
 
+def _optional_key(key_name: str):
+    if not PYNPUT_AVAILABLE:
+        return None
+    return getattr(keyboard.Key, key_name, None)
+
+
+def _key_set(*key_names: str) -> set:
+    keys = set()
+    for key_name in key_names:
+        key = _optional_key(key_name)
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
+def _primary_key(*key_names: str):
+    for key_name in key_names:
+        key = _optional_key(key_name)
+        if key is not None:
+            return key
+    return None
+
+
 MODIFIER_KEY_MAP = {}
+MODIFIER_KEY_VARIANTS = {}
 MODIFIER_NORMALIZE_MAP = {}
 if PYNPUT_AVAILABLE:
     MODIFIER_KEY_MAP = {
-        "ctrl": keyboard.Key.ctrl,
-        "alt": keyboard.Key.alt,
-        "shift": keyboard.Key.shift,
-        "super": keyboard.Key.cmd,
-        "left_ctrl": keyboard.Key.ctrl_l,
-        "left_alt": keyboard.Key.alt_l,
-        "left_shift": keyboard.Key.shift_l,
-        "right_ctrl": keyboard.Key.ctrl_r,
-        "right_alt": keyboard.Key.alt_r,
-        "right_shift": keyboard.Key.shift_r,
+        "ctrl": _primary_key("ctrl", "ctrl_l", "ctrl_r"),
+        "alt": _primary_key("alt", "alt_l", "alt_r"),
+        "shift": _primary_key("shift", "shift_l", "shift_r"),
+        "super": _primary_key("cmd", "cmd_l", "cmd_r"),
+        "left_ctrl": _primary_key("ctrl_l"),
+        "left_alt": _primary_key("alt_l"),
+        "left_shift": _primary_key("shift_l"),
+        "right_ctrl": _primary_key("ctrl_r"),
+        "right_alt": _primary_key("alt_r", "alt_gr"),
+        "right_shift": _primary_key("shift_r"),
+    }
+
+    MODIFIER_KEY_VARIANTS = {
+        "ctrl": _key_set("ctrl", "ctrl_l", "ctrl_r"),
+        "alt": _key_set("alt", "alt_l", "alt_r", "alt_gr"),
+        "shift": _key_set("shift", "shift_l", "shift_r"),
+        "super": _key_set("cmd", "cmd_l", "cmd_r"),
+        "left_ctrl": _key_set("ctrl_l"),
+        "left_alt": _key_set("alt_l"),
+        "left_shift": _key_set("shift_l"),
+        "right_ctrl": _key_set("ctrl_r"),
+        "right_alt": _key_set("alt_r", "alt_gr"),
+        "right_shift": _key_set("shift_r"),
     }
 
     MODIFIER_NORMALIZE_MAP = {
@@ -45,6 +82,7 @@ if PYNPUT_AVAILABLE:
         keyboard.Key.ctrl_r: keyboard.Key.ctrl,
         keyboard.Key.alt_l: keyboard.Key.alt,
         keyboard.Key.alt_r: keyboard.Key.alt,
+        keyboard.Key.alt_gr: keyboard.Key.alt,
         keyboard.Key.shift_l: keyboard.Key.shift,
         keyboard.Key.shift_r: keyboard.Key.shift,
         keyboard.Key.cmd_l: keyboard.Key.cmd,
@@ -81,6 +119,18 @@ class PynputKeyboardBackend(KeyboardBackend):
     def _get_target_key(self):
         """Get the pynput Key object for the configured modifier."""
         return MODIFIER_KEY_MAP.get(self._modifier_key)
+
+    def _matches_configured_modifier(self, key) -> bool:
+        key_variants = self._get_key_variants(self._modifier_key)
+        if key_variants:
+            return key in key_variants
+
+        target_key = self._get_target_key()
+        if target_key is None:
+            return False
+
+        normalized_key = self._normalize_modifier_key(key)
+        return normalized_key == target_key
 
     def is_available(self) -> bool:
         """Check if pynput is available."""
@@ -151,17 +201,12 @@ class PynputKeyboardBackend(KeyboardBackend):
     def _on_press(self, key) -> None:
         """Handle key press events."""
         try:
-            target_key = self._get_target_key()
-            is_side_specific = self._modifier_key.startswith(("left_", "right_"))
-
-            if is_side_specific:
-                matched = key == target_key
-            else:
-                normalized_key = self._normalize_modifier_key(key)
-                matched = normalized_key == target_key
+            matched = self._matches_configured_modifier(key)
 
             if matched:
                 current_time = time.time()
+                normalized_key = self._normalize_modifier_key(key)
+                self.current_keys.add(normalized_key)
 
                 if self._mode == "toggle":
                     if (
@@ -178,11 +223,6 @@ class PynputKeyboardBackend(KeyboardBackend):
                         threading.Thread(target=self.key_press_callback, daemon=True).start()
 
                 self.last_key_press_time = current_time
-
-            if target_key and key in self._get_key_variants(self._modifier_key):
-                normalized_key = self._normalize_modifier_key(key)
-                self.current_keys.add(normalized_key)
-
         except Exception as e:
             logger.error(f"Error in pynput key press handling: {e}")
 
@@ -190,15 +230,9 @@ class PynputKeyboardBackend(KeyboardBackend):
         """Handle key release events."""
         try:
             normalized_key = self._normalize_modifier_key(key)
-            target_key = self._get_target_key()
-            is_side_specific = self._modifier_key.startswith(("left_", "right_"))
 
             self.current_keys.discard(normalized_key)
-
-            if is_side_specific:
-                matched = key == target_key
-            else:
-                matched = normalized_key == target_key
+            matched = self._matches_configured_modifier(key)
 
             if self._mode == "push_to_talk" and matched:
                 if self.key_release_callback is not None:
@@ -216,20 +250,7 @@ class PynputKeyboardBackend(KeyboardBackend):
         """Get all key variants for a modifier name."""
         if not PYNPUT_AVAILABLE:
             return set()
-
-        variants = {
-            "ctrl": {keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r},
-            "alt": {keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r},
-            "shift": {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r},
-            "super": {keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r},
-            "left_ctrl": {keyboard.Key.ctrl_l},
-            "left_alt": {keyboard.Key.alt_l},
-            "left_shift": {keyboard.Key.shift_l},
-            "right_ctrl": {keyboard.Key.ctrl_r},
-            "right_alt": {keyboard.Key.alt_r},
-            "right_shift": {keyboard.Key.shift_r},
-        }
-        return variants.get(modifier_name, set())
+        return MODIFIER_KEY_VARIANTS.get(modifier_name, set())
 
 
 # Export availability

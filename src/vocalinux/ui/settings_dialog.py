@@ -8,7 +8,7 @@ UX Design Notes:
 - Follows GNOME Human Interface Guidelines (HIG) for modern desktop look
 - Uses preference-page style layout with clearly grouped sections
 - Settings apply immediately when changed (instant-apply pattern)
-- No action buttons needed - use title bar close button
+- Close button provided for WM compatibility (some WMs hide title bar close)
 - Provides real-time progress feedback for recognition state
 - Multi-modal feedback (text + icon + audio level) for accessibility
 - Modal dialog for model downloads (explicit confirmation for large downloads)
@@ -758,6 +758,11 @@ class SettingsDialog(Gtk.Dialog):
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.set_decorated(True)  # Force window decorations (close button) on all WMs
+
+        # Add a Close action button so the dialog always has a visible way to
+        # dismiss it, even on window managers that hide the title-bar close
+        # button for Gtk.Dialog windows without action buttons (fixes #323).
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
@@ -773,7 +778,7 @@ class SettingsDialog(Gtk.Dialog):
         # Setup CSS styling
         _setup_css()
 
-        # Dialog configuration - no action buttons needed (use title bar close)
+        # Dialog configuration - Close button added above for WM compatibility
         # Calculate dialog size
         display = Gdk.Display.get_default()
         if display:
@@ -1389,7 +1394,7 @@ class SettingsDialog(Gtk.Dialog):
             self.shortcut_mode_combo.append(mode_id, display_name)
 
         # Load current mode from config
-        current_mode = self.config_manager.get("shortcuts", "mode", "toggle")
+        current_mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
         if not self.shortcut_mode_combo.set_active_id(current_mode):
             self.shortcut_mode_combo.set_active_id("toggle")
 
@@ -1416,7 +1421,9 @@ class SettingsDialog(Gtk.Dialog):
                 self.shortcut_combo.append(shortcut_id, display_name)
 
         # Load current shortcut from config
-        current_shortcut = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        current_shortcut = self.config_manager.get_str(
+            "shortcuts", "toggle_recognition", "ctrl+ctrl"
+        )
         if not self.shortcut_combo.set_active_id(current_shortcut):
             self.shortcut_combo.set_active_id("ctrl+ctrl")
 
@@ -1520,7 +1527,7 @@ class SettingsDialog(Gtk.Dialog):
         # Ignore separator entries (used for grouped display)
         if shortcut_id.startswith("__separator_"):
             # Revert to the previously saved shortcut
-            current = self.config_manager.get("shortcuts", "toggle_recognition", "ctrl+ctrl")
+            current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
             self.shortcut_combo.set_active_id(current)
             return
 
@@ -1652,7 +1659,7 @@ class SettingsDialog(Gtk.Dialog):
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
-        copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", True)
+        copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
@@ -2148,6 +2155,13 @@ class SettingsDialog(Gtk.Dialog):
 
             self.config_manager.update_speech_recognition_settings(settings)
             self.config_manager.save_settings()
+
+            # Stop recognition before reconfiguring to avoid segfaults when
+            # switching between engines with native resources (e.g. whisper.cpp)
+            was_running = self.speech_engine.state != RecognitionState.IDLE
+            if was_running:
+                self.speech_engine.stop_recognition()
+
             self.speech_engine.reconfigure(**settings)
             logger.info("Settings auto-applied successfully")
         except Exception as e:
@@ -2437,7 +2451,7 @@ For now, the engine has been reverted to VOSK."""
                 label += " (default)"
             self.audio_device_combo.append(str(device_index), label)
 
-        saved_device = self.config_manager.get("audio", "device_index", None)
+        saved_device = self.config_manager.get_optional_int("audio", "device_index", None)
 
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")

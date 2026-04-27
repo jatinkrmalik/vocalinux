@@ -5,7 +5,7 @@ This module handles special voice commands like "delete that", "undo", etc.
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from ..text_injection.text_injector import TextInjector
@@ -21,6 +21,20 @@ class ActionHandler:
     and performs the appropriate actions like deleting text, undoing, etc.
     """
 
+    # Keyboard shortcut mappings for simple forwarding actions.
+    # Actions not listed here have custom handlers defined as methods.
+    _SHORTCUT_ACTIONS: dict[str, str] = {
+        "undo": "ctrl+z",
+        "redo": "ctrl+y",
+        "select_all": "ctrl+a",
+        "select_line": "Home+shift+End",
+        "select_word": "ctrl+shift+Right",
+        "select_paragraph": "ctrl+shift+Down",
+        "cut": "ctrl+x",
+        "copy": "ctrl+c",
+        "paste": "ctrl+v",
+    }
+
     def __init__(self, text_injector: "TextInjector"):
         """
         Initialize the action handler.
@@ -31,19 +45,12 @@ class ActionHandler:
         self.text_injector = text_injector
         self.last_injected_text = ""
 
-        # Map actions to handler methods
-        self.action_handlers = {
+        # Build action dispatch table: custom handlers + shortcut-based actions
+        self.action_handlers: dict[str, Callable[[], bool]] = {
             "delete_last": self._handle_delete_last,
-            "undo": self._handle_undo,
-            "redo": self._handle_redo,
-            "select_all": self._handle_select_all,
-            "select_line": self._handle_select_line,
-            "select_word": self._handle_select_word,
-            "select_paragraph": self._handle_select_paragraph,
-            "cut": self._handle_cut,
-            "copy": self._handle_copy,
-            "paste": self._handle_paste,
         }
+        for action, shortcut in self._SHORTCUT_ACTIONS.items():
+            self.action_handlers[action] = self._make_shortcut_handler(shortcut)
 
     def handle_action(self, action: str) -> bool:
         """
@@ -77,6 +84,14 @@ class ActionHandler:
         """
         self.last_injected_text = text
 
+    def _make_shortcut_handler(self, shortcut: str) -> Callable[[], bool]:
+        """Create a handler that sends a keyboard shortcut via the text injector."""
+
+        def handler() -> bool:
+            return self.text_injector._inject_keyboard_shortcut(shortcut)
+
+        return handler
+
     def _handle_delete_last(self) -> bool:
         """Handle 'delete that' command by sending backspace keys."""
         if not self.last_injected_text:
@@ -92,39 +107,3 @@ class ActionHandler:
             self.last_injected_text = ""
 
         return success
-
-    def _handle_undo(self) -> bool:
-        """Handle 'undo' command by sending Ctrl+Z."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+z")
-
-    def _handle_redo(self) -> bool:
-        """Handle 'redo' command by sending Ctrl+Y."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+y")
-
-    def _handle_select_all(self) -> bool:
-        """Handle 'select all' command by sending Ctrl+A."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+a")
-
-    def _handle_select_line(self) -> bool:
-        """Handle 'select line' command by sending Home+Shift+End."""
-        return self.text_injector._inject_keyboard_shortcut("Home+shift+End")
-
-    def _handle_select_word(self) -> bool:
-        """Handle 'select word' command by sending Ctrl+Shift+Right."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+shift+Right")
-
-    def _handle_select_paragraph(self) -> bool:
-        """Handle 'select paragraph' command by sending Ctrl+Shift+Down."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+shift+Down")
-
-    def _handle_cut(self) -> bool:
-        """Handle 'cut' command by sending Ctrl+X."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+x")
-
-    def _handle_copy(self) -> bool:
-        """Handle 'copy' command by sending Ctrl+C."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+c")
-
-    def _handle_paste(self) -> bool:
-        """Handle 'paste' command by sending Ctrl+V."""
-        return self.text_injector._inject_keyboard_shortcut("ctrl+v")

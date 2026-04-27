@@ -177,13 +177,14 @@ class TestGetAudioInputDevices:
                 assert devices == []
 
     def test_get_audio_input_devices_generic_exception(self):
-        """Test handling of generic exceptions during device enumeration."""
+        """Test handling of OS-level audio errors during device enumeration."""
         from vocalinux.speech_recognition.recognition_manager import get_audio_input_devices
 
-        with patch.dict("sys.modules", {"pyaudio": MagicMock()}):
-            with patch("builtins.__import__", side_effect=RuntimeError("Unexpected error")):
-                devices = get_audio_input_devices()
-                assert devices == []
+        mock_pyaudio = MagicMock()
+        mock_pyaudio.PyAudio.side_effect = OSError("Audio subsystem error")
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            devices = get_audio_input_devices()
+            assert devices == []
 
 
 class TestGetSupportedChannels:
@@ -214,11 +215,13 @@ class TestGetSupportedChannels:
         mock_audio = MagicMock()
         mock_stream = MagicMock()
 
-        # Mono fails, stereo succeeds
-        mock_audio.open.side_effect = [
-            IOError("-9998 invalid number of channels"),
-            mock_stream,
-        ]
+        def open_side_effect(**kwargs):
+            if kwargs.get("channels") == 1:
+                raise IOError("-9998 invalid number of channels")
+            return mock_stream
+
+        mock_audio.open.side_effect = open_side_effect
+        mock_audio.get_default_input_device_info.return_value = {"defaultSampleRate": 48000}
 
         with patch.dict(
             "sys.modules",
@@ -233,11 +236,8 @@ class TestGetSupportedChannels:
 
         mock_audio = MagicMock()
 
-        # Both fail
-        mock_audio.open.side_effect = [
-            IOError("Mono failed"),
-            IOError("Stereo failed"),
-        ]
+        mock_audio.open.side_effect = IOError("All channel/rate probes failed")
+        mock_audio.get_default_input_device_info.return_value = {"defaultSampleRate": 48000}
 
         with patch.dict(
             "sys.modules",

@@ -212,19 +212,19 @@ export default function RsiPreventionPage() {
           <div>
             <h3 className="mb-3 font-semibold">Tips for Transitioning</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Start by dictating emails and documents, then expand to other tasks
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Use voice commands for punctuation to maintain natural speech flow
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Take breaks—voice dictation is still work, and vocal rest matters too
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Combine with ergonomic equipment for maximum benefit
               </li>
@@ -233,19 +233,19 @@ export default function RsiPreventionPage() {
           <div>
             <h3 className="mb-3 font-semibold">Vocalinux Advantages</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Toggle mode or push-to-talk control—no mouse required
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 System tray indicator shows recording status
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Pleasant audio feedback confirms start/stop
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Works in ALL Linux applications—universal compatibility
               </li>
@@ -266,7 +266,7 @@ export default function RsiPreventionPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
           >
             Install Vocalinux
             <ChevronRight className="h-4 w-4" />

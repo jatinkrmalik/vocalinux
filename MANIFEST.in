@@ -1,0 +1,4 @@
+include vocalinux.desktop
+include resources/icons/scalable/*.svg
+include resources/sounds/*.wav
+recursive-include src/vocalinux/resources *

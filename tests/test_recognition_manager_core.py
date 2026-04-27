@@ -138,9 +138,9 @@ class TestGetAudioInputDevices(unittest.TestCase):
             self.assertEqual(devices, [])
 
     def test_get_audio_input_devices_exception(self):
-        """Test handling of general exceptions."""
+        """Test handling of OS-level audio errors."""
         mock_pyaudio = MagicMock()
-        mock_pyaudio.PyAudio.side_effect = RuntimeError("Unexpected error")
+        mock_pyaudio.PyAudio.side_effect = OSError("Audio device error")
 
         with patch.dict(sys.modules, {"pyaudio": mock_pyaudio}):
             devices = get_audio_input_devices()
@@ -523,6 +523,72 @@ class TestStartStopRecognition(unittest.TestCase):
 
         self.assertEqual(manager.state, RecognitionState.IDLE)
         mock_audio_feedback.play_stop_sound.assert_not_called()
+
+
+class TestPushToTalkMode(unittest.TestCase):
+    """Test push-to-talk recognition mode prevents premature transcription on silence."""
+
+    def setUp(self):
+        self.mockKaldi = patch.object(sys.modules["vosk"], "KaldiRecognizer")
+        self.mockModel = patch.object(sys.modules["vosk"], "Model")
+        self.mockMakeDirs = patch("os.makedirs")
+        self.mockThread = patch("threading.Thread")
+        self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
+        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+
+        self.kaldiMock = self.mockKaldi.start()
+        self.modelMock = self.mockModel.start()
+        self.makeDirsMock = self.mockMakeDirs.start()
+        self.threadMock = self.mockThread.start()
+        self.pathMock = self.mockPath.start()
+        self.downloadMock = self.mockDownload.start()
+
+        self.pathMock.return_value = "/mock/path/vosk-model"
+        self.recognizerMock = MagicMock()
+        self.kaldiMock.return_value = self.recognizerMock
+        self.recognizerMock.FinalResult.return_value = '{"text": ""}'
+        self.threadInstance = MagicMock()
+        self.threadMock.return_value = self.threadInstance
+
+        mock_audio_feedback.play_start_sound.reset_mock()
+        mock_audio_feedback.play_stop_sound.reset_mock()
+        mock_audio_feedback.play_error_sound.reset_mock()
+
+        self.patcher_exists = patch("os.path.exists", return_value=True)
+        self.mock_exists = self.patcher_exists.start()
+
+    def tearDown(self):
+        self.mockKaldi.stop()
+        self.mockModel.stop()
+        self.mockMakeDirs.stop()
+        self.mockThread.stop()
+        self.mockPath.stop()
+        self.mockDownload.stop()
+        self.patcher_exists.stop()
+
+    def test_default_recognition_mode_is_toggle(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        self.assertEqual(manager._recognition_mode, "toggle")
+
+    def test_start_recognition_sets_toggle_mode_by_default(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.start_recognition()
+        self.assertEqual(manager._recognition_mode, "toggle")
+
+    def test_start_recognition_sets_push_to_talk_mode(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.start_recognition(mode="push_to_talk")
+        self.assertEqual(manager._recognition_mode, "push_to_talk")
+
+    def test_stop_recognition_resets_mode_to_toggle(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.start_recognition(mode="push_to_talk")
+        self.assertEqual(manager._recognition_mode, "push_to_talk")
+
+        manager.audio_thread = self.threadInstance
+        manager.recognition_thread = self.threadInstance
+        manager.stop_recognition()
+        self.assertEqual(manager._recognition_mode, "toggle")
 
 
 class TestWhisperInitialization(unittest.TestCase):

@@ -6,6 +6,53 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.10.2-beta",
+    date: "2026-04-08",
+    type: "beta",
+    highlights: [
+      "Handle non-ASCII characters (á, é, ñ, etc.) with ydotool via clipboard paste fallback (fixes #362, PR #376)",
+      "Detect IBus on Wayland without legacy env vars and fix text injection (PR #381)",
+      "Start IBus engine process before checking registration to fix startup on some systems (fixes #360, PR #361)",
+      "Add missing dependencies for Pop!_OS and Ubuntu 24.04+ including cmake, libcairo2-dev, libgirepository (PR #379)",
+      "Systematic code quality refactor across 20 dimensions (PR #377)",
+      "Clarify missing GNOME AppIndicator support on Debian (PR #385)",
+      "Redesigned OG image for vocalinux.com — cleaner, professional, text-based layout (PR #392)",
+      "Test coverage improvements: mock Notify module, tray degraded-startup, IBus socket-readiness branches (PR #384, #386, #390)",
+    ],
+  },
+  {
+    version: "v0.10.1-beta",
+    date: "2026-03-30",
+    type: "beta",
+    highlights: [
+      "Bundled package resources to prevent missing system tray icons (fixes #349, PR #354)",
+      "Stopped recognition before engine switches to prevent segfaults (fixes #350, PR #355)",
+      "Added a dedicated Close button in Settings for better WM compatibility (fixes #323, PR #356)",
+      "Preserved XKB layout state during Vocalinux IBus activation (fixes #292, PR #343)",
+      "Auto-recover speech recognition after system suspend/resume via new D-Bus handler (fixes #367, PR #369)",
+      "Restart keyboard shortcut backend after resume to keep shortcuts working (PR #371)",
+      "Delayed keyboard restart to allow USB re-enumeration after resume (PR #372)",
+      "Fixed premature transcription during push-to-talk silence (fixes #358, PR #359)",
+      "Disabled copy-to-clipboard by default in Settings (PR #370)",
+      "Maintenance updates: npm/yarn dependency refresh and brace-expansion dev dependency bump (PR #346, #357)",
+    ],
+  },
+  {
+    version: "v0.10.0-beta",
+    date: "2026-03-25",
+    type: "beta",
+    highlights: [
+      "Generalized keyboard modifier alias matching across layouts for more reliable shortcuts",
+      "Audio channel probing now validates device-supported sample rates before selection",
+      "evdev now handles SYN_DROPPED to prevent stale modifier state",
+      "IBus engine activation now uses register_component for stronger text-injection startup",
+      "Settings dialog forces window decorations to prevent missing-titlebar behavior",
+      "Tray icon refresh now uses icon names for better AppIndicator compatibility",
+      "Coverage increased to 80%+ with additional IBus launch/main-entry tests",
+      "Installer and CI polish: latest-tag fallback via GitHub API, Node 24 deploy, and path-filtered workflows",
+    ],
+  },
+  {
     version: "v0.9.0-beta",
     date: "2026-03-14",
     type: "beta",
@@ -175,7 +222,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-03-14",
+    dateModified: "2026-03-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -241,7 +288,7 @@ export default function ChangelogPage() {
 
               <ul className="space-y-2">
                 {release.highlights.map((highlight) => (
-                  <li key={highlight} className="inline-flex items-start gap-2 text-muted-foreground">
+                  <li key={highlight} className="flex items-start gap-2 text-muted-foreground">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                     {highlight}
                   </li>
@@ -268,15 +315,15 @@ export default function ChangelogPage() {
       <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-4 text-2xl font-bold">Stay Updated</h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
             Watch the repository on GitHub for release notifications
           </li>
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
             Re-run the installer to update to the latest version
           </li>
-          <li className="inline-flex items-center gap-2">
+          <li className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-primary" />
             Check the{" "}
             <Link href="/install/" className="font-semibold text-primary hover:underline">

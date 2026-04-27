@@ -237,7 +237,7 @@ export default function GpuAccelerationPage() {
                 <p className="mb-4 text-sm text-muted-foreground">{backend.description}</p>
                 <ul className="space-y-1.5">
                   {backend.advantages.map((advantage) => (
-                    <li key={advantage} className="inline-flex items-start gap-2 text-sm">
+                    <li key={advantage} className="flex items-start gap-2 text-sm">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                       {advantage}
                     </li>
@@ -337,7 +337,7 @@ export default function GpuAccelerationPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />

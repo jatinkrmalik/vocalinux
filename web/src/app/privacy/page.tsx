@@ -111,23 +111,23 @@ export default function PrivacyPage() {
               includes:
             </p>
             <ul className="space-y-2">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 No voice recordings or audio data
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 No transcribed text
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 No usage analytics or telemetry
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 No device fingerprints
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 No IP addresses or location data
               </li>
@@ -177,15 +177,15 @@ export default function PrivacyPage() {
               Vocalinux stores configuration locally at <code className="rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-700">~/.config/vocalinux/</code>:
             </p>
             <ul className="space-y-2">
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Settings like preferred engine, model size, and language
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Custom keyboard shortcuts
               </li>
-              <li className="inline-flex items-start gap-2">
+              <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                 Window and tray preferences
               </li>

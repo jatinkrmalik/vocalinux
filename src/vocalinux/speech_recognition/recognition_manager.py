@@ -96,19 +96,23 @@ def get_audio_input_devices() -> list:
         audio.terminate()
     except ImportError:
         logger.error("PyAudio not installed, cannot enumerate audio devices")
-    except Exception as e:
+    except OSError as e:
         logger.error(f"Error enumerating audio devices: {e}")
 
     return devices
 
 
-def _get_supported_channels(audio, device_index: int = None) -> int:
+def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
     """
     Detect the supported number of channels for the audio device.
 
     Some audio devices (particularly professional audio interfaces and certain
     onboard audio chips) only support specific channel configurations. This
     function tests mono (1) and stereo (2) to find a working configuration.
+
+    Pro-audio USB interfaces (MUPRO, Vocaster, etc.) often only support 48kHz
+    and will reject 16kHz probes. This function uses the device's default
+    sample rate first, then falls back to common rates.
 
     Args:
         audio: PyAudio instance
@@ -121,41 +125,57 @@ def _get_supported_channels(audio, device_index: int = None) -> int:
 
     FORMAT = pyaudio.paInt16
     CHUNK = 1024
-    RATE = 16000  # Use standard rate for channel testing
 
-    # Try mono first (preferred for speech recognition)
+    COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
+
+    rates_to_try = []
+    try:
+        if device_index is not None:
+            device_info = audio.get_device_info_by_index(device_index)
+        else:
+            device_info = audio.get_default_input_device_info()
+
+        default_rate = int(device_info.get("defaultSampleRate", 0))
+        if default_rate > 0:
+            rates_to_try.append(default_rate)
+            logger.debug(f"Device reports default sample rate: {default_rate}Hz")
+    except (IOError, OSError) as e:
+        logger.debug(f"Could not get device info for channel probing: {e}")
+
+    for rate in COMMON_RATES:
+        if rate not in rates_to_try:
+            rates_to_try.append(rate)
+
     for channels in [1, 2]:
-        try:
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": channels,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
-            if device_index is not None:
-                stream_kwargs["input_device_index"] = device_index
+        for rate in rates_to_try:
+            try:
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": channels,
+                    "rate": rate,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
+                if device_index is not None:
+                    stream_kwargs["input_device_index"] = device_index
 
-            test_stream = audio.open(**stream_kwargs)
-            test_stream.close()
-            logger.debug(f"Device supports {channels} channel(s)")
-            return channels
-        except (IOError, OSError) as e:
-            error_str = str(e).lower()
-            if "invalid number of channels" in error_str or "-9998" in error_str:
-                logger.debug(f"Device does not support {channels} channel(s)")
-                continue
-            else:
-                # Different error, try next channel count anyway
-                logger.debug(f"Channel test failed for {channels} channel(s): {e}")
+                test_stream = audio.open(**stream_kwargs)
+                test_stream.close()
+                logger.debug(f"Device supports {channels} channel(s) at {rate}Hz")
+                return channels
+            except (IOError, OSError) as e:
+                error_str = str(e).lower()
+                if "invalid number of channels" in error_str or "-9998" in error_str:
+                    logger.debug(f"Device rejected {channels} channel(s) at {rate}Hz: {e}")
+                else:
+                    logger.debug(f"Channel test failed at {rate}Hz: {e}")
                 continue
 
-    # Default to mono if we couldn't determine
     logger.warning("Could not determine supported channel count, defaulting to 1")
     return 1
 
 
-def _get_supported_sample_rate(audio, device_index: int, channels: int = 1) -> int:
+def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int = 1) -> int:
     """
     Get a supported sample rate for the audio device.
 
@@ -322,7 +342,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
                 audio_data = np.frombuffer(data, dtype=np.int16)
                 amplitudes = np.abs(audio_data)
                 all_amplitudes.extend(amplitudes)
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 result["error"] = f"Error reading audio: {e}"
                 break
 
@@ -342,7 +362,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
 
     except ImportError as e:
         result["error"] = f"Missing dependency: {e}"
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         result["error"] = f"Unexpected error: {e}"
 
     return result
@@ -413,7 +433,7 @@ def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
         logger.debug(f"Could not show notification: {e}")
 
 
@@ -546,6 +566,7 @@ class SpeechRecognitionManager:
 
         # Recording control flags
         self.should_record = False
+        self._recognition_mode = "toggle"  # "toggle" or "push_to_talk"
         self.audio_buffer = []
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
@@ -701,7 +722,7 @@ class SpeechRecognitionManager:
             logger.error("Please install with: pip install openai-whisper torch")
             self.state = RecognitionState.ERROR
             raise
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize Whisper engine: {e}")
             self.state = RecognitionState.ERROR
             raise
@@ -772,16 +793,14 @@ class SpeechRecognitionManager:
 
             return text
 
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
             return ""
 
     def _init_whispercpp(self):
         """Initialize the whisper.cpp speech recognition engine."""
-        import time
-
         try:
-            from pywhispercpp.model import Model
+            from pywhispercpp.model import Model  # noqa: F401 — used in _load_whispercpp_model
 
             # Validate model size for whisper.cpp
             valid_models = list(WHISPERCPP_MODEL_INFO.keys())
@@ -807,105 +826,7 @@ class SpeechRecognitionManager:
                     logger.info(f"Downloading whisper.cpp '{self.model_size}' model...")
                     self._download_whispercpp_model()
 
-            # Detect and log compute backend
-            from ..utils.whispercpp_model_info import (
-                ComputeBackend,
-                detect_compute_backend,
-                get_backend_display_name,
-            )
-
-            backend, backend_info = detect_compute_backend()
-            logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
-            logger.info(
-                f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
-            )
-
-            # Log hardware summary
-            import psutil
-
-            total_ram_gb = psutil.virtual_memory().total // (1024**3)
-            logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
-
-            # Validate model file exists and get size
-            if os.path.exists(model_path):
-                model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
-                logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
-            else:
-                logger.error(f"whisper.cpp model file not found: {model_path}")
-                raise FileNotFoundError(f"Model file not found: {model_path}")
-
-            logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
-            # Ensure previous model is released if re-initializing
-            self.model = None
-
-            # Load model with pywhispercpp
-            # It auto-detects the best backend (Vulkan, CUDA, or CPU)
-            # Use all available CPU cores for best performance
-            import multiprocessing
-
-            n_threads = multiprocessing.cpu_count()
-            cpu_count = multiprocessing.cpu_count()
-
-            load_start_time = time.time()
-
-            loaded_backend = backend
-
-            # Attempt to load model with automatic backend selection
-            # If Vulkan GPU fails (e.g., incompatible Intel GPU), fallback to CPU
-            try:
-                self.model = Model(
-                    model_path,
-                    n_threads=n_threads,
-                    suppress_blank=True,
-                    no_speech_thold=0.6,
-                    entropy_thold=2.4,
-                )
-            except RuntimeError as model_error:
-                error_str = str(model_error).lower()
-                # Check for Vulkan 16-bit storage incompatibility
-                if (
-                    "16-bit storage" in error_str
-                    or "unsupported device" in error_str
-                    or "incompatible driver" in error_str
-                ):
-                    logger.warning(
-                        f"Vulkan GPU initialization failed: {model_error}. "
-                        "Falling back to CPU backend."
-                    )
-                    _show_notification(
-                        "Vocalinux: GPU Fallback",
-                        "Your GPU doesn't support whisper.cpp Vulkan.\n"
-                        "Switched to CPU mode - still fast!",
-                        "dialog-information",
-                    )
-                    # Force CPU backend by disabling GPU backends
-                    os.environ["GGML_VULKAN"] = "0"
-                    os.environ["GGML_CUDA"] = "0"
-                    # Retry with CPU-only backend
-                    self.model = Model(
-                        model_path,
-                        n_threads=n_threads,
-                        suppress_blank=True,
-                        no_speech_thold=0.6,
-                        entropy_thold=2.4,
-                    )
-                    loaded_backend = ComputeBackend.CPU
-                    backend_info = "CPU (fallback from incompatible Vulkan GPU)"
-                    logger.info("Successfully loaded model with CPU backend")
-                else:
-                    raise
-
-            load_duration = time.time() - load_start_time
-
-            logger.info(
-                f"whisper.cpp configured with n_threads={n_threads} (detected {cpu_count} CPUs)"
-            )
-            logger.info(
-                f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)"
-            )
-
-            self._model_initialized = True
-            logger.info("whisper.cpp engine initialized successfully.")
+            self._load_whispercpp_model(model_path)
 
         except ImportError as e:
             logger.error(f"Failed to import pywhispercpp: {e}")
@@ -913,10 +834,126 @@ class SpeechRecognitionManager:
             logger.error("Please install with: pip install pywhispercpp")
             self.state = RecognitionState.ERROR
             raise
-        except Exception as e:
+        except (FileNotFoundError, RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
             self.state = RecognitionState.ERROR
             raise
+
+    def _load_whispercpp_model(self, model_path: str):
+        """Load the whisper.cpp model file and configure the compute backend.
+
+        Detects the optimal backend (Vulkan → CUDA → CPU), loads the model,
+        and falls back to CPU if the GPU backend is incompatible.
+
+        Args:
+            model_path: Filesystem path to the GGML model file.
+        """
+        import multiprocessing
+        import time
+
+        from pywhispercpp.model import Model
+
+        from ..utils.whispercpp_model_info import (
+            ComputeBackend,
+            detect_compute_backend,
+            get_backend_display_name,
+        )
+
+        # Detect and log compute backend
+        backend, backend_info = detect_compute_backend()
+        logger.info(f"whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
+        logger.info(
+            f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
+        )
+
+        # Log hardware summary
+        import psutil
+
+        total_ram_gb = psutil.virtual_memory().total // (1024**3)
+        logger.info(f"whisper.cpp hardware: {backend} | {backend_info} | RAM: {total_ram_gb}GB")
+
+        # Validate model file exists and get size
+        if os.path.exists(model_path):
+            model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
+            logger.info(f"whisper.cpp model file: {model_path} ({model_size_mb:.1f} MB)")
+        else:
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
+        self.model = None  # Release previous model if re-initializing
+
+        n_threads = multiprocessing.cpu_count()
+        load_start_time = time.time()
+        loaded_backend = backend
+
+        # Attempt to load model; fall back to CPU if GPU backend is incompatible
+        try:
+            self.model = Model(
+                model_path,
+                n_threads=n_threads,
+                suppress_blank=True,
+                no_speech_thold=0.6,
+                entropy_thold=2.4,
+            )
+        except RuntimeError as model_error:
+            loaded_backend = self._handle_gpu_fallback(
+                model_error, model_path, n_threads, ComputeBackend.CPU
+            )
+
+        load_duration = time.time() - load_start_time
+        logger.info(
+            f"whisper.cpp configured with n_threads={n_threads} "
+            f"(detected {multiprocessing.cpu_count()} CPUs)"
+        )
+        logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
+
+        self._model_initialized = True
+        logger.info("whisper.cpp engine initialized successfully.")
+
+    def _handle_gpu_fallback(self, error, model_path: str, n_threads: int, cpu_backend):
+        """Handle GPU backend failure by falling back to CPU.
+
+        Args:
+            error: The RuntimeError from model loading.
+            model_path: Path to the GGML model file.
+            n_threads: Number of CPU threads for the model.
+            cpu_backend: The CPU ComputeBackend enum value.
+
+        Returns:
+            The backend that was actually used.
+
+        Raises:
+            RuntimeError: If the error is not a known GPU incompatibility.
+        """
+        from pywhispercpp.model import Model
+
+        error_str = str(error).lower()
+        gpu_incompatible = (
+            "16-bit storage" in error_str
+            or "unsupported device" in error_str
+            or "incompatible driver" in error_str
+        )
+        if not gpu_incompatible:
+            raise error
+
+        logger.warning(f"Vulkan GPU initialization failed: {error}. Falling back to CPU backend.")
+        _show_notification(
+            "Vocalinux: GPU Fallback",
+            "Your GPU doesn't support whisper.cpp Vulkan.\n" "Switched to CPU mode - still fast!",
+            "dialog-information",
+        )
+        # Force CPU backend by disabling GPU backends
+        os.environ["GGML_VULKAN"] = "0"
+        os.environ["GGML_CUDA"] = "0"
+        self.model = Model(
+            model_path,
+            n_threads=n_threads,
+            suppress_blank=True,
+            no_speech_thold=0.6,
+            entropy_thold=2.4,
+        )
+        logger.info("Successfully loaded model with CPU backend")
+        return cpu_backend
 
     def _transcribe_with_whispercpp(self, audio_buffer: list[bytes]) -> str:
         """
@@ -1333,7 +1370,7 @@ class SpeechRecognitionManager:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during whisper.cpp model download: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
@@ -1496,7 +1533,7 @@ class SpeechRecognitionManager:
             if os.path.exists(zip_path):
                 os.remove(zip_path)
             raise RuntimeError("Downloaded VOSK model file is corrupted.")
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during VOSK model download/extraction: {e}")
             # Clean up potentially corrupted extraction
             if os.path.exists(zip_path):
@@ -1612,7 +1649,7 @@ class SpeechRecognitionManager:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             raise RuntimeError(f"Failed to download Whisper model: {e}") from e
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during Whisper model download: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
@@ -1725,7 +1762,7 @@ class SpeechRecognitionManager:
             return self._model_initialized
         return self._model_initialized and self.model is not None
 
-    def start_recognition(self):
+    def start_recognition(self, mode: str = "toggle"):
         """Start the speech recognition process."""
         if self.state != RecognitionState.IDLE:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
@@ -1752,6 +1789,7 @@ class SpeechRecognitionManager:
 
         # Set recording flag
         self.should_record = True
+        self._recognition_mode = mode
         self.audio_buffer = []
         self._segment_queue = queue.Queue(maxsize=32)
 
@@ -1814,6 +1852,7 @@ class SpeechRecognitionManager:
         if self.recognition_thread and self.recognition_thread.is_alive():
             self.recognition_thread.join(timeout=1.0)
 
+        self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
 
     def _record_audio(self):
@@ -1991,9 +2030,15 @@ class SpeechRecognitionManager:
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
                         if silence_counter > self.silence_timeout:  # Use self.silence_timeout
                             if len(self.audio_buffer) > 0:
-                                logger.debug("Silence detected, queueing audio segment")
-                                self._enqueue_audio_segment(self.audio_buffer)
-                                self.audio_buffer = []
+                                if self._recognition_mode == "push_to_talk":
+                                    logger.debug(
+                                        "Silence detected in push-to-talk mode, "
+                                        "deferring transcription until key release"
+                                    )
+                                else:
+                                    logger.debug("Silence detected, queueing audio segment")
+                                    self._enqueue_audio_segment(self.audio_buffer)
+                                    self.audio_buffer = []
                             silence_counter = 0
                     else:  # Speech
                         if not speech_detected_in_session:
@@ -2314,6 +2359,15 @@ class SpeechRecognitionManager:
 
         if restart_needed:
             logger.info("Engine or model changed, re-initializing...")
+
+            # Stop any active recognition before switching engines.
+            # This is critical to prevent segfaults when the old engine's
+            # native resources (e.g. whisper.cpp C model) are freed while
+            # a background thread is still using them.
+            if self.state != RecognitionState.IDLE:
+                logger.info("Stopping active recognition before engine switch...")
+                self.stop_recognition()
+
             # When reconfiguring from UI, allow downloads
             old_defer = self._defer_download
             self._defer_download = not force_download
@@ -2435,6 +2489,42 @@ class SpeechRecognitionManager:
         except Exception as e:
             logger.error(f"Unexpected error during audio reconnection: {e}")
             return False
+
+    def reinitialize_after_resume(self):
+        """Reinitialize the speech engine after system resume from suspend.
+
+        Stops any active recognition, releases stale model resources,
+        and re-creates the engine so that the audio pipeline and model
+        are in a clean state for new dictation.
+        """
+        logger.info("Reinitializing speech engine after system resume")
+
+        if self.state != RecognitionState.IDLE:
+            logger.info("Stopping active recognition before resume reinit")
+            self.stop_recognition()
+
+        with self._model_lock:
+            self.model = None
+            self.recognizer = None
+            self._model_initialized = False
+
+            try:
+                if self.engine == "vosk":
+                    self._init_vosk()
+                elif self.engine == "whisper":
+                    self._init_whisper()
+                elif self.engine == "whisper_cpp":
+                    self._init_whispercpp()
+                else:
+                    logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
+                    return
+
+                logger.info("Speech engine reinitialized after resume")
+            except Exception:
+                logger.error("Failed to reinitialize speech engine after resume", exc_info=True)
+                self._update_state(RecognitionState.ERROR)
+
+        self._reconnection_attempts = 0
 
     def set_buffer_limit(self, max_chunks: int):
         """

@@ -48,7 +48,7 @@ system_packages:
     fedora: ["python3-devel", "python3-virtualenv"]
     arch: ["python"]  # Arch includes venv by default
     opensuse: ["python3-devel", "python3-virtualenv"]
-    gentoo: ["dev-lang/python:3.8"]
+    gentoo: ["dev-lang/python:3.9"]
     alpine: ["py3-virtualenv"]
     void: ["python3-devel"]
     solus: ["python3-virtualenv"]
@@ -196,7 +196,7 @@ distribution_notes:
 
   gentoo:
     general: "Gentoo compiles packages from source. Installation will take longer."
-    python: "Ensure Python 3.8+ is set as the active version"
+    python: "Ensure Python 3.9+ is set as the active version"
 
   alpine:
     general: "Alpine uses musl libc. Some Python packages may not have pre-built wheels."

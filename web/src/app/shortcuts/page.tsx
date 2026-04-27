@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { ChevronRight, Command, Keyboard, Mouse, Settings, Space, Zap } from "lucide-react";
+import { ChevronRight, Keyboard, Mouse, Settings, Volume2, Zap } from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
@@ -12,6 +12,16 @@ const shortcutCategories = [
     shortcuts: [
       { keys: ["Ctrl", "Ctrl"], action: "Toggle mode: start/stop dictation", note: "Default mode" },
       { keys: ["Hold Ctrl"], action: "Push-to-talk mode: speak while held", note: "Release to stop" },
+      {
+        keys: ["Settings"],
+        action: "Choose Left Ctrl vs Right Ctrl in Settings for more control",
+        note: "Modifier key side selection",
+      },
+      {
+        keys: ["PTT"],
+        action: "v0.10.1+ includes fixes for premature transcription during PTT silence",
+        note: "Improved push-to-talk reliability",
+      },
     ],
   },
   {
@@ -28,6 +38,28 @@ const shortcutCategories = [
       { keys: ["\"undo\""], action: "Undo last action", note: "Voice command" },
       { keys: ["\"redo\""], action: "Redo last action", note: "Voice command" },
       { keys: ["Settings Toggle"], action: "Enable/disable voice commands", note: "Optional in v0.8.0-beta" },
+      {
+        keys: ["Voice Commands"],
+        action: "Voice commands are optional since v0.8.0 - auto-enabled for VOSK, disabled for Whisper by default",
+        note: "Engine-specific defaults",
+      },
+    ],
+  },
+  {
+    category: "Audio Feedback",
+    icon: Volume2,
+    iconColor: "text-sky-500",
+    shortcuts: [
+      {
+        keys: ["Settings Toggle"],
+        action: "Enable/disable sound effects from Settings dialog",
+        note: "Audio feedback control",
+      },
+      {
+        keys: ["v0.9.0+"],
+        action: "Sound effects now toggleable - smooth gliding tones for start/stop",
+        note: "Pleasant audio cues",
+      },
     ],
   },
   {
@@ -79,7 +111,7 @@ export default function ShortcutsPage() {
     headline: "Vocalinux Keyboard Shortcuts & Voice Commands",
     description:
       "Complete guide to Vocalinux keyboard shortcuts and voice commands for efficient Linux voice dictation.",
-    dateModified: "2026-03-01",
+    dateModified: "2026-03-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",

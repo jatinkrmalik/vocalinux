@@ -156,10 +156,11 @@ def is_ibus_active_input_method() -> bool:
     """
     Check if IBus is the currently active input method.
 
-    This checks environment variables to determine if IBus is configured
-    as the active input method for GTK and Qt applications. On some systems,
-    IBus may be installed and the daemon running, but not be the active
-    input method (e.g., when using ydotool, Fcitx, or other input methods).
+    This checks environment variables and, on Wayland where env vars may not
+    be set, also checks if the IBus daemon is running and actively managing
+    an engine. On some desktop environments (e.g., KDE Plasma Wayland), IBus
+    is configured via the DE's Virtual Keyboard setting and IBus itself
+    recommends unsetting the legacy env vars.
 
     Returns:
         True if IBus appears to be the active input method, False otherwise
@@ -182,11 +183,35 @@ def is_ibus_active_input_method() -> bool:
         logger.debug(f"IBus detected as active input method via XMODIFIERS={xmodifiers}")
         return True
 
+    # If another input method is explicitly configured, respect that
+    if gtk_im or qt_im or (xmodifiers and "@im=" in xmodifiers):
+        logger.debug(
+            "Another input method is explicitly configured "
+            f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
+            f"QT_IM_MODULE={qt_im or 'not set'}, "
+            f"XMODIFIERS={xmodifiers or 'not set'})"
+        )
+        return False
+
+    # No env vars set at all — common on Wayland (KDE Plasma, etc.) where
+    # IBus is configured via the DE's Virtual Keyboard setting and IBus
+    # recommends unsetting GTK_IM_MODULE / QT_IM_MODULE.
+    # Check if ibus-daemon is running and has an active engine.
+    if is_ibus_daemon_running():
+        engine = get_current_engine()
+        if engine:
+            logger.debug(
+                f"IBus detected as active input method via running daemon "
+                f"(no env vars set, current engine: {engine})"
+            )
+            return True
+
     logger.debug(
         "IBus does not appear to be the active input method "
         f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
         f"QT_IM_MODULE={qt_im or 'not set'}, "
-        f"XMODIFIERS={xmodifiers or 'not set'})"
+        f"XMODIFIERS={xmodifiers or 'not set'}, "
+        f"daemon running: {is_ibus_daemon_running()})"
     )
     return False
 
@@ -234,76 +259,6 @@ def _get_exec_command() -> str:
     return f"{sys.executable} {engine_script} --ibus"
 
 
-def _get_expected_component_xml() -> str:
-    """Generate the expected component XML content for the current installation."""
-    e = _ENGINE_META
-    c = _COMPONENT_META
-
-    return f"""<?xml version="1.0" encoding="utf-8"?>
-<component>
-    <name>{COMPONENT_NAME}</name>
-    <description>{ENGINE_DESCRIPTION}</description>
-    <exec>{_get_exec_command()}</exec>
-    <version>{c['version']}</version>
-    <author>{c['author']}</author>
-    <license>{c['license']}</license>
-    <homepage>{c['homepage']}</homepage>
-    <textdomain>{c['textdomain']}</textdomain>
-    <engines>
-        <engine>
-            <name>{ENGINE_NAME}</name>
-            <longname>{ENGINE_LONGNAME}</longname>
-            <language>{e['language']}</language>
-            <license>{e['license']}</license>
-            <author>{e['author']}</author>
-            <icon>{e['icon']}</icon>
-            <layout>{e['layout']}</layout>
-            <description>{ENGINE_DESCRIPTION}</description>
-            <rank>{ENGINE_RANK}</rank>
-        </engine>
-    </engines>
-</component>
-"""
-
-
-def is_component_up_to_date() -> bool:
-    """
-    Check if the installed IBus component XML matches the current installation.
-
-    Returns:
-        True if component exists and matches expected content, False otherwise
-    """
-    component_file = Path.home() / ".local" / "share" / "ibus" / "component" / "vocalinux.xml"
-
-    if not component_file.exists():
-        return False
-
-    try:
-        installed_content = component_file.read_text()
-        expected_content = _get_expected_component_xml()
-        return installed_content.strip() == expected_content.strip()
-    except Exception as e:
-        logger.debug(f"Failed to check component XML: {e}")
-        return False
-
-
-def is_engine_registered() -> bool:
-    """Check if the Vocalinux IBus engine is registered."""
-    if not IBUS_AVAILABLE:
-        return False
-
-    try:
-        result = subprocess.run(
-            ["ibus", "list-engine"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return ENGINE_NAME in result.stdout
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return False
-
-
 def is_engine_active() -> bool:
     """Check if the Vocalinux IBus engine is currently active."""
     try:
@@ -336,6 +291,102 @@ def get_current_engine() -> Optional[str]:
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return None
+
+
+def _is_wayland_session() -> bool:
+    """Check if the current session is running under Wayland."""
+    return os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+
+
+def get_current_xkb_layout() -> tuple:
+    """
+    Get the current XKB keyboard layout, variant, and options.
+
+    This queries the system's current keyboard configuration using setxkbmap.
+    This is important because IBus may not reflect the actual XKB layout,
+    especially when the user configured their keyboard via desktop environment
+    settings or setxkbmap directly rather than through IBus.
+
+    On Wayland, setxkbmap does not reflect the compositor's keyboard state
+    and can return incorrect results. Returns empty values in that case to
+    signal that XKB layout management should be skipped.
+
+    Returns:
+        A tuple of (layout, variant, option). Returns ("", "", "") on Wayland
+        or on error, ("us", "", "") as X11 default.
+    """
+    if _is_wayland_session():
+        logger.debug(
+            "Wayland session detected — skipping setxkbmap query. "
+            "Keyboard layout is managed by the Wayland compositor."
+        )
+        return "", "", ""
+
+    try:
+        result = subprocess.run(
+            ["setxkbmap", "-query"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            layout, variant, option = "us", "", ""
+            for line in result.stdout.split("\n"):
+                line = line.strip()
+                if line.startswith("layout:"):
+                    layout = line.split(":", 1)[1].strip()
+                elif line.startswith("variant:"):
+                    variant = line.split(":", 1)[1].strip()
+                elif line.startswith("options:"):
+                    option = line.split(":", 1)[1].strip()
+            logger.debug(f"Current XKB layout: {layout}, variant: {variant}, option: {option}")
+            return layout, variant, option
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        logger.debug(f"Could not query XKB layout: {e}")
+    return "us", "", ""
+
+
+def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool:
+    """
+    Restore the XKB keyboard layout.
+
+    This is used to ensure the user's keyboard layout is preserved
+    after IBus engine operations that might change it.
+
+    Args:
+        layout: The XKB layout to set (e.g., "us", "es", "de")
+        variant: Optional layout variant
+        option: Optional layout options
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if not layout:
+        return False
+
+    try:
+        cmd = ["setxkbmap", "-layout", layout]
+        if variant:
+            cmd.extend(["-variant", variant])
+        if option:
+            # Clear existing options first, then set new ones
+            cmd = ["setxkbmap", "-option", ""] + cmd[1:]
+            cmd.extend(["-option", option])
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            logger.info(f"Restored XKB layout: {layout} (variant: {variant}, option: {option})")
+            return True
+        else:
+            logger.warning(f"Failed to restore XKB layout: {result.stderr}")
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        logger.error(f"Could not restore XKB layout: {e}")
+    return False
 
 
 def switch_engine(engine_name: str) -> bool:
@@ -716,11 +767,12 @@ class IBusTextInjector:
 
     This class connects to the Vocalinux IBus engine via Unix socket
     and sends text to be injected. On initialization, it automatically:
-    1. Installs the IBus component if not registered
-    2. Saves the current engine
+    1. Starts the engine process (registers via D-Bus register_component)
+    2. Saves the current engine and XKB layout
     3. Switches to the Vocalinux engine
+    4. Restores the XKB layout
 
-    On cleanup (stop), it restores the previous engine.
+    On cleanup (stop), it restores the previous engine and layout.
     """
 
     def __init__(self, auto_activate: bool = True):
@@ -735,32 +787,43 @@ class IBusTextInjector:
 
         ensure_ibus_dir()
         self._previous_engine: Optional[str] = None
+        self._previous_xkb_layout: tuple = ("us", "", "")
 
         if auto_activate:
             self._setup_engine()
 
     def _setup_engine(self) -> None:
         """Install and activate the IBus engine."""
-        # Install or update component if needed
-        if not is_engine_registered():
-            logger.info("IBus engine not registered, installing...")
-            if not install_ibus_component(system_wide=False):
-                logger.info("User-level install failed, trying system-wide...")
-                install_ibus_component(system_wide=True)
-        elif not is_component_up_to_date():
-            logger.info("IBus component XML is outdated, updating...")
-            install_ibus_component(system_wide=False)
-
-        # Check again after installation
-        if not is_engine_registered():
-            raise IBusSetupError(
-                "Failed to register IBus engine. "
-                "Try running 'ibus list-engine' to verify installation."
-            )
-
-        # Start the engine process (Vocalinux starts it, not IBus)
+        # Start the engine process — it calls register_component() via
+        # D-Bus which makes the engine available even when the IBus daemon
+        # doesn't scan ~/.local/share/ibus/component/.
+        # Follow-up to PR #304: register_component() is the reliable path,
+        # so we no longer gate on is_engine_registered() / ibus list-engine.
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
+
+        # Verify the engine is fully ready before proceeding.
+        # start_engine_process() only confirms the subprocess is alive —
+        # register_component() and socket setup may still be in progress.
+        for _attempt in range(15):
+            if SOCKET_PATH.exists():
+                logger.debug("Engine socket is ready")
+                break
+            time.sleep(0.2)
+        else:
+            logger.warning(
+                "Engine process started but socket not ready after retries; "
+                "proceeding with activation attempt"
+            )
+
+        # Capture current XKB layout before switching engines
+        # This is critical for preserving the user's keyboard layout
+        # when IBus engine switching might override it
+        self._previous_xkb_layout = get_current_xkb_layout()
+        logger.debug(
+            f"Captured XKB layout: {self._previous_xkb_layout[0]}, "
+            f"variant: {self._previous_xkb_layout[1]}, option: {self._previous_xkb_layout[2]}"
+        )
 
         # Save current engine and switch to Vocalinux
         if not is_engine_active():
@@ -777,9 +840,19 @@ class IBusTextInjector:
                     "Try manually: ibus engine vocalinux"
                 )
 
+        # Restore the user's XKB layout immediately after engine activation.
+        # Switching to the Vocalinux IBus engine can override the system
+        # keyboard layout (e.g. Spanish, French AZERTY) with the engine's
+        # default layout. Re-applying the captured XKB layout ensures the
+        # user's keyboard keeps working correctly while Vocalinux is active.
+        # See issue #292.
+        if self._previous_xkb_layout:
+            layout, variant, option = self._previous_xkb_layout
+            restore_xkb_layout(layout, variant, option)
+
     def stop(self) -> None:
         """
-        Stop the IBus text injector and restore previous engine.
+        Stop the IBus text injector and restore previous engine and XKB layout.
 
         Call this when Vocalinux is shutting down.
         """
@@ -787,6 +860,15 @@ class IBusTextInjector:
             logger.info(f"Restoring previous engine: {self._previous_engine}")
             switch_engine(self._previous_engine)
             self._previous_engine = None
+
+        # Restore the XKB layout that was captured during setup
+        # This ensures the user's original keyboard layout is preserved
+        if self._previous_xkb_layout:
+            layout, variant, option = self._previous_xkb_layout
+            if layout:
+                logger.info(f"Restoring XKB layout: {layout}")
+                restore_xkb_layout(layout, variant, option)
+            self._previous_xkb_layout = None
 
         # Stop the engine process
         stop_engine_process()
@@ -843,77 +925,6 @@ class IBusTextInjector:
         except Exception as e:
             logger.error(f"Failed to inject text via IBus: {e}")
             return False
-
-
-def install_ibus_component(system_wide: bool = False) -> bool:
-    """
-    Install the IBus component XML file.
-
-    Args:
-        system_wide: If True, install to /usr/share/ibus/component/ (requires root).
-                    If False, install to user directory and set IBUS_COMPONENT_PATH.
-
-    Returns:
-        True if installation was successful, False otherwise
-    """
-    component_xml = _get_expected_component_xml()
-
-    try:
-        if system_wide:
-            component_dir = Path("/usr/share/ibus/component")
-            component_file = component_dir / "vocalinux.xml"
-
-            # Write to temp file and move with sudo
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
-                f.write(component_xml)
-                temp_path = f.name
-
-            result = subprocess.run(
-                ["sudo", "cp", temp_path, str(component_file)],
-                capture_output=True,
-                text=True,
-            )
-            os.unlink(temp_path)
-
-            if result.returncode != 0:
-                logger.error(f"Failed to install component: {result.stderr}")
-                return False
-
-            subprocess.run(
-                ["sudo", "chmod", "644", str(component_file)],
-                capture_output=True,
-            )
-        else:
-            # User-level installation
-            component_dir = Path.home() / ".local" / "share" / "ibus" / "component"
-            component_dir.mkdir(parents=True, exist_ok=True)
-            component_file = component_dir / "vocalinux.xml"
-            component_file.write_text(component_xml)
-            logger.info(f"Component installed to {component_file}")
-
-        # Refresh IBus - restart with component path set so it picks up user components
-        import time
-
-        user_component_dir = Path.home() / ".local" / "share" / "ibus" / "component"
-        env = os.environ.copy()
-        env["IBUS_COMPONENT_PATH"] = f"{user_component_dir}:/usr/share/ibus/component"
-
-        subprocess.run(["ibus", "write-cache"], capture_output=True, env=env)
-        subprocess.run(["ibus", "restart"], capture_output=True, env=env)
-        time.sleep(1)  # Give IBus time to restart
-
-        logger.info(
-            "IBus component installed successfully.\n"
-            "Set 'Vocalinux' as your input method in system settings "
-            "to enable voice dictation."
-        )
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to install IBus component: {e}")
-        return False
 
 
 def _get_engines_xml() -> str:

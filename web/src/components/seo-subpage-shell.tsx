@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,10 +17,13 @@ import {
   Monitor,
   Power,
   Shield,
+  Sun,
   X,
   Zap,
+  Moon,
 } from "lucide-react";
 import { VocalinuxLogo } from "@/components/optimized-image";
+import { useTheme } from "next-themes";
 
 interface SeoSubpageShellProps {
   children: React.ReactNode;
@@ -50,7 +53,17 @@ const navCategories = [
     items: [
       { href: "/for-developers/", label: "For Developers", icon: Code2 },
       { href: "/rsi-prevention/", label: "RSI Prevention", icon: Heart },
+      { href: "/writers/", label: "For Writers", icon: Heart },
+      { href: "/gnome-kde/", label: "GNOME vs KDE", icon: Monitor },
       { href: "/use-cases/", label: "All Use Cases", icon: Zap },
+    ],
+  },
+  {
+    label: "Comparisons",
+    items: [
+      { href: "/vs-nerd-dictation/", label: "vs Nerd Dictation", icon: BookOpen },
+      { href: "/whisper-model-guide/", label: "Whisper Models", icon: Cpu },
+      { href: "/voice-typing-vscode/", label: "VS Code", icon: Code2 },
     ],
   },
   {
@@ -167,6 +180,60 @@ function Breadcrumbs() {
 
 export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const mainNavCategories = [
+    {
+      label: "Get Started",
+      items: [
+        { href: "/", label: "Home", icon: Home },
+        { href: "/install/", label: "Install", icon: BookOpen },
+        { href: "/changelog/", label: "Changelog", icon: Zap },
+      ],
+    },
+    {
+      label: "Features",
+      items: [
+        { href: "/compare/", label: "Engine Comparison", icon: Cpu },
+        { href: "/whisper-model-guide/", label: "Whisper Models", icon: Cpu },
+        { href: "/wayland/", label: "Wayland", icon: Monitor },
+        { href: "/gpu-acceleration/", label: "GPU Acceleration", icon: Cpu },
+      ],
+    },
+    {
+      label: "Use Cases",
+      items: [
+        { href: "/for-developers/", label: "For Developers", icon: Code2 },
+        { href: "/writers/", label: "For Writers", icon: Heart },
+        { href: "/voice-typing-vscode/", label: "VS Code", icon: Code2 },
+        { href: "/gnome-kde/", label: "GNOME vs KDE", icon: Monitor },
+        { href: "/rsi-prevention/", label: "RSI Prevention", icon: Heart },
+      ],
+    },
+    {
+      label: "Compare",
+      items: [
+        { href: "/vs-nerd-dictation/", label: "vs Nerd Dictation", icon: BookOpen },
+        { href: "/alternatives/", label: "Alternatives", icon: BookOpen },
+        { href: "/offline/", label: "100% Offline", icon: Shield },
+        { href: "/open-source/", label: "Open Source", icon: Code2 },
+      ],
+    },
+    {
+      label: "Support",
+      items: [
+        { href: "/faq/", label: "FAQ", icon: HelpCircle },
+        { href: "/troubleshooting/", label: "Troubleshooting", icon: Zap },
+        { href: "/shortcuts/", label: "Commands", icon: BookOpen },
+        { href: "/privacy/", label: "Privacy Policy", icon: Shield },
+      ],
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
@@ -183,33 +250,48 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
 
           {/* Desktop nav with dropdowns */}
           <nav className="hidden items-center gap-1 md:flex">
-            {navCategories.map((category) => (
+            {mainNavCategories.map((category) => (
               <DropdownMenu key={category.label} category={category} />
             ))}
           </nav>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setMobileMenuOpen(!mobileMenuOpen);
-            }}
-            className="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800 md:hidden"
-            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-          >
-            {mobileMenuOpen ? (
-              <X className="h-6 w-6" />
-            ) : (
-              <Menu className="h-6 w-6" />
+          {/* Theme toggle and mobile menu */}
+          <div className="flex items-center gap-2">
+            {mounted && (
+              <button
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="w-8 h-8 sm:w-9 sm:h-9 bg-muted hover:bg-muted/80 rounded-md flex items-center justify-center transition-all"
+                aria-label="Toggle theme"
+              >
+                {theme === "dark" ? (
+                  <Sun className="h-4 w-4 text-yellow-400" />
+                ) : (
+                  <Moon className="h-4 w-4 text-slate-700" />
+                )}
+              </button>
             )}
-          </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileMenuOpen(!mobileMenuOpen);
+              }}
+              className="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800 md:hidden"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            >
+              {mobileMenuOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
           <div className="border-t border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900 md:hidden">
             <nav className="max-h-[calc(100vh-4rem)] overflow-y-auto px-4 py-4">
-              {navCategories.map((category) => (
+              {mainNavCategories.map((category) => (
                 <div key={category.label} className="mb-4">
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {category.label}
@@ -253,16 +335,15 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
             </div>
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
             >
               Home Page
               <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
 
-          {/* Footer links - all pages organized */}
           <div className="grid gap-6 border-t border-zinc-200 pt-6 dark:border-zinc-700 sm:grid-cols-2 lg:grid-cols-5">
-            {navCategories.map((category) => (
+            {mainNavCategories.map((category) => (
               <div key={category.label}>
                 <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {category.label}
