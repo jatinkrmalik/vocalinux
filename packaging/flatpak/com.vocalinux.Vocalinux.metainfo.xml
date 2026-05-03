@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.vocalinux.Vocalinux</id>
+
+  <name>Vocalinux</name>
+  <summary>Free, offline voice dictation for Linux</summary>
+  <developer id="com.vocalinux">
+    <name>Jatin K Malik</name>
+  </developer>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0</project_license>
+
+  <description>
+    <p>
+      Vocalinux is a privacy-first, fully offline voice dictation system for Linux.
+      Speak naturally and your words appear in any application — on X11 or Wayland —
+      using local speech recognition. No cloud, no data leaves your machine.
+      Speech recognition models are downloaded on first run.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Toggle or push-to-talk activation modes</li>
+      <li>Real-time transcription with minimal latency</li>
+      <li>Universal compatibility across all Linux applications</li>
+      <li>100% offline operation for privacy and reliability</li>
+      <li>whisper.cpp by default — high-performance C++ speech recognition</li>
+      <li>Universal GPU support via Vulkan (AMD, Intel, NVIDIA)</li>
+      <li>System tray integration with visual status indicators</li>
+      <li>Start on login support via XDG autostart</li>
+      <li>Pleasant audio feedback with smooth gliding tones</li>
+      <li>Graphical settings dialog for easy configuration</li>
+      <li>Three engine choices: whisper.cpp, OpenAI Whisper, or VOSK</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">com.vocalinux.Vocalinux.desktop</launchable>
+
+  <categories>
+    <category>Utility</category>
+    <category>Accessibility</category>
+    <category>AudioVideo</category>
+  </categories>
+
+  <keywords>
+    <keyword>voice</keyword>
+    <keyword>typing</keyword>
+    <keyword>dictation</keyword>
+    <keyword>speech</keyword>
+    <keyword>recognition</keyword>
+    <keyword>transcription</keyword>
+    <keyword>accessibility</keyword>
+  </keywords>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Real-time voice-to-text transcription</caption>
+      <image>https://github.com/user-attachments/assets/e3d8dd16-3d4f-408c-b899-93d85e98b107</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://vocalinux.com</url>
+  <url type="bugtracker">https://github.com/jatinkrmalik/vocalinux/issues</url>
+  <url type="vcs-browser">https://github.com/jatinkrmalik/vocalinux</url>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">none</content_attribute>
+    <content_attribute id="violence-fantasy">none</content_attribute>
+    <content_attribute id="violence-realistic">none</content_attribute>
+    <content_attribute id="violence-bloodshed">none</content_attribute>
+    <content_attribute id="violence-sexual">none</content_attribute>
+    <content_attribute id="violence-desecration">none</content_attribute>
+    <content_attribute id="violence-slavery">none</content_attribute>
+    <content_attribute id="violence-worship">none</content_attribute>
+    <content_attribute id="drugs-alcohol">none</content_attribute>
+    <content_attribute id="drugs-narcotics">none</content_attribute>
+    <content_attribute id="drugs-tobacco">none</content_attribute>
+    <content_attribute id="sex-nudity">none</content_attribute>
+    <content_attribute id="sex-themes">none</content_attribute>
+    <content_attribute id="sex-homosexuality">none</content_attribute>
+    <content_attribute id="sex-prostitution">none</content_attribute>
+    <content_attribute id="sex-adultery">none</content_attribute>
+    <content_attribute id="sex-appearance">none</content_attribute>
+    <content_attribute id="language-profanity">none</content_attribute>
+    <content_attribute id="language-humor">none</content_attribute>
+    <content_attribute id="language-discrimination">none</content_attribute>
+    <content_attribute id="social-chat">none</content_attribute>
+    <content_attribute id="social-info">none</content_attribute>
+    <content_attribute id="social-audio">none</content_attribute>
+    <content_attribute id="social-location">none</content_attribute>
+    <content_attribute id="social-contacts">none</content_attribute>
+    <content_attribute id="money-purchasing">none</content_attribute>
+    <content_attribute id="money-gambling">none</content_attribute>
+  </content_rating>
+
+  <releases>
+    <release version="0.10.2-beta" date="2026-04-08">
+      <description>
+        <p>Non-ASCII text injection, IBus Wayland detection fixes, Pop!_OS dependency support, and code quality improvements.</p>
+      </description>
+    </release>
+    <release version="0.10.1-beta" date="2026-03-27">
+      <description>
+        <p>Stability patch: tray resource bundling, engine-switch segfault prevention, settings close action, XKB layout preservation.</p>
+      </description>
+    </release>
+    <release version="0.10.0-beta" date="2026-03-25">
+      <description>
+        <p>Keyboard and audio reliability hardening, IBus and tray stability fixes, CI and test coverage improvements.</p>
+      </description>
+    </release>
+  </releases>
+</component>

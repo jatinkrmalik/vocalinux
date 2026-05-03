@@ -12,8 +12,11 @@ from typing import Callable, Optional
 
 import gi
 
+logger = logging.getLogger(__name__)
+
 # Import GTK
 gi.require_version("Gtk", "3.0")
+AppIndicator3 = None
 try:
     gi.require_version("AppIndicator3", "0.1")
     from gi.repository import AppIndicator3
@@ -22,8 +25,13 @@ except (ImportError, ValueError):
         gi.require_version("AyatanaAppIndicator3", "0.1")
         from gi.repository import AyatanaAppIndicator3 as AppIndicator3
     except (ImportError, ValueError):
-        gi.require_version("AyatanaAppindicator3", "0.1")
-        from gi.repository import AyatanaAppindicator3 as AppIndicator3
+        try:
+            gi.require_version("AyatanaAppindicator3", "0.1")
+            from gi.repository import AyatanaAppindicator3 as AppIndicator3
+        except (ImportError, ValueError):
+            logger.warning(
+                "No AppIndicator implementation available. " "Running without system tray icon."
+            )
 
 from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
@@ -34,8 +42,6 @@ from ..utils.resource_manager import ResourceManager
 from .config_manager import ConfigManager
 from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog
-
-logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
