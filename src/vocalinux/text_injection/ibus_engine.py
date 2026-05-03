@@ -24,7 +24,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -389,6 +389,23 @@ def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool
     return False
 
 
+def _handle_engine_destroy(
+    active_instance: Optional["VocalinuxEngine"],
+    current_instance: object,
+    ibus_available: bool,
+    super_destroy: Optional[Callable[[], None]] = None,
+) -> Optional["VocalinuxEngine"]:
+    """Compute next active engine state and invoke optional parent destroy."""
+    next_active_instance = active_instance
+    if active_instance is current_instance:
+        next_active_instance = None
+
+    if ibus_available and super_destroy is not None:
+        super_destroy()
+
+    return next_active_instance
+
+
 def switch_engine(engine_name: str) -> bool:
     """Switch to the specified IBus engine."""
     import time
@@ -568,10 +585,15 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
     def do_destroy(self) -> None:
         """Called when the engine instance is destroyed by IBus (e.g. layout switch)."""
         logger.debug("VocalinuxEngine instance destroyed")
-        if VocalinuxEngine._active_instance is self:
-            VocalinuxEngine._active_instance = None
+        super_destroy: Optional[Callable[[], None]] = None
         if IBUS_AVAILABLE:
-            super().do_destroy()
+            super_destroy = super().do_destroy
+        VocalinuxEngine._active_instance = _handle_engine_destroy(
+            VocalinuxEngine._active_instance,
+            self,
+            IBUS_AVAILABLE,
+            super_destroy,
+        )
 
     def do_focus_in(self) -> None:
         """Called when the engine gains focus."""

@@ -2,7 +2,6 @@
 Tests for IBus engine functionality.
 """
 
-import importlib
 import os
 import socket
 import sys
@@ -1149,53 +1148,49 @@ class TestWaylandXkbLayoutSkipping(unittest.TestCase):
 class TestVocalinuxEngineDestroy(unittest.TestCase):
     """Tests for VocalinuxEngine.do_destroy (layout switch resilience)."""
 
-    def _reload_engine_module(self):
-        import vocalinux.text_injection.ibus_engine as ibus_engine
-
-        return importlib.reload(ibus_engine)
-
     def test_do_destroy_clears_active_instance(self):
-        """Test do_destroy clears _active_instance when called on the active engine."""
-        ibus_engine = self._reload_engine_module()
-        VocalinuxEngine = ibus_engine.VocalinuxEngine
+        """Test destroy handler clears active instance when called on active engine."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
 
-        engine = object.__new__(VocalinuxEngine)
-        VocalinuxEngine._active_instance = engine
+        engine = object()
+        next_active = _handle_engine_destroy(
+            active_instance=engine,
+            current_instance=engine,
+            ibus_available=False,
+        )
 
-        with patch.object(ibus_engine, "IBUS_AVAILABLE", False):
-            VocalinuxEngine.do_destroy(engine)
-
-        self.assertIsNone(VocalinuxEngine._active_instance)
+        self.assertIsNone(next_active)
 
     def test_do_destroy_ignores_different_instance(self):
-        """Test do_destroy doesn't clear _active_instance if called on a different engine."""
-        ibus_engine = self._reload_engine_module()
-        VocalinuxEngine = ibus_engine.VocalinuxEngine
+        """Test destroy handler keeps active instance for different engine."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
 
-        active_engine = object.__new__(VocalinuxEngine)
-        old_engine = object.__new__(VocalinuxEngine)
-        VocalinuxEngine._active_instance = active_engine
+        active_engine = object()
+        old_engine = object()
 
-        with patch.object(ibus_engine, "IBUS_AVAILABLE", False):
-            VocalinuxEngine.do_destroy(old_engine)
+        next_active = _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=old_engine,
+            ibus_available=False,
+        )
 
-        self.assertIs(VocalinuxEngine._active_instance, active_engine)
+        self.assertIs(next_active, active_engine)
 
     def test_do_destroy_calls_super_when_ibus_available(self):
-        """Test do_destroy calls super().do_destroy() when IBus is available."""
-        ibus_engine = self._reload_engine_module()
-        VocalinuxEngine = ibus_engine.VocalinuxEngine
+        """Test destroy handler calls parent destroy callback when IBus available."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
 
-        engine = object.__new__(VocalinuxEngine)
-        VocalinuxEngine._active_instance = None
+        active_engine = object()
+        mock_super_destroy = MagicMock()
 
-        mock_super = MagicMock()
-        with (
-            patch.object(ibus_engine, "IBUS_AVAILABLE", True),
-            patch("builtins.super", return_value=mock_super),
-        ):
-            VocalinuxEngine.do_destroy(engine)
-            mock_super.do_destroy.assert_called_once()
+        _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=object(),
+            ibus_available=True,
+            super_destroy=mock_super_destroy,
+        )
+
+        mock_super_destroy.assert_called_once()
 
 
 if __name__ == "__main__":
