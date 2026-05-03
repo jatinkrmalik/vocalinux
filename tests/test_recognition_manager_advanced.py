@@ -504,6 +504,69 @@ class TestBufferManagement(unittest.TestCase):
         self.assertIsInstance(stats, dict)
 
 
+class TestWhispercppModelKwargs(unittest.TestCase):
+    def test_default_model_kwargs(self):
+        mgr = _make_manager(engine="whisper_cpp")
+        kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
+        self.assertTrue(kwargs.get("no_timestamps"))
+        self.assertTrue(kwargs.get("suppress_non_speech_tokens"))
+        self.assertTrue(kwargs.get("no_context"))
+        self.assertNotIn("initial_prompt", kwargs)
+        self.assertEqual(kwargs.get("temperature"), 0.0)
+        self.assertEqual(kwargs.get("n_threads"), 4)
+
+    def test_model_kwargs_all_switches_off(self):
+        mgr = _make_manager(
+            engine="whisper_cpp",
+            whispercpp_no_timestamps=False,
+            whispercpp_suppress_nst=False,
+            whispercpp_no_context=False,
+        )
+        kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
+        self.assertNotIn("no_timestamps", kwargs)
+        self.assertNotIn("suppress_non_speech_tokens", kwargs)
+        self.assertNotIn("no_context", kwargs)
+
+    def test_model_kwargs_with_initial_prompt(self):
+        mgr = _make_manager(
+            engine="whisper_cpp",
+            whispercpp_initial_prompt="test prompt",
+        )
+        kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
+        self.assertEqual(kwargs.get("initial_prompt"), "test prompt")
+
+    def test_model_kwargs_custom_numerics(self):
+        mgr = _make_manager(
+            engine="whisper_cpp",
+            whispercpp_temperature=0.7,
+            whispercpp_temperature_inc=0.2,
+            whispercpp_entropy_thold=3.0,
+            whispercpp_logprob_thold=-2.5,
+            whispercpp_no_speech_thold=0.8,
+        )
+        kwargs = mgr._build_whispercpp_model_kwargs(n_threads=8)
+        self.assertEqual(kwargs.get("temperature"), 0.7)
+        self.assertEqual(kwargs.get("temperature_inc"), 0.2)
+        self.assertEqual(kwargs.get("entropy_thold"), 3.0)
+        self.assertEqual(kwargs.get("logprob_thold"), -2.5)
+        self.assertEqual(kwargs.get("no_speech_thold"), 0.8)
+        self.assertEqual(kwargs.get("n_threads"), 8)
+
+    def test_reconfigure_whispercpp_params(self):
+        mgr = _make_manager(engine="whisper_cpp")
+        original_temp_inc = mgr.whispercpp_temperature_inc
+        with patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+            mgr.reconfigure(
+                whispercpp_temperature=0.5,
+                whispercpp_no_timestamps=False,
+                whispercpp_initial_prompt="hello",
+            )
+        self.assertEqual(mgr.whispercpp_temperature, 0.5)
+        self.assertFalse(mgr.whispercpp_no_timestamps)
+        self.assertEqual(mgr.whispercpp_initial_prompt, "hello")
+        self.assertEqual(mgr.whispercpp_temperature_inc, original_temp_inc)
+
+
 class TestVoiceCommandsProperty(unittest.TestCase):
     def test_voice_commands_vosk_default(self):
         mgr = _make_manager(engine="vosk")
