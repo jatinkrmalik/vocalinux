@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
+        "stop_sound_guard_ms": 200,  # Small tail trim to avoid the stop sound without clipping speech
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
     },
     "audio": {

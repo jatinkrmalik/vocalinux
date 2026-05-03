@@ -226,6 +226,14 @@ class TestStartStopRecognition(unittest.TestCase):
         mgr.stop_recognition()
         self.assertFalse(mgr.should_record)
 
+    def test_stop_sound_guard_chunk_calculation(self):
+        mgr = _make_manager()
+
+        self.assertEqual(mgr._get_stop_sound_guard_chunks(), 3)
+
+        mgr.stop_sound_guard_ms = 0
+        self.assertEqual(mgr._get_stop_sound_guard_chunks(), 0)
+
 
 class TestReconfigure(unittest.TestCase):
     def test_reconfigure_language(self):

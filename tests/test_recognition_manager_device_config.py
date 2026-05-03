@@ -641,7 +641,7 @@ class TestStartStopRecognition(unittest.TestCase):
         manager = _make_manager()
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
-        manager.audio_buffer = [b"\x00\x00" for _ in range(20)]  # More than 15 chunks
+        manager.audio_buffer = [b"\x00\x00" for _ in range(20)]
 
         # Create dummy threads
         manager.audio_thread = MagicMock()
@@ -651,8 +651,10 @@ class TestStartStopRecognition(unittest.TestCase):
 
         with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
             with patch.object(manager, "_signal_recognition_stop"):
-                manager.stop_recognition()
-                assert manager.should_record is False
+                with patch.object(manager, "_enqueue_audio_segment") as enqueue_mock:
+                    manager.stop_recognition()
+                    assert manager.should_record is False
+                    assert len(enqueue_mock.call_args.args[0]) == 17
 
 
 class TestDownloads(unittest.TestCase):
