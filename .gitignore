@@ -156,3 +156,6 @@ FIX_PLAN.md
 # opentree - local AI worktree orchestration tool (per-developer, not shared)
 .opentree/
 opentree.toml
+
+# Sisyphus - local AI agent loop state (per-developer, not shared)
+.sisyphus/
