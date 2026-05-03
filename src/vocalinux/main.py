@@ -99,8 +99,9 @@ def check_dependencies():
             gi.require_version("AyatanaAppIndicator3", "0.1")
             from gi.repository import AyatanaAppIndicator3  # noqa: F401
         except (ImportError, ValueError):
-            missing_system_deps.append(
-                "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
+            logger.warning(
+                "AppIndicator3/AyatanaAppIndicator3 not available - "
+                "system tray icon will be disabled"
             )
 
     # pynput is used for keyboard detection but we check at module startup
@@ -108,8 +109,11 @@ def check_dependencies():
     # These are intentional checks to provide user-friendly error messages
     try:
         import pynput  # noqa: F401
-    except ImportError:
-        missing_python_deps.append("pynput (install with: pip install pynput)")
+    except ImportError as e:
+        if "not supported" in str(e) or "display" in str(e).lower():
+            logger.warning(f"pynput unavailable in headless environment: {e}")
+        else:
+            missing_python_deps.append("pynput (install with: pip install pynput)")
 
     try:
         import requests  # noqa: F401

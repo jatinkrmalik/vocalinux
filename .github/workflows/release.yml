@@ -131,6 +131,30 @@ jobs:
         run: |
           twine upload dist/* --skip-existing
 
+  build-flatpak:
+    name: Build Flatpak
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:gnome-46
+      options: --privileged
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: vocalinux.flatpak
+          manifest-path: packaging/flatpak/com.vocalinux.Vocalinux.yml
+          cache-key: flatpak-${{ github.sha }}
+
+      - name: Upload Flatpak bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: vocalinux-flatpak
+          path: vocalinux.flatpak
+
   deploy-website:
     name: Deploy Website
     runs-on: ubuntu-latest
