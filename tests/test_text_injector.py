@@ -1415,3 +1415,80 @@ class TestIBusSetupErrorFallback(unittest.TestCase):
             # Should be able to inject text via xdotool
             result = injector.inject_text("Hello world")
             self.assertTrue(result)
+
+
+class TestIBusRuntimeFallback(unittest.TestCase):
+    """Tests for runtime fallback when IBus injection fails."""
+
+    def setUp(self):
+        self.patch_which = patch("shutil.which")
+        self.mock_which = self.patch_which.start()
+        self.mock_which.return_value = "/usr/bin/xdotool"
+
+        self.patch_subprocess = patch("subprocess.run")
+        self.mock_subprocess = self.patch_subprocess.start()
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        mock_process.stdout = ""
+        mock_process.stderr = ""
+        self.mock_subprocess.return_value = mock_process
+
+    def tearDown(self):
+        self.patch_which.stop()
+        self.patch_subprocess.stop()
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    def test_runtime_fallback_from_x11_ibus_to_xdotool(
+        self,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """If IBus runtime injection fails on X11, fallback to xdotool should work."""
+        mock_ibus_instance = MagicMock()
+        mock_ibus_instance.inject_text.return_value = False
+        mock_ibus_class.return_value = mock_ibus_instance
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}):
+            injector = TextInjector()
+            self.assertEqual(injector.environment, DesktopEnvironment.X11_IBUS)
+
+            result = injector.inject_text("Hello from fallback")
+
+        self.assertTrue(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.X11)
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    def test_runtime_fallback_from_wayland_ibus_to_wtype(
+        self,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """If IBus runtime injection fails on Wayland, fallback to wtype should work."""
+        mock_ibus_instance = MagicMock()
+        mock_ibus_instance.inject_text.return_value = False
+        mock_ibus_class.return_value = mock_ibus_instance
+
+        self.mock_which.side_effect = lambda cmd: {
+            "wtype": "/usr/bin/wtype",
+            "xdotool": "/usr/bin/xdotool",
+        }.get(cmd)
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
+            injector = TextInjector()
+            self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+
+            result = injector.inject_text("Hello via wayland fallback")
+
+        self.assertTrue(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
+        self.assertEqual(injector.wayland_tool, "wtype")
