@@ -556,6 +556,17 @@ class SpeechRecognitionManager:
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
 
+        # whisper.cpp advanced parameters
+        self.whispercpp_no_timestamps = kwargs.get("whispercpp_no_timestamps", True)
+        self.whispercpp_suppress_nst = kwargs.get("whispercpp_suppress_nst", True)
+        self.whispercpp_no_context = kwargs.get("whispercpp_no_context", True)
+        self.whispercpp_initial_prompt = kwargs.get("whispercpp_initial_prompt", "")
+        self.whispercpp_temperature = kwargs.get("whispercpp_temperature", 0.0)
+        self.whispercpp_temperature_inc = kwargs.get("whispercpp_temperature_inc", -1.0)
+        self.whispercpp_entropy_thold = kwargs.get("whispercpp_entropy_thold", 2.4)
+        self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
+        self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
+
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
         self._audio_level_callbacks: list[Callable[[float], None]] = []
@@ -880,18 +891,30 @@ class SpeechRecognitionManager:
         load_start_time = time.time()
         loaded_backend = backend
 
+        model_kwargs = {
+            "n_threads": n_threads,
+            "suppress_blank": True,
+            "no_speech_thold": self.whispercpp_no_speech_thold,
+            "entropy_thold": self.whispercpp_entropy_thold,
+            "logprob_thold": self.whispercpp_logprob_thold,
+            "temperature": self.whispercpp_temperature,
+            "temperature_inc": self.whispercpp_temperature_inc,
+        }
+        if self.whispercpp_no_timestamps:
+            model_kwargs["no_timestamps"] = True
+        if self.whispercpp_suppress_nst:
+            model_kwargs["suppress_non_speech_tokens"] = True
+        if self.whispercpp_no_context:
+            model_kwargs["no_context"] = True
+        if self.whispercpp_initial_prompt:
+            model_kwargs["initial_prompt"] = self.whispercpp_initial_prompt
+
         # Attempt to load model; fall back to CPU if GPU backend is incompatible
         try:
-            self.model = Model(
-                model_path,
-                n_threads=n_threads,
-                suppress_blank=True,
-                no_speech_thold=0.6,
-                entropy_thold=2.4,
-            )
+            self.model = Model(model_path, **model_kwargs)
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
-                model_error, model_path, n_threads, ComputeBackend.CPU
+                model_error, model_path, model_kwargs, ComputeBackend.CPU
             )
 
         load_duration = time.time() - load_start_time
@@ -904,13 +927,13 @@ class SpeechRecognitionManager:
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
 
-    def _handle_gpu_fallback(self, error, model_path: str, n_threads: int, cpu_backend):
+    def _handle_gpu_fallback(self, error, model_path: str, model_kwargs: dict, cpu_backend):
         """Handle GPU backend failure by falling back to CPU.
 
         Args:
             error: The RuntimeError from model loading.
             model_path: Path to the GGML model file.
-            n_threads: Number of CPU threads for the model.
+            model_kwargs: Dict of keyword arguments for pywhispercpp.Model.
             cpu_backend: The CPU ComputeBackend enum value.
 
         Returns:
@@ -939,13 +962,7 @@ class SpeechRecognitionManager:
         # Force CPU backend by disabling GPU backends
         os.environ["GGML_VULKAN"] = "0"
         os.environ["GGML_CUDA"] = "0"
-        self.model = Model(
-            model_path,
-            n_threads=n_threads,
-            suppress_blank=True,
-            no_speech_thold=0.6,
-            entropy_thold=2.4,
-        )
+        self.model = Model(model_path, **model_kwargs)
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
 
@@ -2081,6 +2098,22 @@ class SpeechRecognitionManager:
 
         if "stop_sound_guard_ms" in kwargs:
             self.stop_sound_guard_ms = kwargs.get("stop_sound_guard_ms", self.stop_sound_guard_ms)
+
+        for param_name in (
+            "whispercpp_no_timestamps",
+            "whispercpp_suppress_nst",
+            "whispercpp_no_context",
+            "whispercpp_initial_prompt",
+            "whispercpp_temperature",
+            "whispercpp_temperature_inc",
+            "whispercpp_entropy_thold",
+            "whispercpp_logprob_thold",
+            "whispercpp_no_speech_thold",
+        ):
+            if param_name in kwargs:
+                setattr(self, param_name, kwargs[param_name])
+                restart_needed = True
+
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:
