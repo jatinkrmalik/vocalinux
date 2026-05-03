@@ -1192,6 +1192,72 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
 
         mock_super_destroy.assert_called_once()
 
+    def test_do_destroy_skips_super_when_ibus_unavailable(self):
+        """Test destroy handler skips parent destroy callback when IBus unavailable."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        mock_super_destroy = MagicMock()
+
+        _handle_engine_destroy(
+            active_instance=object(),
+            current_instance=object(),
+            ibus_available=False,
+            super_destroy=mock_super_destroy,
+        )
+
+        mock_super_destroy.assert_not_called()
+
+    def test_do_destroy_handles_missing_super_callback(self):
+        """Test destroy handler works when no parent destroy callback is provided."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        active_engine = object()
+        next_active = _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=active_engine,
+            ibus_available=True,
+            super_destroy=None,
+        )
+
+        self.assertIsNone(next_active)
+
+    def test_engine_do_destroy_without_ibus_uses_handler_result(self):
+        """Test VocalinuxEngine.do_destroy updates active instance from handler output."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        fake_engine = object()
+        next_active = object()
+        VocalinuxEngine._active_instance = fake_engine
+
+        with (
+            patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False),
+            patch(
+                "vocalinux.text_injection.ibus_engine._handle_engine_destroy",
+                return_value=next_active,
+            ) as mock_handler,
+        ):
+            VocalinuxEngine.do_destroy(fake_engine)
+
+        mock_handler.assert_called_once_with(fake_engine, fake_engine, False, None)
+        self.assertIs(VocalinuxEngine._active_instance, next_active)
+
+    def test_engine_do_destroy_with_ibus_calls_parent_destroy(self):
+        """Test VocalinuxEngine.do_destroy invokes parent destroy when IBus is available."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        fake_engine = object()
+        VocalinuxEngine._active_instance = fake_engine
+
+        mock_super = MagicMock()
+        with (
+            patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True),
+            patch("builtins.super", return_value=mock_super),
+        ):
+            VocalinuxEngine.do_destroy(fake_engine)
+
+        mock_super.do_destroy.assert_called_once()
+        self.assertIsNone(VocalinuxEngine._active_instance)
+
 
 if __name__ == "__main__":
     unittest.main()
