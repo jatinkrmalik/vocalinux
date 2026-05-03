@@ -4,9 +4,10 @@ This file makes sure that the 'src' module can be imported in tests.
 """
 
 import os
+import subprocess
 import sys
 import threading
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -78,6 +79,16 @@ mock_audio_feedback.play_error_sound = MagicMock()
 
 # Inject the mock into sys.modules so imports resolve correctly
 sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
+
+
+@pytest.fixture(autouse=True)
+def _suppress_desktop_notifications(request):
+    """Patch _show_notification for all tests except those testing it directly."""
+    if "show_notification" in request.node.nodeid:
+        yield
+        return
+    with patch("vocalinux.speech_recognition.recognition_manager._show_notification"):
+        yield
 
 
 @pytest.fixture(autouse=True)
