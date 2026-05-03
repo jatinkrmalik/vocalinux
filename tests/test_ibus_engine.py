@@ -1148,45 +1148,78 @@ class TestWaylandXkbLayoutSkipping(unittest.TestCase):
 class TestVocalinuxEngineDestroy(unittest.TestCase):
     """Tests for VocalinuxEngine.do_destroy (layout switch resilience)."""
 
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False)
     def test_do_destroy_clears_active_instance(self):
-        """Test do_destroy clears _active_instance when called on the active engine."""
-        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+        """Test destroy handler clears active instance when called on active engine."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
 
-        engine = VocalinuxEngine.__new__(VocalinuxEngine)
-        VocalinuxEngine._active_instance = engine
+        engine = object()
+        next_active = _handle_engine_destroy(
+            active_instance=engine,
+            current_instance=engine,
+            ibus_available=False,
+        )
 
-        engine.do_destroy()
+        self.assertIsNone(next_active)
 
-        self.assertIsNone(VocalinuxEngine._active_instance)
-
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False)
     def test_do_destroy_ignores_different_instance(self):
-        """Test do_destroy doesn't clear _active_instance if called on a different engine."""
-        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+        """Test destroy handler keeps active instance for different engine."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
 
-        active_engine = VocalinuxEngine.__new__(VocalinuxEngine)
-        old_engine = VocalinuxEngine.__new__(VocalinuxEngine)
-        VocalinuxEngine._active_instance = active_engine
+        active_engine = object()
+        old_engine = object()
 
-        old_engine.do_destroy()
+        next_active = _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=old_engine,
+            ibus_available=False,
+        )
 
-        self.assertIs(VocalinuxEngine._active_instance, active_engine)
+        self.assertIs(next_active, active_engine)
 
     def test_do_destroy_calls_super_when_ibus_available(self):
-        """Test do_destroy calls super().do_destroy() when IBus is available."""
-        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+        """Test destroy handler calls parent destroy callback when IBus available."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
 
-        engine = VocalinuxEngine.__new__(VocalinuxEngine)
-        VocalinuxEngine._active_instance = None
+        active_engine = object()
+        mock_super_destroy = MagicMock()
 
-        mock_ibus.Engine.do_destroy = MagicMock()
-        try:
-            with patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True):
-                engine.do_destroy()
-                mock_ibus.Engine.do_destroy.assert_called_once()
-        finally:
-            del mock_ibus.Engine.do_destroy
+        _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=object(),
+            ibus_available=True,
+            super_destroy=mock_super_destroy,
+        )
+
+        mock_super_destroy.assert_called_once()
+
+    def test_do_destroy_skips_super_when_ibus_unavailable(self):
+        """Test destroy handler skips parent destroy callback when IBus unavailable."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        mock_super_destroy = MagicMock()
+
+        _handle_engine_destroy(
+            active_instance=object(),
+            current_instance=object(),
+            ibus_available=False,
+            super_destroy=mock_super_destroy,
+        )
+
+        mock_super_destroy.assert_not_called()
+
+    def test_do_destroy_handles_missing_super_callback(self):
+        """Test destroy handler works when no parent destroy callback is provided."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        active_engine = object()
+        next_active = _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=active_engine,
+            ibus_available=True,
+            super_destroy=None,
+        )
+
+        self.assertIsNone(next_active)
 
 
 if __name__ == "__main__":
