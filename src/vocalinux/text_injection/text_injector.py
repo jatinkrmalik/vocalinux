@@ -160,7 +160,8 @@ class TextInjector:
                     else:
                         self.environment = DesktopEnvironment.WAYLAND_IBUS
                     logger.info(
-                        f"Using IBus for {self.environment.value} text injection (best compatibility)"
+                        "Using IBus for "
+                        f"{self.environment.value} text injection (best compatibility)"
                     )
                     return
                 except Exception as e:
@@ -195,7 +196,9 @@ class TextInjector:
                     if wtype_available:
                         self.wayland_tool = "wtype"
                         logger.info(
-                            f"Using {self.wayland_tool} for Wayland text injection (ydotoold not running)"
+                            "Using "
+                            f"{self.wayland_tool} for Wayland text injection "
+                            "(ydotoold not running)"
                         )
                     else:
                         logger.warning("ydotool found but ydotoold daemon not running")
@@ -223,6 +226,60 @@ class TextInjector:
                     "Or for clipboard fallback: sudo apt install wl-copy"
                 )
                 raise RuntimeError("Missing required dependencies for text injection")
+
+    def _switch_to_non_ibus_backend(self) -> bool:
+        """Switch from IBus mode to a non-IBus backend for runtime fallback."""
+        if self.environment == DesktopEnvironment.X11_IBUS:
+            if shutil.which("xdotool"):
+                self.environment = DesktopEnvironment.X11
+                logger.warning("IBus injection failed, switching to X11 xdotool fallback")
+                return True
+
+            logger.error("IBus fallback failed: xdotool is not available on X11")
+            return False
+
+        if self.environment == DesktopEnvironment.WAYLAND_IBUS:
+            ydotool_available = shutil.which("ydotool") is not None
+            wtype_available = shutil.which("wtype") is not None
+            xdotool_available = shutil.which("xdotool") is not None
+
+            if ydotool_available:
+                try:
+                    subprocess.run(
+                        ["ydotool", "type", ""],
+                        check=True,
+                        stderr=subprocess.PIPE,
+                        timeout=2,
+                    )
+                    self.wayland_tool = "ydotool"
+                    self.environment = DesktopEnvironment.WAYLAND
+                    logger.warning("IBus injection failed, switching to Wayland ydotool fallback")
+                    return True
+                except (
+                    subprocess.CalledProcessError,
+                    subprocess.TimeoutExpired,
+                    FileNotFoundError,
+                ):
+                    logger.debug("ydotool fallback unavailable (daemon not running)")
+
+            if wtype_available:
+                self.wayland_tool = "wtype"
+                self.environment = DesktopEnvironment.WAYLAND
+                logger.warning("IBus injection failed, switching to Wayland wtype fallback")
+                return True
+
+            if xdotool_available:
+                self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                logger.warning("IBus injection failed, switching to XWayland xdotool fallback")
+                return True
+
+            logger.error(
+                "IBus fallback failed: no Wayland text injection tools available "
+                "(ydotool, wtype, xdotool)"
+            )
+            return False
+
+        return True
 
     def _test_xdotool_fallback(self):
         """Test if xdotool is working correctly with XWayland."""
@@ -452,11 +509,23 @@ class TextInjector:
                                 args=(text,),
                                 daemon=True,
                             ).start()
-                    return result
+                        return True
+
+                    logger.warning(
+                        "IBus runtime injection failed. Falling back to non-IBus backend."
+                    )
+                    if not self._switch_to_non_ibus_backend():
+                        raise RuntimeError(
+                            "IBus injection failed and no non-IBus fallback is available"
+                        )
                 else:
-                    logger.error("IBus injector not initialized")
-                    return False
-            elif (
+                    logger.error("IBus injector not initialized, trying non-IBus fallback")
+                    if not self._switch_to_non_ibus_backend():
+                        raise RuntimeError(
+                            "IBus injector not initialized and no non-IBus fallback is available"
+                        )
+
+            if (
                 self.environment == DesktopEnvironment.X11
                 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
             ):

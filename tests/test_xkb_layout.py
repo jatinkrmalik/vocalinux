@@ -7,6 +7,13 @@ from unittest.mock import MagicMock, patch
 
 class TestXkbLayoutFunctions(unittest.TestCase):
 
+    def setUp(self):
+        self.env_patcher = patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"})
+        self.env_patcher.start()
+
+    def tearDown(self):
+        self.env_patcher.stop()
+
     @patch("vocalinux.text_injection.ibus_engine.subprocess.run")
     def test_get_current_xkb_layout_success(self, mock_run):
         mock_run.return_value = MagicMock(
