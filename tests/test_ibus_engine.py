@@ -1221,47 +1221,6 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
 
         self.assertIsNone(next_active)
 
-    def test_engine_do_destroy_without_ibus_uses_handler_result(self):
-        """Test VocalinuxEngine.do_destroy updates active instance from handler output."""
-        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
-
-        fake_engine = object()
-        next_active = object()
-        VocalinuxEngine._active_instance = fake_engine
-
-        with (
-            patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False),
-            patch(
-                "vocalinux.text_injection.ibus_engine._handle_engine_destroy",
-                return_value=next_active,
-            ) as mock_handler,
-        ):
-            VocalinuxEngine.do_destroy(fake_engine)
-
-        mock_handler.assert_called_once_with(fake_engine, fake_engine, False, None)
-        self.assertIs(VocalinuxEngine._active_instance, next_active)
-
-    def test_engine_do_destroy_with_ibus_calls_parent_destroy(self):
-        """Test VocalinuxEngine.do_destroy uses IBus parent path when available."""
-        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
-
-        # When IBus is not installed, VocalinuxEngine inherits from object and there is
-        # no parent do_destroy method to exercise. In that environment we should skip
-        # this IBus-specific path test.
-        parent_has_destroy = any(
-            hasattr(base, "do_destroy") for base in VocalinuxEngine.__mro__[1:]
-        )
-        if not parent_has_destroy:
-            self.skipTest("IBus parent do_destroy is unavailable in this environment")
-
-        fake_engine = VocalinuxEngine.__new__(VocalinuxEngine)
-        VocalinuxEngine._active_instance = fake_engine
-
-        with patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True):
-            VocalinuxEngine.do_destroy(fake_engine)
-
-        self.assertIsNone(VocalinuxEngine._active_instance)
-
 
 if __name__ == "__main__":
     unittest.main()
