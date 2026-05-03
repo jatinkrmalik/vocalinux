@@ -666,6 +666,13 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
 
                             data = conn.recv(65536)  # Max text size
                             if data:
+                                if data == b"\x00PING":
+                                    if cls._active_instance:
+                                        conn.sendall(b"OK")
+                                    else:
+                                        conn.sendall(b"NO_ENGINE")
+                                    continue
+
                                 text = data.decode("utf-8")
                                 # Schedule injection on main thread
                                 if cls._active_instance:
@@ -832,20 +839,6 @@ class IBusTextInjector:
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
-        # Verify the engine is fully ready before proceeding.
-        # start_engine_process() only confirms the subprocess is alive —
-        # register_component() and socket setup may still be in progress.
-        for _attempt in range(15):
-            if SOCKET_PATH.exists():
-                logger.debug("Engine socket is ready")
-                break
-            time.sleep(0.2)
-        else:
-            logger.warning(
-                "Engine process started but socket not ready after retries; "
-                "proceeding with activation attempt"
-            )
-
         # Capture current XKB layout before switching engines
         # This is critical for preserving the user's keyboard layout
         # when IBus engine switching might override it
@@ -870,6 +863,8 @@ class IBusTextInjector:
                     "Try manually: ibus engine vocalinux"
                 )
 
+        self._wait_for_engine_ready()
+
         # Restore the user's XKB layout immediately after engine activation.
         # Switching to the Vocalinux IBus engine can override the system
         # keyboard layout (e.g. Spanish, French AZERTY) with the engine's
@@ -879,6 +874,38 @@ class IBusTextInjector:
         if self._previous_xkb_layout:
             layout, variant, option = self._previous_xkb_layout
             restore_xkb_layout(layout, variant, option)
+
+    def _wait_for_engine_ready(self, max_attempts: int = 8) -> None:
+        delay = 0.25
+
+        for attempt in range(max_attempts):
+            try:
+                if not SOCKET_PATH.exists():
+                    raise FileNotFoundError("IBus engine socket not found")
+
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(2.0)
+                    sock.connect(str(SOCKET_PATH))
+                    sock.sendall(b"\x00PING")
+                    response = sock.recv(64).decode("utf-8")
+
+                if response == "OK":
+                    logger.debug(f"IBus engine readiness probe succeeded on attempt {attempt + 1}")
+                    return
+
+                if response != "NO_ENGINE":
+                    logger.warning(f"Unexpected readiness probe response: {response}")
+            except (socket.timeout, FileNotFoundError, ConnectionRefusedError, OSError) as e:
+                logger.debug(f"IBus readiness probe attempt {attempt + 1} failed: {e}")
+
+            if attempt < max_attempts - 1:
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)
+
+        raise IBusSetupError(
+            "Vocalinux IBus engine did not become ready after startup. "
+            "Try manually: ibus engine vocalinux"
+        )
 
     def stop(self) -> None:
         """
