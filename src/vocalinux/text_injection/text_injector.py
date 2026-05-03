@@ -43,14 +43,18 @@ class TextInjector:
     application window, supporting both X11 and Wayland environments.
     """
 
-    def __init__(self, wayland_mode: bool = False):
+    VALID_BACKENDS = {"auto", "ibus", "xdotool", "wtype", "ydotool"}
+
+    def __init__(self, wayland_mode: bool = False, preferred_backend: str = "auto"):
         """
         Initialize the text injector.
 
         Args:
             wayland_mode: Force Wayland compatibility mode
+            preferred_backend: Preferred text injection backend
         """
         self._ibus_injector: Optional[IBusTextInjector] = None
+        self.preferred_backend = self._normalize_backend(preferred_backend)
         self.environment = self._detect_environment()
 
         # Force Wayland mode if requested
@@ -58,7 +62,11 @@ class TextInjector:
             logger.info("Forcing Wayland compatibility mode")
             self.environment = DesktopEnvironment.WAYLAND
 
-        logger.info(f"Using text injection for {self.environment.value} environment")
+        logger.info(
+            "Using text injection for %s environment with backend preference '%s'",
+            self.environment.value,
+            self.preferred_backend,
+        )
 
         # Check for required tools
         self._check_dependencies()
@@ -110,6 +118,13 @@ class TextInjector:
             self._ibus_injector.stop()
             self._ibus_injector = None
 
+    def _normalize_backend(self, preferred_backend: str) -> str:
+        backend = (preferred_backend or "auto").strip().lower()
+        if backend not in self.VALID_BACKENDS:
+            logger.warning("Unknown text injection backend '%s', using auto", preferred_backend)
+            return "auto"
+        return backend
+
     def _detect_environment(self) -> DesktopEnvironment:
         """
         Detect the current desktop environment (X11 or Wayland).
@@ -134,75 +149,36 @@ class TextInjector:
 
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
+        preferred_backend = getattr(self, "preferred_backend", "auto")
+
+        if preferred_backend == "ibus":
+            self._configure_ibus(required=True)
+            return
+
+        if preferred_backend == "xdotool":
+            self._configure_xdotool(required=True)
+            return
+
+        if preferred_backend == "wtype":
+            self._configure_wayland_tool("wtype", required=True)
+            return
+
+        if preferred_backend == "ydotool":
+            self._configure_wayland_tool("ydotool", required=True)
+            return
+
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
-        if is_ibus_available():
-            # Check if IBus is the active input method (not just installed)
-            # This is important because IBus may be installed but not being used,
-            # e.g., when the user has configured ydotool or Fcitx instead
-            if not is_ibus_active_input_method():
-                logger.info(
-                    "IBus is installed but not the active input method. "
-                    "Falling back to alternative text injection method."
-                )
-            # Check if ibus-daemon is running before attempting setup
-            elif not is_ibus_daemon_running():
-                logger.info(
-                    "IBus daemon not running. This is normal on some desktop environments "
-                    "(e.g., KDE Plasma). Using alternative text injection method. "
-                    "For IBus setup, see: https://github.com/jatinkrmalik/vocalinux/wiki/IBus-Setup"
-                )
-            else:
-                try:
-                    self._ibus_injector = IBusTextInjector(auto_activate=True)
-                    if self.environment == DesktopEnvironment.X11:
-                        self.environment = DesktopEnvironment.X11_IBUS
-                    else:
-                        self.environment = DesktopEnvironment.WAYLAND_IBUS
-                    logger.info(
-                        f"Using IBus for {self.environment.value} text injection (best compatibility)"
-                    )
-                    return
-                except Exception as e:
-                    logger.warning(f"IBus initialization failed: {e}, trying alternatives")
+        if self._configure_ibus(required=False):
+            return
         if self.environment == DesktopEnvironment.X11:
-            # Check for xdotool
-            if not shutil.which("xdotool"):
-                logger.error("xdotool not found. Please install it with: sudo apt install xdotool")
-                raise RuntimeError("Missing required dependency: xdotool")
+            self._configure_xdotool(required=True)
         else:
-            # Fallback: Check for wtype or ydotool for Wayland
-            wtype_available = shutil.which("wtype") is not None
-            ydotool_available = shutil.which("ydotool") is not None
-            xdotool_available = shutil.which("xdotool") is not None
-
-            if ydotool_available:
-                # Verify ydotoold daemon is running before selecting ydotool
-                try:
-                    subprocess.run(
-                        ["ydotool", "type", ""],
-                        check=True,
-                        stderr=subprocess.PIPE,
-                        timeout=2,
-                    )
-                    self.wayland_tool = "ydotool"
-                    logger.info(f"Using {self.wayland_tool} for Wayland text injection")
-                except (
-                    subprocess.CalledProcessError,
-                    subprocess.TimeoutExpired,
-                    FileNotFoundError,
-                ):
-                    if wtype_available:
-                        self.wayland_tool = "wtype"
-                        logger.info(
-                            f"Using {self.wayland_tool} for Wayland text injection (ydotoold not running)"
-                        )
-                    else:
-                        logger.warning("ydotool found but ydotoold daemon not running")
-            elif wtype_available:
-                self.wayland_tool = "wtype"
-                logger.info(f"Using {self.wayland_tool} for Wayland text injection")
-            elif xdotool_available:
+            if self._configure_wayland_tool("ydotool", required=False):
+                return
+            if self._configure_wayland_tool("wtype", required=False):
+                return
+            if shutil.which("xdotool") is not None:
                 # Fallback to xdotool with XWayland
                 self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                 logger.info(
@@ -223,6 +199,110 @@ class TextInjector:
                     "Or for clipboard fallback: sudo apt install wl-copy"
                 )
                 raise RuntimeError("Missing required dependencies for text injection")
+
+    def _configure_ibus(self, required: bool) -> bool:
+        if not is_ibus_available():
+            if required:
+                raise RuntimeError("IBus backend selected but IBus is not installed")
+            return False
+
+        if not is_ibus_active_input_method():
+            message = (
+                "IBus backend selected but IBus is not the active input method"
+                if required
+                else "IBus is installed but not the active input method. "
+                "Falling back to alternative text injection method."
+            )
+            if required:
+                logger.error(message)
+                raise RuntimeError(message)
+            logger.info(message)
+            return False
+
+        if not is_ibus_daemon_running():
+            message = (
+                "IBus backend selected but ibus-daemon is not running"
+                if required
+                else "IBus daemon not running. This is normal on some desktop environments "
+                "(e.g., KDE Plasma). Using alternative text injection method. "
+                "For IBus setup, see: https://github.com/jatinkrmalik/vocalinux/wiki/IBus-Setup"
+            )
+            if required:
+                logger.error(message)
+                raise RuntimeError(message)
+            logger.info(message)
+            return False
+
+        try:
+            self._ibus_injector = IBusTextInjector(auto_activate=True)
+            if self.environment == DesktopEnvironment.X11:
+                self.environment = DesktopEnvironment.X11_IBUS
+            else:
+                self.environment = DesktopEnvironment.WAYLAND_IBUS
+            logger.info(
+                f"Using IBus for {self.environment.value} text injection (best compatibility)"
+            )
+            return True
+        except Exception as e:
+            if required:
+                raise RuntimeError(f"IBus initialization failed: {e}") from e
+            logger.warning(f"IBus initialization failed: {e}, trying alternatives")
+            return False
+
+    def _configure_xdotool(self, required: bool) -> bool:
+        if self.environment == DesktopEnvironment.WAYLAND:
+            logger.error("xdotool backend requires an X11 session")
+            if required:
+                raise RuntimeError("xdotool backend requires an X11 session")
+            return False
+
+        if not shutil.which("xdotool"):
+            logger.error("xdotool not found. Please install it with: sudo apt install xdotool")
+            if required:
+                raise RuntimeError("Missing required dependency: xdotool")
+            return False
+
+        if self.environment != DesktopEnvironment.X11:
+            self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+        logger.info("Using xdotool for text injection")
+        return True
+
+    def _configure_wayland_tool(self, tool: str, required: bool) -> bool:
+        if self.environment == DesktopEnvironment.X11:
+            logger.error("%s backend requires a Wayland session", tool)
+            if required:
+                raise RuntimeError(f"{tool} backend requires a Wayland session")
+            return False
+
+        if tool == "wtype":
+            if shutil.which("wtype") is None:
+                if required:
+                    raise RuntimeError("Missing required dependency: wtype")
+                return False
+            self.wayland_tool = "wtype"
+            logger.info("Using wtype for Wayland text injection")
+            return True
+
+        if shutil.which("ydotool") is None:
+            if required:
+                raise RuntimeError("Missing required dependency: ydotool")
+            return False
+
+        try:
+            subprocess.run(
+                ["ydotool", "type", ""],
+                check=True,
+                stderr=subprocess.PIPE,
+                timeout=2,
+            )
+            self.wayland_tool = "ydotool"
+            logger.info("Using ydotool for Wayland text injection")
+            return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+            if required:
+                raise RuntimeError("ydotool backend selected but ydotoold daemon is not running") from e
+            logger.warning("ydotool found but ydotoold daemon not running")
+            return False
 
     def _test_xdotool_fallback(self):
         """Test if xdotool is working correctly with XWayland."""

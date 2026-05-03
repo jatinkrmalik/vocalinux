@@ -288,10 +288,12 @@ def main():
     logger.info("Logging system initialized")
 
     config_manager = ConfigManager()
-    saved_settings = config_manager.get_settings().get("speech_recognition", {})
-    audio_settings = config_manager.get_settings().get("audio", {})
+    all_settings = config_manager.get_settings()
+    saved_settings = all_settings.get("speech_recognition", {})
+    audio_settings = all_settings.get("audio", {})
+    text_injection_settings = all_settings.get("text_injection", {})
 
-    general_settings = config_manager.get_settings().get("general", {})
+    general_settings = all_settings.get("general", {})
     first_run = general_settings.get("first_run", True)
     should_prompt_first_run = first_run and not args.start_minimized
 
@@ -350,6 +352,7 @@ def main():
     stop_sound_guard_ms = saved_settings.get("stop_sound_guard_ms", 200)
     voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto
     audio_device_index = audio_settings.get("device_index", None)
+    text_injection_backend = text_injection_settings.get("backend", "auto")
 
     logger.info(f"Final settings: engine={engine}, language={language}, model={model_size}")
     if audio_device_index is not None:
@@ -372,7 +375,10 @@ def main():
         )
 
         # Initialize text injection system
-        text_system = text_injector.TextInjector(wayland_mode=args.wayland)
+        text_system = text_injector.TextInjector(
+            wayland_mode=args.wayland,
+            preferred_backend=text_injection_backend,
+        )
 
         # Initialize action handler
         action_handler = ActionHandler(text_system)

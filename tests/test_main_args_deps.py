@@ -372,6 +372,7 @@ class TestMainFunction(unittest.TestCase):
                 "language": "en-us",
             },
             "audio": {},
+            "text_injection": {"backend": "xdotool"},
             "general": {"first_run": False},
         }
 
@@ -447,6 +448,7 @@ class TestMainFunction(unittest.TestCase):
         mock_config_manager.return_value.get_settings.return_value = {
             "speech_recognition": {},
             "audio": {},
+            "text_injection": {"backend": "auto"},
             "general": {"first_run": False},
         }
 
@@ -479,6 +481,25 @@ class TestMainFunction(unittest.TestCase):
                 )
                 mock_logger.warning.assert_any_call("The system tray icon may not appear.")
                 mock_speech_manager_ctor.assert_called_once()
+
+
+class TestTrayIndicatorBackendReload:
+    def test_source_contains_backend_reload_hook(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "tray_indicator.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        assert "def update_text_injection_backend" in source_code
+        assert "text_injection_backend_update_callback=self.update_text_injection_backend" in source_code
 
     @patch("vocalinux.main.logging")
     @patch("vocalinux.main.check_dependencies")

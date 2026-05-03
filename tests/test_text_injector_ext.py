@@ -169,6 +169,37 @@ class TestInjectText(unittest.TestCase):
             self.assertTrue(result)
 
 
+class TestPreferredBackend(unittest.TestCase):
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
+    def test_xdotool_backend_on_x11(self, _mock_ibus, mock_which):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+
+        mock_which.side_effect = lambda cmd: "/usr/bin/xdotool" if cmd == "xdotool" else None
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}):
+            injector = TextInjector(preferred_backend="xdotool")
+        self.assertEqual(injector.environment, DesktopEnvironment.X11)
+
+    def test_wtype_backend_fails_on_x11(self):
+        from vocalinux.text_injection.text_injector import TextInjector
+
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}):
+            with self.assertRaises(RuntimeError):
+                TextInjector(preferred_backend="wtype")
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
+    def test_ydotool_backend_on_wayland(self, _mock_ibus, mock_which, mock_run):
+        from vocalinux.text_injection.text_injector import TextInjector
+
+        mock_which.side_effect = lambda cmd: "/usr/bin/ydotool" if cmd == "ydotool" else None
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"}):
+            injector = TextInjector(preferred_backend="ydotool")
+        self.assertEqual(injector.wayland_tool, "ydotool")
+
+
 class TestLogWindowInfo(unittest.TestCase):
     def test_log_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment

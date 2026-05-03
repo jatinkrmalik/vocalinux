@@ -30,6 +30,7 @@ from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
 from ..suspend_handler import SuspendHandler
+from ..text_injection.text_injector import TextInjector
 from ..utils.resource_manager import ResourceManager
 from .config_manager import ConfigManager
 from .keyboard_shortcuts import KeyboardShortcutManager
@@ -470,6 +471,7 @@ class TrayIndicator:
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
             shortcut_update_callback=self.update_shortcut,
+            text_injection_backend_update_callback=self.update_text_injection_backend,
         )
 
         # Connect to the response signal
@@ -531,6 +533,21 @@ class TrayIndicator:
 
         logger.debug("No changes needed - shortcut and mode unchanged")
         return True
+
+    def update_text_injection_backend(self, backend: str) -> bool:
+        """Reinitialize the text injector with a newly selected backend."""
+        try:
+            logger.info("Updating text injection backend to: %s", backend)
+            new_injector = TextInjector(preferred_backend=backend)
+            old_injector = self.text_injector
+            self.text_injector = new_injector
+            if hasattr(old_injector, "stop"):
+                old_injector.stop()
+            logger.info("Text injection backend updated successfully")
+            return True
+        except Exception as e:
+            logger.error("Failed to update text injection backend to %s: %s", backend, e)
+            return False
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
