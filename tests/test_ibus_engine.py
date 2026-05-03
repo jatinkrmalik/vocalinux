@@ -1148,12 +1148,24 @@ class TestWaylandXkbLayoutSkipping(unittest.TestCase):
 class TestVocalinuxEngineDestroy(unittest.TestCase):
     """Tests for VocalinuxEngine.do_destroy (layout switch resilience)."""
 
+    def _make_engine(self, VocalinuxEngine):
+        # VocalinuxEngine inherits from MagicMock (IBus is mocked at module level).
+        # MagicMock.__new__ calls issubclass() on the cls argument which fails on
+        # Python < 3.13 when the class is not a real type. We create a thin
+        # concrete subclass whose __new__ delegates to object.__new__ to bypass
+        # the MagicMock allocation path entirely.
+        class _ConcreteEngine(VocalinuxEngine):
+            def __new__(cls, *args, **kwargs):
+                return object.__new__(cls)
+
+        return _ConcreteEngine()
+
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False)
     def test_do_destroy_clears_active_instance(self):
         """Test do_destroy clears _active_instance when called on the active engine."""
         from vocalinux.text_injection.ibus_engine import VocalinuxEngine
 
-        engine = VocalinuxEngine.__new__(VocalinuxEngine)
+        engine = self._make_engine(VocalinuxEngine)
         VocalinuxEngine._active_instance = engine
 
         engine.do_destroy()
@@ -1165,8 +1177,8 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
         """Test do_destroy doesn't clear _active_instance if called on a different engine."""
         from vocalinux.text_injection.ibus_engine import VocalinuxEngine
 
-        active_engine = VocalinuxEngine.__new__(VocalinuxEngine)
-        old_engine = VocalinuxEngine.__new__(VocalinuxEngine)
+        active_engine = self._make_engine(VocalinuxEngine)
+        old_engine = self._make_engine(VocalinuxEngine)
         VocalinuxEngine._active_instance = active_engine
 
         old_engine.do_destroy()
@@ -1177,7 +1189,7 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
         """Test do_destroy calls super().do_destroy() when IBus is available."""
         from vocalinux.text_injection.ibus_engine import VocalinuxEngine
 
-        engine = VocalinuxEngine.__new__(VocalinuxEngine)
+        engine = self._make_engine(VocalinuxEngine)
         VocalinuxEngine._active_instance = None
 
         mock_super = MagicMock()
