@@ -152,3 +152,7 @@ temp/
 # Analysis documents (keep local)
 CROSS_DISTRO_ANALYSIS.md
 FIX_PLAN.md
+
+# opentree - local AI worktree orchestration tool (per-developer, not shared)
+.opentree/
+opentree.toml
