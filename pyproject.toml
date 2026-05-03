@@ -59,6 +59,9 @@ whisper = [
     "torch>=2.0.0",
     "torchaudio>=2.0.0",
 ]
+vad = [
+    "onnxruntime>=1.16.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -96,7 +99,7 @@ package-dir = {"" = "src"}
 version = {attr = "vocalinux.version.__version__"}
 
 [tool.setuptools.package-data]
-"*" = ["*.svg", "*.wav"]
+"*" = ["*.svg", "*.wav", "*.onnx"]
 "vocalinux" = ["resources/**/*"]
 
 [tool.black]
