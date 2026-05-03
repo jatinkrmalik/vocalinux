@@ -619,6 +619,16 @@ class TextInjector:
                         raise
             logger.info("Text injection completed successfully")
 
+            # When using xdotool fallback on Wayland, xdotool may exit 0 but
+            # type into the XWayland layer instead of the native Wayland window.
+            # Always copy to clipboard so the user can paste manually as a fallback.
+            if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+                try:
+                    if self._copy_to_clipboard(text):
+                        self._show_clipboard_fallback_notification()
+                except Exception as clipboard_error:
+                    logger.debug(f"Wayland clipboard fallback failed: {clipboard_error}")
+
             if self._should_copy_to_clipboard():
                 threading.Thread(
                     target=self._copy_to_clipboard,

@@ -270,10 +270,10 @@ class TrayIndicator:
             if names_variant is not None:
                 name_list = names_variant.unpack()[0]
                 return "org.kde.StatusNotifierWatcher" in name_list
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Could not check StatusNotifierWatcher: {e}")
 
-        return True
+        return False
 
     def _show_missing_watcher_dialog(self):
         dialog = Gtk.MessageDialog(
@@ -422,19 +422,19 @@ class TrayIndicator:
             return False
 
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon_full(self.icon_names["default"], "Microphone off")
+            self.indicator.set_icon(self.icon_paths["default"])
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon_full(self.icon_names["active"], "Microphone on")
+            self.indicator.set_icon(self.icon_paths["active"])
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon_full(self.icon_names["processing"], "Processing speech")
+            self.indicator.set_icon(self.icon_paths["processing"])
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon_full(self.icon_names["default"], "Error")
+            self.indicator.set_icon(self.icon_paths["default"])
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
