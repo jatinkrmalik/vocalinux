@@ -635,8 +635,8 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_socket_path,
         mock_ensure_dir,
     ):
-        """Test injector restarts the engine process when it is not running."""
-        mock_socket_path.exists.return_value = True
+        """Test injector restarts the engine process when its socket is not ready."""
+        mock_socket_path.exists.side_effect = [False, True, True]
 
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 

@@ -928,16 +928,21 @@ class IBusTextInjector:
         # This can happen if IBus re-created the engine instance or if the
         # engine process/socket is still coming up when dictation ends.
         max_attempts = 3
+
+        def restart_engine_process() -> bool:
+            logger.warning("IBus engine process is not running, restarting...")
+            if not start_engine_process():
+                logger.error("Failed to restart IBus engine process")
+                return False
+            time.sleep(0.3)
+            return True
+
         for attempt in range(max_attempts):
             try:
-                if not is_engine_process_running():
-                    logger.warning("IBus engine process is not running, restarting...")
-                    if not start_engine_process():
-                        logger.error("Failed to restart IBus engine process")
-                        return False
-                    time.sleep(0.3)
-
                 if not SOCKET_PATH.exists():
+                    if not is_engine_process_running() and not restart_engine_process():
+                        return False
+
                     if attempt < max_attempts - 1:
                         logger.warning(
                             "IBus engine socket not found on attempt "
@@ -990,6 +995,8 @@ class IBusTextInjector:
                         "IBus engine refused connection on attempt "
                         f"{attempt + 1}/{max_attempts}: {e}. Retrying..."
                     )
+                    if not is_engine_process_running() and not restart_engine_process():
+                        return False
                     time.sleep(0.2 * (attempt + 1))
                     continue
                 logger.error(f"Failed to inject text via IBus: {e}")
@@ -1000,6 +1007,8 @@ class IBusTextInjector:
                         "IBus engine socket disappeared on attempt "
                         f"{attempt + 1}/{max_attempts}; retrying..."
                     )
+                    if not is_engine_process_running() and not restart_engine_process():
+                        return False
                     time.sleep(0.2 * (attempt + 1))
                     continue
                 logger.error("IBus engine socket not found")
