@@ -1492,3 +1492,127 @@ class TestIBusRuntimeFallback(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
         self.assertEqual(injector.wayland_tool, "wtype")
+
+    def test_switch_from_x11_ibus_fails_without_xdotool(self):
+        """X11 IBus fallback should fail cleanly when xdotool is unavailable."""
+        self.mock_which.return_value = None
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.X11_IBUS
+
+        result = injector._switch_to_non_ibus_backend()
+
+        self.assertFalse(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.X11_IBUS)
+
+    def test_switch_from_wayland_ibus_prefers_running_ydotool(self):
+        """Wayland IBus fallback should prefer ydotool when its daemon responds."""
+        self.mock_which.side_effect = lambda cmd: {"ydotool": "/usr/bin/ydotool"}.get(cmd)
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.WAYLAND_IBUS
+        injector.wayland_tool = None
+
+        result = injector._switch_to_non_ibus_backend()
+
+        self.assertTrue(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
+        self.assertEqual(injector.wayland_tool, "ydotool")
+        self.mock_subprocess.assert_any_call(
+            ["ydotool", "type", ""], check=True, stderr=subprocess.PIPE, timeout=2
+        )
+
+    def test_switch_from_wayland_ibus_falls_back_when_ydotool_daemon_down(self):
+        """If ydotool exists but daemon fails, wtype should be selected next."""
+        self.mock_which.side_effect = lambda cmd: {
+            "ydotool": "/usr/bin/ydotool",
+            "wtype": "/usr/bin/wtype",
+        }.get(cmd)
+        self.mock_subprocess.side_effect = subprocess.CalledProcessError(1, ["ydotool"])
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.WAYLAND_IBUS
+        injector.wayland_tool = None
+
+        result = injector._switch_to_non_ibus_backend()
+
+        self.assertTrue(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
+        self.assertEqual(injector.wayland_tool, "wtype")
+
+    def test_switch_from_wayland_ibus_uses_xwayland_as_last_tool(self):
+        """Wayland IBus fallback should use xdotool/XWayland when native tools are absent."""
+        self.mock_which.side_effect = lambda cmd: {"xdotool": "/usr/bin/xdotool"}.get(cmd)
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.WAYLAND_IBUS
+        injector.wayland_tool = None
+
+        result = injector._switch_to_non_ibus_backend()
+
+        self.assertTrue(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_XDOTOOL)
+
+    def test_switch_from_wayland_ibus_fails_without_tools(self):
+        """Wayland IBus fallback should fail when no non-IBus tools are available."""
+        self.mock_which.return_value = None
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.WAYLAND_IBUS
+        injector.wayland_tool = None
+
+        result = injector._switch_to_non_ibus_backend()
+
+        self.assertFalse(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+
+    def test_switch_to_non_ibus_backend_noop_outside_ibus_mode(self):
+        """Non-IBus modes are already on fallback backends."""
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.X11
+
+        self.assertTrue(injector._switch_to_non_ibus_backend())
+        self.assertEqual(injector.environment, DesktopEnvironment.X11)
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    def test_successful_ibus_injection_still_copies_to_clipboard_when_enabled(
+        self,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """Successful IBus injection should keep the existing optional clipboard copy path."""
+        mock_ibus_instance = MagicMock()
+        mock_ibus_instance.inject_text.return_value = True
+        mock_ibus_class.return_value = mock_ibus_instance
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}):
+            injector = TextInjector()
+            with patch.object(injector, "_should_copy_to_clipboard", return_value=True):
+                with patch("threading.Thread") as mock_thread:
+                    result = injector.inject_text("copy me")
+
+        self.assertTrue(result)
+        mock_thread.assert_called_once()
+        mock_thread.return_value.start.assert_called_once()
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    def test_uninitialized_ibus_injector_uses_non_ibus_fallback(
+        self,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """If the IBus injector disappears at runtime, fallback backend should still run."""
+        mock_ibus_class.return_value = MagicMock()
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}):
+            injector = TextInjector()
+            injector._ibus_injector = None
+            result = injector.inject_text("fallback without ibus instance")
+
+        self.assertTrue(result)
+        self.assertEqual(injector.environment, DesktopEnvironment.X11)
