@@ -19,12 +19,13 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 # Default configuration
 DEFAULT_CONFIG = {
     "speech_recognition": {  # Changed section name
-        "engine": "whisper_cpp",  # "vosk", "whisper", or "whisper_cpp" - whisper_cpp is default for best performance
+        "engine": "whisper_cpp",  # "vosk", "whisper", "whisper_cpp", or "moonshine"
         "language": "auto",  # Auto-detect language (Whisper/whisper.cpp only)
         "model_size": "tiny",  # Current model size (for backward compatibility)
         "vosk_model_size": "small",  # Default model for VOSK engine
         "whisper_model_size": "tiny",  # Default model for Whisper engine
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
+        "moonshine_model_size": "auto",  # Default model selection for Moonshine engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "stop_sound_guard_ms": 200,  # Small tail trim to avoid the stop sound without clipping speech
@@ -118,7 +119,10 @@ class ConfigManager:
         sr_config = user_config.get("speech_recognition", {})
         # Need migration if we have model_size but not the per-engine keys
         return "model_size" in sr_config and (
-            "vosk_model_size" not in sr_config or "whisper_model_size" not in sr_config
+            "vosk_model_size" not in sr_config
+            or "whisper_model_size" not in sr_config
+            or "whisper_cpp_model_size" not in sr_config
+            or "moonshine_model_size" not in sr_config
         )
 
     def _migrate_config(self, user_config: dict):
@@ -142,6 +146,20 @@ class ConfigManager:
                 current_model if current_engine == "whisper" else "tiny"
             )
             logger.info(f"Migrated whisper_model_size to: {sr_config['whisper_model_size']}")
+
+        if "whisper_cpp_model_size" not in user_sr_config:
+            sr_config["whisper_cpp_model_size"] = (
+                current_model if current_engine == "whisper_cpp" else "tiny"
+            )
+            logger.info(
+                f"Migrated whisper_cpp_model_size to: {sr_config['whisper_cpp_model_size']}"
+            )
+
+        if "moonshine_model_size" not in user_sr_config:
+            sr_config["moonshine_model_size"] = (
+                current_model if current_engine == "moonshine" else "auto"
+            )
+            logger.info(f"Migrated moonshine_model_size to: {sr_config['moonshine_model_size']}")
 
         self.save_config()
         logger.info("Config migrated to new per-engine model format")
@@ -279,7 +297,7 @@ class ConfigManager:
         """Get the saved model size for a specific engine.
 
         Args:
-            engine: The engine name ("vosk", "whisper", or "whisper_cpp")
+            engine: The engine name ("vosk", "whisper", "whisper_cpp", or "moonshine")
 
         Returns:
             The model size for the engine, or the default if not found
@@ -298,7 +316,7 @@ class ConfigManager:
         """Set the model size for a specific engine.
 
         Args:
-            engine: The engine name ("vosk" or "whisper")
+            engine: The engine name ("vosk", "whisper", "whisper_cpp", or "moonshine")
             model_size: The model size to save
         """
         if "speech_recognition" not in self.config:

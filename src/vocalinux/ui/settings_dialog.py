@@ -28,6 +28,12 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
+from ..utils.moonshine_model_info import (  # noqa: E402
+    get_moonshine_default_model_size,
+    get_moonshine_supported_model_sizes,
+    is_moonshine_available,
+    is_moonshine_language_supported,
+)
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
@@ -45,7 +51,9 @@ from .keyboard_backends import (  # noqa: E402
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
-    from ..speech_recognition.recognition_manager import SpeechRecognitionManager  # noqa: E402
+    from ..speech_recognition.recognition_manager import (  # noqa: E402
+        SpeechRecognitionManager,
+    )
     from .config_manager import ConfigManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -71,6 +79,13 @@ ENGINE_MODELS = {
         "medium",
         "large",
     ],  # whisper.cpp models (ggml format)
+    "moonshine": [
+        "auto",
+        "tiny",
+        "base",
+        "small",
+        "medium",
+    ],
 }
 
 # Whisper model metadata for display
@@ -88,7 +103,12 @@ def get_available_engines():
     Detect which speech recognition engines are available/installed.
     Returns a dictionary of engine_name -> availability (bool).
     """
-    engines = {"vosk": False, "whisper": False, "whisper_cpp": False}
+    engines = {
+        "vosk": False,
+        "whisper": False,
+        "whisper_cpp": False,
+        "moonshine": False,
+    }
 
     # Check VOSK
     try:
@@ -113,6 +133,10 @@ def get_available_engines():
         engines["whisper_cpp"] = True
     except ImportError:
         pass
+
+    # Check Moonshine
+    if is_moonshine_available():
+        engines["moonshine"] = True
 
     logger.debug(f"Available engines: {engines}")
     return engines
@@ -1570,15 +1594,21 @@ class SettingsDialog(Gtk.Dialog):
 
             downloaded_models = []
             smallest_model = None
+            available_models = ENGINE_MODELS.get(engine, [])
             if engine == "whisper":
                 recommended_model, _ = _get_recommended_whisper_model()
             elif engine == "whisper_cpp":
                 recommended_model, _ = get_recommended_whispercpp_model()
+            elif engine == "moonshine":
+                available_models = get_moonshine_supported_model_sizes(self.language)
+                if "auto" not in available_models:
+                    available_models = ["auto"] + available_models
+                recommended_model = "auto"
             else:
                 recommended_model, _ = _get_recommended_vosk_model()
 
-            if engine in ENGINE_MODELS:
-                for size in ENGINE_MODELS[engine]:
+            if available_models:
+                for size in available_models:
                     if engine == "whisper" and size in WHISPER_MODEL_INFO:
                         info = WHISPER_MODEL_INFO[size]
                         is_downloaded = _is_whisper_model_downloaded(size)
@@ -1592,9 +1622,18 @@ class SettingsDialog(Gtk.Dialog):
                         is_downloaded = False
                         info = {"size_mb": 0}
 
-                    status = "✓" if is_downloaded else "↓"
                     star = " ★" if size == recommended_model else ""
-                    display_text = f"{size.capitalize()} ({_format_size(info.get('size_mb', 0))}) {status}{star}"
+                    if engine == "moonshine":
+                        if size == "auto":
+                            display_text = f"{size.capitalize()} (managed){star}"
+                        else:
+                            display_text = f"{size.capitalize()}{star}"
+                    else:
+                        status = "✓" if is_downloaded else "↓"
+                        display_text = (
+                            f"{size.capitalize()} ({_format_size(info.get('size_mb', 0))}) "
+                            f"{status}{star}"
+                        )
 
                     if is_downloaded:
                         downloaded_models.append(size)
@@ -1605,7 +1644,7 @@ class SettingsDialog(Gtk.Dialog):
 
             # Determine which model to select
             saved_model = saved_model_for_engine.lower()
-            valid_models = [m.lower() for m in ENGINE_MODELS.get(engine, [])]
+            valid_models = [m.lower() for m in available_models]
 
             if saved_model in valid_models:
                 model_to_set = saved_model.capitalize()
@@ -1624,7 +1663,7 @@ class SettingsDialog(Gtk.Dialog):
                         self.model_combo.set_active(i)
                         break
                 else:
-                    if len(ENGINE_MODELS.get(engine, [])) > 0:
+                    if len(available_models) > 0:
                         self.model_combo.set_active(0)
 
             logger.info(f"Final selected model: {self.model_combo.get_active_text()}")
@@ -1647,6 +1686,8 @@ class SettingsDialog(Gtk.Dialog):
                 self.language = "en-us"
             elif engine in ["whisper", "whisper_cpp"] and not current_lang:
                 self.language = "auto"
+            elif engine == "moonshine" and not is_moonshine_language_supported(current_lang):
+                self.language = "auto"
 
         self._populate_model_options()
         self._populate_language_options()
@@ -1660,9 +1701,17 @@ class SettingsDialog(Gtk.Dialog):
         sr_config = self.config_manager.get_settings().get("speech_recognition", {})
         voice_commands_enabled = sr_config.get("voice_commands_enabled")
 
+        engine_text = self.engine_combo.get_active_text()
+        engine = engine_text.lower() if engine_text else sr_config.get("engine", "whisper_cpp")
+
+        if engine == "moonshine":
+            self.voice_commands_switch.set_sensitive(False)
+            self.voice_commands_switch.set_active(False)
+            return
+
+        self.voice_commands_switch.set_sensitive(True)
+
         if voice_commands_enabled is None:
-            engine_text = self.engine_combo.get_active_text()
-            engine = engine_text.lower() if engine_text else sr_config.get("engine", "whisper_cpp")
             auto_enabled = engine == "vosk"
             self.voice_commands_switch.set_active(auto_enabled)
 
@@ -1721,6 +1770,11 @@ class SettingsDialog(Gtk.Dialog):
                 # Both Whisper and whisper.cpp support auto-detect
                 if lang_code == "auto":
                     display_text += " ⚠"
+            elif engine == "moonshine":
+                if lang_code != "auto" and not is_moonshine_language_supported(lang_code):
+                    continue
+                if lang_code == "auto":
+                    display_text += " (English fallback)"
             else:
                 continue
 
@@ -1805,6 +1859,44 @@ class SettingsDialog(Gtk.Dialog):
             is_downloaded = _is_vosk_model_downloaded(model_name, self.language)
             recommended, reason = _get_recommended_vosk_model()
             extra_info = f"Size: {_format_size(info['size_mb'])}"
+        elif engine == "moonshine":
+            supported = get_moonshine_supported_model_sizes(self.language)
+            info = {
+                "desc": "Moonshine ONNX backend",
+                "params": (
+                    "Auto-selected by moonshine_voice" if model_name == "auto" else model_name
+                ),
+            }
+            package_available = is_moonshine_available()
+            recommended = "auto"
+            reason = "Moonshine chooses the best available model for the selected language"
+            extra_info = (
+                "Backend: moonshine_voice"
+                if model_name == "auto"
+                else f"Model selection: {model_name}"
+            )
+            if model_name != "auto" and model_name not in supported:
+                self.model_info_card.hide()
+                return
+
+            self.model_info_title.set_markup(f"<b>{model_name.capitalize()}</b>: {info['desc']}")
+            if package_available:
+                status = "<span foreground='#26a269'>✓ Managed by moonshine_voice</span>"
+            else:
+                status = "<span foreground='#c01c28'>Moonshine package not installed</span>"
+            self.model_info_subtitle.set_markup(f"{extra_info} • {status}")
+
+            if model_name == recommended:
+                self.model_recommendation.set_markup(
+                    f"<span foreground='#26a269'>★ Recommended for your system ({reason})</span>"
+                )
+            else:
+                self.model_recommendation.set_markup(
+                    f"Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})"
+                )
+
+            self.model_info_card.show_all()
+            return
         else:
             self.model_info_card.hide()
             return
@@ -1950,13 +2042,18 @@ class SettingsDialog(Gtk.Dialog):
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
 
-        return {
+        settings = {
             "engine": engine,
             "model_size": model_size,
             "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
         }
+
+        if engine == "moonshine":
+            settings["voice_commands_enabled"] = False
+
+        return settings
 
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""
