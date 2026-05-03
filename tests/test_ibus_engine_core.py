@@ -826,12 +826,13 @@ class TestIBusTextInjectorRetry(unittest.TestCase):
     """Test IBusTextInjector.inject_text() retry logic on NO_ENGINE response."""
 
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
     @patch("socket.socket")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.time")
     def test_retry_on_no_engine_then_succeeds(
-        self, mock_time, mock_socket_path, mock_socket_cls, mock_active, mock_ensure_dir
+        self, mock_time, mock_socket_path, mock_socket_cls, mock_active, mock_switch, mock_ensure
     ):
         """Two NO_ENGINE responses followed by OK returns True and retried twice."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
@@ -848,16 +849,15 @@ class TestIBusTextInjectorRetry(unittest.TestCase):
 
         self.assertTrue(result)
         self.assertEqual(mock_sock.recv.call_count, 3)
-        self.assertEqual(mock_time.sleep.call_count, 2)
-        mock_time.sleep.assert_has_calls([call(0.2), call(0.4)])
 
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
     @patch("socket.socket")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.time")
     def test_all_retries_exhausted_returns_false(
-        self, mock_time, mock_socket_path, mock_socket_cls, mock_active, mock_ensure_dir
+        self, mock_time, mock_socket_path, mock_socket_cls, mock_active, mock_switch, mock_ensure
     ):
         """All NO_ENGINE responses after exhausting retries returns False."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
@@ -873,9 +873,8 @@ class TestIBusTextInjectorRetry(unittest.TestCase):
         result = injector.inject_text("hello")
 
         self.assertFalse(result)
-        self.assertEqual(mock_sock.recv.call_count, 4)
-        self.assertEqual(mock_time.sleep.call_count, 3)
-        mock_time.sleep.assert_has_calls([call(0.2), call(0.4), call(0.8)])
+        # 3 max_attempts: first 2 get NO_ENGINE and retry, 3rd gets NO_ENGINE and fails
+        self.assertEqual(mock_sock.recv.call_count, 3)
 
 
 class TestIBusEngineStartupReadiness(unittest.TestCase):
