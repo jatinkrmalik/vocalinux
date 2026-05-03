@@ -347,6 +347,8 @@ def main():
     voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto
     audio_device_index = audio_settings.get("device_index", None)
 
+    advanced_settings = config_manager.get_settings().get("advanced", {})
+
     logger.info(f"Final settings: engine={engine}, language={language}, model={model_size}")
     if audio_device_index is not None:
         logger.info(f"Using audio device index={audio_device_index} (from saved config)")
@@ -365,6 +367,15 @@ def main():
             stop_sound_guard_ms=stop_sound_guard_ms,
             voice_commands_enabled=voice_commands_enabled,
             audio_device_index=audio_device_index,
+            whispercpp_no_timestamps=advanced_settings.get("whispercpp_no_timestamps", True),
+            whispercpp_suppress_nst=advanced_settings.get("whispercpp_suppress_nst", True),
+            whispercpp_no_context=advanced_settings.get("whispercpp_no_context", True),
+            whispercpp_initial_prompt=advanced_settings.get("whispercpp_initial_prompt", ""),
+            whispercpp_temperature=advanced_settings.get("whispercpp_temperature", 0.0),
+            whispercpp_temperature_inc=advanced_settings.get("whispercpp_temperature_inc", -1.0),
+            whispercpp_entropy_thold=advanced_settings.get("whispercpp_entropy_thold", 2.4),
+            whispercpp_logprob_thold=advanced_settings.get("whispercpp_logprob_thold", -1.0),
+            whispercpp_no_speech_thold=advanced_settings.get("whispercpp_no_speech_thold", 0.6),
         )
 
         # Initialize text injection system

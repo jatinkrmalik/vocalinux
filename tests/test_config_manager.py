@@ -530,3 +530,28 @@ class TestTypedAccessors(unittest.TestCase):
         self.config_manager.config["audio"]["device_index"] = "not_int"
         result = self.config_manager.get_optional_int("audio", "device_index", 5)
         assert result == 5
+
+    def test_whispercpp_advanced_defaults(self):
+        """Test that whisper.cpp advanced parameters have correct defaults."""
+        advanced = DEFAULT_CONFIG["advanced"]
+        self.assertTrue(advanced["whispercpp_no_timestamps"])
+        self.assertTrue(advanced["whispercpp_suppress_nst"])
+        self.assertTrue(advanced["whispercpp_no_context"])
+        self.assertEqual(advanced["whispercpp_initial_prompt"], "")
+        self.assertEqual(advanced["whispercpp_temperature"], 0.0)
+        self.assertEqual(advanced["whispercpp_temperature_inc"], -1.0)
+        self.assertEqual(advanced["whispercpp_entropy_thold"], 2.4)
+        self.assertEqual(advanced["whispercpp_logprob_thold"], -1.0)
+        self.assertEqual(advanced["whispercpp_no_speech_thold"], 0.6)
+
+    def test_whispercpp_advanced_persistence(self):
+        self.config_manager.set("advanced", "whispercpp_temperature", 0.5)
+        self.config_manager.set("advanced", "whispercpp_no_timestamps", False)
+        self.config_manager.set("advanced", "whispercpp_initial_prompt", "Meeting notes")
+        self.config_manager.save_config()
+
+        new_manager = ConfigManager()
+        advanced = new_manager.get_settings().get("advanced", {})
+        self.assertEqual(advanced["whispercpp_temperature"], 0.5)
+        self.assertFalse(advanced["whispercpp_no_timestamps"])
+        self.assertEqual(advanced["whispercpp_initial_prompt"], "Meeting notes")
