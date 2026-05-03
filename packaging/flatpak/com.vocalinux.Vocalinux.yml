@@ -1,0 +1,86 @@
+app-id: com.vocalinux.Vocalinux
+runtime: org.gnome.Platform
+runtime-version: "46"
+sdk: org.gnome.Sdk
+command: vocalinux
+
+build-options:
+  build-args:
+    - --share=network
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --device=input
+  - --filesystem=xdg-config/vocalinux:create
+  - --filesystem=xdg-data/vocalinux:create
+  - --talk-name=org.freedesktop.IBus
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.gnome.Shell
+  - --env=GI_TYPELIB_PATH=/app/lib/girepository-1.0
+
+modules:
+  - name: portaudio
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+    cleanup:
+      - /include
+      - /lib/cmake
+      - /lib/pkgconfig
+      - "*.a"
+      - "*.la"
+    sources:
+      - type: archive
+        url: https://github.com/PortAudio/portaudio/archive/refs/tags/v19.7.0.tar.gz
+        sha256: 5af29ba58bbdbb7bbcefaaecc77ec8fc413f0db6f4c4e286c40c3e1b83174fa0
+
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
+  - name: wtype
+    buildsystem: meson
+    config-opts:
+      - --prefix=/app
+    sources:
+      - type: archive
+        url: https://github.com/atx/wtype/archive/refs/tags/v0.4.tar.gz
+        sha256: da91786d828b6a6e29b884bc510473939eda052658ebef87d7bdeafa6a8746f9
+
+  - name: wl-clipboard
+    buildsystem: meson
+    config-opts:
+      - --prefix=/app
+      - -Dfishcompletiondir=no
+      - -Dzshcompletiondir=no
+    sources:
+      - type: archive
+        url: https://github.com/bugaevc/wl-clipboard/archive/refs/tags/v2.2.1.tar.gz
+        sha256: 6eb8081207fb5581d1d82c4bcd9587205a31a3d47bea3ebeb7f41aa1143783eb
+
+  - name: xdotool
+    buildsystem: simple
+    build-commands:
+      - make
+      - make install PREFIX=/app
+    sources:
+      - type: archive
+        url: https://github.com/jordansissel/xdotool/archive/refs/tags/v3.20211022.1.tar.gz
+        sha256: 82b15a944a5e82fee15e0f6116bd9f642bc3d0bb6989fc0ca5ad9dfe35de0847
+
+  - name: vocalinux
+    buildsystem: simple
+    build-commands:
+      - pip3 install --ignore-installed --prefix=/app setuptools wheel meson-python
+      - pip3 install --ignore-installed --no-build-isolation --prefix=/app .
+      - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.desktop -t /app/share/applications/
+      - install -Dm644 resources/icons/scalable/vocalinux.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux.svg
+      - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.metainfo.xml -t /app/share/metainfo/
+    sources:
+      - type: dir
+        path: ../..

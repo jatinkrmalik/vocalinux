@@ -1656,6 +1656,33 @@ class SpeechRecognitionManager:
                 except (IOError, OSError):
                     continue
 
+            # Validate that the saved device index still points to an input-capable
+            # device. USB devices may be replugged, causing index shifts — a previously
+            # valid index may now point to HDMI output or another output-only device.
+            if self.audio_device_index is not None:
+                try:
+                    device_info = audio.get_device_info_by_index(self.audio_device_index)
+                    name = device_info.get("name", "Unknown")
+                    max_input = device_info.get("maxInputChannels", 0)
+                    if max_input == 0:
+                        logger.warning(
+                            f"Audio device [{self.audio_device_index}] '{name}' "
+                            f"has no input channels (maxInputChannels={max_input}). "
+                            "Saved config may be stale. Falling back to system default."
+                        )
+                        self.audio_device_index = None
+                    else:
+                        logger.debug(
+                            f"Audio device [{self.audio_device_index}] '{name}' "
+                            f"validated: {max_input} input channel(s)"
+                        )
+                except (IOError, OSError) as e:
+                    logger.warning(
+                        f"Audio device [{self.audio_device_index}] no longer available "
+                        f"({e}). Falling back to system default."
+                    )
+                    self.audio_device_index = None
+
             # Detect supported channel count first (some devices require stereo)
             CHANNELS = _get_supported_channels(audio, self.audio_device_index)
             logger.info(f"Using {CHANNELS} channel(s) for recording")

@@ -12,8 +12,11 @@ from typing import Callable, Optional
 
 import gi
 
+logger = logging.getLogger(__name__)
+
 # Import GTK
 gi.require_version("Gtk", "3.0")
+AppIndicator3 = None
 try:
     gi.require_version("AppIndicator3", "0.1")
     from gi.repository import AppIndicator3
@@ -22,8 +25,13 @@ except (ImportError, ValueError):
         gi.require_version("AyatanaAppIndicator3", "0.1")
         from gi.repository import AyatanaAppIndicator3 as AppIndicator3
     except (ImportError, ValueError):
-        gi.require_version("AyatanaAppindicator3", "0.1")
-        from gi.repository import AyatanaAppindicator3 as AppIndicator3
+        try:
+            gi.require_version("AyatanaAppindicator3", "0.1")
+            from gi.repository import AyatanaAppindicator3 as AppIndicator3
+        except (ImportError, ValueError):
+            logger.warning(
+                "No AppIndicator implementation available. " "Running without system tray icon."
+            )
 
 from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
@@ -34,8 +42,6 @@ from ..utils.resource_manager import ResourceManager
 from .config_manager import ConfigManager
 from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog
-
-logger = logging.getLogger(__name__)
 
 # Define constants
 APP_ID = "vocalinux"
@@ -264,10 +270,10 @@ class TrayIndicator:
             if names_variant is not None:
                 name_list = names_variant.unpack()[0]
                 return "org.kde.StatusNotifierWatcher" in name_list
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Could not check StatusNotifierWatcher: {e}")
 
-        return True
+        return False
 
     def _show_missing_watcher_dialog(self):
         dialog = Gtk.MessageDialog(
@@ -416,19 +422,19 @@ class TrayIndicator:
             return False
 
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon_full(self.icon_names["default"], "Microphone off")
+            self.indicator.set_icon(self.icon_paths["default"])
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon_full(self.icon_names["active"], "Microphone on")
+            self.indicator.set_icon(self.icon_paths["active"])
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon_full(self.icon_names["processing"], "Processing speech")
+            self.indicator.set_icon(self.icon_paths["processing"])
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon_full(self.icon_names["default"], "Error")
+            self.indicator.set_icon(self.icon_paths["default"])
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
