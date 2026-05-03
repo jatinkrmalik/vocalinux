@@ -284,10 +284,6 @@ def main():
         logger.debug(f"Could not start IBus daemon: {e}")
 
     config_manager = ConfigManager()
-    initialize_logging()
-    logger.info("Logging system initialized")
-
-    config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
     audio_settings = config_manager.get_settings().get("audio", {})
 

@@ -81,6 +81,32 @@ sys.modules["vocalinux.ui.audio_feedback"] = mock_audio_feedback
 
 
 @pytest.fixture(autouse=True)
+def _clear_hardware_detection_cache():
+    """Clear lru_cache on hardware-detection helpers between tests.
+
+    Hardware detection results are cached for the lifetime of the process
+    in production, but tests mock subprocess.run and call these helpers
+    multiple times with different mock return values; without clearing
+    the cache, later assertions would see the first call's cached result.
+    """
+    try:
+        from vocalinux.utils import whispercpp_model_info as _wmi
+
+        for fn_name in (
+            "detect_vulkan_support",
+            "detect_cuda_support",
+            "detect_compute_backend",
+            "detect_cpu_info",
+        ):
+            fn = getattr(_wmi, fn_name, None)
+            if fn is not None and hasattr(fn, "cache_clear"):
+                fn.cache_clear()
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _cleanup_ibus_server():
     """Stop any leftover IBus socket server threads after each test.
 
