@@ -924,11 +924,28 @@ class IBusTextInjector:
             logger.debug("Vocalinux engine not active, re-activating...")
             switch_engine(ENGINE_NAME)
 
-        # Try injection, retry once if engine instance was destroyed
-        # (e.g. user switched keyboard layout and IBus called do_destroy)
-        for attempt in range(2):
+        # Try injection with bounded retries for transient socket/engine races.
+        # This can happen if IBus re-created the engine instance or if the
+        # engine process/socket is still coming up when dictation ends.
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
+                if not is_engine_process_running():
+                    logger.warning("IBus engine process is not running, restarting...")
+                    if not start_engine_process():
+                        logger.error("Failed to restart IBus engine process")
+                        return False
+                    time.sleep(0.3)
+
                 if not SOCKET_PATH.exists():
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            "IBus engine socket not found on attempt "
+                            f"{attempt + 1}/{max_attempts}; retrying..."
+                        )
+                        time.sleep(0.2 * (attempt + 1))
+                        continue
+
                     logger.error(
                         "IBus engine socket not found. "
                         "Make sure Vocalinux IBus engine is running."
@@ -946,7 +963,7 @@ class IBusTextInjector:
                     if response == "OK":
                         logger.debug("Text injection successful")
                         return True
-                    elif response == "NO_ENGINE" and attempt == 0:
+                    elif response == "NO_ENGINE" and attempt < max_attempts - 1:
                         # Engine instance was destroyed (layout switch).
                         # Re-activate to create a new instance and retry.
                         logger.info("Engine instance not active, re-activating and retrying...")
@@ -958,9 +975,33 @@ class IBusTextInjector:
                         return False
 
             except socket.timeout:
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        "Timeout connecting to IBus engine on attempt "
+                        f"{attempt + 1}/{max_attempts}; retrying..."
+                    )
+                    time.sleep(0.2 * (attempt + 1))
+                    continue
                 logger.error("Timeout connecting to IBus engine")
                 return False
+            except ConnectionRefusedError as e:
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        "IBus engine refused connection on attempt "
+                        f"{attempt + 1}/{max_attempts}: {e}. Retrying..."
+                    )
+                    time.sleep(0.2 * (attempt + 1))
+                    continue
+                logger.error(f"Failed to inject text via IBus: {e}")
+                return False
             except FileNotFoundError:
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        "IBus engine socket disappeared on attempt "
+                        f"{attempt + 1}/{max_attempts}; retrying..."
+                    )
+                    time.sleep(0.2 * (attempt + 1))
+                    continue
                 logger.error("IBus engine socket not found")
                 return False
             except Exception as e:
@@ -1022,6 +1063,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import sys
-
     sys.exit(main())
