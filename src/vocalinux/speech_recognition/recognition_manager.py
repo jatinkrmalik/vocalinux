@@ -844,6 +844,46 @@ class SpeechRecognitionManager:
             self.state = RecognitionState.ERROR
             raise
 
+    def _build_whispercpp_model_kwargs(self, n_threads: int) -> dict:
+        model_kwargs = {
+            "n_threads": n_threads,
+            "suppress_blank": True,
+            "no_speech_thold": self.whispercpp_no_speech_thold,
+            "entropy_thold": self.whispercpp_entropy_thold,
+            "logprob_thold": self.whispercpp_logprob_thold,
+            "temperature": self.whispercpp_temperature,
+            "temperature_inc": self.whispercpp_temperature_inc,
+        }
+        if self.whispercpp_no_timestamps:
+            model_kwargs["no_timestamps"] = True
+        if self.whispercpp_suppress_nst:
+            model_kwargs["suppress_non_speech_tokens"] = True
+        if self.whispercpp_no_context:
+            model_kwargs["no_context"] = True
+        if self.whispercpp_initial_prompt:
+            model_kwargs["initial_prompt"] = self.whispercpp_initial_prompt
+        return model_kwargs
+
+    def _load_model_with_compatible_params(self, model_path: str, model_kwargs: dict):
+        from pywhispercpp.model import Model
+
+        compatible_kwargs = dict(model_kwargs)
+        while True:
+            try:
+                return Model(model_path, **compatible_kwargs)
+            except AttributeError as e:
+                msg = str(e)
+                if "no attribute" in msg and "object has no attribute" in msg:
+                    param_name = msg.split("'")[1] if "'" in msg else None
+                    if param_name and param_name in compatible_kwargs:
+                        logger.warning(
+                            f"pywhispercpp does not support '{param_name}'; "
+                            "removing from model kwargs."
+                        )
+                        del compatible_kwargs[param_name]
+                        continue
+                raise
+
     def _load_whispercpp_model(self, model_path: str):
         """Load the whisper.cpp model file and configure the compute backend.
 
@@ -891,27 +931,11 @@ class SpeechRecognitionManager:
         load_start_time = time.time()
         loaded_backend = backend
 
-        model_kwargs = {
-            "n_threads": n_threads,
-            "suppress_blank": True,
-            "no_speech_thold": self.whispercpp_no_speech_thold,
-            "entropy_thold": self.whispercpp_entropy_thold,
-            "logprob_thold": self.whispercpp_logprob_thold,
-            "temperature": self.whispercpp_temperature,
-            "temperature_inc": self.whispercpp_temperature_inc,
-        }
-        if self.whispercpp_no_timestamps:
-            model_kwargs["no_timestamps"] = True
-        if self.whispercpp_suppress_nst:
-            model_kwargs["suppress_non_speech_tokens"] = True
-        if self.whispercpp_no_context:
-            model_kwargs["no_context"] = True
-        if self.whispercpp_initial_prompt:
-            model_kwargs["initial_prompt"] = self.whispercpp_initial_prompt
+        model_kwargs = self._build_whispercpp_model_kwargs(n_threads)
 
-        # Attempt to load model; fall back to CPU if GPU backend is incompatible
+        # Attempt to load model; filter unsupported params and fall back to CPU if needed
         try:
-            self.model = Model(model_path, **model_kwargs)
+            self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
                 model_error, model_path, model_kwargs, ComputeBackend.CPU
