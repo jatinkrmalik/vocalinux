@@ -43,6 +43,36 @@ modules:
 
   - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
 
+  - name: wtype
+    buildsystem: meson
+    config-opts:
+      - --prefix=/app
+    sources:
+      - type: archive
+        url: https://github.com/atx/wtype/archive/refs/tags/v0.4.tar.gz
+        sha256: da91786d828b6a6e29b884bc510473939eda052658ebef87d7bdeafa6a8746f9
+
+  - name: wl-clipboard
+    buildsystem: meson
+    config-opts:
+      - --prefix=/app
+      - -Dfishcompletiondir=no
+      - -Dzshcompletiondir=no
+    sources:
+      - type: archive
+        url: https://github.com/bugaevc/wl-clipboard/archive/refs/tags/v2.2.1.tar.gz
+        sha256: 6eb8081207fb5581d1d82c4bcd9587205a31a3d47bea3ebeb7f41aa1143783eb
+
+  - name: xdotool
+    buildsystem: simple
+    build-commands:
+      - make
+      - make install PREFIX=/app
+    sources:
+      - type: archive
+        url: https://github.com/jordansissel/xdotool/archive/refs/tags/v3.20211022.1.tar.gz
+        sha256: 82b15a944a5e82fee15e0f6116bd9f642bc3d0bb6989fc0ca5ad9dfe35de0847
+
   - name: vocalinux
     buildsystem: simple
     build-commands:
