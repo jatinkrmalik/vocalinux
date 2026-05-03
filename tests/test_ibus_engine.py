@@ -1180,13 +1180,13 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
         engine = VocalinuxEngine.__new__(VocalinuxEngine)
         VocalinuxEngine._active_instance = None
 
-        mock_ibus.Engine.do_destroy = MagicMock()
-        try:
-            with patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True):
-                engine.do_destroy()
-                mock_ibus.Engine.do_destroy.assert_called_once()
-        finally:
-            del mock_ibus.Engine.do_destroy
+        mock_super = MagicMock()
+        with (
+            patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True),
+            patch("builtins.super", return_value=mock_super),
+        ):
+            engine.do_destroy()
+            mock_super.do_destroy.assert_called_once()
 
 
 if __name__ == "__main__":
