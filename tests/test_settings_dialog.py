@@ -13,7 +13,7 @@ UX Design Notes tested:
 import sys
 import time
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 # Mock GTK before importing anything that might use it
 sys.modules["gi"] = MagicMock()
@@ -48,6 +48,7 @@ mock_config_manager.get = Mock(
     }
 )
 mock_config_manager.update_speech_recognition_settings = Mock()
+mock_config_manager.set = Mock()
 mock_config_manager.save_settings = Mock()
 
 
@@ -58,7 +59,12 @@ def apply_settings_internal(dialog, settings: dict) -> bool:
     """
     try:
         # 1. Update Config Manager
-        dialog.config_manager.update_speech_recognition_settings(settings)
+        sr_settings = {k: v for k, v in settings.items() if not k.startswith("whispercpp_")}
+        advanced_settings = {k: v for k, v in settings.items() if k.startswith("whispercpp_")}
+
+        dialog.config_manager.update_speech_recognition_settings(sr_settings)
+        for key, value in advanced_settings.items():
+            dialog.config_manager.set("advanced", key, value)
         dialog.config_manager.save_settings()
 
         # 2. Reconfigure Speech Engine
@@ -122,6 +128,44 @@ class TestSettingsDialog(unittest.TestCase):
 
         # Verify mocks were called with the right parameters
         mock_config_manager.update_speech_recognition_settings.assert_called_once_with(settings)
+        mock_config_manager.save_settings.assert_called_once()
+        mock_speech_engine.reconfigure.assert_called_once_with(**settings)
+
+    def test_apply_settings_persists_whispercpp_settings_to_advanced_section(self):
+        """Test whisper.cpp settings are saved outside speech_recognition config."""
+        settings = {
+            "engine": "whisper_cpp",
+            "language": "auto",
+            "model_size": "tiny",
+            "vad_sensitivity": 3,
+            "silence_timeout": 2.0,
+            "whispercpp_no_timestamps": False,
+            "whispercpp_temperature": 0.5,
+            "whispercpp_initial_prompt": "Meeting notes",
+        }
+
+        mock_speech_engine.reconfigure.side_effect = None
+
+        result = apply_settings_internal(self.dialog, settings)
+
+        self.assertTrue(result)
+        mock_config_manager.update_speech_recognition_settings.assert_called_once_with(
+            {
+                "engine": "whisper_cpp",
+                "language": "auto",
+                "model_size": "tiny",
+                "vad_sensitivity": 3,
+                "silence_timeout": 2.0,
+            }
+        )
+        mock_config_manager.set.assert_has_calls(
+            [
+                call("advanced", "whispercpp_no_timestamps", False),
+                call("advanced", "whispercpp_temperature", 0.5),
+                call("advanced", "whispercpp_initial_prompt", "Meeting notes"),
+            ],
+            any_order=True,
+        )
         mock_config_manager.save_settings.assert_called_once()
         mock_speech_engine.reconfigure.assert_called_once_with(**settings)
 
