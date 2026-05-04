@@ -1288,9 +1288,57 @@ install_system_dependencies() {
                 exit 1
             fi
 
-            print_info "Updating package lists and installing dependencies..."
-            sudo zypper refresh
-            sudo zypper install -y $ZYPPER_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+            zypper_package_installed() {
+                rpm -q "$1" >/dev/null 2>&1
+            }
+
+            for pkg in $ZYPPER_PACKAGES; do
+                if ! zypper_package_installed "$pkg"; then
+                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                fi
+            done
+
+            if [ -n "$MISSING_PACKAGES" ]; then
+                print_info "Installing missing packages:$MISSING_PACKAGES"
+                sudo zypper refresh || true
+
+                if echo "$MISSING_PACKAGES" | grep -qw "glslang"; then
+                    if ! sudo zypper install -y glslang 2>/dev/null; then
+                        print_info "glslang not found, trying glslang-devel..."
+                        if ! sudo zypper install -y glslang-devel 2>/dev/null; then
+                            print_warning "glslang not available - Vulkan shader compilation may not work"
+                            print_warning "Install glslang manually for whisper.cpp GPU support"
+                        fi
+                    fi
+                    FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/glslang//' | xargs)
+                else
+                    FILTERED_PACKAGES="$MISSING_PACKAGES"
+                fi
+
+                if echo "$FILTERED_PACKAGES" | grep -qw "libappindicator-gtk3"; then
+                    if ! sudo zypper install -y libappindicator-gtk3 2>/dev/null; then
+                        print_info "libappindicator-gtk3 not available, trying typelib-1_0-AppIndicator3-0_1..."
+                        if ! sudo zypper install -y typelib-1_0-AppIndicator3-0_1 2>/dev/null; then
+                            print_info "Trying libayatana-appindicator3-1..."
+                            if sudo zypper install -y libayatana-appindicator3-1 2>/dev/null; then
+                                print_success "Installed libayatana-appindicator3-1"
+                            else
+                                print_warning "No appindicator package found - system tray may not work"
+                            fi
+                        fi
+                    fi
+                    FILTERED_PACKAGES=$(echo "$FILTERED_PACKAGES" | sed 's/libappindicator-gtk3//' | xargs)
+                fi
+
+                if [ -n "$FILTERED_PACKAGES" ]; then
+                    sudo zypper install -y $FILTERED_PACKAGES || {
+                        print_error "Failed to install dependencies"
+                        exit 1
+                    }
+                fi
+            else
+                print_info "All required packages are already installed."
+            fi
             ;;
 
         gentoo)
