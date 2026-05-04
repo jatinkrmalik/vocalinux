@@ -104,10 +104,23 @@ sudo pacman -S --needed python-gobject gtk3 gobject-introspection \
 
 ### openSUSE
 ```bash
-sudo zypper install -y python3-gobject python3-gobject-cairo gtk3 \
-  gobject-introspection-devel portaudio-devel python3-devel \
-  python3-virtualenv pkg-config
+PYVER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")')
+
+sudo zypper install -y \
+  "${PYVER}-pip" "${PYVER}-gobject" "${PYVER}-gobject-cairo" \
+  "${PYVER}-devel" "${PYVER}-virtualenv" \
+  gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
+  gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip \
+  xdotool wtype
+
+# Optional: only needed for whisper.cpp Vulkan GPU builds
+sudo zypper install -y vulkan-tools vulkan-devel shaderc
 ```
+
+**Note:** openSUSE Tumbleweed often uses versioned Python package names such as
+`python313-devel`. The `-devel` suffix means development headers for compiling
+native dependencies; it does **not** mean beta or unstable packages. If
+`${PYVER}-virtualenv` is unavailable on your snapshot, try `${PYVER}-venv`.
 
 ### Gentoo
 ```bash
@@ -173,8 +186,11 @@ sudo pacman -S python-gobject gtk3 libappindicator portaudio pkg-config
 
 #### openSUSE
 ```bash
-sudo zypper install python3-gobject gtk3 libappindicator \
-  portaudio-devel python3-devel pkg-config
+PYVER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")')
+
+sudo zypper install "${PYVER}-gobject" gtk3 \
+  typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
+  portaudio-devel "${PYVER}-devel" pkg-config
 ```
 
 ### pipx Installation Steps

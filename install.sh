@@ -100,6 +100,7 @@ RUN_TESTS="no"
 DEV_MODE="no"
 VENV_DIR="venv"
 SKIP_MODELS="no"
+SKIP_SYSTEM_DEPS="no"
 WITH_WHISPER="no"
 WHISPER_CPU="no"
 NO_WHISPER_EXPLICIT="no"
@@ -117,8 +118,13 @@ VULKAN_DEVICE=""
 # If no terminal is available at all (headless/CI), fall back to automatic mode.
 if [ ! -t 0 ]; then
     if [ -e /dev/tty ] && [ -r /dev/tty ]; then
-        exec < /dev/tty
-        INTERACTIVE_MODE="ask"
+        if { exec < /dev/tty; } 2>/dev/null; then
+            INTERACTIVE_MODE="ask"
+        else
+            AUTO_MODE="yes"
+            INTERACTIVE_MODE="no"
+            NON_INTERACTIVE="yes"
+        fi
     else
         AUTO_MODE="yes"
         INTERACTIVE_MODE="no"
@@ -142,6 +148,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-models)
             SKIP_MODELS="yes"
+            shift
+            ;;
+        --skip-system-deps)
+            SKIP_SYSTEM_DEPS="yes"
             shift
             ;;
         --engine=*)
@@ -180,6 +190,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory"
             echo "  --skip-models    Skip downloading speech models during installation"
+            echo "  --skip-system-deps"
+            echo "                  Skip package-manager dependency installation (advanced)"
             echo "  --tag=TAG        Install specific release tag (default: latest release)"
             echo "  --help           Show this help message"
             echo ""
@@ -1142,6 +1154,106 @@ pacman_package_installed() {
     pacman -Q "$1" >/dev/null 2>&1
 }
 
+suse_python_package_prefix() {
+    python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")' 2>/dev/null || echo "python3"
+}
+
+suse_python_package_candidates() {
+    local suffix="$1"
+    local PY_PREFIX
+    PY_PREFIX=$(suse_python_package_prefix)
+
+    if [[ "$PY_PREFIX" != "python3" ]]; then
+        echo "${PY_PREFIX}-${suffix} python3-${suffix}"
+    else
+        echo "python3-${suffix}"
+    fi
+}
+
+suse_package_installed() {
+    rpm -q "$1" >/dev/null 2>&1
+}
+
+suse_install_first_available() {
+    local DESCRIPTION="$1"
+    shift
+
+    local PKG
+    for PKG in "$@"; do
+        [ -z "$PKG" ] && continue
+
+        if suse_package_installed "$PKG"; then
+            print_info "$DESCRIPTION is already installed ($PKG)."
+            return 0
+        fi
+
+        if sudo zypper install -y "$PKG" 2>/dev/null; then
+            print_success "Installed $DESCRIPTION ($PKG)."
+            return 0
+        fi
+
+        print_info "$DESCRIPTION package '$PKG' not available, trying next option..."
+    done
+
+    return 1
+}
+
+suse_appindicator_gi_available() {
+    python3 - <<'PY' >/dev/null 2>&1
+import importlib
+import gi
+
+for namespace in ("AppIndicator3", "AyatanaAppIndicator3", "AyatanaAppindicator3"):
+    try:
+        gi.require_version(namespace, "0.1")
+        importlib.import_module(f"gi.repository.{namespace}")
+        raise SystemExit(0)
+    except (ImportError, ValueError):
+        pass
+
+raise SystemExit(1)
+PY
+}
+
+suse_install_appindicator_runtime() {
+    local APPINDICATOR_PACKAGES=(
+        "typelib-1_0-AyatanaAppIndicator3-0_1"
+        "typelib-1_0-AppIndicator3-0_1"
+        "typelib-1_0-AyatanaAppIndicator-0_1"
+        "libayatana-appindicator3-1"
+        "libappindicator3-1"
+        "libappindicator-gtk3"
+    )
+
+    if suse_appindicator_gi_available; then
+        print_info "AppIndicator/Ayatana GI namespace is already available."
+        return 0
+    fi
+
+    local PKG
+    for PKG in "${APPINDICATOR_PACKAGES[@]}"; do
+        if suse_package_installed "$PKG"; then
+            print_info "AppIndicator/Ayatana package is already installed ($PKG); verifying GI namespace..."
+        elif sudo zypper install -y "$PKG" 2>/dev/null; then
+            print_success "Installed AppIndicator/Ayatana package ($PKG)."
+        else
+            print_info "AppIndicator/Ayatana package '$PKG' not available, trying next option..."
+            continue
+        fi
+
+        if suse_appindicator_gi_available; then
+            print_success "AppIndicator/Ayatana GI namespace is available."
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+suse_shader_compiler_available() {
+    command_exists glslc || command_exists glslangValidator
+}
+
 # Function to install system dependencies based on the detected distribution
 install_system_dependencies() {
     print_info "Installing system dependencies..."
@@ -1168,7 +1280,7 @@ install_system_dependencies() {
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip wl-clipboard"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config cmake wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip wl-clipboard"
-    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-devel glslang xclip wl-clipboard"
+    local ZYPPER_PACKAGES="gtk3 ibus-devel gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip xclip wl-clipboard"
     # Gentoo uses Portage and different package naming convention
     local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf cmake dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
     # Alpine Linux uses apk and has musl libc
@@ -1288,56 +1400,87 @@ install_system_dependencies() {
                 exit 1
             fi
 
-            zypper_package_installed() {
-                rpm -q "$1" >/dev/null 2>&1
-            }
+            sudo zypper refresh || true
 
+            if [[ "${SELECTED_ENGINE:-whisper_cpp}" == "whisper_cpp" && "${WHISPERCPP_BACKEND:-}" != "cpu" ]]; then
+                ZYPPER_PACKAGES="$ZYPPER_PACKAGES vulkan-tools vulkan-devel"
+            fi
+
+            local MISSING_ZYPPER_PACKAGES=()
             for pkg in $ZYPPER_PACKAGES; do
-                if ! zypper_package_installed "$pkg"; then
-                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                if ! suse_package_installed "$pkg"; then
+                    MISSING_ZYPPER_PACKAGES+=("$pkg")
                 fi
             done
 
-            if [ -n "$MISSING_PACKAGES" ]; then
-                print_info "Installing missing packages:$MISSING_PACKAGES"
-                sudo zypper refresh || true
-
-                if echo "$MISSING_PACKAGES" | grep -qw "glslang"; then
-                    if ! sudo zypper install -y glslang 2>/dev/null; then
-                        print_info "glslang not found, trying glslang-devel..."
-                        if ! sudo zypper install -y glslang-devel 2>/dev/null; then
-                            print_warning "glslang not available - Vulkan shader compilation may not work"
-                            print_warning "Install glslang manually for whisper.cpp GPU support"
-                        fi
-                    fi
-                    FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/glslang//' | xargs)
-                else
-                    FILTERED_PACKAGES="$MISSING_PACKAGES"
-                fi
-
-                if echo "$FILTERED_PACKAGES" | grep -qw "libappindicator-gtk3"; then
-                    if ! sudo zypper install -y libappindicator-gtk3 2>/dev/null; then
-                        print_info "libappindicator-gtk3 not available, trying typelib-1_0-AppIndicator3-0_1..."
-                        if ! sudo zypper install -y typelib-1_0-AppIndicator3-0_1 2>/dev/null; then
-                            print_info "Trying libayatana-appindicator3-1..."
-                            if sudo zypper install -y libayatana-appindicator3-1 2>/dev/null; then
-                                print_success "Installed libayatana-appindicator3-1"
-                            else
-                                print_warning "No appindicator package found - system tray may not work"
-                            fi
-                        fi
-                    fi
-                    FILTERED_PACKAGES=$(echo "$FILTERED_PACKAGES" | sed 's/libappindicator-gtk3//' | xargs)
-                fi
-
-                if [ -n "$FILTERED_PACKAGES" ]; then
-                    sudo zypper install -y $FILTERED_PACKAGES || {
-                        print_error "Failed to install dependencies"
-                        exit 1
-                    }
-                fi
+            if [ "${#MISSING_ZYPPER_PACKAGES[@]}" -gt 0 ]; then
+                print_info "Installing missing packages: ${MISSING_ZYPPER_PACKAGES[*]}"
+                sudo zypper install -y "${MISSING_ZYPPER_PACKAGES[@]}" || {
+                    print_error "Failed to install openSUSE base dependencies"
+                    exit 1
+                }
             else
-                print_info "All required packages are already installed."
+                print_info "All base openSUSE packages are already installed."
+            fi
+
+            local PY_PIP_CANDIDATES=()
+            local PY_GOBJECT_CANDIDATES=()
+            local PY_GOBJECT_CAIRO_CANDIDATES=()
+            local PY_DEVEL_CANDIDATES=()
+            local PY_VIRTUALENV_CANDIDATES=()
+            local PY_VENV_CANDIDATES=()
+
+            read -r -a PY_PIP_CANDIDATES <<< "$(suse_python_package_candidates "pip")"
+            read -r -a PY_GOBJECT_CANDIDATES <<< "$(suse_python_package_candidates "gobject")"
+            read -r -a PY_GOBJECT_CAIRO_CANDIDATES <<< "$(suse_python_package_candidates "gobject-cairo")"
+            read -r -a PY_DEVEL_CANDIDATES <<< "$(suse_python_package_candidates "devel")"
+            read -r -a PY_VIRTUALENV_CANDIDATES <<< "$(suse_python_package_candidates "virtualenv")"
+            read -r -a PY_VENV_CANDIDATES <<< "$(suse_python_package_candidates "venv")"
+
+            print_info "Resolving openSUSE Python packages for $(suse_python_package_prefix)..."
+
+            if ! suse_install_first_available "Python pip" "${PY_PIP_CANDIDATES[@]}"; then
+                print_error "Failed to install Python pip package (tried: ${PY_PIP_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "PyGObject bindings" "${PY_GOBJECT_CANDIDATES[@]}"; then
+                print_error "Failed to install PyGObject package (tried: ${PY_GOBJECT_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "PyGObject Cairo bindings" "${PY_GOBJECT_CAIRO_CANDIDATES[@]}"; then
+                print_error "Failed to install PyGObject Cairo package (tried: ${PY_GOBJECT_CAIRO_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "Python development headers" "${PY_DEVEL_CANDIDATES[@]}"; then
+                print_error "Failed to install Python development headers (tried: ${PY_DEVEL_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "Python virtualenv/venv" "${PY_VIRTUALENV_CANDIDATES[@]}" "${PY_VENV_CANDIDATES[@]}"; then
+                print_warning "Python virtualenv/venv package was not found (tried: ${PY_VIRTUALENV_CANDIDATES[*]} ${PY_VENV_CANDIDATES[*]})"
+                print_warning "Continuing because python3 -m venv may still be available."
+            fi
+
+            if ! suse_install_appindicator_runtime; then
+                print_error "Failed to install a working AppIndicator/Ayatana GI runtime on openSUSE."
+                print_error "Try manually: sudo zypper install typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1"
+                exit 1
+            fi
+
+            if [[ "${SELECTED_ENGINE:-whisper_cpp}" == "whisper_cpp" && "${WHISPERCPP_BACKEND:-}" != "cpu" ]]; then
+                if ! suse_shader_compiler_available; then
+                    if ! suse_install_first_available "Vulkan shader compiler" shaderc glslang-devel glslang; then
+                        print_warning "No Vulkan shader compiler found - whisper.cpp Vulkan build may fail"
+                        print_warning "Install shaderc manually for glslc support if you want GPU acceleration."
+                    fi
+                fi
+
+                if ! suse_shader_compiler_available; then
+                    print_warning "glslc/glslangValidator is still unavailable; CPU fallback will be used if Vulkan build fails."
+                fi
             fi
             ;;
 
@@ -1514,7 +1657,12 @@ install_system_dependencies() {
 }
 
 # Install system dependencies
-install_system_dependencies
+if [[ "$SKIP_SYSTEM_DEPS" == "yes" ]]; then
+    print_warning "Skipping system dependency installation (--skip-system-deps specified)."
+    print_warning "Make sure GTK, PyGObject, AppIndicator/Ayatana, PortAudio, and text input tools are installed."
+else
+    install_system_dependencies
+fi
 
 # Define XDG directories
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vocalinux"
@@ -1524,6 +1672,11 @@ ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 
 # Function to detect and install text input tools
 install_text_input_tools() {
+    if [[ "$SKIP_SYSTEM_DEPS" == "yes" ]]; then
+        print_warning "Skipping text input tool installation (--skip-system-deps specified)."
+        return 0
+    fi
+
     # Detect session type more robustly
     local SESSION_TYPE="unknown"
 
@@ -1839,8 +1992,11 @@ setup_virtual_environment() {
     # Use --system-site-packages to access pre-compiled system packages like PyGObject
     # This avoids build failures with Python 3.13+ where PyGObject may not build from source
     python3 -m venv --system-site-packages "$VENV_DIR" || {
-        print_error "Failed to create virtual environment. Please check your Python installation."
-        exit 1
+        print_warning "python3 -m venv failed, trying python3 -m virtualenv..."
+        python3 -m virtualenv --system-site-packages "$VENV_DIR" || {
+            print_error "Failed to create virtual environment. Please check your Python installation."
+            exit 1
+        }
     }
 
     # Activate virtual environment
@@ -1999,6 +2155,7 @@ install_python_package() {
                             print_info "    Ubuntu/Debian: sudo apt install libvulkan-dev vulkan-tools glslc || glslang-tools"
                             print_info "    Fedora: sudo dnf install vulkan-loader-devel vulkan-tools glslang"
                             print_info "    Arch: sudo pacman -S vulkan-headers vulkan-tools glslang"
+                            print_info "    openSUSE: sudo zypper install vulkan-devel vulkan-tools shaderc"
                         elif [[ "$GPU_BACKEND" == "CUDA" ]]; then
                             print_info "  To use CUDA GPU acceleration, please install CUDA toolkit:"
                             print_info "    Visit: https://developer.nvidia.com/cuda-downloads"

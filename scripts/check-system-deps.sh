@@ -59,6 +59,28 @@ check_deps() {
         MISSING=1
     fi
 
+    # Check for AppIndicator/Ayatana AppIndicator GI runtime
+    if python3 - <<'PY' >/dev/null 2>&1
+import importlib
+import gi
+
+for namespace in ("AppIndicator3", "AyatanaAppIndicator3", "AyatanaAppindicator3"):
+    try:
+        gi.require_version(namespace, "0.1")
+        importlib.import_module(f"gi.repository.{namespace}")
+        raise SystemExit(0)
+    except (ImportError, ValueError):
+        pass
+
+raise SystemExit(1)
+PY
+    then
+        echo "✓ AppIndicator/Ayatana GI runtime"
+    else
+        echo "✗ AppIndicator/Ayatana GI runtime not found"
+        MISSING=1
+    fi
+
     # Check for PortAudio
     if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists portaudio-2.0 2>/dev/null; then
         PA_VERSION=$(pkg-config --modversion portaudio-2.0 2>/dev/null)
@@ -124,7 +146,9 @@ check_deps() {
             echo "  sudo pacman -S --needed python-gobject gtk3 gobject-introspection portaudio python pkg-config xdotool wtype"
         elif [[ "$DETECTED_DISTRO" == "opensuse" || "$DETECTED_DISTRO_LIKE" == *"suse"* ]]; then
             echo "openSUSE:"
-            echo "  sudo zypper install -y python3-gobject python3-gobject-cairo gtk3 gobject-introspection-devel portaudio-devel python3-devel python3-virtualenv pkg-config xdotool wtype"
+            echo "  PYVER=\$(python3 -c 'import sys; print(f\"python{sys.version_info.major}{sys.version_info.minor}\")')"
+            echo "  sudo zypper install -y \"\${PYVER}-gobject\" \"\${PYVER}-gobject-cairo\" gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 gobject-introspection-devel portaudio-devel \"\${PYVER}-devel\" \"\${PYVER}-virtualenv\" pkg-config xdotool wtype"
+            echo "  If \"\${PYVER}-virtualenv\" is unavailable, try \"\${PYVER}-venv\"."
         elif [[ "$DETECTED_DISTRO" == "gentoo" ]]; then
             echo "Gentoo:"
             echo "  sudo emerge dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libappindicator:3 media-libs/portaudio dev-lang/python:3.9 xdotool wtype"

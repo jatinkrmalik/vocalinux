@@ -139,6 +139,16 @@ def check_dependencies():
             logger.error("  Arch Linux:")
             logger.error("    sudo pacman -S python-gobject gtk3 libappindicator")
             logger.error("")
+            logger.error("  openSUSE Tumbleweed:")
+            logger.error(
+                "    PYVER=$(python3 -c 'import sys; "
+                'print(f"python{sys.version_info.major}{sys.version_info.minor}")\')'
+            )
+            logger.error(
+                '    sudo zypper install "${PYVER}-gobject" gtk3 '
+                "typelib-1_0-AyatanaAppIndicator3-0_1"
+            )
+            logger.error("")
             logger.error(
                 "For pipx users: Install system packages BEFORE running 'pipx install vocalinux'"
             )
