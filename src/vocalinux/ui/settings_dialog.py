@@ -2141,13 +2141,7 @@ class SettingsDialog(Gtk.Dialog):
 
             logger.info(f"Auto-applying settings: {settings}")
 
-            sr_settings = {k: v for k, v in settings.items() if not k.startswith("whispercpp_")}
-            advanced_settings = {k: v for k, v in settings.items() if k.startswith("whispercpp_")}
-
-            self.config_manager.update_speech_recognition_settings(sr_settings)
-            for key, value in advanced_settings.items():
-                self.config_manager.set("advanced", key, value)
-            self.config_manager.save_settings()
+            self._save_selected_settings(settings)
 
             was_running = self.speech_engine.state != RecognitionState.IDLE
             if was_running:
@@ -2159,6 +2153,16 @@ class SettingsDialog(Gtk.Dialog):
             logger.error(f"Failed to auto-apply settings: {e}")
         finally:
             self._applying_settings = False
+
+    def _save_selected_settings(self, settings: dict):
+        """Persist selected settings to their appropriate config sections."""
+        sr_settings = {k: v for k, v in settings.items() if not k.startswith("whispercpp_")}
+        advanced_settings = {k: v for k, v in settings.items() if k.startswith("whispercpp_")}
+
+        self.config_manager.update_speech_recognition_settings(sr_settings)
+        for key, value in advanced_settings.items():
+            self.config_manager.set("advanced", key, value)
+        self.config_manager.save_settings()
 
     def get_selected_settings(self) -> dict:
         """Return the currently selected settings from the UI."""
@@ -2395,8 +2399,7 @@ For now, the engine has been reverted to VOSK."""
     def _apply_settings_internal(self, settings: dict) -> bool:
         """Internal method to apply settings."""
         try:
-            self.config_manager.update_speech_recognition_settings(settings)
-            self.config_manager.save_settings()
+            self._save_selected_settings(settings)
 
             was_running = self.speech_engine.state != RecognitionState.IDLE
             if was_running:
