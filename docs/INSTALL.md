@@ -279,6 +279,25 @@ sudo pacman -S --noconfirm \
     wget curl unzip xdotool
 ```
 
+**openSUSE Tumbleweed:**
+```bash
+PYVER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")')
+
+sudo zypper install -y \
+    "${PYVER}-pip" "${PYVER}-gobject" "${PYVER}-gobject-cairo" \
+    "${PYVER}-devel" "${PYVER}-virtualenv" \
+    gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
+    gobject-introspection-devel portaudio-devel pkg-config cmake \
+    wget curl unzip xdotool wtype
+
+# Optional: only needed for whisper.cpp Vulkan GPU builds
+sudo zypper install -y vulkan-tools vulkan-devel shaderc
+```
+
+On openSUSE, `-devel` packages are development headers for native Python
+dependencies. They are not beta or unstable packages. If `${PYVER}-virtualenv`
+is unavailable on your snapshot, try `${PYVER}-venv`.
+
 ### 2. Create Virtual Environment
 
 ```bash

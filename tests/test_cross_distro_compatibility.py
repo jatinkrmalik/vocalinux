@@ -129,6 +129,37 @@ class TestCrossDistroCompatibility:
         for path in expected_paths:
             assert path in install_sh_content, f"Should have fallback path: {path}"
 
+    def test_opensuse_dependency_mapping_uses_tumbleweed_package_names(
+        self, install_sh_content
+    ):
+        """Test that openSUSE uses Tumbleweed-compatible dependency resolution."""
+        assert "suse_python_package_prefix()" in install_sh_content
+        assert "suse_python_package_candidates()" in install_sh_content
+        assert "typelib-1_0-AyatanaAppIndicator3-0_1" in install_sh_content
+        assert "suse_install_appindicator_runtime" in install_sh_content
+        assert "shaderc glslang-devel glslang" in install_sh_content
+
+        zypper_line = next(
+            line
+            for line in install_sh_content.splitlines()
+            if "local ZYPPER_PACKAGES=" in line
+        )
+        assert "python3-devel" not in zypper_line
+        assert "python3-virtualenv" not in zypper_line
+        assert "libappindicator-gtk3" not in zypper_line
+        assert "glslang" not in zypper_line
+
+    def test_skip_system_deps_option_is_implemented(self, install_sh_content):
+        """Test that the documented --skip-system-deps option is parsed and honored."""
+        assert "SKIP_SYSTEM_DEPS" in install_sh_content
+        assert "--skip-system-deps" in install_sh_content
+        assert "Skipping system dependency installation" in install_sh_content
+
+    def test_noninteractive_tty_fallback_does_not_abort(self, install_sh_content):
+        """Test that missing controlling TTY falls back to non-interactive mode."""
+        assert "{ exec < /dev/tty; } 2>/dev/null" in install_sh_content
+        assert "NON_INTERACTIVE=\"yes\"" in install_sh_content
+
     def test_ci_workflow_uses_dynamic_detection(self, workflow_content):
         """Test that CI workflow uses dynamic GI_TYPELIB_PATH detection."""
         # Should use pkg-config or dynamic detection
