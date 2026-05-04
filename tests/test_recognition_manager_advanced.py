@@ -467,6 +467,41 @@ class TestInitWhispercpp(unittest.TestCase):
                 except Exception:
                     pass
 
+    def test_cpu_fallback_filters_unsupported_whispercpp_params(self):
+        mgr = _make_manager(engine="whisper_cpp")
+        model = MagicMock()
+        mock_pywhispercpp = MagicMock()
+        mock_pywhispercpp.Model.side_effect = [
+            AttributeError("'Params' object has no attribute 'no_context'"),
+            model,
+        ]
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "pywhispercpp": MagicMock(),
+                "pywhispercpp.model": mock_pywhispercpp,
+            },
+        ):
+            loaded_backend = mgr._handle_gpu_fallback(
+                RuntimeError("16-bit storage not supported"),
+                "/tmp/model.bin",
+                {"n_threads": 4, "no_context": True},
+                "cpu",
+            )
+
+        self.assertEqual(loaded_backend, "cpu")
+        self.assertIs(mgr.model, model)
+        self.assertEqual(mock_pywhispercpp.Model.call_count, 2)
+        self.assertEqual(
+            mock_pywhispercpp.Model.call_args_list[0].kwargs,
+            {"n_threads": 4, "no_context": True},
+        )
+        self.assertEqual(
+            mock_pywhispercpp.Model.call_args_list[1].kwargs,
+            {"n_threads": 4},
+        )
+
 
 class TestDownloadVoskModel(unittest.TestCase):
     pass

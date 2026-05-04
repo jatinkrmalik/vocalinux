@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -874,7 +875,8 @@ class SpeechRecognitionManager:
             except AttributeError as e:
                 msg = str(e)
                 if "no attribute" in msg and "object has no attribute" in msg:
-                    param_name = msg.split("'")[1] if "'" in msg else None
+                    match = re.search(r"has no attribute ['\"]([^'\"]+)['\"]", msg)
+                    param_name = match.group(1) if match else None
                     if param_name and param_name in compatible_kwargs:
                         logger.warning(
                             f"pywhispercpp does not support '{param_name}'; "
@@ -966,8 +968,6 @@ class SpeechRecognitionManager:
         Raises:
             RuntimeError: If the error is not a known GPU incompatibility.
         """
-        from pywhispercpp.model import Model
-
         error_str = str(error).lower()
         gpu_incompatible = (
             "16-bit storage" in error_str
@@ -986,7 +986,7 @@ class SpeechRecognitionManager:
         # Force CPU backend by disabling GPU backends
         os.environ["GGML_VULKAN"] = "0"
         os.environ["GGML_CUDA"] = "0"
-        self.model = Model(model_path, **model_kwargs)
+        self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
 
