@@ -142,10 +142,10 @@ def check_dependencies():
             logger.error("  openSUSE Tumbleweed:")
             logger.error(
                 "    PYVER=$(python3 -c 'import sys; "
-                "print(f\"python{sys.version_info.major}{sys.version_info.minor}\")')"
+                'print(f"python{sys.version_info.major}{sys.version_info.minor}")\')'
             )
             logger.error(
-                "    sudo zypper install \"${PYVER}-gobject\" gtk3 "
+                '    sudo zypper install "${PYVER}-gobject" gtk3 '
                 "typelib-1_0-AyatanaAppIndicator3-0_1"
             )
             logger.error("")

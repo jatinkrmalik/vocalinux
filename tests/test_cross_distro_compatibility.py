@@ -129,9 +129,7 @@ class TestCrossDistroCompatibility:
         for path in expected_paths:
             assert path in install_sh_content, f"Should have fallback path: {path}"
 
-    def test_opensuse_dependency_mapping_uses_tumbleweed_package_names(
-        self, install_sh_content
-    ):
+    def test_opensuse_dependency_mapping_uses_tumbleweed_package_names(self, install_sh_content):
         """Test that openSUSE uses Tumbleweed-compatible dependency resolution."""
         assert "suse_python_package_prefix()" in install_sh_content
         assert "suse_python_package_candidates()" in install_sh_content
@@ -140,9 +138,7 @@ class TestCrossDistroCompatibility:
         assert "shaderc glslang-devel glslang" in install_sh_content
 
         zypper_line = next(
-            line
-            for line in install_sh_content.splitlines()
-            if "local ZYPPER_PACKAGES=" in line
+            line for line in install_sh_content.splitlines() if "local ZYPPER_PACKAGES=" in line
         )
         assert "python3-devel" not in zypper_line
         assert "python3-virtualenv" not in zypper_line
@@ -158,7 +154,7 @@ class TestCrossDistroCompatibility:
     def test_noninteractive_tty_fallback_does_not_abort(self, install_sh_content):
         """Test that missing controlling TTY falls back to non-interactive mode."""
         assert "{ exec < /dev/tty; } 2>/dev/null" in install_sh_content
-        assert "NON_INTERACTIVE=\"yes\"" in install_sh_content
+        assert 'NON_INTERACTIVE="yes"' in install_sh_content
 
     def test_ci_workflow_uses_dynamic_detection(self, workflow_content):
         """Test that CI workflow uses dynamic GI_TYPELIB_PATH detection."""
