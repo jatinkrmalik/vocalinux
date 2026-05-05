@@ -1797,7 +1797,7 @@ class SettingsDialog(Gtk.Dialog):
         # Update counter
         count = len(text)
         self.initial_prompt_counter.set_text(f"{count} / 500")
-        if count > 100:
+        if count > 400:
             self.initial_prompt_counter.get_style_context().add_class("status-warning")
         else:
             self.initial_prompt_counter.get_style_context().remove_class("status-warning")
@@ -1807,7 +1807,8 @@ class SettingsDialog(Gtk.Dialog):
             GLib.source_remove(self._prompt_debounce_id)
             self._prompt_debounce_id = None
 
-        # Schedule new debounce (3 seconds)
+        # Debounce: whisper.cpp requires a full model reload on prompt change,
+        # so we batch rapid edits to avoid reloading the model on every keystroke.
         self._prompt_debounce_id = GLib.timeout_add(3000, self._apply_prompt_setting)
 
     def _on_initial_prompt_focus_out(self, widget, event):
@@ -1823,7 +1824,7 @@ class SettingsDialog(Gtk.Dialog):
         if self._prompt_debounce_id is not None:
             GLib.source_remove(self._prompt_debounce_id)
             self._prompt_debounce_id = None
-            self._apply_prompt_setting()
+        self._apply_prompt_setting()
 
     def _apply_prompt_setting(self):
         """Save initial_prompt to config and reconfigure engine if needed."""
@@ -1843,7 +1844,7 @@ class SettingsDialog(Gtk.Dialog):
 
             logger.info(f"Applying initial_prompt (length={len(text)})")
             self.config_manager.set("speech_recognition", "initial_prompt", text)
-            self.config_manager.save_settings()
+            self.config_manager.save_config()
 
             try:
                 self.speech_engine.reconfigure(initial_prompt=text, force_download=False)

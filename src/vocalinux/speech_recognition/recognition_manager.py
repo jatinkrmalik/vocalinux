@@ -892,23 +892,22 @@ class SpeechRecognitionManager:
             "no_speech_thold": 0.6,
             "entropy_thold": 2.4,
         }
+        import inspect
+
+        # Detect initial_prompt support once to avoid TypeError in both
+        # the primary load path and the GPU fallback path.
         if self.initial_prompt:
-            model_kwargs["initial_prompt"] = self.initial_prompt
+            if "initial_prompt" in inspect.signature(Model.__init__).parameters:
+                model_kwargs["initial_prompt"] = self.initial_prompt
+            else:
+                logger.warning(
+                    "pywhispercpp does not support initial_prompt (old version?). "
+                    "Prompt will be ignored."
+                )
 
         # Attempt to load model; fall back to CPU if GPU backend is incompatible
         try:
-            try:
-                self.model = Model(model_path, **model_kwargs)
-            except TypeError as type_error:
-                if "initial_prompt" in str(type_error):
-                    logger.warning(
-                        "pywhispercpp does not support initial_prompt (old version?). "
-                        "Falling back to load without prompt."
-                    )
-                    model_kwargs.pop("initial_prompt", None)
-                    self.model = Model(model_path, **model_kwargs)
-                else:
-                    raise
+            self.model = Model(model_path, **model_kwargs)
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
                 model_error, model_path, n_threads, ComputeBackend.CPU, model_kwargs
@@ -2075,6 +2074,12 @@ class SpeechRecognitionManager:
             silence_timeout: New silence timeout (for VOSK).
             audio_device_index: Audio input device index (None for default, -1 to clear).
             force_download: If True, download missing models (default: True for UI-triggered reconfigures).
+
+        Keyword Args:
+            initial_prompt (str): Custom vocabulary prompt for whisper.cpp / Whisper.
+                Triggers model reload on whisper.cpp; passed at transcription time for Whisper.
+                Ignored for VOSK.
+            voice_commands_enabled (bool): Toggle voice commands.
         """
         logger.info(
             f"Reconfiguring speech engine. New settings: engine={engine}, model_size={model_size}, language={language}, vad={vad_sensitivity}, silence={silence_timeout}, audio_device={audio_device_index}"

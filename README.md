@@ -273,12 +273,12 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 ```json
 {
   "speech_recognition": {
-        "engine": "whisper_cpp",
-        "model_size": "tiny",
-        "vad_sensitivity": 3,
-        "silence_timeout": 2.0,
-        "initial_prompt": ""
-    }
+    "engine": "whisper_cpp",
+    "model_size": "tiny",
+    "vad_sensitivity": 3,
+    "silence_timeout": 2.0,
+    "initial_prompt": ""
+  }
 }
 ```
 

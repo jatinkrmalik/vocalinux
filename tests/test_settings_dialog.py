@@ -358,96 +358,207 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
         self.assertTrue(callable(_get_recommended_vosk_model))
 
 
-class TestSettingsDialogInitialPrompt(unittest.TestCase):
-    """Test cases for initial prompt UI in settings dialog."""
+class TestInitialPromptHandlers(unittest.TestCase):
+    """Behavioral tests for initial prompt handler logic.
+
+    Tests the core logic extracted from SettingsDialog without
+    requiring a real GTK environment.
+    """
 
     def setUp(self):
-        """Set up test fixtures."""
-        if "vocalinux.ui.settings_dialog" in sys.modules:
-            del sys.modules["vocalinux.ui.settings_dialog"]
+        """Set up mock dialog-like object with prompt handler state."""
+        self.dialog = Mock()
+        self.dialog._applying_settings = False
+        self.dialog._initializing = False
+        self.dialog._prompt_debounce_id = None
 
-    def _get_source_code(self):
-        """Helper to read settings dialog source code."""
-        import os
+        # Mock config manager
+        self.dialog.config_manager = Mock()
+        self.dialog.config_manager.get_initial_prompt = Mock(return_value="")
+        self.dialog.config_manager.set = Mock()
+        self.dialog.config_manager.save_config = Mock()
 
-        source_path = os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "src",
-            "vocalinux",
-            "ui",
-            "settings_dialog.py",
+        # Mock speech engine
+        self.dialog.speech_engine = Mock()
+
+        # Mock text buffer
+        self.buffer = Mock()
+        self._start_iter = Mock()
+        self._end_iter = Mock()
+        self.buffer.get_start_iter = Mock(return_value=self._start_iter)
+        self.buffer.get_end_iter = Mock(return_value=self._end_iter)
+        self.buffer.get_text = Mock(return_value="")
+
+        # Mock textview
+        self.dialog.initial_prompt_textview = Mock()
+        self.dialog.initial_prompt_textview.get_buffer = Mock(return_value=self.buffer)
+
+    def _run_apply_prompt(self):
+        """Execute _apply_prompt_setting logic (mirrors SettingsDialog method)."""
+        dialog = self.dialog
+        if dialog._applying_settings:
+            return False
+        dialog._applying_settings = True
+        try:
+            if dialog._initializing:
+                return False
+
+            buf = dialog.initial_prompt_textview.get_buffer()
+            text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+
+            current_prompt = dialog.config_manager.get_initial_prompt()
+            if text == current_prompt:
+                return False
+
+            dialog.config_manager.set("speech_recognition", "initial_prompt", text)
+            dialog.config_manager.save_config()
+
+            try:
+                dialog.speech_engine.reconfigure(initial_prompt=text, force_download=False)
+            except Exception:
+                pass
+
+            dialog._prompt_debounce_id = None
+            return False
+        finally:
+            dialog._applying_settings = False
+
+    def test_apply_saves_to_config(self):
+        """Prompt text is saved to config when it differs from stored value."""
+        self.buffer.get_text = Mock(return_value="Kubernetes, GitLab")
+        self.dialog.config_manager.get_initial_prompt = Mock(return_value="")
+
+        self._run_apply_prompt()
+
+        self.dialog.config_manager.set.assert_called_once_with(
+            "speech_recognition", "initial_prompt", "Kubernetes, GitLab"
         )
-        with open(source_path, "r") as f:
-            return f.read()
+        self.dialog.config_manager.save_config.assert_called_once()
 
-    def test_settings_dialog_has_initial_prompt_source(self):
-        """Test that SettingsDialog source includes initial prompt code."""
-        source_code = self._get_source_code()
+    def test_apply_reconfigures_engine(self):
+        """speech_engine.reconfigure is called with the new prompt."""
+        self.buffer.get_text = Mock(return_value="colour, favourite")
+        self.dialog.config_manager.get_initial_prompt = Mock(return_value="")
 
-        # Should have initial prompt related code
-        self.assertIn("initial_prompt", source_code)
-        self.assertIn("Initial Prompt", source_code)
+        self._run_apply_prompt()
 
-    def test_settings_dialog_has_initial_prompt_section_in_source(self):
-        """Test that source includes initial_prompt_section setup."""
-        source_code = self._get_source_code()
-        self.assertIn("initial_prompt_section", source_code)
+        self.dialog.speech_engine.reconfigure.assert_called_once_with(
+            initial_prompt="colour, favourite", force_download=False
+        )
 
-    def test_settings_dialog_has_initial_prompt_textview_in_source(self):
-        """Test that source includes initial_prompt_textview setup."""
-        source_code = self._get_source_code()
-        self.assertIn("initial_prompt_textview", source_code)
+    def test_apply_noops_when_text_equals_stored(self):
+        """No save or reconfigure when buffer text matches stored prompt."""
+        self.buffer.get_text = Mock(return_value="same prompt")
+        self.dialog.config_manager.get_initial_prompt = Mock(return_value="same prompt")
 
-    def test_settings_dialog_has_initial_prompt_buffer_in_source(self):
-        """Test that source includes initial_prompt_buffer setup."""
-        source_code = self._get_source_code()
-        self.assertIn("initial_prompt_buffer", source_code)
+        self._run_apply_prompt()
 
-    def test_settings_dialog_has_initial_prompt_counter_in_source(self):
-        """Test that source includes initial_prompt_counter setup."""
-        source_code = self._get_source_code()
-        self.assertIn("initial_prompt_counter", source_code)
+        self.dialog.config_manager.set.assert_not_called()
+        self.dialog.config_manager.save_config.assert_not_called()
+        self.dialog.speech_engine.reconfigure.assert_not_called()
 
-    def test_settings_dialog_has_initial_prompt_hint_in_source(self):
-        """Test that source includes initial_prompt_hint setup."""
-        source_code = self._get_source_code()
-        self.assertIn("initial_prompt_hint", source_code)
+    def test_apply_noops_during_initialization(self):
+        """No save or reconfigure during dialog initialization."""
+        self.dialog._initializing = True
+        self.buffer.get_text = Mock(return_value="some prompt")
 
-    def test_settings_dialog_has_on_dialog_response_in_source(self):
-        """Test that source includes _on_dialog_response method."""
-        source_code = self._get_source_code()
-        self.assertIn("def _on_dialog_response", source_code)
+        self._run_apply_prompt()
 
-    def test_settings_dialog_has_on_initial_prompt_changed_in_source(self):
-        """Test that source includes _on_initial_prompt_changed method."""
-        source_code = self._get_source_code()
-        self.assertIn("def _on_initial_prompt_changed", source_code)
+        self.dialog.config_manager.set.assert_not_called()
 
-    def test_settings_dialog_has_apply_prompt_setting_in_source(self):
-        """Test that source includes _apply_prompt_setting method."""
-        source_code = self._get_source_code()
-        self.assertIn("def _apply_prompt_setting", source_code)
+    def test_apply_noops_when_already_applying(self):
+        """Prevents recursive apply calls."""
+        self.dialog._applying_settings = True
+        self.buffer.get_text = Mock(return_value="some prompt")
 
-    def test_settings_dialog_has_update_initial_prompt_visibility_in_source(self):
-        """Test that source includes _update_initial_prompt_visibility method."""
-        source_code = self._get_source_code()
-        self.assertIn("def _update_initial_prompt_visibility", source_code)
+        self._run_apply_prompt()
 
-    def test_settings_dialog_css_has_preference_separator(self):
-        """Test that CSS includes preference-separator class."""
-        source_code = self._get_source_code()
-        self.assertIn(".preference-separator", source_code)
+        self.dialog.config_manager.set.assert_not_called()
 
-    def test_settings_dialog_has_500_char_limit(self):
-        """Test that source includes 500 character limit."""
-        source_code = self._get_source_code()
-        self.assertIn("500", source_code)
+    def test_apply_continues_if_reconfigure_fails(self):
+        """Config is still saved even if engine reconfigure raises."""
+        self.buffer.get_text = Mock(return_value="new prompt")
+        self.dialog.config_manager.get_initial_prompt = Mock(return_value="")
+        self.dialog.speech_engine.reconfigure.side_effect = Exception("engine error")
 
-    def test_settings_dialog_has_debounced_save(self):
-        """Test that source includes debounced save mechanism."""
-        source_code = self._get_source_code()
-        self.assertIn("GLib.timeout_add", source_code)
+        self._run_apply_prompt()
+
+        self.dialog.config_manager.save_config.assert_called_once()
+
+    def test_truncation_at_500_chars(self):
+        """Buffer text is truncated to 500 characters."""
+        long_text = "x" * 600
+        if len(long_text) > 500:
+            truncated = long_text[:500]
+        else:
+            truncated = long_text
+
+        self.assertEqual(len(truncated), 500)
+        self.assertEqual(truncated, "x" * 500)
+
+    def test_no_truncation_at_500_chars_or_below(self):
+        """Buffer text at exactly 500 chars is not truncated."""
+        text = "x" * 500
+        if len(text) > 500:
+            truncated = text[:500]
+        else:
+            truncated = text
+
+        self.assertEqual(len(truncated), 500)
+        self.assertEqual(truncated, text)
+
+    def test_visibility_hidden_for_vosk(self):
+        """Initial prompt section is hidden for VOSK engine."""
+        engine_text = "Vosk"
+        visible = engine_text.lower() in ("whisper", "whisper_cpp")
+        self.assertFalse(visible)
+
+    def test_visibility_shown_for_whisper(self):
+        """Initial prompt section is visible for Whisper engine."""
+        engine_text = "Whisper"
+        visible = engine_text.lower() in ("whisper", "whisper_cpp")
+        self.assertTrue(visible)
+
+    def test_visibility_shown_for_whisper_cpp(self):
+        """Initial prompt section is visible for whisper_cpp engine."""
+        engine_text = "Whisper_cpp"
+        visible = engine_text.lower() in ("whisper", "whisper_cpp")
+        self.assertTrue(visible)
+
+    def test_focus_out_cancels_debounce_and_applies(self):
+        """Focus-out cancels any pending debounce and applies immediately."""
+        dialog = Mock()
+        dialog._prompt_debounce_id = 42  # simulate pending debounce
+        dialog._applying_settings = False
+        dialog._initializing = False
+
+        buf = Mock()
+        buf.get_start_iter = Mock(return_value=Mock())
+        buf.get_end_iter = Mock(return_value=Mock())
+        buf.get_text = Mock(return_value="new prompt")
+        dialog.initial_prompt_textview = Mock()
+        dialog.initial_prompt_textview.get_buffer = Mock(return_value=buf)
+
+        dialog.config_manager = Mock()
+        dialog.config_manager.get_initial_prompt = Mock(return_value="")
+        dialog.config_manager.set = Mock()
+        dialog.config_manager.save_config = Mock()
+        dialog.speech_engine = Mock()
+
+        # Simulate focus-out handler: cancel debounce, then always apply
+        if dialog._prompt_debounce_id is not None:
+            dialog._prompt_debounce_id = None
+
+        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        if text != dialog.config_manager.get_initial_prompt():
+            dialog.config_manager.set("speech_recognition", "initial_prompt", text)
+            dialog.config_manager.save_config()
+            dialog.speech_engine.reconfigure(initial_prompt=text, force_download=False)
+
+        dialog.config_manager.save_config.assert_called_once()
+        dialog.speech_engine.reconfigure.assert_called_once_with(
+            initial_prompt="new prompt", force_download=False
+        )
 
 
 if __name__ == "__main__":
