@@ -4,12 +4,22 @@ Tests for the config manager functionality.
 
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 
 # Update import path to use the new package structure
 from vocalinux.ui.config_manager import DEFAULT_CONFIG, ConfigManager
+
+
+def _ensure_test_config_dir(path: str):
+    """Create the temp config directory without relying on recursive makedirs patches."""
+    parent_dir = os.path.dirname(path)
+    if not os.path.exists(parent_dir):
+        os.mkdir(parent_dir)
+    if not os.path.exists(path):
+        os.mkdir(path)
 
 
 class TestConfigManager(unittest.TestCase):
@@ -20,7 +30,7 @@ class TestConfigManager(unittest.TestCase):
         # Create a temporary directory for configuration
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_config_dir = os.path.join(self.temp_dir.name, ".config/vocalinux")
-        os.makedirs(self.temp_config_dir, exist_ok=True)
+        _ensure_test_config_dir(self.temp_config_dir)
         self.temp_config_file = os.path.join(self.temp_config_dir, "config.json")
 
         # Patch the config paths to use our temporary directory
@@ -30,9 +40,17 @@ class TestConfigManager(unittest.TestCase):
         self.config_file_patcher = patch(
             "vocalinux.ui.config_manager.CONFIG_FILE", self.temp_config_file
         )
+        self.makedirs_patcher = patch(
+            "vocalinux.ui.config_manager.os.makedirs",
+            side_effect=lambda path, exist_ok=True: _ensure_test_config_dir(path),
+        )
 
         self.config_dir_patcher.start()
         self.config_file_patcher.start()
+        self.makedirs_patcher.start()
+
+        # Recreate after patching so each test starts from a known config path.
+        _ensure_test_config_dir(self.temp_config_dir)
 
         # Patch logging to avoid actual logging
         self.logger_patcher = patch("vocalinux.ui.config_manager.logger")
@@ -42,6 +60,7 @@ class TestConfigManager(unittest.TestCase):
         """Clean up after tests."""
         self.config_dir_patcher.stop()
         self.config_file_patcher.stop()
+        self.makedirs_patcher.stop()
         self.logger_patcher.stop()
         self.temp_dir.cleanup()
 
@@ -57,7 +76,7 @@ class TestConfigManager(unittest.TestCase):
     def test_ensure_config_dir(self):
         """Test that _ensure_config_dir creates the directory."""
         # Delete the config directory to test creation
-        os.rmdir(self.temp_config_dir)
+        shutil.rmtree(self.temp_config_dir)
         self.assertFalse(os.path.exists(self.temp_config_dir))
 
         # Create config manager, which should create the directory

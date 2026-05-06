@@ -18,6 +18,7 @@ import struct
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 from unittest.mock import MagicMock, Mock, patch
@@ -641,7 +642,7 @@ class TestStartStopRecognition(unittest.TestCase):
         manager = _make_manager()
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
-        manager.audio_buffer = [b"\x00\x00" for _ in range(20)]  # More than 15 chunks
+        manager.audio_buffer = [b"\x00\x00" for _ in range(20)]
 
         # Create dummy threads
         manager.audio_thread = MagicMock()
@@ -651,8 +652,10 @@ class TestStartStopRecognition(unittest.TestCase):
 
         with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
             with patch.object(manager, "_signal_recognition_stop"):
-                manager.stop_recognition()
-                assert manager.should_record is False
+                with patch.object(manager, "_enqueue_audio_segment") as enqueue_mock:
+                    manager.stop_recognition()
+                    assert manager.should_record is False
+                    assert len(enqueue_mock.call_args.args[0]) == 17
 
 
 class TestDownloads(unittest.TestCase):
@@ -695,6 +698,108 @@ class TestReconfiguration(unittest.TestCase):
             with patch.object(manager, "stop_recognition"):
                 manager.reconfigure(engine="whisper")
                 assert manager.engine == "whisper"
+
+
+class TestEnqueueAudioSegment(unittest.TestCase):
+    """Direct tests for _enqueue_audio_segment (not mocked)."""
+
+    def test_enqueue_empty_buffer_returns_early(self):
+        """Empty buffer should return without enqueuing anything."""
+        manager = _make_manager()
+        manager._segment_queue = queue.Queue()
+        manager._enqueue_audio_segment([])
+        assert manager._segment_queue.empty()
+
+    def test_enqueue_puts_segment(self):
+        """Non-empty buffer should be copied and enqueued."""
+        manager = _make_manager()
+        manager._segment_queue = queue.Queue()
+        buf = [b"\x00\x01", b"\x02\x03"]
+        manager._enqueue_audio_segment(buf)
+        assert not manager._segment_queue.empty()
+        assert manager._segment_queue.get_nowait() == buf
+
+    def test_enqueue_drops_oldest_when_queue_full(self):
+        """When queue is full, oldest item is dropped and new one inserted."""
+        manager = _make_manager()
+        manager._segment_queue = queue.Queue(maxsize=1)
+        manager._segment_queue.put_nowait([b"old"])
+        manager._enqueue_audio_segment([b"new"])
+        assert manager._segment_queue.get_nowait() == [b"new"]
+
+
+class TestPerformRecognition(unittest.TestCase):
+    """Direct tests for _perform_recognition (not mocked)."""
+
+    def _run_recognition(self, manager, pre_hook=None):
+        """Start _perform_recognition in a thread and return the thread."""
+        t = threading.Thread(target=manager._perform_recognition)
+        t.start()
+        if pre_hook:
+            pre_hook(manager)
+        return t
+
+    def test_processes_segment_and_exits_on_none_signal(self):
+        """Feed a segment, then a None signal; thread processes and exits."""
+        manager = _make_manager()
+        manager._segment_queue = queue.Queue()
+        manager.should_record = True
+
+        with patch.object(manager, "_process_audio_buffer") as mock_proc:
+            with patch.object(manager, "_update_state"):
+                t = self._run_recognition(manager)
+                manager._segment_queue.put([b"\x00\x01"])
+                manager.should_record = False
+                manager._segment_queue.put(None)
+                t.join(timeout=2)
+                assert not t.is_alive()
+                assert mock_proc.called
+
+    def test_drains_remaining_items_on_none_signal(self):
+        """None signal drains any remaining queued segments before exit."""
+        manager = _make_manager()
+        manager._segment_queue = queue.Queue()
+        manager.should_record = True
+
+        with patch.object(manager, "_process_audio_buffer") as mock_proc:
+            with patch.object(manager, "_update_state"):
+                t = self._run_recognition(manager)
+                manager._segment_queue.put([b"first"])
+                manager._segment_queue.put([b"second"])
+                manager.should_record = False
+                manager._segment_queue.put(None)
+                t.join(timeout=2)
+                assert not t.is_alive()
+                assert mock_proc.call_count == 2
+
+    def test_exits_when_idle_and_queue_empty(self):
+        """When not recording and queue empty, thread exits after brief wait."""
+        manager = _make_manager()
+        manager._segment_queue = queue.Queue()
+        manager.should_record = False
+
+        with patch.object(manager, "_process_audio_buffer") as mock_proc:
+            with patch.object(manager, "_update_state"):
+                t = self._run_recognition(manager)
+                t.join(timeout=2)
+                assert not t.is_alive()
+                assert not mock_proc.called
+
+    def test_queue_timeout_while_recording(self):
+        """While recording, an empty-queue timeout causes the loop to continue."""
+        manager = _make_manager()
+        manager._segment_queue = queue.Queue()
+        manager.should_record = True
+
+        with patch.object(manager, "_process_audio_buffer") as mock_proc:
+            with patch.object(manager, "_update_state"):
+                t = self._run_recognition(manager)
+                # Allow at least one 0.1 s timeout to fire
+                time.sleep(0.25)
+                manager.should_record = False
+                manager._segment_queue.put(None)
+                t.join(timeout=2)
+                assert not t.is_alive()
 
 
 if __name__ == "__main__":

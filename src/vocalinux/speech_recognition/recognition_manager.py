@@ -527,6 +527,7 @@ class SpeechRecognitionManager:
         self.engine = engine
         self.model_size = model_size
         self.language = language
+        self.stop_sound_guard_ms = kwargs.get("stop_sound_guard_ms", 200)
         self.state = RecognitionState.IDLE
         self.audio_thread = None
         self.recognition_thread = None
@@ -1533,6 +1534,19 @@ class SpeechRecognitionManager:
         """Check if the model is initialized and ready for recognition."""
         return self._model_initialized and self.model is not None
 
+    def _get_stop_sound_guard_chunks(self) -> int:
+        """Convert the configured stop-sound guard to 16kHz chunk count."""
+        try:
+            guard_ms = max(0, int(self.stop_sound_guard_ms))
+        except (TypeError, ValueError):
+            logger.warning(
+                f"Invalid stop_sound_guard_ms value: {self.stop_sound_guard_ms}. Using default 200ms."
+            )
+            guard_ms = 200
+
+        chunk_duration_ms = (1024 / 16000) * 1000
+        return int(guard_ms / chunk_duration_ms)
+
     def start_recognition(self, mode: str = "toggle"):
         """Start the speech recognition process."""
         if self.state != RecognitionState.IDLE:
@@ -1590,23 +1604,20 @@ class SpeechRecognitionManager:
         if self.audio_thread and self.audio_thread.is_alive():
             self.audio_thread.join(timeout=2.0)
 
-        # Discard the last ~1 second of audio to avoid transcribing the stop sound
-        # Audio is recorded in 1024-sample chunks at 16000 Hz = ~64ms per chunk
-        # We discard the last 15 chunks (~1 second) which should contain the feedback sound
+        # Trim only a small tail to avoid the stop sound without clipping the user's final word.
         with self._buffer_lock:
-            if len(self.audio_buffer) > 15:
-                discarded_chunks = self.audio_buffer[-15:]
-                self.audio_buffer = self.audio_buffer[:-15]
+            stop_sound_guard_chunks = self._get_stop_sound_guard_chunks()
+            if stop_sound_guard_chunks > 0 and len(self.audio_buffer) > stop_sound_guard_chunks:
+                discarded_chunks = self.audio_buffer[-stop_sound_guard_chunks:]
+                self.audio_buffer = self.audio_buffer[:-stop_sound_guard_chunks]
                 logger.debug(
-                    f"Discarded {len(discarded_chunks)} audio chunks to avoid transcribing feedback sound"
+                    "Discarded %s audio chunks (~%sms) to avoid transcribing feedback sound",
+                    len(discarded_chunks),
+                    self.stop_sound_guard_ms,
                 )
-            elif self.audio_buffer:
-                # If buffer is small, just clear it entirely to be safe
-                logger.debug(f"Clearing small audio buffer ({len(self.audio_buffer)} chunks)")
-                self.audio_buffer = []
 
             if self.audio_buffer:
-                logger.info(f"DEBUG: Enqueuing final buffer with {len(self.audio_buffer)} chunks")
+                logger.debug(f"Enqueuing final buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
 
@@ -1920,9 +1931,7 @@ class SpeechRecognitionManager:
             return
 
         # Process text - either with voice commands or pass through directly
-        logger.info(
-            f"DEBUG: _process_audio_buffer got text='{text[:50] if text else '(empty)'}...'"
-        )
+        logger.debug(f"_process_audio_buffer got text='{text[:50] if text else '(empty)'}...'")
         if text:
             if self._voice_commands_enabled:
                 # Process with voice commands (original behavior)
@@ -1933,13 +1942,13 @@ class SpeechRecognitionManager:
                 actions = []
 
             # Call text callbacks with processed text
-            logger.info(
-                f"DEBUG: processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+            logger.debug(
+                f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
             )
             if processed_text:
                 for callback in self.text_callbacks:
-                    logger.info(
-                        f"DEBUG: invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                    logger.debug(
+                        f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
                     )
                     callback(processed_text)
 
@@ -1950,89 +1959,65 @@ class SpeechRecognitionManager:
 
     def _perform_recognition(self):
         """Perform speech recognition in real-time."""
-        logger.info("DEBUG: _perform_recognition thread started")
+        logger.debug("_perform_recognition thread started")
         while True:
             logger.debug(
-                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
+                f"Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
             )
             try:
                 segment = self._segment_queue.get(timeout=0.1)
             except queue.Empty:
                 # Only exit if we're not recording AND queue is empty
                 if not self.should_record and self._segment_queue.empty():
-                    logger.info(
-                        "DEBUG: Recognition loop - not recording and queue empty, checking for final items..."
+                    logger.debug(
+                        "Recognition loop - not recording and queue empty, checking for final items..."
                     )
                     # Give a brief moment for any final items to be enqueued
                     try:
                         segment = self._segment_queue.get(timeout=0.5)
                     except queue.Empty:
-                        logger.info("DEBUG: Recognition loop - no more items, exiting")
+                        logger.debug("Recognition loop - no more items, exiting")
                         break
                 else:
-                    logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
+                    logger.debug("Recognition loop - queue timeout, continuing")
                     continue
 
             if segment is None:
-                logger.info(
-                    "DEBUG: Recognition loop - got None signal, draining remaining items..."
-                )
+                logger.debug("Recognition loop - got None signal, draining remaining items...")
                 # Drain any remaining items before exiting
                 while not self._segment_queue.empty():
                     try:
                         remaining = self._segment_queue.get_nowait()
                         if remaining is not None:
-                            logger.info(
-                                f"DEBUG: Recognition loop - processing remaining segment with {len(remaining)} chunks"
+                            logger.debug(
+                                f"Recognition loop - processing remaining segment with {len(remaining)} chunks"
                             )
                             self._update_state(RecognitionState.PROCESSING)
                             self._process_audio_buffer(remaining)
                     except queue.Empty:
                         break
-                logger.info("DEBUG: Recognition loop - exiting after None signal")
+                logger.debug("Recognition loop - exiting after None signal")
                 break
 
-            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
+            logger.debug(f"Recognition loop - processing segment with {len(segment)} chunks")
             self._update_state(RecognitionState.PROCESSING)
             self._process_audio_buffer(segment)
             if self.should_record:
                 self._update_state(RecognitionState.LISTENING)
-        logger.info("DEBUG: _perform_recognition thread exiting")
-        """Perform speech recognition in real-time."""
-        logger.info("DEBUG: _perform_recognition thread started")
-        while self.should_record or not self._segment_queue.empty():
-            logger.debug(
-                f"DEBUG: Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
-            )
-            try:
-                segment = self._segment_queue.get(timeout=0.1)
-            except queue.Empty:
-                logger.debug("DEBUG: Recognition loop - queue timeout, continuing")
-                continue
-
-            if segment is None:
-                logger.info("DEBUG: Recognition loop - got None signal, continuing")
-                continue
-
-            logger.info(f"DEBUG: Recognition loop - processing segment with {len(segment)} chunks")
-            self._update_state(RecognitionState.PROCESSING)
-            self._process_audio_buffer(segment)
-            if self.should_record:
-                self._update_state(RecognitionState.LISTENING)
-        logger.info("DEBUG: _perform_recognition thread exiting")
+        logger.debug("_perform_recognition thread exiting")
 
     def _enqueue_audio_segment(self, audio_buffer: list[bytes]):
         """Queue an audio segment for asynchronous transcription."""
         segment = audio_buffer.copy()
         if not segment:
-            logger.warning("DEBUG: _enqueue_audio_segment called with empty buffer")
+            logger.warning("_enqueue_audio_segment called with empty buffer")
             return
 
-        logger.info(f"DEBUG: _enqueue_audio_segment called with {len(segment)} chunks")
+        logger.debug(f"_enqueue_audio_segment called with {len(segment)} chunks")
 
         try:
             self._segment_queue.put_nowait(segment)
-            logger.info("DEBUG: Enqueued segment successfully")
+            logger.debug("Enqueued segment successfully")
         except queue.Full:
             logger.warning("Transcription queue is full, dropping oldest pending segment")
             try:
@@ -2125,6 +2110,8 @@ class SpeechRecognitionManager:
                 if self.engine == "whisper_cpp":
                     restart_needed = True
 
+        if "stop_sound_guard_ms" in kwargs:
+            self.stop_sound_guard_ms = kwargs.get("stop_sound_guard_ms", self.stop_sound_guard_ms)
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:

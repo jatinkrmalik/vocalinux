@@ -52,11 +52,19 @@ class TextInjector:
         """
         self._ibus_injector: Optional[IBusTextInjector] = None
         self.environment = self._detect_environment()
+        self._session_environment = self.environment
+        self._ibus_ready = False
+        self._ibus_init_failed = False
+        self._ibus_init_thread: Optional[threading.Thread] = None
+        self._state_lock = threading.Lock()
+        self._clipboard_tool_health = {}
+        self._clipboard_timeout = 0.35
 
         # Force Wayland mode if requested
         if wayland_mode and self.environment == DesktopEnvironment.X11:
             logger.info("Forcing Wayland compatibility mode")
             self.environment = DesktopEnvironment.WAYLAND
+            self._session_environment = self.environment
 
         logger.info(f"Using text injection for {self.environment.value} environment")
 
@@ -109,6 +117,7 @@ class TextInjector:
             logger.info("Stopping IBus text injector")
             self._ibus_injector.stop()
             self._ibus_injector = None
+            self._ibus_ready = False
 
     def _detect_environment(self) -> DesktopEnvironment:
         """
@@ -134,6 +143,8 @@ class TextInjector:
 
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
+        ibus_requested = False
+
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
         if is_ibus_available():
@@ -154,20 +165,16 @@ class TextInjector:
                 )
             else:
                 try:
-                    self._ibus_injector = IBusTextInjector(auto_activate=True)
-                    if self.environment == DesktopEnvironment.X11:
-                        self.environment = DesktopEnvironment.X11_IBUS
-                    else:
-                        self.environment = DesktopEnvironment.WAYLAND_IBUS
-                    logger.info(
-                        f"Using IBus for {self.environment.value} text injection (best compatibility)"
-                    )
-                    return
+                    self._ibus_injector = IBusTextInjector(auto_activate=False)
+                    ibus_requested = True
                 except Exception as e:
                     logger.warning(f"IBus initialization failed: {e}, trying alternatives")
         if self.environment == DesktopEnvironment.X11:
             # Check for xdotool
             if not shutil.which("xdotool"):
+                if ibus_requested:
+                    self._start_ibus_initialization()
+                    return
                 logger.error("xdotool not found. Please install it with: sudo apt install xdotool")
                 raise RuntimeError("Missing required dependency: xdotool")
         else:
@@ -195,7 +202,9 @@ class TextInjector:
                     if wtype_available:
                         self.wayland_tool = "wtype"
                         logger.info(
-                            f"Using {self.wayland_tool} for Wayland text injection (ydotoold not running)"
+                            "Using "
+                            f"{self.wayland_tool} for Wayland text injection "
+                            "(ydotoold not running)"
                         )
                     else:
                         logger.warning("ydotool found but ydotoold daemon not running")
@@ -209,6 +218,9 @@ class TextInjector:
                     "No native Wayland tools found. Using xdotool with XWayland as fallback"
                 )
             else:
+                if ibus_requested:
+                    self._start_ibus_initialization()
+                    return
                 logger.error(
                     "No text injection tools found. Please install one of:\n"
                     "- IBus (recommended, usually pre-installed)\n"
@@ -223,6 +235,150 @@ class TextInjector:
                     "Or for clipboard fallback: sudo apt install wl-copy"
                 )
                 raise RuntimeError("Missing required dependencies for text injection")
+
+        if ibus_requested:
+            self._start_ibus_initialization()
+
+    def _start_ibus_initialization(self) -> None:
+        if self._ibus_injector is None or self._ibus_init_thread is not None:
+            return
+
+        if self.environment == DesktopEnvironment.WAYLAND and not hasattr(self, "wayland_tool"):
+            if shutil.which("wtype"):
+                self.wayland_tool = "wtype"
+            elif shutil.which("ydotool"):
+                self.wayland_tool = "ydotool"
+
+        self._ibus_init_failed = False
+        self._ibus_init_thread = threading.Thread(
+            target=self._initialize_ibus_in_background,
+            daemon=True,
+        )
+        self._ibus_init_thread.start()
+        logger.info("Starting IBus warmup in background")
+
+    def _initialize_ibus_in_background(self) -> None:
+        if self._ibus_injector is None:
+            return
+
+        try:
+            self._ibus_injector._setup_engine()
+            with self._state_lock:
+                self._ibus_ready = True
+                self._ibus_init_failed = False
+                if self._session_environment == DesktopEnvironment.X11:
+                    self.environment = DesktopEnvironment.X11_IBUS
+                else:
+                    self.environment = DesktopEnvironment.WAYLAND_IBUS
+            logger.info(
+                f"Using IBus for {self.environment.value} text injection (best compatibility)"
+            )
+        except Exception as e:
+            with self._state_lock:
+                self._ibus_ready = False
+                self._ibus_init_failed = True
+            logger.warning(f"IBus initialization failed: {e}, continuing with fallback")
+
+    def _get_clipboard_tools(self):
+        tools = []
+        if self._session_environment == DesktopEnvironment.WAYLAND and shutil.which("wl-copy"):
+            tools.append("wl-copy")
+        if shutil.which("xclip"):
+            tools.append("xclip")
+        if shutil.which("xsel"):
+            tools.append("xsel")
+        if self._session_environment != DesktopEnvironment.WAYLAND and shutil.which("wl-copy"):
+            tools.append("wl-copy")
+        return tools
+
+    def _run_clipboard_command(self, tool: str, text: str) -> bool:
+        if tool == "wl-copy":
+            subprocess.run(
+                ["wl-copy", text],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=self._clipboard_timeout,
+            )
+            return True
+
+        if tool == "xclip":
+            subprocess.run(
+                ["xclip", "-selection", "clipboard"],
+                input=text,
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=self._clipboard_timeout,
+            )
+            return True
+
+        if tool == "xsel":
+            subprocess.run(
+                ["xsel", "--clipboard", "--input"],
+                input=text,
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=self._clipboard_timeout,
+            )
+            return True
+
+        return False
+
+    def _switch_to_non_ibus_backend(self) -> bool:
+        """Switch from IBus mode to a non-IBus backend for runtime fallback."""
+        if self.environment == DesktopEnvironment.X11_IBUS:
+            if shutil.which("xdotool"):
+                self.environment = DesktopEnvironment.X11
+                logger.warning("IBus injection failed, switching to X11 xdotool fallback")
+                return True
+
+            logger.error("IBus fallback failed: xdotool is not available on X11")
+            return False
+
+        if self.environment == DesktopEnvironment.WAYLAND_IBUS:
+            ydotool_available = shutil.which("ydotool") is not None
+            wtype_available = shutil.which("wtype") is not None
+            xdotool_available = shutil.which("xdotool") is not None
+
+            if ydotool_available:
+                try:
+                    subprocess.run(
+                        ["ydotool", "type", ""],
+                        check=True,
+                        stderr=subprocess.PIPE,
+                        timeout=2,
+                    )
+                    self.wayland_tool = "ydotool"
+                    self.environment = DesktopEnvironment.WAYLAND
+                    logger.warning("IBus injection failed, switching to Wayland ydotool fallback")
+                    return True
+                except (
+                    subprocess.CalledProcessError,
+                    subprocess.TimeoutExpired,
+                    FileNotFoundError,
+                ):
+                    logger.debug("ydotool fallback unavailable (daemon not running)")
+
+            if wtype_available:
+                self.wayland_tool = "wtype"
+                self.environment = DesktopEnvironment.WAYLAND
+                logger.warning("IBus injection failed, switching to Wayland wtype fallback")
+                return True
+
+            if xdotool_available:
+                self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                logger.warning("IBus injection failed, switching to XWayland xdotool fallback")
+                return True
+
+            logger.error(
+                "IBus fallback failed: no Wayland text injection tools available "
+                "(ydotool, wtype, xdotool)"
+            )
+            return False
+
+        return True
 
     def _test_xdotool_fallback(self):
         """Test if xdotool is working correctly with XWayland."""
@@ -322,52 +478,22 @@ class TextInjector:
         """
         logger.info("Copying text to clipboard")
 
-        # Try wl-copy first (Wayland native)
-        if shutil.which("wl-copy"):
-            try:
-                subprocess.run(
-                    ["wl-copy", text],
-                    check=True,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=5,
-                )
-                logger.info("Text copied to Wayland clipboard using wl-copy")
-                return True
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.warning(f"wl-copy failed: {e}")
+        for tool in self._get_clipboard_tools():
+            if self._clipboard_tool_health.get(tool) is False:
+                continue
 
-        # Try xclip (X11 / XWayland)
-        if shutil.which("xclip"):
             try:
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard"],
-                    input=text,
-                    check=True,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=5,
-                )
-                logger.info("Text copied to clipboard using xclip")
-                return True
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.warning(f"xclip failed: {e}")
-
-        # Try xsel as last resort
-        if shutil.which("xsel"):
-            try:
-                subprocess.run(
-                    ["xsel", "--clipboard", "--input"],
-                    input=text,
-                    check=True,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=5,
-                )
-                logger.info("Text copied to clipboard using xsel")
-                return True
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.warning(f"xsel failed: {e}")
+                if self._run_clipboard_command(tool, text):
+                    self._clipboard_tool_health[tool] = True
+                    logger.info(f"Text copied to clipboard using {tool}")
+                    return True
+            except (
+                subprocess.CalledProcessError,
+                subprocess.TimeoutExpired,
+                FileNotFoundError,
+            ) as e:
+                self._clipboard_tool_health[tool] = False
+                logger.warning(f"{tool} failed: {e}")
 
         logger.warning(
             "Clipboard copy failed. Install wl-copy (Wayland) or xclip/xsel "
@@ -452,11 +578,23 @@ class TextInjector:
                                 args=(text,),
                                 daemon=True,
                             ).start()
-                    return result
+                        return True
+
+                    logger.warning(
+                        "IBus runtime injection failed. Falling back to non-IBus backend."
+                    )
+                    if not self._switch_to_non_ibus_backend():
+                        raise RuntimeError(
+                            "IBus injection failed and no non-IBus fallback is available"
+                        )
                 else:
-                    logger.error("IBus injector not initialized")
-                    return False
-            elif (
+                    logger.error("IBus injector not initialized, trying non-IBus fallback")
+                    if not self._switch_to_non_ibus_backend():
+                        raise RuntimeError(
+                            "IBus injector not initialized and no non-IBus fallback is available"
+                        )
+
+            if (
                 self.environment == DesktopEnvironment.X11
                 or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
             ):

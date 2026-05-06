@@ -24,7 +24,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -389,6 +389,23 @@ def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool
     return False
 
 
+def _handle_engine_destroy(
+    active_instance: Optional["VocalinuxEngine"],
+    current_instance: object,
+    ibus_available: bool,
+    super_destroy: Optional[Callable[[], None]] = None,
+) -> Optional["VocalinuxEngine"]:
+    """Compute next active engine state and invoke optional parent destroy."""
+    next_active_instance = active_instance
+    if active_instance is current_instance:
+        next_active_instance = None
+
+    if ibus_available and super_destroy is not None:
+        super_destroy()
+
+    return next_active_instance
+
+
 def switch_engine(engine_name: str) -> bool:
     """Switch to the specified IBus engine."""
     import time
@@ -565,6 +582,19 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
         # want to be able to inject text. The engine process keeps running and
         # the instance remains valid for text injection.
 
+    def do_destroy(self) -> None:
+        """Called when the engine instance is destroyed by IBus (e.g. layout switch)."""
+        logger.debug("VocalinuxEngine instance destroyed")
+        super_destroy: Optional[Callable[[], None]] = None
+        if IBUS_AVAILABLE:
+            super_destroy = super().do_destroy
+        VocalinuxEngine._active_instance = _handle_engine_destroy(
+            VocalinuxEngine._active_instance,
+            self,
+            IBUS_AVAILABLE,
+            super_destroy,
+        )
+
     def do_focus_in(self) -> None:
         """Called when the engine gains focus."""
         logger.debug("VocalinuxEngine focus in")
@@ -636,6 +666,13 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
 
                             data = conn.recv(65536)  # Max text size
                             if data:
+                                if data == b"\x00PING":
+                                    if cls._active_instance:
+                                        conn.sendall(b"OK")
+                                    else:
+                                        conn.sendall(b"NO_ENGINE")
+                                    continue
+
                                 text = data.decode("utf-8")
                                 # Schedule injection on main thread
                                 if cls._active_instance:
@@ -802,20 +839,6 @@ class IBusTextInjector:
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
-        # Verify the engine is fully ready before proceeding.
-        # start_engine_process() only confirms the subprocess is alive —
-        # register_component() and socket setup may still be in progress.
-        for _attempt in range(15):
-            if SOCKET_PATH.exists():
-                logger.debug("Engine socket is ready")
-                break
-            time.sleep(0.2)
-        else:
-            logger.warning(
-                "Engine process started but socket not ready after retries; "
-                "proceeding with activation attempt"
-            )
-
         # Capture current XKB layout before switching engines
         # This is critical for preserving the user's keyboard layout
         # when IBus engine switching might override it
@@ -840,6 +863,8 @@ class IBusTextInjector:
                     "Try manually: ibus engine vocalinux"
                 )
 
+        self._wait_for_engine_ready()
+
         # Restore the user's XKB layout immediately after engine activation.
         # Switching to the Vocalinux IBus engine can override the system
         # keyboard layout (e.g. Spanish, French AZERTY) with the engine's
@@ -849,6 +874,38 @@ class IBusTextInjector:
         if self._previous_xkb_layout:
             layout, variant, option = self._previous_xkb_layout
             restore_xkb_layout(layout, variant, option)
+
+    def _wait_for_engine_ready(self, max_attempts: int = 8) -> None:
+        delay = 0.25
+
+        for attempt in range(max_attempts):
+            try:
+                if not SOCKET_PATH.exists():
+                    raise FileNotFoundError("IBus engine socket not found")
+
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(2.0)
+                    sock.connect(str(SOCKET_PATH))
+                    sock.sendall(b"\x00PING")
+                    response = sock.recv(64).decode("utf-8")
+
+                if response == "OK":
+                    logger.debug(f"IBus engine readiness probe succeeded on attempt {attempt + 1}")
+                    return
+
+                if response != "NO_ENGINE":
+                    logger.warning(f"Unexpected readiness probe response: {response}")
+            except (socket.timeout, FileNotFoundError, ConnectionRefusedError, OSError) as e:
+                logger.debug(f"IBus readiness probe attempt {attempt + 1} failed: {e}")
+
+            if attempt < max_attempts - 1:
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)
+
+        raise IBusSetupError(
+            "Vocalinux IBus engine did not become ready after startup. "
+            "Try manually: ibus engine vocalinux"
+        )
 
     def stop(self) -> None:
         """
@@ -894,37 +951,100 @@ class IBusTextInjector:
             logger.debug("Vocalinux engine not active, re-activating...")
             switch_engine(ENGINE_NAME)
 
-        try:
-            if not SOCKET_PATH.exists():
-                logger.error(
-                    "IBus engine socket not found. " "Make sure Vocalinux IBus engine is running."
-                )
+        # Try injection with bounded retries for transient socket/engine races.
+        # This can happen if IBus re-created the engine instance or if the
+        # engine process/socket is still coming up when dictation ends.
+        max_attempts = 3
+
+        def restart_engine_process() -> bool:
+            logger.warning("IBus engine process is not running, restarting...")
+            if not start_engine_process():
+                logger.error("Failed to restart IBus engine process")
                 return False
+            time.sleep(0.3)
+            return True
 
-            # Connect to engine socket and send text
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                sock.settimeout(5.0)
-                sock.connect(str(SOCKET_PATH))
-                sock.sendall(text.encode("utf-8"))
+        for attempt in range(max_attempts):
+            try:
+                if not SOCKET_PATH.exists():
+                    if not is_engine_process_running() and not restart_engine_process():
+                        return False
 
-                # Wait for response
-                response = sock.recv(64).decode("utf-8")
-                if response == "OK":
-                    logger.debug("Text injection successful")
-                    return True
-                else:
-                    logger.error(f"Text injection failed: {response}")
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            "IBus engine socket not found on attempt "
+                            f"{attempt + 1}/{max_attempts}; retrying..."
+                        )
+                        time.sleep(0.2 * (attempt + 1))
+                        continue
+
+                    logger.error(
+                        "IBus engine socket not found. "
+                        "Make sure Vocalinux IBus engine is running."
+                    )
                     return False
 
-        except socket.timeout:
-            logger.error("Timeout connecting to IBus engine")
-            return False
-        except FileNotFoundError:
-            logger.error("IBus engine socket not found")
-            return False
-        except Exception as e:
-            logger.error(f"Failed to inject text via IBus: {e}")
-            return False
+                # Connect to engine socket and send text
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(5.0)
+                    sock.connect(str(SOCKET_PATH))
+                    sock.sendall(text.encode("utf-8"))
+
+                    # Wait for response
+                    response = sock.recv(64).decode("utf-8")
+                    if response == "OK":
+                        logger.debug("Text injection successful")
+                        return True
+                    elif response == "NO_ENGINE" and attempt < max_attempts - 1:
+                        # Engine instance was destroyed (layout switch).
+                        # Re-activate to create a new instance and retry.
+                        logger.info("Engine instance not active, re-activating and retrying...")
+                        switch_engine(ENGINE_NAME)
+                        time.sleep(0.3)
+                        continue
+                    else:
+                        logger.error(f"Text injection failed: {response}")
+                        return False
+
+            except socket.timeout:
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        "Timeout connecting to IBus engine on attempt "
+                        f"{attempt + 1}/{max_attempts}; retrying..."
+                    )
+                    time.sleep(0.2 * (attempt + 1))
+                    continue
+                logger.error("Timeout connecting to IBus engine")
+                return False
+            except ConnectionRefusedError as e:
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        "IBus engine refused connection on attempt "
+                        f"{attempt + 1}/{max_attempts}: {e}. Retrying..."
+                    )
+                    if not is_engine_process_running() and not restart_engine_process():
+                        return False
+                    time.sleep(0.2 * (attempt + 1))
+                    continue
+                logger.error(f"Failed to inject text via IBus: {e}")
+                return False
+            except FileNotFoundError:
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        "IBus engine socket disappeared on attempt "
+                        f"{attempt + 1}/{max_attempts}; retrying..."
+                    )
+                    if not is_engine_process_running() and not restart_engine_process():
+                        return False
+                    time.sleep(0.2 * (attempt + 1))
+                    continue
+                logger.error("IBus engine socket not found")
+                return False
+            except Exception as e:
+                logger.error(f"Failed to inject text via IBus: {e}")
+                return False
+
+        return False
 
 
 def _get_engines_xml() -> str:
@@ -979,6 +1099,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import sys
-
     sys.exit(main())

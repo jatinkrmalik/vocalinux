@@ -98,8 +98,7 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
-    @patch("vocalinux.text_injection.ibus_engine.time")
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
@@ -114,27 +113,22 @@ class TestIBusTextInjectorSetupFailures(unittest.TestCase):
         mock_restore_xkb,
         mock_get_xkb,
         mock_start_engine,
-        mock_time,
-        mock_socket_path,
+        mock_wait_ready,
         mock_ensure_dir,
     ):
-        """Covers the for/else warning branch: all 15 socket-readiness retries exhaust,
-        warning is logged, and activation proceeds anyway (graceful degradation)."""
+        """Readiness probe is invoked as part of setup before returning."""
         mock_start_engine.return_value = True
-        mock_socket_path.exists.return_value = False
         mock_is_active.return_value = False
         mock_get_engine.return_value = "xkb:us::eng"
         mock_switch.return_value = True
         mock_get_xkb.return_value = ("us", "", "")
+        mock_wait_ready.return_value = None
 
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
-        with self.assertLogs("vocalinux.text_injection.ibus_engine", level="WARNING") as log:
-            injector = IBusTextInjector(auto_activate=True)
+        injector = IBusTextInjector(auto_activate=True)
 
-        self.assertTrue(any("socket not ready" in msg for msg in log.output))
-        self.assertEqual(mock_socket_path.exists.call_count, 15)
-        self.assertEqual(mock_time.sleep.call_count, 15)
+        mock_wait_ready.assert_called_once_with()
         self.assertIsNotNone(injector)
 
 
@@ -292,6 +286,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine")
@@ -302,6 +297,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_get_current,
         mock_start_engine,
         mock_is_active,
+        mock_wait_ready,
         mock_socket_path,
         mock_ensure_dir,
     ):
@@ -311,6 +307,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine.return_value = True
         mock_get_current.return_value = "xkb:us::eng"
         mock_switch.return_value = True
+        mock_wait_ready.return_value = None
 
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
@@ -322,6 +319,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine.assert_called_once()
         # Should switch to vocalinux engine
         mock_switch.assert_called_once_with("vocalinux")
+        mock_wait_ready.assert_called_once_with()
         self.assertEqual(injector._previous_engine, "xkb:us::eng")
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
@@ -409,6 +407,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.get_current_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
@@ -422,6 +421,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_get_engine,
         mock_switch,
         mock_start_proc,
+        mock_wait_ready,
         mock_socket_path,
         mock_get_xkb,
         mock_restore_xkb,
@@ -431,6 +431,7 @@ class TestIBusTextInjector(unittest.TestCase):
 
         mock_socket_path.exists.return_value = True
         mock_get_xkb.return_value = ("fr", "azerty", "")
+        mock_wait_ready.return_value = None
 
         injector = IBusTextInjector(auto_activate=False)
         injector._setup_engine()
@@ -495,29 +496,69 @@ class TestIBusTextInjector(unittest.TestCase):
         server_sock.close()
         self.assertTrue(result)
 
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    def test_inject_text_engine_error(self, mock_ensure_dir):
-        """Test text injection when engine returns error."""
+    def test_inject_text_no_engine_retries_and_recovers(self, mock_ensure_dir, mock_switch):
+        """Test inject_text retries once on NO_ENGINE and succeeds on second attempt."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
-        # Create a mock server socket that returns error
         server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server_sock.bind(str(self.socket_path))
-        server_sock.listen(1)
+        server_sock.listen(2)
+
+        call_count = 0
 
         def handle_connection():
-            conn, _ = server_sock.accept()
-            with conn:
-                conn.recv(65536)
-                conn.sendall(b"NO_ENGINE")
+            nonlocal call_count
+            for _ in range(2):
+                conn, _ = server_sock.accept()
+                with conn:
+                    conn.recv(65536)
+                    call_count += 1
+                    if call_count == 1:
+                        conn.sendall(b"NO_ENGINE")
+                    else:
+                        conn.sendall(b"OK")
 
         server_thread = threading.Thread(target=handle_connection, daemon=True)
         server_thread.start()
 
         with patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH", self.socket_path):
-            injector = IBusTextInjector(auto_activate=False)
-            result = injector.inject_text("Hello")
+            with patch("vocalinux.text_injection.ibus_engine.time"):
+                injector = IBusTextInjector(auto_activate=False)
+                result = injector.inject_text("Hello")
+
+        server_sock.close()
+        self.assertTrue(result)
+        self.assertEqual(call_count, 2)
+        mock_switch.assert_called_with("vocalinux")
+
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_inject_text_no_engine_fails_after_retry(self, mock_ensure_dir, mock_switch):
+        """Test inject_text returns False when NO_ENGINE persists after retry."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server_sock.bind(str(self.socket_path))
+        server_sock.listen(2)
+
+        def handle_connection():
+            for _ in range(2):
+                conn, _ = server_sock.accept()
+                with conn:
+                    conn.recv(65536)
+                    conn.sendall(b"NO_ENGINE")
+
+        server_thread = threading.Thread(target=handle_connection, daemon=True)
+        server_thread.start()
+
+        with patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH", self.socket_path):
+            with patch("vocalinux.text_injection.ibus_engine.time"):
+                injector = IBusTextInjector(auto_activate=False)
+                result = injector.inject_text("Hello")
 
         server_sock.close()
         self.assertFalse(result)
@@ -541,6 +582,217 @@ class TestIBusTextInjector(unittest.TestCase):
             result = injector.inject_text("Hello")
 
         self.assertFalse(result)
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_process_running", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.time")
+    def test_inject_text_connection_refused_then_success(
+        self,
+        mock_time,
+        mock_process_running,
+        mock_start_engine,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Test retry behavior when first socket connect is refused."""
+        mock_socket_path.exists.return_value = True
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        with patch("socket.socket") as mock_socket_class:
+            socket_context = MagicMock()
+            mock_socket_class.return_value = socket_context
+
+            first_sock = MagicMock()
+            second_sock = MagicMock()
+            first_sock.connect.side_effect = ConnectionRefusedError("refused")
+            second_sock.connect.return_value = None
+            second_sock.recv.return_value = b"OK"
+            socket_context.__enter__.side_effect = [first_sock, second_sock]
+            socket_context.__exit__.return_value = False
+
+            injector = IBusTextInjector(auto_activate=False)
+            result = injector.inject_text("Hello")
+
+        self.assertTrue(result)
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
+    @patch(
+        "vocalinux.text_injection.ibus_engine.is_engine_process_running",
+        side_effect=[False, True, True],
+    )
+    @patch("vocalinux.text_injection.ibus_engine.time")
+    def test_inject_text_restarts_engine_when_not_running(
+        self,
+        mock_time,
+        mock_process_running,
+        mock_start_engine,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Test injector restarts the engine process when its socket is not ready."""
+        mock_socket_path.exists.side_effect = [False, True, True]
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        with patch("socket.socket") as mock_socket_class:
+            socket_context = MagicMock()
+            mock_socket_class.return_value = socket_context
+            sock = MagicMock()
+            sock.recv.return_value = b"OK"
+            socket_context.__enter__.return_value = sock
+            socket_context.__exit__.return_value = False
+
+            injector = IBusTextInjector(auto_activate=False)
+            result = injector.inject_text("Hello")
+
+        self.assertTrue(result)
+        mock_start_engine.assert_called_once()
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_process_running", return_value=False)
+    def test_inject_text_returns_false_when_engine_restart_fails(
+        self,
+        mock_process_running,
+        mock_start_engine,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Missing socket plus failed engine restart should abort cleanly."""
+        mock_socket_path.exists.return_value = False
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+        result = injector.inject_text("Hello")
+
+        self.assertFalse(result)
+        mock_start_engine.assert_called_once()
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_process_running", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.time")
+    def test_inject_text_socket_missing_until_final_attempt(
+        self,
+        mock_time,
+        mock_process_running,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Persistent missing socket should reach the final error branch."""
+        mock_socket_path.exists.return_value = False
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+        result = injector.inject_text("Hello")
+
+        self.assertFalse(result)
+        self.assertEqual(mock_socket_path.exists.call_count, 3)
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_process_running", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.time")
+    def test_inject_text_times_out_until_final_attempt(
+        self,
+        mock_time,
+        mock_process_running,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Repeated socket timeouts should exercise retry and terminal timeout branches."""
+        mock_socket_path.exists.return_value = True
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        with patch("socket.socket") as mock_socket_class:
+            socket_context = MagicMock()
+            sock = MagicMock()
+            sock.connect.side_effect = socket.timeout("slow")
+            socket_context.__enter__.return_value = sock
+            socket_context.__exit__.return_value = False
+            mock_socket_class.return_value = socket_context
+
+            injector = IBusTextInjector(auto_activate=False)
+            result = injector.inject_text("Hello")
+
+        self.assertFalse(result)
+        self.assertEqual(sock.connect.call_count, 3)
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_process_running", return_value=False)
+    def test_inject_text_connection_refused_aborts_when_restart_fails(
+        self,
+        mock_process_running,
+        mock_start_engine,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Connection refusal with a dead process should fail if restart fails."""
+        mock_socket_path.exists.return_value = True
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        with patch("socket.socket") as mock_socket_class:
+            socket_context = MagicMock()
+            sock = MagicMock()
+            sock.connect.side_effect = ConnectionRefusedError("refused")
+            socket_context.__enter__.return_value = sock
+            socket_context.__exit__.return_value = False
+            mock_socket_class.return_value = socket_context
+
+            injector = IBusTextInjector(auto_activate=False)
+            result = injector.inject_text("Hello")
+
+        self.assertFalse(result)
+        mock_start_engine.assert_called_once()
+
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_process_running", return_value=False)
+    def test_inject_text_socket_disappeared_aborts_when_restart_fails(
+        self,
+        mock_process_running,
+        mock_start_engine,
+        mock_socket_path,
+        mock_ensure_dir,
+    ):
+        """Socket disappearance with a dead process should fail if restart fails."""
+        mock_socket_path.exists.return_value = True
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        with patch("socket.socket") as mock_socket_class:
+            socket_context = MagicMock()
+            sock = MagicMock()
+            sock.connect.side_effect = FileNotFoundError("gone")
+            socket_context.__enter__.return_value = sock
+            socket_context.__exit__.return_value = False
+            mock_socket_class.return_value = socket_context
+
+            injector = IBusTextInjector(auto_activate=False)
+            result = injector.inject_text("Hello")
+
+        self.assertFalse(result)
+        mock_start_engine.assert_called_once()
 
 
 class TestTextInjectorWithIBus(unittest.TestCase):
@@ -1103,6 +1355,83 @@ class TestWaylandXkbLayoutSkipping(unittest.TestCase):
             from vocalinux.text_injection.ibus_engine import _is_wayland_session
 
             self.assertFalse(_is_wayland_session())
+
+
+class TestVocalinuxEngineDestroy(unittest.TestCase):
+    """Tests for VocalinuxEngine.do_destroy (layout switch resilience)."""
+
+    def test_do_destroy_clears_active_instance(self):
+        """Test destroy handler clears active instance when called on active engine."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        engine = object()
+        next_active = _handle_engine_destroy(
+            active_instance=engine,
+            current_instance=engine,
+            ibus_available=False,
+        )
+
+        self.assertIsNone(next_active)
+
+    def test_do_destroy_ignores_different_instance(self):
+        """Test destroy handler keeps active instance for different engine."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        active_engine = object()
+        old_engine = object()
+
+        next_active = _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=old_engine,
+            ibus_available=False,
+        )
+
+        self.assertIs(next_active, active_engine)
+
+    def test_do_destroy_calls_super_when_ibus_available(self):
+        """Test destroy handler calls parent destroy callback when IBus available."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        active_engine = object()
+        mock_super_destroy = MagicMock()
+
+        _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=object(),
+            ibus_available=True,
+            super_destroy=mock_super_destroy,
+        )
+
+        mock_super_destroy.assert_called_once()
+
+    def test_do_destroy_skips_super_when_ibus_unavailable(self):
+        """Test destroy handler skips parent destroy callback when IBus unavailable."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        mock_super_destroy = MagicMock()
+
+        _handle_engine_destroy(
+            active_instance=object(),
+            current_instance=object(),
+            ibus_available=False,
+            super_destroy=mock_super_destroy,
+        )
+
+        mock_super_destroy.assert_not_called()
+
+    def test_do_destroy_handles_missing_super_callback(self):
+        """Test destroy handler works when no parent destroy callback is provided."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        active_engine = object()
+        next_active = _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=active_engine,
+            ibus_available=True,
+            super_destroy=None,
+        )
+
+        self.assertIsNone(next_active)
 
 
 if __name__ == "__main__":

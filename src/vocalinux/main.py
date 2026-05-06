@@ -284,10 +284,6 @@ def main():
         logger.debug(f"Could not start IBus daemon: {e}")
 
     config_manager = ConfigManager()
-    initialize_logging()
-    logger.info("Logging system initialized")
-
-    config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
     audio_settings = config_manager.get_settings().get("audio", {})
 
@@ -347,6 +343,7 @@ def main():
 
     vad_sensitivity = saved_settings.get("vad_sensitivity", 3)
     silence_timeout = saved_settings.get("silence_timeout", 2.0)
+    stop_sound_guard_ms = saved_settings.get("stop_sound_guard_ms", 200)
     voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto
     audio_device_index = audio_settings.get("device_index", None)
 
@@ -365,6 +362,7 @@ def main():
             language=language,
             vad_sensitivity=vad_sensitivity,
             silence_timeout=silence_timeout,
+            stop_sound_guard_ms=stop_sound_guard_ms,
             voice_commands_enabled=voice_commands_enabled,
             audio_device_index=audio_device_index,
         )

@@ -333,40 +333,41 @@ class TestBufferManagement(unittest.TestCase):
         assert stats["buffer_limit"] == 1000
         assert stats["buffer_full_percentage"] == 0.2
 
-    def test_stop_recognition_small_buffer_clear(self):
-        """Test that small audio buffers are cleared on stop."""
+    def test_stop_recognition_small_buffer_preserved(self):
+        """Test that small audio buffers are still enqueued on stop."""
         manager = self._create_manager()
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
-        manager.audio_buffer = [b"small"]  # Less than 15 chunks
+        manager.audio_buffer = [b"small"]
         manager.audio_thread = MagicMock()
         manager.audio_thread.is_alive.return_value = False
         manager.recognition_thread = MagicMock()
         manager.recognition_thread.is_alive.return_value = False
 
-        with patch("vocalinux.ui.audio_feedback.play_stop_sound"):
-            manager.stop_recognition()
+        with patch.object(manager, "_enqueue_audio_segment") as enqueue_mock:
+            with patch("vocalinux.ui.audio_feedback.play_stop_sound"):
+                manager.stop_recognition()
 
-            # Buffer should be cleared
-            assert manager.audio_buffer == []
+                enqueue_mock.assert_called_once_with([b"small"])
+                assert manager.audio_buffer == []
 
     def test_stop_recognition_large_buffer_trim(self):
-        """Test that large buffers are trimmed on stop."""
+        """Test that large buffers are trimmed by the configured stop-sound guard."""
         manager = self._create_manager()
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
-        # Create buffer with 20 chunks
         manager.audio_buffer = [b"x" * 100 for _ in range(20)]
         manager.audio_thread = MagicMock()
         manager.audio_thread.is_alive.return_value = False
         manager.recognition_thread = MagicMock()
         manager.recognition_thread.is_alive.return_value = False
 
-        with patch.object(manager, "_enqueue_audio_segment"):
+        with patch.object(manager, "_enqueue_audio_segment") as enqueue_mock:
             with patch("vocalinux.ui.audio_feedback.play_stop_sound"):
                 manager.stop_recognition()
 
-                # Only first 5 chunks should remain (20 - 15 discarded)
+                trimmed_segment = enqueue_mock.call_args.args[0]
+                assert len(trimmed_segment) == 17
                 assert len(manager.audio_buffer) == 0  # Will be enqueued then cleared
 
 

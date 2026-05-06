@@ -3,7 +3,9 @@
 import os
 import subprocess
 import sys
+import threading
 import unittest
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -38,12 +40,19 @@ class TestDesktopEnvironmentEnum(unittest.TestCase):
         self.assertEqual(DesktopEnvironment.UNKNOWN.value, "unknown")
 
 
-def _make_injector(env):
+def _make_injector(env) -> Any:
     from vocalinux.text_injection.text_injector import TextInjector
 
-    obj = TextInjector.__new__(TextInjector)
+    obj = cast(Any, TextInjector.__new__(TextInjector))
     obj._ibus_injector = None
     obj.environment = env
+    obj._session_environment = env
+    obj._ibus_ready = False
+    obj._ibus_init_failed = False
+    obj._ibus_init_thread = None
+    obj._state_lock = threading.Lock()
+    obj._clipboard_tool_health = {}
+    obj._clipboard_timeout = 0.35
     return obj
 
 
@@ -288,6 +297,48 @@ class TestCopyToClipboard(unittest.TestCase):
             result = obj._copy_to_clipboard("hello")
             self.assertFalse(result)
 
+    def test_copy_timeout_marks_tool_unhealthy(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with (
+            patch(
+                "shutil.which",
+                side_effect=lambda name: (
+                    "/usr/bin/" + name if name in ("wl-copy", "xclip") else None
+                ),
+            ),
+            patch(
+                "subprocess.run",
+                side_effect=[subprocess.TimeoutExpired("wl-copy", timeout=0.35), MagicMock()],
+            ),
+        ):
+            result = obj._copy_to_clipboard("hello")
+
+        self.assertTrue(result)
+        self.assertEqual(obj._clipboard_tool_health, {"wl-copy": False, "xclip": True})
+
+    def test_copy_skips_unhealthy_tool(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        obj._clipboard_tool_health["wl-copy"] = False
+
+        with (
+            patch(
+                "shutil.which",
+                side_effect=lambda name: (
+                    "/usr/bin/" + name if name in ("wl-copy", "xclip") else None
+                ),
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
+            result = obj._copy_to_clipboard("hello")
+
+        self.assertTrue(result)
+        self.assertEqual(mock_run.call_args.args[0][0], "xclip")
+
 
 class TestShouldCopyToClipboard(unittest.TestCase):
     def test_should_copy(self):
@@ -313,6 +364,64 @@ class TestStop(unittest.TestCase):
 
         obj = _make_injector(DesktopEnvironment.X11)
         obj.stop()  # Should not raise
+
+
+class TestBackgroundIBusInitialization(unittest.TestCase):
+    def test_check_dependencies_starts_ibus_in_background(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with (
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                return_value=True,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.IBusTextInjector",
+                return_value=MagicMock(),
+            ),
+            patch.object(obj, "_start_ibus_initialization") as mock_start,
+            patch(
+                "shutil.which",
+                side_effect=lambda x: "/usr/bin/ydotool" if x == "ydotool" else None,
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            obj._check_dependencies()
+
+        mock_start.assert_called_once_with()
+        self.assertEqual(obj.environment, DesktopEnvironment.WAYLAND)
+        self.assertEqual(obj.wayland_tool, "ydotool")
+
+    def test_background_ibus_success_switches_environment(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        obj._ibus_injector = MagicMock()
+
+        obj._initialize_ibus_in_background()
+
+        self.assertTrue(obj._ibus_ready)
+        self.assertEqual(obj.environment, DesktopEnvironment.WAYLAND_IBUS)
+
+    def test_background_ibus_failure_preserves_fallback(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        obj._ibus_injector = MagicMock()
+        obj._ibus_injector._setup_engine.side_effect = RuntimeError("not ready")
+
+        obj._initialize_ibus_in_background()
+
+        self.assertFalse(obj._ibus_ready)
+        self.assertTrue(obj._ibus_init_failed)
+        self.assertEqual(obj.environment, DesktopEnvironment.WAYLAND)
 
 
 if __name__ == "__main__":
