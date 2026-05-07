@@ -1798,7 +1798,7 @@ class SpeechRecognitionManager:
             # is higher than 16 kHz (e.g. 48 kHz), resampling produces fewer
             # than 1024 samples per read (~341 at 48 kHz), so the buffer may
             # need several reads to fill a full 512-sample chunk.  This is
-            # expected — VAD decisions simply arrive less frequently (every
+            # expected -- VAD decisions simply arrive less frequently (every
             # ~128 ms instead of ~64 ms) with no impact on accuracy.
             silero_chunk_buf = np.array([], dtype=np.int16)
 
@@ -1883,7 +1883,7 @@ class SpeechRecognitionManager:
                             chunk_processed = True
 
                         # Map vad_sensitivity (1-5) to threshold:
-                        # 1 (least sensitive) → 0.8, 5 (most sensitive) → 0.3
+                        # 1 (least sensitive) -> 0.8, 5 (most sensitive) -> 0.3
                         try:
                             vad_sens = int(self.vad_sensitivity)
                             vad_sens = max(1, min(5, vad_sens))

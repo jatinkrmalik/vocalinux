@@ -283,6 +283,18 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 
 You can also configure settings through the graphical Settings dialog (right-click the tray icon).
 
+### Optional: Neural Voice Activity Detection
+
+Vocalinux ships with a Silero VAD model and uses it automatically when `onnxruntime` is available. Without it, recording falls back to the simpler amplitude-threshold VAD.
+
+To enable neural VAD:
+
+```bash
+pip install "vocalinux[vad]"
+```
+
+Restart Vocalinux after install. The Recognition tab in Settings shows which backend is active. The same `vad_sensitivity` (1-5) works for both -- it's mapped to a Silero probability threshold internally (1 = 0.8, 5 = 0.3).
+
 ## 🔧 Development Setup
 
 ```bash

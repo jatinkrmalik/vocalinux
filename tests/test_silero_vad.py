@@ -8,25 +8,35 @@ Covers:
 - Sensitivity-to-threshold mapping
 """
 
-from unittest.mock import MagicMock, patch
+import sys
 
-import numpy as np
-import pytest
+# Earlier test modules (test_recognition_manager_core.py etc.) install
+# `sys.modules["numpy"] = MagicMock()` at module load and don't restore it.
+# Pop the top-level reference so a fresh `import numpy` returns the real
+# package -- only the top level, leaving cached submodules in place to avoid
+# re-importing the numpy C extension (which raises "cannot load module more
+# than once per process").
+sys.modules.pop("numpy", None)
 
-from vocalinux.speech_recognition.silero_vad import (
+from unittest.mock import MagicMock, patch  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402
+
+from vocalinux.speech_recognition import silero_vad as _sv_mod  # noqa: E402
+from vocalinux.speech_recognition.silero_vad import (  # noqa: E402
     _CONTEXT_SIZE,
     SILERO_CHUNK_SIZE,
     SILERO_SAMPLE_RATE,
     SileroVAD,
+    is_silero_available,
     load_silero_vad,
 )
 
-# Detect if numpy was replaced by a MagicMock (upstream test modules do this).
-# When numpy is mocked, tests that need real array operations are skipped.
-_numpy_is_real = isinstance(getattr(np, "__version__", None), str)
-_skip_if_numpy_mocked = pytest.mark.skipif(
-    not _numpy_is_real, reason="numpy is mocked by another test module"
-)
+# silero_vad imported numpy when first loaded (likely with a mocked numpy
+# reference). Point its module-level `np` at the real numpy so SileroVAD
+# methods use real array operations.
+_sv_mod.np = np
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +57,6 @@ def _make_mock_session(prob=0.05):
 # ---------------------------------------------------------------------------
 
 
-@_skip_if_numpy_mocked
 class TestSileroVADProcess:
     """Test the process() method."""
 
@@ -71,7 +80,7 @@ class TestSileroVADProcess:
 
         chunk = np.zeros(SILERO_CHUNK_SIZE, dtype=np.int16)
         prob = vad.process(chunk)
-        assert prob == pytest.approx(0.42)
+        assert abs(prob - 0.42) < 1e-6
 
     def test_session_receives_correct_input_shape(self):
         """Session should receive (1, 512+64) float32 input."""
@@ -117,7 +126,6 @@ class TestSileroVADProcess:
         assert np.allclose(vad._context[0], expected)
 
 
-@_skip_if_numpy_mocked
 class TestSileroVADReset:
     """Test state reset between sessions."""
 
@@ -203,3 +211,34 @@ class TestLoadFallback:
         ):
             result = load_silero_vad()
             assert result is mock_vad
+
+
+class TestIsSileroAvailable:
+    """Cheap probe used by Settings UI to decide whether to show the install hint."""
+
+    def test_returns_false_without_onnxruntime(self):
+        with patch.dict(sys.modules, {"onnxruntime": None}):
+            assert is_silero_available() is False
+
+    def test_returns_false_when_model_missing(self):
+        # onnxruntime importable, but model file gone
+        ort_mod = MagicMock()
+        with (
+            patch.dict(sys.modules, {"onnxruntime": ort_mod}),
+            patch(
+                "vocalinux.speech_recognition.silero_vad.os.path.exists",
+                return_value=False,
+            ),
+        ):
+            assert is_silero_available() is False
+
+    def test_returns_true_when_both_present(self):
+        ort_mod = MagicMock()
+        with (
+            patch.dict(sys.modules, {"onnxruntime": ort_mod}),
+            patch(
+                "vocalinux.speech_recognition.silero_vad.os.path.exists",
+                return_value=True,
+            ),
+        ):
+            assert is_silero_available() is True
