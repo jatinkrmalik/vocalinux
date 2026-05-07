@@ -847,7 +847,7 @@ class SpeechRecognitionManager:
             self.state = RecognitionState.ERROR
             raise
 
-    def _build_whispercpp_model_kwargs(self, n_threads: int) -> dict:
+    def _build_whispercpp_model_kwargs(self, n_threads: int, backend: Optional[str] = None) -> dict:
         model_kwargs = {
             "n_threads": n_threads,
             "suppress_blank": True,
@@ -857,6 +857,8 @@ class SpeechRecognitionManager:
             "temperature": self.whispercpp_temperature,
             "temperature_inc": self.whispercpp_temperature_inc,
         }
+        if backend:
+            self._add_whispercpp_gpu_kwargs(model_kwargs, backend)
         if self.whispercpp_no_timestamps:
             model_kwargs["no_timestamps"] = True
         if self.whispercpp_no_context:
@@ -864,6 +866,30 @@ class SpeechRecognitionManager:
         if self.whispercpp_initial_prompt:
             model_kwargs["initial_prompt"] = self.whispercpp_initial_prompt
         return model_kwargs
+
+    def _add_whispercpp_gpu_kwargs(self, model_kwargs: dict, backend: str) -> None:
+        """Add supported pywhispercpp GPU arguments for the detected backend."""
+        from ..utils.whispercpp_model_info import ComputeBackend
+
+        if backend == ComputeBackend.CPU:
+            model_kwargs["use_gpu"] = False
+            return
+
+        # pywhispercpp mirrors whisper.cpp/llama.cpp bindings across releases, and
+        # parameter names vary.  Add the common GPU switches here; unsupported keys
+        # are removed by _filter_whispercpp_model_kwargs before construction.
+        model_kwargs.update(
+            {
+                "use_gpu": True,
+                "gpu_device": 0,
+                "n_gpu_layers": 999,
+            }
+        )
+
+        if backend == ComputeBackend.VULKAN:
+            os.environ.setdefault("GGML_VULKAN", "1")
+        elif backend == ComputeBackend.CUDA:
+            os.environ.setdefault("GGML_CUDA", "1")
 
     def _get_supported_whispercpp_params(self) -> Optional[set[str]]:
         """Return params supported by the active pywhispercpp native binding."""
@@ -901,6 +927,9 @@ class SpeechRecognitionManager:
                 "temperature_inc",
                 "no_context",
                 "initial_prompt",
+                "use_gpu",
+                "gpu_device",
+                "n_gpu_layers",
             }
 
         compatible_kwargs = {}
@@ -966,7 +995,7 @@ class SpeechRecognitionManager:
         load_start_time = time.time()
         loaded_backend = backend
 
-        model_kwargs = self._build_whispercpp_model_kwargs(n_threads)
+        model_kwargs = self._build_whispercpp_model_kwargs(n_threads, backend)
 
         # Attempt to load model; filter unsupported params and fall back to CPU if needed
         try:
@@ -1016,10 +1045,15 @@ class SpeechRecognitionManager:
             "Your GPU doesn't support whisper.cpp Vulkan.\n" "Switched to CPU mode - still fast!",
             "dialog-information",
         )
-        # Force CPU backend by disabling GPU backends
+        # Force CPU backend by disabling GPU backends and removing GPU-specific
+        # constructor arguments from the retry.
         os.environ["GGML_VULKAN"] = "0"
         os.environ["GGML_CUDA"] = "0"
-        self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
+        cpu_kwargs = dict(model_kwargs)
+        cpu_kwargs.pop("gpu_device", None)
+        cpu_kwargs.pop("n_gpu_layers", None)
+        cpu_kwargs["use_gpu"] = False
+        self.model = self._load_model_with_compatible_params(model_path, cpu_kwargs)
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
 

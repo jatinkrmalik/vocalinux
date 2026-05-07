@@ -69,14 +69,8 @@ def detect_vulkan_support() -> tuple[bool, Optional[str]]:
     Returns:
         Tuple of (is_available, device_name)
     """
-    """
-    Detect if Vulkan is available and get device info.
-
-    Returns:
-        Tuple of (is_available, device_name)
-    """
     try:
-        # Check for vulkaninfo command
+        # Prefer vulkaninfo when it is available because it can name the device.
         result = subprocess.run(
             ["vulkaninfo", "--summary"],
             capture_output=True,
@@ -84,7 +78,6 @@ def detect_vulkan_support() -> tuple[bool, Optional[str]]:
             timeout=5,
         )
         if result.returncode == 0:
-            # Try to extract GPU name from output
             for line in result.stdout.split("\n"):
                 if "deviceName" in line or "GPU" in line:
                     device_name = line.split(":")[-1].strip()
@@ -94,7 +87,21 @@ def detect_vulkan_support() -> tuple[bool, Optional[str]]:
             logger.info("Vulkan support detected")
             return True, "Vulkan GPU"
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-        logger.debug(f"Vulkan detection failed: {e}")
+        logger.debug(f"vulkaninfo detection failed: {e}")
+
+    # Flatpak generally exposes render nodes through --device=dri, but may not
+    # include vulkaninfo. Treat render nodes as a GPU-capable hint so the
+    # Vulkan-enabled whisper.cpp build gets a chance to initialize, with safe
+    # fallback to CPU handled during model load.
+    render_dir = "/dev/dri"
+    try:
+        if os.path.isdir(render_dir) and any(
+            name.startswith("renderD") for name in os.listdir(render_dir)
+        ):
+            logger.info("Vulkan-capable DRI render node detected")
+            return True, "DRI render node"
+    except OSError as e:
+        logger.debug(f"DRI render node detection failed: {e}")
 
     return False, None
 

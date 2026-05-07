@@ -86,7 +86,10 @@ def check_dependencies():
             "GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)"
         )
 
-    # Check for AppIndicator3 / Ayatana AppIndicator
+    # Check for AppIndicator3 / Ayatana AppIndicator.  The tray is a core part of the
+    # application UX, so startup should fail when neither typelib is available.  A
+    # missing StatusNotifierWatcher is handled separately because the app can still
+    # run while the desktop integration is being fixed.
     try:
         import gi
 
@@ -99,9 +102,9 @@ def check_dependencies():
             gi.require_version("AyatanaAppIndicator3", "0.1")
             from gi.repository import AyatanaAppIndicator3  # noqa: F401
         except (ImportError, ValueError):
-            logger.warning(
-                "AppIndicator3/AyatanaAppIndicator3 not available - "
-                "system tray icon will be disabled"
+            missing_system_deps.append(
+                "AppIndicator3/AyatanaAppIndicator3 "
+                "(install with: sudo apt install gir1.2-ayatanaappindicator3-0.1)"
             )
 
     # pynput is used for keyboard detection but we check at module startup

@@ -56,6 +56,11 @@ ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
 FLATPAK_ICON_PREFIX = os.environ.get("FLATPAK_ID")
 FLATPAK_ICON_DIR = "/app/share/icons/hicolor/scalable/apps"
+FLATPAK_ICON_SUFFIXES = {
+    "default": "microphone-off",
+    "active": "microphone",
+    "processing": "microphone-process",
+}
 
 # /dev/input settle-detection tuning (used after resume)
 _INPUT_SETTLE_SECONDS = 2
@@ -104,17 +109,7 @@ class TrayIndicator:
             "active": _resource_manager.get_icon_path(ACTIVE_ICON),
             "processing": _resource_manager.get_icon_path(PROCESSING_ICON),
         }
-        self.icon_names = {
-            "default": DEFAULT_ICON,
-            "active": ACTIVE_ICON,
-            "processing": PROCESSING_ICON,
-        }
-        if FLATPAK_ICON_PREFIX:
-            self.icon_names = {
-                "default": f"{FLATPAK_ICON_PREFIX}-microphone-off",
-                "active": f"{FLATPAK_ICON_PREFIX}-microphone",
-                "processing": f"{FLATPAK_ICON_PREFIX}-microphone-process",
-            }
+        self.icon_names = self._build_icon_names()
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -133,6 +128,32 @@ class TrayIndicator:
 
         # Set up keyboard shortcuts with mode support
         self._setup_keyboard_shortcuts()
+
+    @staticmethod
+    def _build_icon_names() -> dict[str, str]:
+        """Return icon names visible to the current runtime."""
+        package_names = {
+            "default": DEFAULT_ICON,
+            "active": ACTIVE_ICON,
+            "processing": PROCESSING_ICON,
+        }
+        if not FLATPAK_ICON_PREFIX:
+            return package_names
+
+        icon_names = {}
+        for key, suffix in FLATPAK_ICON_SUFFIXES.items():
+            exported_name = f"{FLATPAK_ICON_PREFIX}-{suffix}"
+            exported_path = os.path.join(FLATPAK_ICON_DIR, f"{exported_name}.svg")
+            if os.path.exists(exported_path):
+                icon_names[key] = exported_name
+            else:
+                logger.warning(
+                    "Flatpak exported icon missing: %s; falling back to bundled icon name %s",
+                    exported_path,
+                    package_names[key],
+                )
+                icon_names[key] = package_names[key]
+        return icon_names
 
     def _setup_keyboard_shortcuts(self):
         """Set up keyboard shortcuts based on configured mode."""
@@ -225,6 +246,7 @@ class TrayIndicator:
                 icon_theme_path,
             )
             self.indicator.set_icon_theme_path(icon_theme_path)
+            self._set_indicator_icon("default", "Microphone off")
             self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         except Exception as e:
             logger.error(f"Failed to create AppIndicator: {e}")

@@ -9,10 +9,10 @@ modules:
       - tar -xzf pywhispercpp-1.4.1.tar.gz
       - python3 -c "from pathlib import Path; p = Path('pywhispercpp-1.4.1/setup.py'); s = p.read_text(); p.write_text(s.replace('setup(\\n    name=\"pywhispercpp\",', 'setup(\\n    name=\"pywhispercpp\",\\n    version=\"1.4.1\",'))"
       - tar -czf pywhispercpp-1.4.1.tar.gz pywhispercpp-1.4.1
-      - PYWHISPERCPP_VERSION=1.4.1 NO_REPAIR=1 pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}"
+      - PYWHISPERCPP_VERSION=1.4.1 NO_REPAIR=1 GGML_VULKAN=1 pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}"
         --prefix=${FLATPAK_DEST} "pywhispercpp" --no-build-isolation
-      - for lib in libggml.so libggml-base.so libggml-cpu.so libwhisper.so libwhisper.so.1
-        libwhisper.so.1.8.2; do ln -sf "python3.13/site-packages/${lib}" "${FLATPAK_DEST}/lib/${lib}";
+      - for lib in libggml.so libggml-base.so libggml-cpu.so libggml-vulkan.so libwhisper.so
+        libwhisper.so.1 libwhisper.so.1.8.2; do test ! -e "python3.13/site-packages/${lib}" || ln -sf "python3.13/site-packages/${lib}" "${FLATPAK_DEST}/lib/${lib}";
         done
     sources:
       - &id002
