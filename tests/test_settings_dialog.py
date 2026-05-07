@@ -348,7 +348,7 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         # _show_settings_applied_message was removed as part of instant-apply pattern
         self.assertFalse(hasattr(SettingsDialog, "_show_settings_applied_message"))
 
-    def test_advanced_initial_prompt_applies_on_focus_out(self):
+    def test_advanced_initial_prompt_defers_auto_apply_while_typing(self):
         import os
 
         source_path = os.path.join(
@@ -362,10 +362,138 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         with open(source_path, "r") as f:
             source_code = f.read()
 
-        self.assertIn('"focus-out-event", self._on_advanced_prompt_focus_out', source_code)
+        self.assertNotIn("focus-out-event", source_code)
         self.assertNotIn(
             'advanced_initial_prompt_buffer.connect("changed", self._on_advanced_param_changed)',
             source_code,
+        )
+        self.assertIn(
+            'advanced_initial_prompt_buffer.connect("changed", self._on_advanced_prompt_changed)',
+            source_code,
+        )
+        self.assertIn("def _flush_advanced_prompt_if_dirty", source_code)
+        self.assertIn("self._advanced_prompt_dirty = True", source_code)
+        self.assertIn("self._flush_advanced_prompt_if_dirty()", source_code)
+
+    def test_advanced_initial_prompt_has_help_tooltip(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("initial_prompt_help", source_code)
+        self.assertIn("Leave blank for normal dictation.", source_code)
+        self.assertIn("prompt_scrolled.set_tooltip_text(initial_prompt_help)", source_code)
+        self.assertIn("initial_prompt_row.set_tooltip_text(initial_prompt_help)", source_code)
+
+    def test_advanced_panel_has_reset_to_defaults_button(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn('Gtk.Button(label="Reset to Defaults")', source_code)
+        self.assertIn('"clicked", self._on_reset_advanced_clicked', source_code)
+        self.assertIn("def _on_reset_advanced_clicked(self, widget):", source_code)
+        self.assertIn('defaults = DEFAULT_CONFIG["advanced"]', source_code)
+        self.assertIn("self.advanced_reset_button", source_code)
+        self.assertIn(
+            "action_area.set_child_secondary(self.advanced_reset_button, True)", source_code
+        )
+        self.assertNotIn("reset_box.pack_start(self.advanced_reset_button", source_code)
+
+    def test_advanced_reset_button_is_contextual_footer_action(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("self.advanced_page_num = notebook.append_page", source_code)
+        self.assertIn(
+            'notebook.connect("switch-page", self._on_settings_page_switched)', source_code
+        )
+        self.assertIn("def _update_advanced_reset_button_visibility", source_code)
+        self.assertIn(
+            "self.advanced_reset_button.set_visible(page_num == self.advanced_page_num)",
+            source_code,
+        )
+
+    def test_advanced_panel_omits_unsupported_non_speech_token_setting(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertNotIn("Suppress Non-Speech Tokens", source_code)
+        self.assertNotIn("advanced_suppress_nst_switch", source_code)
+
+    def test_close_button_uses_dialog_padding(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("action_area = self.get_action_area()", source_code)
+        self.assertIn("action_area.set_margin_start(16)", source_code)
+        self.assertIn("action_area.set_margin_end(16)", source_code)
+
+    def test_advanced_disclaimer_appears_before_controls(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertLess(
+            source_code.index("controls_box.pack_start(info_box"),
+            source_code.index("controls_box.pack_start(group"),
         )
 
 

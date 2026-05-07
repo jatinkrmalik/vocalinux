@@ -59,7 +59,6 @@ DEFAULT_CONFIG = {
         "debug_logging": False,
         "wayland_mode": False,
         "whispercpp_no_timestamps": True,
-        "whispercpp_suppress_nst": True,
         "whispercpp_no_context": True,
         "whispercpp_initial_prompt": "",
         "whispercpp_temperature": 0.0,

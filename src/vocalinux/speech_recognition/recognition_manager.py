@@ -558,7 +558,6 @@ class SpeechRecognitionManager:
 
         # whisper.cpp advanced parameters
         self.whispercpp_no_timestamps = kwargs.get("whispercpp_no_timestamps", True)
-        self.whispercpp_suppress_nst = kwargs.get("whispercpp_suppress_nst", True)
         self.whispercpp_no_context = kwargs.get("whispercpp_no_context", True)
         self.whispercpp_initial_prompt = kwargs.get("whispercpp_initial_prompt", "")
         self.whispercpp_temperature = kwargs.get("whispercpp_temperature", 0.0)
@@ -856,8 +855,6 @@ class SpeechRecognitionManager:
         }
         if self.whispercpp_no_timestamps:
             model_kwargs["no_timestamps"] = True
-        if self.whispercpp_suppress_nst:
-            model_kwargs["suppress_non_speech_tokens"] = True
         if self.whispercpp_no_context:
             model_kwargs["no_context"] = True
         if self.whispercpp_initial_prompt:
@@ -2157,7 +2154,6 @@ class SpeechRecognitionManager:
 
         for param_name in (
             "whispercpp_no_timestamps",
-            "whispercpp_suppress_nst",
             "whispercpp_no_context",
             "whispercpp_initial_prompt",
             "whispercpp_temperature",

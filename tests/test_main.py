@@ -223,7 +223,6 @@ class TestMainModule(unittest.TestCase):
                 voice_commands_enabled=None,
                 audio_device_index=None,
                 whispercpp_no_timestamps=True,
-                whispercpp_suppress_nst=True,
                 whispercpp_no_context=True,
                 whispercpp_initial_prompt="",
                 whispercpp_temperature=0.0,

@@ -538,7 +538,6 @@ class TestWhispercppModelKwargs(unittest.TestCase):
         mgr = _make_manager(engine="whisper_cpp")
         kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
         self.assertTrue(kwargs.get("no_timestamps"))
-        self.assertTrue(kwargs.get("suppress_non_speech_tokens"))
         self.assertTrue(kwargs.get("no_context"))
         self.assertNotIn("initial_prompt", kwargs)
         self.assertEqual(kwargs.get("temperature"), 0.0)
@@ -548,12 +547,10 @@ class TestWhispercppModelKwargs(unittest.TestCase):
         mgr = _make_manager(
             engine="whisper_cpp",
             whispercpp_no_timestamps=False,
-            whispercpp_suppress_nst=False,
             whispercpp_no_context=False,
         )
         kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
         self.assertNotIn("no_timestamps", kwargs)
-        self.assertNotIn("suppress_non_speech_tokens", kwargs)
         self.assertNotIn("no_context", kwargs)
 
     def test_model_kwargs_with_initial_prompt(self):
@@ -601,7 +598,6 @@ class TestWhispercppModelKwargs(unittest.TestCase):
         )
 
         self.assertNotIn("no_timestamps", filtered)
-        self.assertNotIn("suppress_non_speech_tokens", filtered)
         self.assertEqual(filtered["n_threads"], 4)
         self.assertTrue(filtered["no_context"])
 

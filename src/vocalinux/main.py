@@ -368,7 +368,6 @@ def main():
             voice_commands_enabled=voice_commands_enabled,
             audio_device_index=audio_device_index,
             whispercpp_no_timestamps=advanced_settings.get("whispercpp_no_timestamps", True),
-            whispercpp_suppress_nst=advanced_settings.get("whispercpp_suppress_nst", True),
             whispercpp_no_context=advanced_settings.get("whispercpp_no_context", True),
             whispercpp_initial_prompt=advanced_settings.get("whispercpp_initial_prompt", ""),
             whispercpp_temperature=advanced_settings.get("whispercpp_temperature", 0.0),

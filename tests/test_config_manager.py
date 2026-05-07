@@ -536,7 +536,6 @@ class TestTypedAccessors(unittest.TestCase):
         advanced = DEFAULT_CONFIG["advanced"]
         self.assertFalse(advanced["power_user_mode"])
         self.assertTrue(advanced["whispercpp_no_timestamps"])
-        self.assertTrue(advanced["whispercpp_suppress_nst"])
         self.assertTrue(advanced["whispercpp_no_context"])
         self.assertEqual(advanced["whispercpp_initial_prompt"], "")
         self.assertEqual(advanced["whispercpp_temperature"], 0.0)
