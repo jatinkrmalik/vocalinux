@@ -151,7 +151,18 @@ class TestTranscriptBufferOverlap(unittest.TestCase):
     def test_diverging_text_resets_buffer(self):
         self.buf.insert("hello world")
         self.buf.insert("goodbye moon")
+        self.assertEqual(self.buf.flush(), "hello world")
+        self.assertEqual(self.buf.committed_text, "hello world")
         self.assertEqual(self.buf.pending_text, "goodbye moon")
+
+    def test_diverging_stream_commits_previous_pending_with_one_chunk_latency(self):
+        self.buf.insert("So let's try again.")
+        self.assertIsNone(self.buf.flush())
+
+        self.buf.insert("Again, I'm trying to speak.")
+
+        self.assertEqual(self.buf.flush(), "So let's try again.")
+        self.assertEqual(self.buf.pending_text, "Again, I'm trying to speak.")
 
 
 class TestTranscriptBufferCaseInsensitive(unittest.TestCase):

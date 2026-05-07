@@ -467,6 +467,19 @@ class TestProcessStreamingWhisper(unittest.TestCase):
         self.mgr._process_streaming_whisper([b"\x00\x00"], False)
         self.assertTrue(self.cb.called)
 
+    def test_divergent_whisper_cpp_chunk_emits_previous_pending_text(self):
+        self.mgr.engine = "whisper_cpp"
+        self.mgr._transcribe_with_whispercpp = MagicMock(return_value="So let's try again.")
+        self.mgr._process_streaming_whisper([b"\x00\x00"], False)
+        self.mgr._emit_text.assert_not_called()
+
+        self.mgr._transcribe_with_whispercpp.return_value = "Again, I'm trying to speak."
+        self.mgr._process_streaming_whisper([b"\x00\x00"], False)
+
+        self.mgr._emit_text.assert_called_once_with("So let's try again.")
+        self.assertEqual(self.cb.call_args_list[-1].args, ("Again, I'm trying to speak.",))
+        self.assertFalse(self.cb.call_args_list[-1].kwargs["is_final"])
+
     def test_is_final_flushes_all_and_resets_buffer(self):
         self.mgr.engine = "whisper_cpp"
         self.mgr._transcribe_with_whispercpp = MagicMock(return_value="hello")

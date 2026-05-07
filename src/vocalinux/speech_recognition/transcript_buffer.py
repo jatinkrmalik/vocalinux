@@ -41,6 +41,7 @@ class TranscriptBuffer:
 
         self._insert_count += 1
 
+        had_committed_tail_overlap = False
         if self._committed_words and new_words:
             max_check = min(len(self._committed_words), len(new_words), 5)
             for i in range(1, max_check + 1):
@@ -48,6 +49,7 @@ class TranscriptBuffer:
                 new_head = " ".join(new_words[:i]).lower()
                 if committed_tail == new_head:
                     new_words = new_words[i:]
+                    had_committed_tail_overlap = True
                     break
 
         confirmed = []
@@ -64,6 +66,14 @@ class TranscriptBuffer:
             self._buffer_words = self._buffer_words[len(confirmed) :]
             new_words = new_words[len(confirmed) :]
             logger.debug(f"Committed {len(confirmed)} words: {' '.join(confirmed)}")
+        elif self._buffer_words and new_words and not had_committed_tail_overlap:
+            # Whisper/whisper.cpp may produce sequential, non-overlapping chunks
+            # instead of revised hypotheses for the same window. Once a new
+            # unrelated hypothesis arrives, commit the previous pending words so
+            # streaming dictation advances instead of waiting until final stop.
+            self._committed_words.extend(self._buffer_words)
+            logger.debug(f"Committed stale pending words: {' '.join(self._buffer_words)}")
+            self._buffer_words = []
 
         self._buffer_words = new_words
         self._new_words = new_words
