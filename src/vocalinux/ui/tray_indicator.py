@@ -44,7 +44,7 @@ from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog
 
 # Define constants
-APP_ID = "vocalinux"
+APP_ID = os.environ.get("FLATPAK_ID", "vocalinux")
 
 # Initialize resource manager
 _resource_manager = ResourceManager()
@@ -54,6 +54,8 @@ ICON_DIR = _resource_manager.icons_dir
 DEFAULT_ICON = "vocalinux-microphone-off"
 ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
+FLATPAK_ICON_PREFIX = os.environ.get("FLATPAK_ID")
+FLATPAK_ICON_DIR = "/app/share/icons/hicolor/scalable/apps"
 
 # /dev/input settle-detection tuning (used after resume)
 _INPUT_SETTLE_SECONDS = 2
@@ -107,6 +109,12 @@ class TrayIndicator:
             "active": ACTIVE_ICON,
             "processing": PROCESSING_ICON,
         }
+        if FLATPAK_ICON_PREFIX:
+            self.icon_names = {
+                "default": f"{FLATPAK_ICON_PREFIX}-microphone-off",
+                "active": f"{FLATPAK_ICON_PREFIX}-microphone",
+                "processing": f"{FLATPAK_ICON_PREFIX}-microphone-process",
+            }
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -187,27 +195,36 @@ class TrayIndicator:
             logger.warning("AppIndicator is not available; continuing without a tray icon")
             return False
 
-        # Log the icon directory path
-        logger.info(f"Using icon directory: {ICON_DIR}")
-        logger.info(f"Icon directory exists: {os.path.exists(ICON_DIR)}")
+        icon_theme_path = FLATPAK_ICON_DIR if FLATPAK_ICON_PREFIX else ICON_DIR
 
-        # List available icon files and check if they exist
-        if os.path.exists(ICON_DIR):
-            icon_files = os.listdir(ICON_DIR)
+        # Log the icon directory path
+        logger.info(f"Using icon directory: {icon_theme_path}")
+        logger.info(f"Icon directory exists: {os.path.exists(icon_theme_path)}")
+
+        # List available themed icons and check if packaged resource icons exist.
+        if os.path.exists(icon_theme_path):
+            icon_files = os.listdir(icon_theme_path)
             logger.info(f"Available icon files: {icon_files}")
 
+        if os.path.exists(ICON_DIR):
             for name, path in self.icon_paths.items():
                 exists = os.path.exists(path)
                 logger.info(f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}")
 
         try:
+            default_icon_name = getattr(self, "icon_names", {}).get("default")
+            if not default_icon_name:
+                default_icon_name = (
+                    f"{FLATPAK_ICON_PREFIX}-microphone-off" if FLATPAK_ICON_PREFIX else DEFAULT_ICON
+                )
+
             self.indicator = AppIndicator3.Indicator.new_with_path(
                 APP_ID,
-                DEFAULT_ICON,
+                default_icon_name,
                 AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
-                ICON_DIR,
+                icon_theme_path,
             )
-            self.indicator.set_icon_theme_path(ICON_DIR)
+            self.indicator.set_icon_theme_path(icon_theme_path)
             self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         except Exception as e:
             logger.error(f"Failed to create AppIndicator: {e}")
@@ -447,8 +464,10 @@ class TrayIndicator:
 
     def _set_indicator_icon(self, icon_key: str, description: str) -> None:
         """Set the tray icon using the most reliable format for the runtime."""
-        if os.environ.get("FLATPAK_ID") and os.path.exists(self.icon_paths[icon_key]):
-            self.indicator.set_icon(self.icon_paths[icon_key])
+        if FLATPAK_ICON_PREFIX and hasattr(self.indicator, "set_icon_full"):
+            self.indicator.set_icon_full(self.icon_names[icon_key], description)
+        elif FLATPAK_ICON_PREFIX:
+            self.indicator.set_icon(self.icon_names[icon_key])
         elif hasattr(self.indicator, "set_icon_full"):
             self.indicator.set_icon_full(self.icon_names[icon_key], description)
         else:

@@ -361,6 +361,26 @@ class TestTrayIndicator(unittest.TestCase):
         )
         self.assertEqual(result, False)
 
+    def test_flatpak_icons_use_exported_icon_names(self):
+        """Flatpak tray icons must use host-visible exported icon names."""
+        modules_to_remove = [k for k in list(sys.modules.keys()) if "tray_indicator" in k]
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        with patch.dict(os.environ, {"FLATPAK_ID": "com.vocalinux.Vocalinux"}):
+            from vocalinux.ui.tray_indicator import TrayIndicator
+
+            tray = TrayIndicator.__new__(TrayIndicator)
+            tray.indicator = MagicMock()
+            tray.icon_names = {
+                "active": "com.vocalinux.Vocalinux-microphone",
+            }
+            TrayIndicator._set_indicator_icon(tray, "active", "Microphone on")
+
+        tray.indicator.set_icon_full.assert_called_once_with(
+            "com.vocalinux.Vocalinux-microphone", "Microphone on"
+        )
+
     def test_set_menu_item_enabled(self):
         """Test _set_menu_item_enabled finds and sets menu item sensitivity."""
         with patch("vocalinux.ui.tray_indicator.Gtk") as patched_gtk:

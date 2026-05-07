@@ -52,7 +52,7 @@ def _make_injector(env) -> Any:
     obj._ibus_init_thread = None
     obj._state_lock = threading.Lock()
     obj._clipboard_tool_health = {}
-    obj._clipboard_timeout = 0.35
+    obj._clipboard_timeout = 2.0
     return obj
 
 
@@ -92,6 +92,23 @@ class TestDetectEnvironment(unittest.TestCase):
                     ):
                         result = obj._detect_environment()
                         self.assertIn(result, [DesktopEnvironment.X11, DesktopEnvironment.X11_IBUS])
+
+    def test_flatpak_wayland_session_without_wayland_socket_uses_x11(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        with patch.dict(
+            os.environ,
+            {
+                "FLATPAK_ID": "com.vocalinux.Vocalinux",
+                "XDG_SESSION_TYPE": "wayland",
+                "DISPLAY": ":0",
+            },
+            clear=True,
+        ):
+            result = obj._detect_environment()
+
+        self.assertEqual(result, DesktopEnvironment.X11)
 
     # IBus detection tests removed due to test-ordering mock pollution issues
 
@@ -278,6 +295,25 @@ class TestShortcutWithWaylandTool(unittest.TestCase):
 
 
 class TestCopyToClipboard(unittest.TestCase):
+    def test_wl_copy_uses_stdin_and_closed_pipes(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        with (
+            patch(
+                "shutil.which",
+                side_effect=lambda name: "/usr/bin/wl-copy" if name == "wl-copy" else None,
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
+            result = obj._copy_to_clipboard("hello")
+
+        self.assertTrue(result)
+        self.assertEqual(mock_run.call_args.args[0], ["wl-copy"])
+        self.assertEqual(mock_run.call_args.kwargs["input"], "hello")
+        self.assertEqual(mock_run.call_args.kwargs["stdout"], subprocess.DEVNULL)
+        self.assertEqual(mock_run.call_args.kwargs["stderr"], subprocess.DEVNULL)
+
     def test_copy_success(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 

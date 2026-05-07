@@ -58,7 +58,7 @@ class TextInjector:
         self._ibus_init_thread: Optional[threading.Thread] = None
         self._state_lock = threading.Lock()
         self._clipboard_tool_health = {}
-        self._clipboard_timeout = 0.35
+        self._clipboard_timeout = 2.0
 
         # Force Wayland mode if requested
         if wayland_mode and self.environment == DesktopEnvironment.X11:
@@ -127,15 +127,20 @@ class TextInjector:
             The detected desktop environment
         """
         session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        wayland_display = os.environ.get("WAYLAND_DISPLAY")
+        x11_display = os.environ.get("DISPLAY")
         if session_type == "wayland":
+            if os.environ.get("FLATPAK_ID") and not wayland_display and x11_display:
+                logger.info("Flatpak is running with X11 access only; using X11 text injection")
+                return DesktopEnvironment.X11
             return DesktopEnvironment.WAYLAND
         elif session_type == "x11":
             return DesktopEnvironment.X11
         else:
             # Try to detect based on other methods
-            if "WAYLAND_DISPLAY" in os.environ:
+            if wayland_display:
                 return DesktopEnvironment.WAYLAND
-            elif "DISPLAY" in os.environ:
+            elif x11_display:
                 return DesktopEnvironment.X11
             else:
                 logger.warning("Could not detect desktop environment, defaulting to X11")
@@ -294,9 +299,11 @@ class TextInjector:
     def _run_clipboard_command(self, tool: str, text: str) -> bool:
         if tool == "wl-copy":
             subprocess.run(
-                ["wl-copy", text],
+                ["wl-copy"],
+                input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -307,7 +314,8 @@ class TextInjector:
                 ["xclip", "-selection", "clipboard"],
                 input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -318,7 +326,8 @@ class TextInjector:
                 ["xsel", "--clipboard", "--input"],
                 input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -496,8 +505,8 @@ class TextInjector:
                 logger.warning(f"{tool} failed: {e}")
 
         logger.warning(
-            "Clipboard copy failed. Install wl-copy (Wayland) or xclip/xsel "
-            "to enable clipboard functionality."
+            "Clipboard copy failed. Make sure wl-copy (Wayland) or xclip/xsel "
+            "is installed and can access the session clipboard."
         )
         return False
 

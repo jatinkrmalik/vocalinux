@@ -12,8 +12,7 @@ build-options:
 finish-args:
   - --share=network
   - --share=ipc
-  - --socket=fallback-x11
-  - --socket=wayland
+  - --socket=x11
   - --socket=pulseaudio
   - --device=dri
   - --talk-name=org.freedesktop.IBus
@@ -42,25 +41,19 @@ modules:
 
   - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
 
-  - name: wtype
-    buildsystem: meson
-    config-opts:
-      - --prefix=/app
+  - name: xsel
+    buildsystem: simple
+    build-commands:
+      - autoreconf -fi
+      - ./configure --prefix=/app
+      - make
+      - make install
+    cleanup:
+      - /share/man
     sources:
       - type: archive
-        url: https://github.com/atx/wtype/archive/refs/tags/v0.4.tar.gz
-        sha256: da91786d828b6a6e29b884bc510473939eda052658ebef87d7bdeafa6a8746f9
-
-  - name: wl-clipboard
-    buildsystem: meson
-    config-opts:
-      - --prefix=/app
-      - -Dfishcompletiondir=no
-      - -Dzshcompletiondir=no
-    sources:
-      - type: archive
-        url: https://github.com/bugaevc/wl-clipboard/archive/refs/tags/v2.2.1.tar.gz
-        sha256: 6eb8081207fb5581d1d82c4bcd9587205a31a3d47bea3ebeb7f41aa1143783eb
+        url: https://github.com/kfish/xsel/archive/refs/tags/1.2.1.tar.gz
+        sha256: 18487761f5ca626a036d65ef2db8ad9923bf61685e06e7533676c56d7d60eb14
 
   - name: xdotool
     buildsystem: simple
@@ -81,6 +74,9 @@ modules:
       - pip3 install --no-deps --no-build-isolation --prefix=/app .
       - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.desktop -t /app/share/applications/
       - install -Dm644 resources/icons/scalable/vocalinux.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux.svg
+      - install -Dm644 resources/icons/scalable/vocalinux-microphone-off.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux-microphone-off.svg
+      - install -Dm644 resources/icons/scalable/vocalinux-microphone.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux-microphone.svg
+      - install -Dm644 resources/icons/scalable/vocalinux-microphone-process.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux-microphone-process.svg
       - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.metainfo.xml -t /app/share/metainfo/
     sources:
       - type: dir

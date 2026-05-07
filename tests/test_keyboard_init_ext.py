@@ -33,6 +33,17 @@ class TestDesktopEnvironmentDetect:
             result = DesktopEnvironment.detect()
             assert result == DesktopEnvironment.WAYLAND
 
+    def test_detect_flatpak_x11_only_wayland_session(self):
+        """Flatpak can run on XWayland while the host session is Wayland."""
+        env = {
+            "FLATPAK_ID": "com.vocalinux.Vocalinux",
+            "XDG_SESSION_TYPE": "wayland",
+            "DISPLAY": ":0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            result = DesktopEnvironment.detect()
+            assert result == DesktopEnvironment.X11
+
     def test_detect_xdg_session_type_x11(self):
         """Test detection of X11 via XDG_SESSION_TYPE."""
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=False):

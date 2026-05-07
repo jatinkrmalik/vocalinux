@@ -11,9 +11,14 @@ platform wheels, not a source distribution. A Flathub-ready VOSK module will nee
 to build VOSK and its native dependencies from source, or VOSK support should be
 made an optional non-Flatpak feature.
 
-Global keyboard shortcuts are also limited inside the sandbox. The Flatpak does
-not request direct `/dev/input` access, so Wayland users should expect tray/menu
-control and IBus text injection rather than evdev-based push-to-talk shortcuts.
+The Flatpak intentionally uses the X11 socket so it runs under XWayland on
+Wayland sessions. Native Wayland input injection is compositor-dependent and is
+not available on GNOME without privileged protocols, while the XWayland path lets
+the packaged `xdotool` backend work wherever X11/XWayland injection is possible.
+
+Global keyboard shortcuts are limited inside the sandbox. The Flatpak does not
+request direct `/dev/input` access, so users should expect tray/menu control
+rather than evdev-based push-to-talk shortcuts.
 
 ## Local Build
 
@@ -119,7 +124,8 @@ For a Flathub PR:
 - Microphone access: `--socket=pulseaudio`
 - GPU access: `--device=dri`
 - Model downloads: `--share=network`
-- Text injection: `--talk-name=org.freedesktop.IBus`
+- Text injection: `--socket=x11` with packaged `xdotool` and `xsel`
+- IBus D-Bus access: `--talk-name=org.freedesktop.IBus`
 - Tray/status notifier: `--talk-name=org.kde.StatusNotifierWatcher`
 
 Configuration and model data use the standard Flatpak XDG directories under

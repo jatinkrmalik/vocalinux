@@ -82,6 +82,9 @@ out/
 .nuxt/
 dist/
 build/
+.flatpak-builder/
+build-dir/
+repo/
 
 # Environment variables
 .env

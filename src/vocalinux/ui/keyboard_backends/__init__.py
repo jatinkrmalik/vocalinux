@@ -58,15 +58,20 @@ class DesktopEnvironment:
             'x11', 'wayland', or 'unknown'
         """
         session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        wayland_display = os.environ.get("WAYLAND_DISPLAY")
+        x11_display = os.environ.get("DISPLAY")
         if session_type == "wayland":
+            if os.environ.get("FLATPAK_ID") and not wayland_display and x11_display:
+                logger.info("Flatpak is running with X11 access only; using X11 keyboard backend")
+                return DesktopEnvironment.X11
             return DesktopEnvironment.WAYLAND
         elif session_type == "x11":
             return DesktopEnvironment.X11
 
         # Fallback to environment variables
-        if "WAYLAND_DISPLAY" in os.environ:
+        if wayland_display:
             return DesktopEnvironment.WAYLAND
-        elif "DISPLAY" in os.environ:
+        elif x11_display:
             return DesktopEnvironment.X11
 
         logger.warning("Could not detect desktop environment, defaulting to unknown")
