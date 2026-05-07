@@ -422,6 +422,34 @@ class TestTrayIndicator(unittest.TestCase):
         self.assertEqual(icon_names["active"], "vocalinux-microphone")
         self.assertEqual(icon_names["processing"], "vocalinux-microphone-process")
 
+    def test_set_indicator_icon_uses_set_icon_for_flatpak_without_full_api(self):
+        """Flatpak icon setter should support indicators missing set_icon_full."""
+        import vocalinux.ui.tray_indicator as tray_module
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        tray = TrayIndicator.__new__(TrayIndicator)
+        tray.indicator = MagicMock(spec=["set_icon"])
+        tray.icon_names = {"default": "com.vocalinux.Vocalinux-microphone-off"}
+
+        with patch.object(tray_module, "FLATPAK_ICON_PREFIX", "com.vocalinux.Vocalinux"):
+            TrayIndicator._set_indicator_icon(tray, "default", "Microphone off")
+
+        tray.indicator.set_icon.assert_called_once_with("com.vocalinux.Vocalinux-microphone-off")
+
+    def test_set_indicator_icon_uses_set_icon_for_non_flatpak_without_full_api(self):
+        """Regular icon setter should support indicators missing set_icon_full."""
+        import vocalinux.ui.tray_indicator as tray_module
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        tray = TrayIndicator.__new__(TrayIndicator)
+        tray.indicator = MagicMock(spec=["set_icon"])
+        tray.icon_names = {"default": "vocalinux-microphone-off"}
+
+        with patch.object(tray_module, "FLATPAK_ICON_PREFIX", None):
+            TrayIndicator._set_indicator_icon(tray, "default", "Microphone off")
+
+        tray.indicator.set_icon.assert_called_once_with("vocalinux-microphone-off")
+
     def test_set_menu_item_enabled(self):
         """Test _set_menu_item_enabled finds and sets menu item sensitivity."""
         with patch("vocalinux.ui.tray_indicator.Gtk") as patched_gtk:

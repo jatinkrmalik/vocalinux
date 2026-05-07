@@ -530,6 +530,37 @@ class TestCheckDependencies(unittest.TestCase):
                 # Should return False because both indicators are missing
                 self.assertFalse(result)
 
+    def test_check_dependencies_ignores_headless_pynput_import_error(self):
+        """Headless pynput import errors should not fail dependency checks."""
+        import builtins
+
+        mock_gi = MagicMock()
+        mock_gtk = MagicMock()
+        mock_appindicator = MagicMock()
+        mock_requests = MagicMock()
+        real_import = builtins.__import__
+
+        def import_side_effect(name, *args, **kwargs):
+            if name == "pynput":
+                raise ImportError("display not supported")
+            return real_import(name, *args, **kwargs)
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "gi": mock_gi,
+                "gi.repository": MagicMock(Gtk=mock_gtk, AppIndicator3=mock_appindicator),
+                "requests": mock_requests,
+            },
+            clear=False,
+        ):
+            with patch("builtins.__import__", side_effect=import_side_effect):
+                with patch("vocalinux.main.logger") as mock_logger:
+                    result = check_dependencies()
+
+        self.assertTrue(result)
+        mock_logger.warning.assert_called()
+
 
 class TestMainConfigPrecedence(unittest.TestCase):
     """Test cases for configuration precedence in main."""

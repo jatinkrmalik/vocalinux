@@ -496,6 +496,33 @@ class TestInitWhispercpp(unittest.TestCase):
             {"n_threads": 4},
         )
 
+    def test_cpu_fallback_removes_gpu_kwargs_and_disables_gpu(self):
+        mgr = _make_manager(engine="whisper_cpp")
+        with patch.object(mgr, "_load_model_with_compatible_params", return_value=MagicMock()) as mock_load:
+            loaded_backend = mgr._handle_gpu_fallback(
+                RuntimeError("unsupported device"),
+                "/tmp/model.bin",
+                {"n_threads": 4, "use_gpu": True, "gpu_device": 0, "n_gpu_layers": 999},
+                "cpu",
+            )
+
+        self.assertEqual(loaded_backend, "cpu")
+        mock_load.assert_called_once_with(
+            "/tmp/model.bin",
+            {"n_threads": 4, "use_gpu": False},
+        )
+
+    def test_cpu_fallback_reraises_unknown_runtime_error(self):
+        mgr = _make_manager(engine="whisper_cpp")
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected load failure"):
+            mgr._handle_gpu_fallback(
+                RuntimeError("unexpected load failure"),
+                "/tmp/model.bin",
+                {"n_threads": 4},
+                "cpu",
+            )
+
 
 class TestDownloadVoskModel(unittest.TestCase):
     pass
