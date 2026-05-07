@@ -103,6 +103,8 @@ Options:
   --test           Run tests after installation
   --venv-dir=PATH  Specify custom virtual environment directory
   --skip-models    Skip downloading speech models during installation
+  --rebuild-whispercpp     Rebuild/reinstall pywhispercpp even if already installed
+  --no-rebuild-whispercpp  Reuse existing pywhispercpp when present (auto-mode default)
   --tag=TAG        Install specific release tag
   --help           Show this help message
 
@@ -358,6 +360,17 @@ vulkaninfo --summary | grep -i "deviceName"
 # In Vocalinux, look for these log messages:
 # [INFO] whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU
 # [INFO] whisper.cpp using Vulkan GPU backend: AMD Radeon RX 6800
+```
+
+### Reusing Existing whisper.cpp Builds
+
+When updating an existing install, the installer checks for a working `pywhispercpp`
+installation before rebuilding it. Interactive installs ask whether to rebuild, with
+the default set to no. Automatic installs reuse the existing build by default.
+
+```bash
+./install.sh --auto                         # Reuse pywhispercpp if already installed
+./install.sh --auto --rebuild-whispercpp    # Force a rebuild/reinstall
 ```
 
 ### Switching Engines
