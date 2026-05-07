@@ -84,10 +84,19 @@ jobs:
             ./install.sh
             ```
 
-            ### From PyPI (if available)
+            ### From PyPI
             ```bash
+            # Install the Linux system packages first:
+            # GTK/AppIndicator, PortAudio, and xdotool/wtype are required.
+            python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+            source ~/.local/share/vocalinux-pypi/venv/bin/activate
             pip install vocalinux
+            vocalinux
             ```
+
+            PyPI installs the Python package only. For automatic system dependency,
+            desktop integration, and model setup, use the Quick Install command above.
+            See docs/INSTALL.md for distro-specific PyPI prerequisites.
 
             ---
             See [CHANGELOG](https://github.com/jatinkrmalik/vocalinux/releases) for detailed changes.
