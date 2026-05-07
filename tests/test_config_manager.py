@@ -534,6 +534,7 @@ class TestTypedAccessors(unittest.TestCase):
     def test_whispercpp_advanced_defaults(self):
         """Test that whisper.cpp advanced parameters have correct defaults."""
         advanced = DEFAULT_CONFIG["advanced"]
+        self.assertFalse(advanced["power_user_mode"])
         self.assertTrue(advanced["whispercpp_no_timestamps"])
         self.assertTrue(advanced["whispercpp_suppress_nst"])
         self.assertTrue(advanced["whispercpp_no_context"])

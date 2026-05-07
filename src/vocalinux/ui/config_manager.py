@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
     },
     "advanced": {
+        "power_user_mode": False,
         "debug_logging": False,
         "wayland_mode": False,
         "whispercpp_no_timestamps": True,
