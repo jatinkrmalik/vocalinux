@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import queue
-import re
 import sys
 import threading
 import time
@@ -865,26 +864,59 @@ class SpeechRecognitionManager:
             model_kwargs["initial_prompt"] = self.whispercpp_initial_prompt
         return model_kwargs
 
+    def _get_supported_whispercpp_params(self) -> Optional[set[str]]:
+        """Return params supported by the active pywhispercpp native binding."""
+        try:
+            import _pywhispercpp as pw
+
+            params = pw.whisper_full_default_params(
+                pw.whisper_sampling_strategy.WHISPER_SAMPLING_GREEDY
+            )
+            return {name for name in dir(params) if not name.startswith("_")}
+        except Exception as e:
+            logger.debug(f"Could not inspect pywhispercpp params; using conservative filter: {e}")
+            return None
+
+    def _filter_whispercpp_model_kwargs(
+        self, model_kwargs: dict, supported_params: Optional[set[str]] = None
+    ) -> dict:
+        """Filter model kwargs before constructing pywhispercpp.Model.
+
+        Some pywhispercpp releases segfault when a partially constructed Model is
+        garbage-collected after an unsupported native param raises AttributeError.
+        Filtering against the bound params object avoids that unsafe retry path.
+        """
+        if supported_params is None:
+            supported_params = self._get_supported_whispercpp_params()
+
+        if supported_params is None:
+            supported_params = {
+                "n_threads",
+                "suppress_blank",
+                "no_speech_thold",
+                "entropy_thold",
+                "logprob_thold",
+                "temperature",
+                "temperature_inc",
+                "no_context",
+                "initial_prompt",
+            }
+
+        compatible_kwargs = {}
+        for param_name, value in model_kwargs.items():
+            if param_name in supported_params:
+                compatible_kwargs[param_name] = value
+            else:
+                logger.warning(
+                    f"pywhispercpp does not support '{param_name}'; " "removing from model kwargs."
+                )
+        return compatible_kwargs
+
     def _load_model_with_compatible_params(self, model_path: str, model_kwargs: dict):
         from pywhispercpp.model import Model
 
-        compatible_kwargs = dict(model_kwargs)
-        while True:
-            try:
-                return Model(model_path, **compatible_kwargs)
-            except AttributeError as e:
-                msg = str(e)
-                if "no attribute" in msg and "object has no attribute" in msg:
-                    match = re.search(r"has no attribute ['\"]([^'\"]+)['\"]", msg)
-                    param_name = match.group(1) if match else None
-                    if param_name and param_name in compatible_kwargs:
-                        logger.warning(
-                            f"pywhispercpp does not support '{param_name}'; "
-                            "removing from model kwargs."
-                        )
-                        del compatible_kwargs[param_name]
-                        continue
-                raise
+        compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
+        return Model(model_path, **compatible_kwargs)
 
     def _load_whispercpp_model(self, model_path: str):
         """Load the whisper.cpp model file and configure the compute backend.
