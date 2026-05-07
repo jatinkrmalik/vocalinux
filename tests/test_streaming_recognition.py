@@ -477,7 +477,20 @@ class TestProcessStreamingWhisper(unittest.TestCase):
         self.mgr._process_streaming_whisper([b"\x00\x00"], False)
 
         self.mgr._emit_text.assert_called_once_with("So let's try again.")
-        self.assertEqual(self.cb.call_args_list[-1].args, ("Again, I'm trying to speak.",))
+        self.assertEqual(self.cb.call_args_list[-1].args, ("I'm trying to speak.",))
+        self.assertFalse(self.cb.call_args_list[-1].kwargs["is_final"])
+
+    def test_whisper_cpp_boundary_overlap_dedup_before_emit(self):
+        self.mgr.engine = "whisper_cpp"
+        self.mgr._transcribe_with_whispercpp = MagicMock(
+            side_effect=["It looks like it's...", "it's working properly."]
+        )
+
+        self.mgr._process_streaming_whisper([b"\x00\x00"], False)
+        self.mgr._process_streaming_whisper([b"\x00\x00"], False)
+
+        self.mgr._emit_text.assert_called_once_with("It looks like it's")
+        self.assertEqual(self.cb.call_args_list[-1].args, ("working properly.",))
         self.assertFalse(self.cb.call_args_list[-1].kwargs["is_final"])
 
     def test_is_final_flushes_all_and_resets_buffer(self):

@@ -162,7 +162,28 @@ class TestTranscriptBufferOverlap(unittest.TestCase):
         self.buf.insert("Again, I'm trying to speak.")
 
         self.assertEqual(self.buf.flush(), "So let's try again.")
-        self.assertEqual(self.buf.pending_text, "Again, I'm trying to speak.")
+        self.assertEqual(self.buf.pending_text, "I'm trying to speak.")
+
+    def test_diverging_stream_dedups_boundary_word(self):
+        self.buf.insert("Okay so let's try again.")
+        self.buf.insert("again and see if we are...")
+
+        self.assertEqual(self.buf.flush(), "Okay so let's try again.")
+        self.assertEqual(self.buf.pending_text, "and see if we are...")
+
+    def test_diverging_stream_strips_terminal_ellipsis_from_commit(self):
+        self.buf.insert("It looks like it's...")
+        self.buf.insert("it's working properly.")
+
+        self.assertEqual(self.buf.flush(), "It looks like it's")
+        self.assertEqual(self.buf.pending_text, "working properly.")
+
+    def test_confirmed_text_matches_across_punctuation(self):
+        self.buf.insert("hello.")
+        self.buf.insert("hello world")
+
+        self.assertEqual(self.buf.flush(), "hello")
+        self.assertEqual(self.buf.pending_text, "world")
 
 
 class TestTranscriptBufferCaseInsensitive(unittest.TestCase):

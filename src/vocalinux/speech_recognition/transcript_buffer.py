@@ -8,6 +8,7 @@ This prevents flickering and duplicate text injection.
 """
 
 import logging
+import string
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,31 @@ class TranscriptBuffer:
         self._confidence_threshold = confidence_threshold
         self._insert_count = 0
 
+    def _normalize_word(self, word: str) -> str:
+        return word.lower().strip(string.punctuation)
+
+    def _find_tail_head_overlap(self, previous_words: list[str], new_words: list[str]) -> int:
+        max_check = min(len(previous_words), len(new_words), 5)
+        for count in range(max_check, 0, -1):
+            previous_tail = [self._normalize_word(word) for word in previous_words[-count:]]
+            new_head = [self._normalize_word(word) for word in new_words[:count]]
+            if previous_tail == new_head and any(previous_tail):
+                return count
+        return 0
+
+    def _strip_terminal_ellipsis(self, words: list[str]) -> list[str]:
+        if not words:
+            return words
+
+        last_word = words[-1]
+        if last_word.endswith("..."):
+            stripped = last_word.rstrip(".")
+            if stripped:
+                words[-1] = stripped
+            else:
+                words.pop()
+        return words
+
     def insert(self, text: str) -> None:
         if not text or not text.strip():
             return
@@ -45,9 +71,9 @@ class TranscriptBuffer:
         if self._committed_words and new_words:
             max_check = min(len(self._committed_words), len(new_words), 5)
             for i in range(1, max_check + 1):
-                committed_tail = " ".join(self._committed_words[-i:]).lower()
-                new_head = " ".join(new_words[:i]).lower()
-                if committed_tail == new_head:
+                committed_tail = [self._normalize_word(word) for word in self._committed_words[-i:]]
+                new_head = [self._normalize_word(word) for word in new_words[:i]]
+                if committed_tail == new_head and any(committed_tail):
                     new_words = new_words[i:]
                     had_committed_tail_overlap = True
                     break
@@ -56,13 +82,15 @@ class TranscriptBuffer:
         if self._buffer_words and new_words:
             max_check = min(len(self._buffer_words), len(new_words))
             for i in range(max_check):
-                if self._buffer_words[i].lower() == new_words[i].lower():
+                if self._normalize_word(self._buffer_words[i]) == self._normalize_word(
+                    new_words[i]
+                ):
                     confirmed.append(new_words[i])
                 else:
                     break
 
         if confirmed:
-            self._committed_words.extend(confirmed)
+            self._committed_words.extend(self._strip_terminal_ellipsis(confirmed))
             self._buffer_words = self._buffer_words[len(confirmed) :]
             new_words = new_words[len(confirmed) :]
             logger.debug(f"Committed {len(confirmed)} words: {' '.join(confirmed)}")
@@ -71,9 +99,12 @@ class TranscriptBuffer:
             # instead of revised hypotheses for the same window. Once a new
             # unrelated hypothesis arrives, commit the previous pending words so
             # streaming dictation advances instead of waiting until final stop.
-            self._committed_words.extend(self._buffer_words)
+            overlap_count = self._find_tail_head_overlap(self._buffer_words, new_words)
+            words_to_commit = self._strip_terminal_ellipsis(self._buffer_words.copy())
+            self._committed_words.extend(words_to_commit)
             logger.debug(f"Committed stale pending words: {' '.join(self._buffer_words)}")
             self._buffer_words = []
+            new_words = new_words[overlap_count:]
 
         self._buffer_words = new_words
         self._new_words = new_words
