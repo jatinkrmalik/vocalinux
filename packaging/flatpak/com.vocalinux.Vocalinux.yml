@@ -1,23 +1,21 @@
 app-id: com.vocalinux.Vocalinux
 runtime: org.gnome.Platform
-runtime-version: "46"
+runtime-version: "50"
 sdk: org.gnome.Sdk
 command: vocalinux
 
 build-options:
-  build-args:
-    - --share=network
+  env:
+    NO_REPAIR: "1"
+    PYWHISPERCPP_VERSION: "1.4.1"
 
 finish-args:
   - --share=network
   - --share=ipc
-  - --socket=x11
+  - --socket=fallback-x11
   - --socket=wayland
   - --socket=pulseaudio
   - --device=dri
-  - --device=input
-  - --filesystem=xdg-config/vocalinux:create
-  - --filesystem=xdg-data/vocalinux:create
   - --talk-name=org.freedesktop.IBus
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.kde.StatusNotifierWatcher
@@ -30,6 +28,7 @@ modules:
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
       - -DCMAKE_INSTALL_PREFIX=/app
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     cleanup:
       - /include
       - /lib/cmake
@@ -73,11 +72,13 @@ modules:
         url: https://github.com/jordansissel/xdotool/archive/refs/tags/v3.20211022.1.tar.gz
         sha256: 82b15a944a5e82fee15e0f6116bd9f642bc3d0bb6989fc0ca5ad9dfe35de0847
 
+  - python3-build-dependencies.yaml
+  - python3-dependencies.yaml
+
   - name: vocalinux
     buildsystem: simple
     build-commands:
-      - pip3 install --ignore-installed --prefix=/app setuptools wheel meson-python
-      - pip3 install --ignore-installed --no-build-isolation --prefix=/app .
+      - pip3 install --no-deps --no-build-isolation --prefix=/app .
       - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.desktop -t /app/share/applications/
       - install -Dm644 resources/icons/scalable/vocalinux.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux.svg
       - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.metainfo.xml -t /app/share/metainfo/

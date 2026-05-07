@@ -13,7 +13,10 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 # Define constants
-CONFIG_DIR = os.path.expanduser("~/.config/vocalinux")
+CONFIG_DIR = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+    "vocalinux",
+)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 # Default configuration

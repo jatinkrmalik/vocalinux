@@ -438,7 +438,11 @@ def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
 
 
 # Define constants
-MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
+MODELS_DIR = os.path.join(
+    os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+    "vocalinux",
+    "models",
+)
 
 
 def _get_system_model_paths() -> list:

@@ -14,8 +14,10 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Lock file location: ~/.local/share/vocalinux/
-LOCK_FILE_DIR = Path.home() / ".local" / "share" / "vocalinux"
+# Lock file location: $XDG_DATA_HOME/vocalinux/
+LOCK_FILE_DIR = (
+    Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "vocalinux"
+)
 LOCK_FILE_PATH = LOCK_FILE_DIR / "instance.lock"
 
 # Global lock file handle

@@ -58,7 +58,9 @@ except (ImportError, ValueError) as e:
 
 
 # File paths for communication
-VOCALINUX_IBUS_DIR = Path.home() / ".local" / "share" / "vocalinux-ibus"
+VOCALINUX_IBUS_DIR = (
+    Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "vocalinux-ibus"
+)
 SOCKET_PATH = VOCALINUX_IBUS_DIR / "inject.sock"
 PID_FILE = VOCALINUX_IBUS_DIR / "engine.pid"
 

@@ -116,41 +116,9 @@ Here are some screenshots showcasing Vocalinux in action:
   </tr>
 </table>
 
-## 🚀 Installation
+## 🚀 Quick Install
 
-### Flatpak (Recommended — All Linux Distributions)
-
-One command for any Linux distro. Also available in GNOME Software and KDE Discover.
-
-```bash
-flatpak install flathub com.vocalinux.Vocalinux
-```
-
-> **Note**: Speech models are downloaded on first run (~39MB for whisper.cpp tiny).
-
-### Ubuntu / Debian (PPA)
-
-```bash
-sudo add-apt-repository ppa:vocalinux/vocalinux
-sudo apt update
-sudo apt install vocalinux
-```
-
-### Arch Linux (AUR)
-
-```bash
-yay -S vocalinux
-# or
-paru -S vocalinux
-```
-
-### Snap Store (Ubuntu)
-
-```bash
-sudo snap install vocalinux
-```
-
-### Interactive Installer (Any Distribution)
+### Interactive Install (Recommended)
 
 Our interactive installer guides you through setup with intelligent hardware detection:
 
@@ -171,7 +139,33 @@ The installer will:
 
 > **Note**: Always installs the latest release. For a specific version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
 
-### Install from Source
+### Installation Options
+
+**Default (whisper.cpp - recommended):**
+```bash
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh
+```
+Fastest installation (~1-2 min), universal GPU support via Vulkan.
+
+**Whisper (OpenAI) - if you prefer PyTorch:**
+```bash
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper
+```
+NVIDIA GPU only (~5-10 min, downloads PyTorch + CUDA).
+
+**VOSK only - for low-RAM systems:**
+```bash
+curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk
+```
+Lightweight option (~40MB), works on systems with 4GB RAM.
+
+**Flatpak test build:**
+```bash
+flatpak-builder --user --install --force-clean build-dir packaging/flatpak/com.vocalinux.Vocalinux.yml
+```
+Flatpak packaging is in progress for Flathub submission. See `packaging/flatpak/README.md`.
+
+### Alternative: Install from Source
 
 ```bash
 # Clone the repository
@@ -371,7 +365,7 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [x] ~~Vulkan GPU support~~ ✅
 - [ ] In-app update mechanism
 - [ ] Application-specific commands
-- [x] ~~Flatpak packaging~~ ✅
+- [ ] Flatpak packaging
 - [ ] Debian/Ubuntu package (.deb)
 - [x] ~~Wayland support via IBus~~ ✅
 - [ ] Voice command customization

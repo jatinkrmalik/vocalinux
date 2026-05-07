@@ -183,6 +183,10 @@ class TrayIndicator:
         """Initialize the system tray indicator."""
         logger.info("Initializing system tray indicator")
 
+        if AppIndicator3 is None:
+            logger.warning("AppIndicator is not available; continuing without a tray icon")
+            return False
+
         # Log the icon directory path
         logger.info(f"Using icon directory: {ICON_DIR}")
         logger.info(f"Icon directory exists: {os.path.exists(ICON_DIR)}")
@@ -272,6 +276,7 @@ class TrayIndicator:
                 return "org.kde.StatusNotifierWatcher" in name_list
         except Exception as e:
             logger.warning(f"Could not check StatusNotifierWatcher: {e}")
+            return True
 
         return False
 
@@ -422,23 +427,32 @@ class TrayIndicator:
             return False
 
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon(self.icon_paths["default"])
+            self._set_indicator_icon("default", "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon(self.icon_paths["active"])
+            self._set_indicator_icon("active", "Microphone on")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon(self.icon_paths["processing"])
+            self._set_indicator_icon("processing", "Processing speech")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon(self.icon_paths["default"])
+            self._set_indicator_icon("default", "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
         return False  # Remove idle callback
+
+    def _set_indicator_icon(self, icon_key: str, description: str) -> None:
+        """Set the tray icon using the most reliable format for the runtime."""
+        if os.environ.get("FLATPAK_ID") and os.path.exists(self.icon_paths[icon_key]):
+            self.indicator.set_icon(self.icon_paths[icon_key])
+        elif hasattr(self.indicator, "set_icon_full"):
+            self.indicator.set_icon_full(self.icon_names[icon_key], description)
+        else:
+            self.indicator.set_icon(self.icon_names[icon_key])
 
     def _set_menu_item_enabled(self, label: str, enabled: bool):
         """

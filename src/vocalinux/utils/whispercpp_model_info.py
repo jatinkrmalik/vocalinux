@@ -249,7 +249,12 @@ def get_model_path(model_name: str) -> str:
     Returns:
         Path to the model file
     """
-    models_dir = os.path.expanduser("~/.local/share/vocalinux/models/whispercpp")
+    models_dir = os.path.join(
+        os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+        "vocalinux",
+        "models",
+        "whispercpp",
+    )
     os.makedirs(models_dir, exist_ok=True)
 
     if model_name == "large":

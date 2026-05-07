@@ -145,7 +145,7 @@ jobs:
     needs: build-and-release
     runs-on: ubuntu-latest
     container:
-      image: bilelmoussaoui/flatpak-github-actions:gnome-46
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
       options: --privileged
     steps:
       - name: Checkout code
@@ -157,6 +157,7 @@ jobs:
           bundle: vocalinux.flatpak
           manifest-path: packaging/flatpak/com.vocalinux.Vocalinux.yml
           cache-key: flatpak-${{ github.sha }}
+          mirror-screenshots-url: https://dl.flathub.org/media
 
       - name: Upload Flatpak bundle
         uses: actions/upload-artifact@v4

@@ -506,7 +506,11 @@ class TextInjector:
         try:
             import json
 
-            config_path = os.path.expanduser("~/.config/vocalinux/config.json")
+            config_path = os.path.join(
+                os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+                "vocalinux",
+                "config.json",
+            )
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = json.load(f)
