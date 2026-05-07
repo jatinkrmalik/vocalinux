@@ -381,6 +381,47 @@ class TestTrayIndicator(unittest.TestCase):
             "com.vocalinux.Vocalinux-microphone", "Microphone on"
         )
 
+    def test_build_icon_names_uses_flatpak_exported_icons_when_present(self):
+        """Flatpak icon helper should prefer exported host-visible names."""
+        import vocalinux.ui.tray_indicator as tray_module
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        def fake_exists(path):
+            return path.endswith(".svg") and "com.vocalinux.Vocalinux" in path
+
+        with patch.object(tray_module, "FLATPAK_ICON_PREFIX", "com.vocalinux.Vocalinux"):
+            with patch("vocalinux.ui.tray_indicator.os.path.exists", side_effect=fake_exists):
+                icon_names = TrayIndicator._build_icon_names()
+
+        self.assertEqual(icon_names["default"], "com.vocalinux.Vocalinux-microphone-off")
+        self.assertEqual(icon_names["active"], "com.vocalinux.Vocalinux-microphone")
+        self.assertEqual(icon_names["processing"], "com.vocalinux.Vocalinux-microphone-process")
+
+    def test_build_icon_names_falls_back_to_bundled_icons_when_export_missing(self):
+        """Flatpak icon helper should fall back if exported icon files are absent."""
+        import vocalinux.ui.tray_indicator as tray_module
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        with patch.object(tray_module, "FLATPAK_ICON_PREFIX", "com.vocalinux.Vocalinux"):
+            with patch("vocalinux.ui.tray_indicator.os.path.exists", return_value=False):
+                icon_names = TrayIndicator._build_icon_names()
+
+        self.assertEqual(icon_names["default"], "vocalinux-microphone-off")
+        self.assertEqual(icon_names["active"], "vocalinux-microphone")
+        self.assertEqual(icon_names["processing"], "vocalinux-microphone-process")
+
+    def test_build_icon_names_uses_bundled_icons_outside_flatpak(self):
+        """Non-Flatpak runtime should keep regular package icon names."""
+        import vocalinux.ui.tray_indicator as tray_module
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        with patch.object(tray_module, "FLATPAK_ICON_PREFIX", None):
+            icon_names = TrayIndicator._build_icon_names()
+
+        self.assertEqual(icon_names["default"], "vocalinux-microphone-off")
+        self.assertEqual(icon_names["active"], "vocalinux-microphone")
+        self.assertEqual(icon_names["processing"], "vocalinux-microphone-process")
+
     def test_set_menu_item_enabled(self):
         """Test _set_menu_item_enabled finds and sets menu item sensitivity."""
         with patch("vocalinux.ui.tray_indicator.Gtk") as patched_gtk:

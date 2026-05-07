@@ -561,6 +561,40 @@ class TestWhispercppModelKwargs(unittest.TestCase):
         kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
         self.assertEqual(kwargs.get("initial_prompt"), "test prompt")
 
+    def test_model_kwargs_enable_vulkan_gpu_backend(self):
+        from vocalinux.utils.whispercpp_model_info import ComputeBackend
+
+        mgr = _make_manager(engine="whisper_cpp")
+        with patch.dict(os.environ, {}, clear=True):
+            kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4, backend=ComputeBackend.VULKAN)
+            self.assertEqual(os.environ["GGML_VULKAN"], "1")
+
+        self.assertTrue(kwargs["use_gpu"])
+        self.assertEqual(kwargs["gpu_device"], 0)
+        self.assertEqual(kwargs["n_gpu_layers"], 999)
+
+    def test_model_kwargs_enable_cuda_gpu_backend(self):
+        from vocalinux.utils.whispercpp_model_info import ComputeBackend
+
+        mgr = _make_manager(engine="whisper_cpp")
+        with patch.dict(os.environ, {}, clear=True):
+            kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4, backend=ComputeBackend.CUDA)
+            self.assertEqual(os.environ["GGML_CUDA"], "1")
+
+        self.assertTrue(kwargs["use_gpu"])
+        self.assertEqual(kwargs["gpu_device"], 0)
+        self.assertEqual(kwargs["n_gpu_layers"], 999)
+
+    def test_model_kwargs_disable_gpu_for_cpu_backend(self):
+        from vocalinux.utils.whispercpp_model_info import ComputeBackend
+
+        mgr = _make_manager(engine="whisper_cpp")
+        kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4, backend=ComputeBackend.CPU)
+
+        self.assertFalse(kwargs["use_gpu"])
+        self.assertNotIn("gpu_device", kwargs)
+        self.assertNotIn("n_gpu_layers", kwargs)
+
     def test_model_kwargs_custom_numerics(self):
         mgr = _make_manager(
             engine="whisper_cpp",

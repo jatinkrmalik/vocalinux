@@ -184,6 +184,36 @@ class TestDetectVulkanSupport(unittest.TestCase):
             self.assertFalse(is_available)
             self.assertIsNone(device_name)
 
+    def test_detect_vulkan_support_from_dri_render_node(self):
+        """Flatpak can detect Vulkan-capable GPUs through exposed DRI render nodes."""
+        with (
+            patch("subprocess.run", side_effect=FileNotFoundError("vulkaninfo not found")),
+            patch("os.path.isdir", return_value=True),
+            patch("os.listdir", return_value=["card0", "renderD128"]),
+        ):
+            from vocalinux.utils.whispercpp_model_info import detect_vulkan_support
+
+            detect_vulkan_support.cache_clear()
+            is_available, device_name = detect_vulkan_support()
+
+        self.assertTrue(is_available)
+        self.assertEqual(device_name, "DRI render node")
+
+    def test_detect_vulkan_support_ignores_dri_os_error(self):
+        """DRI probing errors should not make Vulkan detection fail noisily."""
+        with (
+            patch("subprocess.run", side_effect=FileNotFoundError("vulkaninfo not found")),
+            patch("os.path.isdir", return_value=True),
+            patch("os.listdir", side_effect=OSError("permission denied")),
+        ):
+            from vocalinux.utils.whispercpp_model_info import detect_vulkan_support
+
+            detect_vulkan_support.cache_clear()
+            is_available, device_name = detect_vulkan_support()
+
+        self.assertFalse(is_available)
+        self.assertIsNone(device_name)
+
 
 class TestDetectCudaSupport(unittest.TestCase):
     """Test cases for detect_cuda_support function."""
