@@ -36,6 +36,7 @@ from ..utils.whispercpp_model_info import (
 )
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
+from .config_manager import DEFAULT_CONFIG  # noqa: E402
 from .keyboard_backends import (  # noqa: E402
     SHORTCUT_DISPLAY_NAMES,
     SHORTCUT_GROUPS,
@@ -732,6 +733,19 @@ class SettingsDialog(Gtk.Dialog):
         # dismiss it, even on window managers that hide the title-bar close
         # button for Gtk.Dialog windows without action buttons (fixes #323).
         self.add_button("Close", Gtk.ResponseType.CLOSE)
+        action_area = self.get_action_area()
+        action_area.set_margin_top(8)
+        action_area.set_margin_bottom(12)
+        action_area.set_margin_start(16)
+        action_area.set_margin_end(16)
+        action_area.set_spacing(8)
+        self.advanced_reset_button = Gtk.Button(label="Reset to Defaults")
+        self.advanced_reset_button.set_tooltip_text(
+            "Restore the whisper.cpp advanced parameters to their default values"
+        )
+        self.advanced_reset_button.connect("clicked", self._on_reset_advanced_clicked)
+        action_area.pack_start(self.advanced_reset_button, False, False, 0)
+        action_area.set_child_secondary(self.advanced_reset_button, True)
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
@@ -743,6 +757,7 @@ class SettingsDialog(Gtk.Dialog):
             False  # Flag to prevent recursive language change handling
         )
         self._applying_settings = False  # Flag to prevent recursive settings application
+        self._advanced_prompt_dirty = False
 
         # Setup CSS styling
         _setup_css()
@@ -771,6 +786,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Create notebook for tabbed interface
         notebook = Gtk.Notebook()
+        self.settings_notebook = notebook
         notebook.set_show_tabs(True)
         notebook.set_show_border(False)
         notebook.get_style_context().add_class("notebook")
@@ -809,6 +825,12 @@ class SettingsDialog(Gtk.Dialog):
         self.general_tab.set_margin_start(16)
         self.general_tab.set_margin_end(16)
 
+        self.advanced_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.advanced_tab.set_margin_top(16)
+        self.advanced_tab.set_margin_bottom(16)
+        self.advanced_tab.set_margin_start(16)
+        self.advanced_tab.set_margin_end(16)
+
         # Add tabs to notebook (ordered by importance)
         # Speech Engine tab - most important (what model/language to use)
         speech_engine_label = Gtk.Label(label="Speech Engine")
@@ -835,6 +857,11 @@ class SettingsDialog(Gtk.Dialog):
         general_label.set_tooltip_text("General settings")
         notebook.append_page(self.general_tab, general_label)
 
+        advanced_label = Gtk.Label(label="Advanced")
+        advanced_label.set_tooltip_text("Advanced whisper.cpp parameters")
+        self.advanced_page_num = notebook.append_page(self.advanced_tab, advanced_label)
+        notebook.connect("switch-page", self._on_settings_page_switched)
+
         self.get_content_area().pack_start(notebook, True, True, 0)
 
         # Set content_box to speech_engine_tab for backward compatibility
@@ -846,15 +873,19 @@ class SettingsDialog(Gtk.Dialog):
         self._build_engine_section()
         self._build_recognition_section()
         self._build_shortcuts_section()
+        self._build_advanced_section()
         self._build_test_section()
 
         # Load settings and populate UI
         self._load_and_apply_settings()
 
+        self.connect("response", self._on_settings_dialog_response)
+
         # Show everything first
         self.show_all()
 
         # Then update visibility of engine-specific elements
+        self._update_advanced_reset_button_visibility()
         self._update_engine_specific_ui()
 
         # Initialize recognition progress UI
@@ -1436,6 +1467,276 @@ class SettingsDialog(Gtk.Dialog):
         self.progress_info_label.set_margin_bottom(8)
         self.recognition_settings_tab.pack_start(self.progress_info_label, False, False, 0)
 
+    def _build_advanced_section(self):
+        """Build the Advanced section with whisper.cpp parameters."""
+
+        # Opt-in toggle at the top of the tab
+        opt_in_group = PreferencesGroup(title="Advanced Access")
+        self.power_user_switch = Gtk.Switch()
+        self.power_user_switch.set_tooltip_text("Reveal advanced whisper.cpp tuning parameters")
+        power_user_row = PreferenceRow(
+            title="Unlock Advanced Settings",
+            subtitle="I know what I'm doing — show me the whisper.cpp tuning knobs",
+            widget=self.power_user_switch,
+        )
+        opt_in_group.add_row(power_user_row)
+        self.advanced_tab.pack_start(opt_in_group, False, False, 0)
+
+        # Revealer that hides/shows the actual advanced controls
+        self.advanced_revealer = Gtk.Revealer()
+        self.advanced_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+
+        # Scrollable container for the controls
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(350)
+
+        controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+        group = PreferencesGroup(title="Whisper.cpp Decoding")
+
+        self.advanced_no_timestamps_switch = Gtk.Switch()
+        self.advanced_no_timestamps_switch.set_tooltip_text(
+            "Disable timestamp generation to reduce hallucinations"
+        )
+        no_timestamps_row = PreferenceRow(
+            title="No Timestamps",
+            subtitle="Disable timestamp tokens (reduces hallucinations)",
+            widget=self.advanced_no_timestamps_switch,
+        )
+        group.add_row(no_timestamps_row)
+
+        self.advanced_no_context_switch = Gtk.Switch()
+        self.advanced_no_context_switch.set_tooltip_text(
+            "Do not condition on previously transcribed text"
+        )
+        no_context_row = PreferenceRow(
+            title="No Context",
+            subtitle="Prevent error loops from past text",
+            widget=self.advanced_no_context_switch,
+        )
+        group.add_row(no_context_row)
+
+        self.advanced_temperature_spin = Gtk.SpinButton.new_with_range(0.0, 1.0, 0.1)
+        self.advanced_temperature_spin.set_digits(1)
+        self.advanced_temperature_spin.set_tooltip_text(
+            "0.0 = greedy decoding, higher = more random"
+        )
+        _prevent_scroll_on_hover(self.advanced_temperature_spin)
+        temperature_row = PreferenceRow(
+            title="Temperature",
+            subtitle="Decoding randomness (0.0 = deterministic)",
+            widget=self.advanced_temperature_spin,
+        )
+        group.add_row(temperature_row)
+
+        self.advanced_temperature_inc_spin = Gtk.SpinButton.new_with_range(-1.0, 1.0, 0.1)
+        self.advanced_temperature_inc_spin.set_digits(1)
+        self.advanced_temperature_inc_spin.set_tooltip_text(
+            "-1.0 disables temperature fallback entirely"
+        )
+        _prevent_scroll_on_hover(self.advanced_temperature_inc_spin)
+        temperature_inc_row = PreferenceRow(
+            title="Temperature Increment",
+            subtitle="Fallback step (-1.0 = disabled)",
+            widget=self.advanced_temperature_inc_spin,
+        )
+        group.add_row(temperature_inc_row)
+
+        self.advanced_entropy_thold_spin = Gtk.SpinButton.new_with_range(0.0, 5.0, 0.1)
+        self.advanced_entropy_thold_spin.set_digits(1)
+        self.advanced_entropy_thold_spin.set_tooltip_text(
+            "Higher values catch more repetition loops"
+        )
+        _prevent_scroll_on_hover(self.advanced_entropy_thold_spin)
+        entropy_row = PreferenceRow(
+            title="Entropy Threshold",
+            subtitle="Repetition loop detection",
+            widget=self.advanced_entropy_thold_spin,
+        )
+        group.add_row(entropy_row)
+
+        self.advanced_logprob_thold_spin = Gtk.SpinButton.new_with_range(-5.0, 0.0, 0.1)
+        self.advanced_logprob_thold_spin.set_digits(1)
+        self.advanced_logprob_thold_spin.set_tooltip_text(
+            "Average log-probability threshold for fallback"
+        )
+        _prevent_scroll_on_hover(self.advanced_logprob_thold_spin)
+        logprob_row = PreferenceRow(
+            title="Logprob Threshold",
+            subtitle="Fallback trigger for low confidence",
+            widget=self.advanced_logprob_thold_spin,
+        )
+        group.add_row(logprob_row)
+
+        self.advanced_no_speech_thold_spin = Gtk.SpinButton.new_with_range(0.0, 1.0, 0.05)
+        self.advanced_no_speech_thold_spin.set_digits(2)
+        self.advanced_no_speech_thold_spin.set_tooltip_text(
+            "Probability threshold for treating audio as silence"
+        )
+        _prevent_scroll_on_hover(self.advanced_no_speech_thold_spin)
+        no_speech_row = PreferenceRow(
+            title="No-Speech Threshold",
+            subtitle="Silence detection confidence",
+            widget=self.advanced_no_speech_thold_spin,
+        )
+        group.add_row(no_speech_row)
+
+        # Initial Prompt -- moved to the end and made multiline
+        initial_prompt_help = (
+            "Optional. Add names, jargon, punctuation style, or other context to bias "
+            "whisper.cpp transcription. Leave blank for normal dictation."
+        )
+        self.advanced_initial_prompt_textview = Gtk.TextView()
+        self.advanced_initial_prompt_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.advanced_initial_prompt_textview.set_tooltip_text(initial_prompt_help)
+        self.advanced_initial_prompt_textview.set_size_request(250, 80)
+
+        prompt_scrolled = Gtk.ScrolledWindow()
+        prompt_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        prompt_scrolled.set_min_content_height(80)
+        prompt_scrolled.set_tooltip_text(initial_prompt_help)
+        prompt_scrolled.add(self.advanced_initial_prompt_textview)
+
+        initial_prompt_row = PreferenceRow(
+            title="Initial Prompt",
+            subtitle="Context to steer transcription style",
+            widget=prompt_scrolled,
+        )
+        initial_prompt_row.set_tooltip_text(initial_prompt_help)
+        group.add_row(initial_prompt_row)
+
+        info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        info_box.get_style_context().add_class("info-box")
+        info_box.set_margin_start(4)
+        info_box.set_margin_end(4)
+        info_box.set_margin_bottom(4)
+
+        info_icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic", Gtk.IconSize.MENU)
+        info_box.pack_start(info_icon, False, False, 0)
+
+        self.advanced_info_label = Gtk.Label(
+            label="These settings only apply when the whisper.cpp engine is selected.",
+            xalign=0,
+            wrap=True,
+        )
+        self.advanced_info_label.get_style_context().add_class("tip-label")
+        info_box.pack_start(self.advanced_info_label, True, True, 0)
+
+        controls_box.pack_start(info_box, False, False, 0)
+        controls_box.pack_start(group, False, False, 0)
+
+        scrolled.add(controls_box)
+        self.advanced_revealer.add(scrolled)
+        self.advanced_tab.pack_start(self.advanced_revealer, True, True, 0)
+
+        self.advanced_no_timestamps_switch.connect("state-set", self._on_advanced_param_changed)
+        self.advanced_no_context_switch.connect("state-set", self._on_advanced_param_changed)
+        self.advanced_temperature_spin.connect("value-changed", self._on_advanced_param_changed)
+        self.advanced_temperature_inc_spin.connect("value-changed", self._on_advanced_param_changed)
+        self.advanced_entropy_thold_spin.connect("value-changed", self._on_advanced_param_changed)
+        self.advanced_logprob_thold_spin.connect("value-changed", self._on_advanced_param_changed)
+        self.advanced_no_speech_thold_spin.connect("value-changed", self._on_advanced_param_changed)
+
+        self.advanced_initial_prompt_buffer = self.advanced_initial_prompt_textview.get_buffer()
+        self.advanced_initial_prompt_buffer.connect("changed", self._on_advanced_prompt_changed)
+
+        self.power_user_switch.connect("state-set", self._on_power_user_toggled)
+
+    def _on_power_user_toggled(self, widget, state):
+        """Handle the power-user opt-in toggle."""
+        if self._initializing or self._applying_settings:
+            return False
+        if getattr(self, "_power_user_dialog_open", False):
+            return True
+        if state:
+            self._power_user_dialog_open = True
+            try:
+                dialog = Gtk.MessageDialog(
+                    transient_for=self,
+                    flags=Gtk.DialogFlags.MODAL,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.NONE,
+                    text="Advanced Settings",
+                )
+                dialog.format_secondary_text(
+                    "These settings control whisper.cpp's internal decoding parameters. "
+                    "Changing them can affect transcription quality and performance. "
+                    "Only proceed if you understand the impact."
+                )
+                dialog.add_button("_Keep it Simple", Gtk.ResponseType.CANCEL)
+                confirm_btn = dialog.add_button("_I Know What I'm Doing", Gtk.ResponseType.YES)
+                confirm_btn.get_style_context().add_class("suggested-action")
+                response = dialog.run()
+                dialog.destroy()
+            finally:
+                self._power_user_dialog_open = False
+            if response != Gtk.ResponseType.YES:
+                return True
+        self.config_manager.set("advanced", "power_user_mode", state)
+        self.config_manager.save_settings()
+        self.advanced_revealer.set_reveal_child(state)
+        return False
+
+    def _on_settings_dialog_response(self, dialog, response_id):
+        """Persist deferred text edits before the settings dialog closes."""
+        if response_id in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
+            self._flush_advanced_prompt_if_dirty()
+
+    def _on_settings_page_switched(self, notebook, page, page_num):
+        """Update contextual footer actions when the active settings page changes."""
+        if page_num != self.advanced_page_num:
+            self._flush_advanced_prompt_if_dirty()
+        self._update_advanced_reset_button_visibility(page_num)
+
+    def _update_advanced_reset_button_visibility(self, page_num: int = None):
+        """Show the reset action only on the Advanced settings page."""
+        if page_num is None:
+            page_num = self.settings_notebook.get_current_page()
+        self.advanced_reset_button.set_visible(page_num == self.advanced_page_num)
+
+    def _on_advanced_prompt_changed(self, buffer):
+        """Track prompt edits without applying settings on every keystroke."""
+        if self._initializing or self._applying_settings:
+            return
+        self._advanced_prompt_dirty = True
+
+    def _flush_advanced_prompt_if_dirty(self):
+        """Apply deferred initial prompt edits."""
+        if not self._advanced_prompt_dirty or self._initializing or self._applying_settings:
+            return
+        self._auto_apply_settings()
+        self._advanced_prompt_dirty = False
+
+    def _on_advanced_param_changed(self, widget, *args):
+        """Handle any advanced parameter change."""
+        if self._initializing or self._applying_settings:
+            return False
+        self._auto_apply_settings()
+        self._advanced_prompt_dirty = False
+        return False
+
+    def _on_reset_advanced_clicked(self, widget):
+        """Reset whisper.cpp advanced parameters to defaults."""
+        if self._initializing or self._applying_settings:
+            return
+
+        defaults = DEFAULT_CONFIG["advanced"]
+        self._applying_settings = True
+        try:
+            self.advanced_no_timestamps_switch.set_active(defaults["whispercpp_no_timestamps"])
+            self.advanced_no_context_switch.set_active(defaults["whispercpp_no_context"])
+            self.advanced_initial_prompt_buffer.set_text(defaults["whispercpp_initial_prompt"], -1)
+            self.advanced_temperature_spin.set_value(defaults["whispercpp_temperature"])
+            self.advanced_temperature_inc_spin.set_value(defaults["whispercpp_temperature_inc"])
+            self.advanced_entropy_thold_spin.set_value(defaults["whispercpp_entropy_thold"])
+            self.advanced_logprob_thold_spin.set_value(defaults["whispercpp_logprob_thold"])
+            self.advanced_no_speech_thold_spin.set_value(defaults["whispercpp_no_speech_thold"])
+        finally:
+            self._applying_settings = False
+
+        self._auto_apply_settings()
+
     def _load_and_apply_settings(self):
         """Load current settings and populate the UI."""
         settings = self._get_current_settings()
@@ -1525,6 +1826,35 @@ class SettingsDialog(Gtk.Dialog):
         # Set voice commands switch based on config
         voice_commands_enabled = self.config_manager.is_voice_commands_enabled()
         self.voice_commands_switch.set_active(voice_commands_enabled)
+
+        advanced_settings = self.config_manager.get_settings().get("advanced", {})
+        power_user_mode = advanced_settings.get("power_user_mode", False)
+        self.power_user_switch.set_active(power_user_mode)
+        self.advanced_revealer.set_reveal_child(power_user_mode)
+        self.advanced_no_timestamps_switch.set_active(
+            advanced_settings.get("whispercpp_no_timestamps", True)
+        )
+        self.advanced_no_context_switch.set_active(
+            advanced_settings.get("whispercpp_no_context", True)
+        )
+        self.advanced_initial_prompt_buffer.set_text(
+            advanced_settings.get("whispercpp_initial_prompt", ""), -1
+        )
+        self.advanced_temperature_spin.set_value(
+            advanced_settings.get("whispercpp_temperature", 0.0)
+        )
+        self.advanced_temperature_inc_spin.set_value(
+            advanced_settings.get("whispercpp_temperature_inc", -1.0)
+        )
+        self.advanced_entropy_thold_spin.set_value(
+            advanced_settings.get("whispercpp_entropy_thold", 2.4)
+        )
+        self.advanced_logprob_thold_spin.set_value(
+            advanced_settings.get("whispercpp_logprob_thold", -1.0)
+        )
+        self.advanced_no_speech_thold_spin.set_value(
+            advanced_settings.get("whispercpp_no_speech_thold", 0.6)
+        )
 
     def _get_current_settings(self):
         """Get current settings from config manager."""
@@ -1762,6 +2092,33 @@ class SettingsDialog(Gtk.Dialog):
     def _update_engine_specific_ui(self):
         """Show/hide UI elements specific to the selected engine."""
         self._update_model_info()
+        self._update_advanced_tab_sensitivity()
+
+    def _update_advanced_tab_sensitivity(self):
+        """Enable or disable advanced settings based on selected engine."""
+        engine_text = self.engine_combo.get_active_text()
+        is_whispercpp = engine_text and engine_text.lower() == "whisper_cpp"
+
+        widgets = [
+            self.advanced_no_timestamps_switch,
+            self.advanced_no_context_switch,
+            self.advanced_initial_prompt_textview,
+            self.advanced_temperature_spin,
+            self.advanced_temperature_inc_spin,
+            self.advanced_entropy_thold_spin,
+            self.advanced_logprob_thold_spin,
+            self.advanced_no_speech_thold_spin,
+            self.advanced_reset_button,
+        ]
+        for widget in widgets:
+            widget.set_sensitive(is_whispercpp)
+
+        if is_whispercpp:
+            self.advanced_info_label.set_text("These settings apply to the whisper.cpp engine.")
+        else:
+            self.advanced_info_label.set_text(
+                "These settings only apply when the whisper.cpp engine is selected."
+            )
 
     def _update_model_info(self):
         """Update the model info card display."""
@@ -1921,11 +2278,8 @@ class SettingsDialog(Gtk.Dialog):
 
             logger.info(f"Auto-applying settings: {settings}")
 
-            self.config_manager.update_speech_recognition_settings(settings)
-            self.config_manager.save_settings()
+            self._save_selected_settings(settings)
 
-            # Stop recognition before reconfiguring to avoid segfaults when
-            # switching between engines with native resources (e.g. whisper.cpp)
             was_running = self.speech_engine.state != RecognitionState.IDLE
             if was_running:
                 self.speech_engine.stop_recognition()
@@ -1936,6 +2290,16 @@ class SettingsDialog(Gtk.Dialog):
             logger.error(f"Failed to auto-apply settings: {e}")
         finally:
             self._applying_settings = False
+
+    def _save_selected_settings(self, settings: dict):
+        """Persist selected settings to their appropriate config sections."""
+        sr_settings = {k: v for k, v in settings.items() if not k.startswith("whispercpp_")}
+        advanced_settings = {k: v for k, v in settings.items() if k.startswith("whispercpp_")}
+
+        self.config_manager.update_speech_recognition_settings(sr_settings)
+        for key, value in advanced_settings.items():
+            self.config_manager.set("advanced", key, value)
+        self.config_manager.save_settings()
 
     def get_selected_settings(self) -> dict:
         """Return the currently selected settings from the UI."""
@@ -1956,6 +2320,18 @@ class SettingsDialog(Gtk.Dialog):
             "language": language,
             "vad_sensitivity": vad,
             "silence_timeout": silence,
+            "whispercpp_no_timestamps": self.advanced_no_timestamps_switch.get_active(),
+            "whispercpp_no_context": self.advanced_no_context_switch.get_active(),
+            "whispercpp_initial_prompt": self.advanced_initial_prompt_buffer.get_text(
+                self.advanced_initial_prompt_buffer.get_start_iter(),
+                self.advanced_initial_prompt_buffer.get_end_iter(),
+                False,
+            ),
+            "whispercpp_temperature": self.advanced_temperature_spin.get_value(),
+            "whispercpp_temperature_inc": self.advanced_temperature_inc_spin.get_value(),
+            "whispercpp_entropy_thold": self.advanced_entropy_thold_spin.get_value(),
+            "whispercpp_logprob_thold": self.advanced_logprob_thold_spin.get_value(),
+            "whispercpp_no_speech_thold": self.advanced_no_speech_thold_spin.get_value(),
         }
 
     def _on_test_clicked(self, widget):
@@ -2163,8 +2539,7 @@ For now, the engine has been reverted to VOSK."""
     def _apply_settings_internal(self, settings: dict) -> bool:
         """Internal method to apply settings."""
         try:
-            self.config_manager.update_speech_recognition_settings(settings)
-            self.config_manager.save_settings()
+            self._save_selected_settings(settings)
 
             was_running = self.speech_engine.state != RecognitionState.IDLE
             if was_running:
