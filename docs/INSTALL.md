@@ -26,6 +26,65 @@ That's it! The installer handles everything automatically:
 git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
 ```
 
+### From PyPI
+
+The PyPI package installs the Python application and Python dependencies, but it
+cannot install Linux desktop packages such as GTK typelibs, AppIndicator,
+PortAudio, or text injection tools. Install those system packages first, then
+install Vocalinux in a virtual environment.
+
+**Ubuntu/Debian:**
+
+```bash
+sudo apt install -y \
+    python3-venv python3-dev python3-gi python3-gi-cairo \
+    gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
+    libgirepository1.0-dev libcairo2-dev portaudio19-dev \
+    pkg-config xdotool wtype
+
+python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+source ~/.local/share/vocalinux-pypi/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install vocalinux
+vocalinux
+```
+
+**Fedora:**
+
+```bash
+sudo dnf install -y \
+    python3-virtualenv python3-devel python3-gobject gtk3 gtk3-devel \
+    libappindicator-gtk3 gobject-introspection-devel portaudio-devel \
+    pkg-config xdotool wtype
+
+python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+source ~/.local/share/vocalinux-pypi/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install vocalinux
+vocalinux
+```
+
+**Arch Linux:**
+
+```bash
+sudo pacman -S --needed \
+    python python-virtualenv python-gobject gtk3 libappindicator-gtk3 \
+    gobject-introspection python-cairo portaudio pkg-config xdotool wtype
+
+python -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+source ~/.local/share/vocalinux-pypi/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install vocalinux
+vocalinux
+```
+
+If `vocalinux` starts but reports a missing speech model, open Settings and
+download a model, or use the recommended installer which downloads the default
+model during setup.
+
+On Ubuntu 24.04+ or Pop!_OS, install `libgirepository-2.0-dev` if
+`libgirepository1.0-dev` is not available.
+
 ## System Requirements
 
 | Requirement | Details |
@@ -302,6 +361,10 @@ pip install ".[whisper]"
 # Development mode
 pip install -e ".[dev]"
 ```
+
+For PyPI instead of a local checkout, use `pip install vocalinux` after installing
+the same system packages and creating the virtual environment with
+`--system-site-packages`.
 
 ### 4. Set Up Desktop Integration
 

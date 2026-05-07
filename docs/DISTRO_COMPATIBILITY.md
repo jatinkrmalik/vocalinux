@@ -146,36 +146,79 @@ sudo urpmi -y python3-gobject gtk3-devel gobject-introspection-devel \
   portaudio-devel python3-devel python3-virtualenv pkg-config
 ```
 
-## pipx Installation
+## PyPI, pip, and pipx Installation
 
-pipx is a popular tool for installing Python CLI applications in isolated environments. However, **Vocalinux requires system GTK packages** that cannot be installed via pip/pipx.
+The PyPI package is useful when you want a standard Python package install, or
+when you want to manage Vocalinux with `pipx`. However, **Vocalinux requires
+system desktop packages** that cannot be installed by pip or pipx.
+
+Use the official installer when possible. It installs the required system
+packages, creates the virtual environment, installs Vocalinux, sets up desktop
+integration, and downloads the default speech model:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+```
 
 ### Important: Install System Packages First
 
-Before running `pipx install vocalinux`, you **must** install the required system packages:
+Before running `pip install vocalinux` or `pipx install vocalinux`, you **must**
+install the required system packages:
 
 #### Ubuntu/Debian
 ```bash
 sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
-  portaudio19-dev python3-dev pkg-config
+  libgirepository1.0-dev libcairo2-dev portaudio19-dev python3-dev \
+  python3-venv pkg-config xdotool wtype
 ```
+
+On Ubuntu 24.04+ or Pop!_OS, install `libgirepository-2.0-dev` if
+`libgirepository1.0-dev` is not available.
 
 #### Fedora
 ```bash
-sudo dnf install python3-gobject gtk3 libappindicator-gtk3 \
-  portaudio-devel python3-devel pkg-config
+sudo dnf install python3-gobject gtk3 gtk3-devel libappindicator-gtk3 \
+  gobject-introspection-devel portaudio-devel python3-devel \
+  python3-virtualenv pkg-config xdotool wtype
 ```
 
 #### Arch Linux
 ```bash
-sudo pacman -S python-gobject gtk3 libappindicator portaudio pkg-config
+sudo pacman -S python-gobject gtk3 libappindicator gobject-introspection \
+  python-cairo portaudio python-virtualenv pkg-config xdotool wtype
 ```
 
 #### openSUSE
 ```bash
-sudo zypper install python3-gobject gtk3 libappindicator \
-  portaudio-devel python3-devel pkg-config
+sudo zypper install python3-gobject python3-gobject-cairo gtk3 libappindicator \
+  gobject-introspection-devel portaudio-devel python3-devel \
+  python3-virtualenv pkg-config xdotool wtype
 ```
+
+### pip Installation Steps
+
+1. **Install system packages** (see above for your distribution)
+
+2. **Create a virtual environment with system site-packages enabled**:
+   ```bash
+   python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+   source ~/.local/share/vocalinux-pypi/venv/bin/activate
+   pip install --upgrade pip setuptools wheel
+   ```
+
+   `--system-site-packages` lets the venv use distro-provided GTK bindings such
+   as `python3-gi`, which are often more reliable than building PyGObject from
+   source in a venv.
+
+3. **Install Vocalinux from PyPI**:
+   ```bash
+   pip install vocalinux
+   ```
+
+4. **Run Vocalinux**:
+   ```bash
+   vocalinux
+   ```
 
 ### pipx Installation Steps
 
@@ -203,23 +246,36 @@ sudo zypper install python3-gobject gtk3 libappindicator \
 
 4. **Run Vocalinux**:
    ```bash
-   vocalinux-gui
+   vocalinux
    ```
 
 ### Why System Packages Are Required
 
-Vocalinux uses GTK3 for its GUI and AppIndicator for the system tray icon. These are system libraries that use GObject Introspection (GI) bindings, which must be installed via your distribution's package manager. The Python packages in pip only provide the Python interface to these libraries - they don't include the actual GTK libraries.
+Vocalinux uses GTK3 for its GUI, AppIndicator/Ayatana for the system tray icon,
+PortAudio for microphone capture, and tools such as `xdotool` or `wtype` for
+text injection. These are system libraries and desktop tools that must be
+installed with your distribution's package manager. Python packages from PyPI
+can provide Python bindings, but they do not provide the underlying GTK
+typelibs, tray support, audio development libraries, or text injection binaries.
 
-### Troubleshooting pipx Installation
+### Troubleshooting pip/pipx Installation
 
-If `vocalinux-gui` fails to start:
+If `vocalinux` fails to start:
 
 1. **Check for missing system packages** - The error message will indicate which packages are missing
 2. **Verify GI_TYPELIB_PATH** - In rare cases, you may need to set this environment variable:
    ```bash
    export GI_TYPELIB_PATH=/usr/lib/x86_64-linux-gnu/girepository-1.0
-   vocalinux-gui
+   vocalinux
    ```
+3. **Check package metadata** - Run `pip show vocalinux` or
+   `pipx runpip vocalinux show vocalinux` to confirm which version was installed.
+4. **Check Python dependencies** - Run `pip check` inside the venv, or
+   `pipx runpip vocalinux check` for pipx.
+
+If Vocalinux reports that a speech recognition model is missing, open Settings
+and download a model, or use the official installer to download the default model
+during setup.
 
 ### Recommended Alternative
 
