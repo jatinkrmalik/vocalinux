@@ -496,3 +496,235 @@ class TestWhisperInitialPrompt:
                         initial_prompt="",
                     )
                     assert manager.initial_prompt == ""
+
+
+class TestInitialPromptCodeCoverage:
+    """Tests covering the exact lines flagged by codecov patch coverage."""
+
+    def _setup_whispercpp_mocks(self):
+        """Return a dict of mocks needed for _load_whispercpp_model."""
+        from vocalinux.utils.whispercpp_model_info import ComputeBackend
+
+        mock_model_cls = MagicMock(name="Model")
+        mock_model_instance = MagicMock(name="model_instance")
+        mock_model_cls.return_value = mock_model_instance
+
+        mock_detect = MagicMock(return_value=(ComputeBackend.CPU, "test-info"))
+        mock_display = MagicMock(return_value="CPU")
+
+        return {
+            "model_cls": mock_model_cls,
+            "model_instance": mock_model_instance,
+            "detect_compute_backend": mock_detect,
+            "get_backend_display_name": mock_display,
+        }
+
+    def _write_temp_model(self, tmp_path):
+        """Write a tiny temp file to act as model_path."""
+        model_path = str(tmp_path / "model.bin")
+        with open(model_path, "wb") as f:
+            f.write(b"\x00" * 1024)
+        return model_path
+
+    # ------------------------------------------------------------------
+    # _load_whispercpp_model: inspect.signature branches (lines 900-907)
+    # ------------------------------------------------------------------
+
+    def test_load_whispercpp_model_with_supported_prompt(self, tmp_path):
+        """initial_prompt IS in Model.__init__ signature → kwargs include it."""
+        import inspect as real_inspect
+
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        mocks = self._setup_whispercpp_mocks()
+        model_path = self._write_temp_model(tmp_path)
+
+        # Build a fake signature that includes "initial_prompt"
+        fake_params = {
+            "self": MagicMock(),
+            "model_path": MagicMock(),
+            "initial_prompt": MagicMock(),
+        }
+        fake_sig = MagicMock()
+        fake_sig.parameters = fake_params
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"), \
+             patch.object(SpeechRecognitionManager, "_init_whisper"), \
+             patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+            manager = SpeechRecognitionManager(
+                engine="whisper_cpp", model_size="tiny", defer_download=True,
+                initial_prompt="test vocab",
+            )
+
+        with patch.dict("sys.modules", {
+            "pywhispercpp": MagicMock(model=MagicMock(Model=mocks["model_cls"])),
+            "pywhispercpp.model": MagicMock(Model=mocks["model_cls"]),
+        }), \
+             patch("vocalinux.speech_recognition.recognition_manager.detect_compute_backend",
+                   mocks["detect_compute_backend"]), \
+             patch("vocalinux.speech_recognition.recognition_manager.get_backend_display_name",
+                   mocks["get_backend_display_name"]), \
+             patch("psutil.virtual_memory", return_value=MagicMock(total=8 * 1024**3)), \
+             patch("multiprocessing.cpu_count", return_value=4), \
+             patch("inspect.signature", return_value=fake_sig) as mock_sig:
+
+            manager._load_whispercpp_model(model_path)
+
+        # Model was loaded
+        assert manager.model is not None
+        assert manager._model_initialized is True
+        # inspect.signature was called on the Model class
+        mock_sig.assert_called_once_with(mocks["model_cls"].__init__)
+        # initial_prompt was passed to Model constructor
+        call_kwargs = mocks["model_cls"].call_args[1]
+        assert call_kwargs["initial_prompt"] == "test vocab"
+
+    def test_load_whispercpp_model_with_unsupported_prompt(self, tmp_path):
+        """Old pywhispercpp without initial_prompt param → warning, kwargs exclude it."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        mocks = self._setup_whispercpp_mocks()
+        model_path = self._write_temp_model(tmp_path)
+
+        # Fake signature WITHOUT "initial_prompt"
+        fake_params = {
+            "self": MagicMock(),
+            "model_path": MagicMock(),
+        }
+        fake_sig = MagicMock()
+        fake_sig.parameters = fake_params
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"), \
+             patch.object(SpeechRecognitionManager, "_init_whisper"), \
+             patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+            manager = SpeechRecognitionManager(
+                engine="whisper_cpp", model_size="tiny", defer_download=True,
+                initial_prompt="test vocab",
+            )
+
+        with patch.dict("sys.modules", {
+            "pywhispercpp": MagicMock(model=MagicMock(Model=mocks["model_cls"])),
+            "pywhispercpp.model": MagicMock(Model=mocks["model_cls"]),
+        }), \
+             patch("vocalinux.speech_recognition.recognition_manager.detect_compute_backend",
+                   mocks["detect_compute_backend"]), \
+             patch("vocalinux.speech_recognition.recognition_manager.get_backend_display_name",
+                   mocks["get_backend_display_name"]), \
+             patch("psutil.virtual_memory", return_value=MagicMock(total=8 * 1024**3)), \
+             patch("multiprocessing.cpu_count", return_value=4), \
+             patch("inspect.signature", return_value=fake_sig):
+
+            manager._load_whispercpp_model(model_path)
+
+        assert manager.model is not None
+        assert manager._model_initialized is True
+        # initial_prompt was NOT passed to Model constructor
+        call_kwargs = mocks["model_cls"].call_args[1]
+        assert "initial_prompt" not in call_kwargs
+
+    def test_load_whispercpp_model_empty_prompt_skips_check(self, tmp_path):
+        """Empty initial_prompt → inspect.signature block skipped entirely."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        mocks = self._setup_whispercpp_mocks()
+        model_path = self._write_temp_model(tmp_path)
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"), \
+             patch.object(SpeechRecognitionManager, "_init_whisper"), \
+             patch.object(SpeechRecognitionManager, "_init_whispercpp"):
+            manager = SpeechRecognitionManager(
+                engine="whisper_cpp", model_size="tiny", defer_download=True,
+                initial_prompt="",
+            )
+
+        with patch.dict("sys.modules", {
+            "pywhispercpp": MagicMock(model=MagicMock(Model=mocks["model_cls"])),
+            "pywhispercpp.model": MagicMock(Model=mocks["model_cls"]),
+        }), \
+             patch("vocalinux.speech_recognition.recognition_manager.detect_compute_backend",
+                   mocks["detect_compute_backend"]), \
+             patch("vocalinux.speech_recognition.recognition_manager.get_backend_display_name",
+                   mocks["get_backend_display_name"]), \
+             patch("psutil.virtual_memory", return_value=MagicMock(total=8 * 1024**3)), \
+             patch("multiprocessing.cpu_count", return_value=4), \
+             patch("inspect.signature") as mock_sig:
+
+            manager._load_whispercpp_model(model_path)
+
+        assert manager.model is not None
+        assert manager._model_initialized is True
+        # inspect.signature should NOT have been called (empty prompt → if guard skipped)
+        mock_sig.assert_not_called()
+        # No initial_prompt in kwargs
+        call_kwargs = mocks["model_cls"].call_args[1]
+        assert "initial_prompt" not in call_kwargs
+
+    # ------------------------------------------------------------------
+    # _transcribe_with_whisper: transcribe_kwargs conditional (lines 782-783)
+    # ------------------------------------------------------------------
+
+    def test_transcribe_with_whisper_includes_prompt_in_kwargs(self):
+        """When initial_prompt is set, model.transcribe receives it."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"), \
+             patch.object(SpeechRecognitionManager, "_init_whispercpp"), \
+             patch.object(SpeechRecognitionManager, "_init_whisper"):
+            manager = SpeechRecognitionManager(
+                engine="whisper", model_size="tiny", language="en-us",
+                defer_download=True, initial_prompt="medical terms",
+            )
+
+        # Set up model mock
+        mock_device = object()
+        manager.model = MagicMock()
+        manager.model.device = mock_device
+        manager.model.transcribe.return_value = {"text": "hello"}
+
+        # Mock torch so the import inside the method succeeds
+        mock_torch = MagicMock()
+        mock_torch.device.return_value = mock_device  # same object → use_fp16 = False
+
+        # Fake numpy
+        import numpy as real_np
+
+        audio_buffer = [b"\x00\x10" * 512]  # ~1KB of fake audio
+
+        with patch.dict("sys.modules", {"torch": mock_torch, "numpy": real_np}):
+            result = manager._transcribe_with_whisper(audio_buffer)
+
+        assert result == "hello"
+        # Verify transcribe was called with initial_prompt
+        transcribe_call = manager.model.transcribe.call_args
+        assert "initial_prompt" in transcribe_call[1]
+        assert transcribe_call[1]["initial_prompt"] == "medical terms"
+
+    def test_transcribe_with_whisper_omits_empty_prompt_from_kwargs(self):
+        """When initial_prompt is empty, model.transcribe does NOT receive it."""
+        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"), \
+             patch.object(SpeechRecognitionManager, "_init_whispercpp"), \
+             patch.object(SpeechRecognitionManager, "_init_whisper"):
+            manager = SpeechRecognitionManager(
+                engine="whisper", model_size="tiny", language="en-us",
+                defer_download=True, initial_prompt="",
+            )
+
+        mock_device = object()
+        manager.model = MagicMock()
+        manager.model.device = mock_device
+        manager.model.transcribe.return_value = {"text": "world"}
+
+        mock_torch = MagicMock()
+        mock_torch.device.return_value = mock_device
+
+        import numpy as real_np
+        audio_buffer = [b"\x00\x10" * 512]
+
+        with patch.dict("sys.modules", {"torch": mock_torch, "numpy": real_np}):
+            result = manager._transcribe_with_whisper(audio_buffer)
+
+        assert result == "world"
+        transcribe_call = manager.model.transcribe.call_args
+        assert "initial_prompt" not in transcribe_call[1]
