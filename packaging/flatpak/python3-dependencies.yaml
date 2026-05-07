@@ -11,6 +11,9 @@ modules:
       - tar -czf pywhispercpp-1.4.1.tar.gz pywhispercpp-1.4.1
       - PYWHISPERCPP_VERSION=1.4.1 NO_REPAIR=1 pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}"
         --prefix=${FLATPAK_DEST} "pywhispercpp" --no-build-isolation
+      - for lib in libggml.so libggml-base.so libggml-cpu.so libwhisper.so libwhisper.so.1
+        libwhisper.so.1.8.2; do ln -sf "python3.13/site-packages/${lib}" "${FLATPAK_DEST}/lib/${lib}";
+        done
     sources:
       - &id002
         type: file

@@ -39,6 +39,7 @@ class FirstRunDialog(Gtk.Dialog):
             Gtk.ResponseType.DELETE_EVENT: None,
         }
         self.result = None
+        self.connect("response", self._on_response)
 
         box = self.get_content_area()
         box.set_spacing(16)
@@ -105,11 +106,9 @@ class FirstRunDialog(Gtk.Dialog):
 
         self.show_all()
 
-    def do_response(self, response_id):
-        """Handle dialog response - override default handler to set result."""
+    def _on_response(self, _dialog, response_id):
+        """Record the selected first-run preference."""
         self.result = self._response_map.get(response_id, None)
-        # Call parent to actually close the dialog
-        Gtk.Dialog.do_response(self, response_id)
 
 
 def show_first_run_dialog(parent: Optional[Gtk.Window] = None) -> Optional[str]:

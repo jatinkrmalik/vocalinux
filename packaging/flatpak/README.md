@@ -47,12 +47,6 @@ flatpak run --command=flatpak-builder-lint org.flatpak.Builder builddir build-di
 flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
 ```
 
-Run without installing:
-
-```bash
-flatpak-builder --run build-dir packaging/flatpak/com.vocalinux.Vocalinux.yml vocalinux --debug
-```
-
 Install locally:
 
 ```bash
@@ -68,6 +62,15 @@ Launch after installing:
 
 ```bash
 flatpak run com.vocalinux.Vocalinux --debug
+```
+
+Prefer the installed launch path for GUI testing. On GNOME runtimes that use
+glycin image loaders, `flatpak-builder --run` can fail to load themed SVG icons
+for an uninstalled stable app ID. `flatpak-builder --run` is still useful for
+non-GUI smoke tests:
+
+```bash
+flatpak-builder --run build-dir packaging/flatpak/com.vocalinux.Vocalinux.yml python3 -c 'from pywhispercpp.model import Model; print("pywhispercpp ok")'
 ```
 
 ## Python Dependencies
