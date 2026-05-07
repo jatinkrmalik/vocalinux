@@ -348,6 +348,26 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         # _show_settings_applied_message was removed as part of instant-apply pattern
         self.assertFalse(hasattr(SettingsDialog, "_show_settings_applied_message"))
 
+    def test_advanced_initial_prompt_applies_on_focus_out(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn('"focus-out-event", self._on_advanced_prompt_focus_out', source_code)
+        self.assertNotIn(
+            'advanced_initial_prompt_buffer.connect("changed", self._on_advanced_param_changed)',
+            source_code,
+        )
+
 
 class TestSettingsDialogHelperFunctions(unittest.TestCase):
     """Test cases for settings dialog helper functions."""
