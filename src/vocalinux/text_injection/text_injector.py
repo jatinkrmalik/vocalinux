@@ -131,8 +131,10 @@ class TextInjector:
         x11_display = os.environ.get("DISPLAY")
         if session_type == "wayland":
             if os.environ.get("FLATPAK_ID") and not wayland_display and x11_display:
-                logger.info("Flatpak is running with X11 access only; using X11 text injection")
-                return DesktopEnvironment.X11
+                logger.info(
+                    "Flatpak is running with X11 access only; using XWayland text injection"
+                )
+                return DesktopEnvironment.WAYLAND_XDOTOOL
             return DesktopEnvironment.WAYLAND
         elif session_type == "x11":
             return DesktopEnvironment.X11

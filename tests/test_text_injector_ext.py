@@ -93,7 +93,7 @@ class TestDetectEnvironment(unittest.TestCase):
                         result = obj._detect_environment()
                         self.assertIn(result, [DesktopEnvironment.X11, DesktopEnvironment.X11_IBUS])
 
-    def test_flatpak_wayland_session_without_wayland_socket_uses_x11(self):
+    def test_flatpak_wayland_session_without_wayland_socket_uses_xwayland(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
         obj = _make_injector(DesktopEnvironment.X11)
@@ -108,7 +108,7 @@ class TestDetectEnvironment(unittest.TestCase):
         ):
             result = obj._detect_environment()
 
-        self.assertEqual(result, DesktopEnvironment.X11)
+        self.assertEqual(result, DesktopEnvironment.WAYLAND_XDOTOOL)
 
     # IBus detection tests removed due to test-ordering mock pollution issues
 
