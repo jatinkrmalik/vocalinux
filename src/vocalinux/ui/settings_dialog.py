@@ -1198,7 +1198,7 @@ class SettingsDialog(Gtk.Dialog):
         self.streaming_switch.set_active(False)
         self.streaming_switch.set_tooltip_text(
             "Enable experimental real-time streaming transcription.\n"
-            "Shows text as you speak for a more responsive chunks.\n"
+            "Shows text as you speak for more responsive dictation.\n"
             "This is an experimental feature."
         )
         streaming_row = PreferenceRow(
@@ -1901,8 +1901,8 @@ class SettingsDialog(Gtk.Dialog):
         engine = sr_settings.get("engine", "vosk")
         language = sr_settings.get("language", "en-us")
         model_size = self.config_manager.get_model_size_for_engine(engine)
-        self.current_vad = settings.get("vad_sensitivity", 3)
-        self.current_silence = settings.get("silence_timeout", 2.0)
+        self.current_vad = sr_settings.get("vad_sensitivity", 3)
+        self.current_silence = sr_settings.get("silence_timeout", 2.0)
 
         self.current_streaming = sr_settings.get("experimental_streaming", False)
         self.current_streaming_duration_ms = sr_settings.get("streaming_chunk_duration_ms", 1000)

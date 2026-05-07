@@ -18,6 +18,16 @@ from vocalinux.main import check_dependencies, main, parse_arguments
 class TestMainModule(unittest.TestCase):
     """Test cases for the main module."""
 
+    def setUp(self):
+        self.acquire_lock_patch = patch("vocalinux.single_instance.acquire_lock", return_value=True)
+        self.release_lock_patch = patch("vocalinux.single_instance.release_lock")
+        self.acquire_lock_patch.start()
+        self.release_lock_patch.start()
+
+    def tearDown(self):
+        self.release_lock_patch.stop()
+        self.acquire_lock_patch.stop()
+
     def test_parse_arguments_defaults(self):
         """Test argument parsing with defaults."""
         # Test with no arguments (model/engine/language will be None without defaults)
@@ -536,6 +546,16 @@ class TestCheckDependencies(unittest.TestCase):
 
 class TestMainConfigPrecedence(unittest.TestCase):
     """Test cases for configuration precedence in main."""
+
+    def setUp(self):
+        self.acquire_lock_patch = patch("vocalinux.single_instance.acquire_lock", return_value=True)
+        self.release_lock_patch = patch("vocalinux.single_instance.release_lock")
+        self.acquire_lock_patch.start()
+        self.release_lock_patch.start()
+
+    def tearDown(self):
+        self.release_lock_patch.stop()
+        self.acquire_lock_patch.stop()
 
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.ui.action_handler.ActionHandler")
