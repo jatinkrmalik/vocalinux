@@ -1651,6 +1651,10 @@ class SpeechRecognitionManager:
         # Stop recording FIRST to prevent capturing the stop sound
         self.should_record = False
 
+        # Give immediate release feedback. The recorder may still finish one
+        # in-flight chunk, so the stop-sound guard below keeps the cue out.
+        play_stop_sound()
+
         # Wait for audio thread to finish recording and enqueue any pending audio
         # This is critical to prevent race condition where recognition thread exits
         # before the final audio segment is enqueued
@@ -1673,9 +1677,6 @@ class SpeechRecognitionManager:
                 logger.debug(f"Enqueuing final buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
-
-        # Now play the stop sound (after recording has stopped)
-        play_stop_sound()
 
         # Wake up recognition thread so it can drain queued segments and stop
         self._signal_recognition_stop()
