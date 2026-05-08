@@ -534,6 +534,89 @@ class TextInjector:
         except Exception as e:
             logger.debug(f"Could not show clipboard notification: {e}")
 
+    def _get_current_x11_app_id(self) -> str:
+        """Return a best-effort identifier for the focused X11/XWayland application."""
+        if not shutil.which("xdotool"):
+            return ""
+
+        try:
+            env = os.environ.copy()
+            window = subprocess.run(
+                ["xdotool", "getactivewindow"],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+                timeout=1,
+            )
+            window_id = window.stdout.strip()
+            if window.returncode != 0 or not window_id:
+                return ""
+
+            app_parts = []
+            for args in (
+                ["xdotool", "getwindowclassname", window_id],
+                ["xdotool", "getwindowname", window_id],
+            ):
+                result = subprocess.run(
+                    args,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    check=False,
+                    timeout=1,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    app_parts.append(result.stdout.strip())
+
+            pid_result = subprocess.run(
+                ["xdotool", "getwindowpid", window_id],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+                timeout=1,
+            )
+            if pid_result.returncode == 0 and pid_result.stdout.strip():
+                pid = pid_result.stdout.strip()
+                for proc_file in (f"/proc/{pid}/comm", f"/proc/{pid}/cmdline"):
+                    try:
+                        with open(proc_file, "r", encoding="utf-8", errors="ignore") as f:
+                            app_parts.append(f.read().replace("\x00", " "))
+                    except OSError:
+                        continue
+
+            return " ".join(app_parts).lower()
+        except Exception as e:
+            logger.debug(f"Could not identify active X11 application: {e}")
+            return ""
+
+    def _inject_via_x11_clipboard_paste(self, text: str) -> bool:
+        """Inject text by copying to clipboard and sending Ctrl+V through xdotool."""
+        if not shutil.which("xdotool"):
+            return False
+
+        if not self._copy_to_clipboard(text):
+            logger.warning("Could not copy text to clipboard for X11 paste injection")
+            return False
+
+        try:
+            subprocess.run(
+                ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            logger.info(f"Text injected via X11 clipboard paste: '{text[:20]}...'")
+            return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"X11 paste simulation failed: {e}")
+            return False
+
     def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently focused application.
@@ -553,6 +636,9 @@ class TextInjector:
 
         # Get information about the current window/application
         self._log_current_window_info()
+        target_app = ""
+        if self.environment in (DesktopEnvironment.X11_IBUS, DesktopEnvironment.WAYLAND_IBUS):
+            target_app = self._get_current_x11_app_id().lower()
 
         # Note: No shell escaping needed - subprocess is called with list arguments,
         # which passes text directly without shell interpretation
@@ -568,6 +654,10 @@ class TextInjector:
                 self.environment == DesktopEnvironment.WAYLAND_IBUS
                 or self.environment == DesktopEnvironment.X11_IBUS
             ):
+                if "firefox" in target_app and self._inject_via_x11_clipboard_paste(text):
+                    logger.info("Used Firefox clipboard-paste fallback instead of IBus")
+                    return True
+
                 if self._ibus_injector is not None:
                     result = self._ibus_injector.inject_text(text)
                     if result:

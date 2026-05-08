@@ -435,6 +435,51 @@ class TestTextInjector(unittest.TestCase):
         result = injector.inject_text("Test")
         self.assertTrue(result)
 
+    def test_firefox_ibus_uses_clipboard_paste_fallback(self):
+        """Test Firefox uses clipboard-paste instead of IBus injection."""
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11_IBUS
+        injector._ibus_injector = MagicMock()
+
+        with patch.object(injector, "_get_current_x11_app_id", return_value="Navigator Firefox"):
+            with patch.object(injector, "_inject_via_x11_clipboard_paste", return_value=True):
+                result = injector.inject_text("Test")
+
+        self.assertTrue(result)
+        injector._ibus_injector.inject_text.assert_not_called()
+
+    def test_non_firefox_ibus_keeps_ibus_injection(self):
+        """Test non-Firefox IBus targets keep the normal IBus path."""
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11_IBUS
+        injector._ibus_injector = MagicMock()
+        injector._ibus_injector.inject_text.return_value = True
+
+        with patch.object(injector, "_get_current_x11_app_id", return_value="Code"):
+            with patch.object(injector, "_inject_via_x11_clipboard_paste") as mock_paste:
+                result = injector.inject_text("Test")
+
+        self.assertTrue(result)
+        mock_paste.assert_not_called()
+        injector._ibus_injector.inject_text.assert_called_once_with("Test")
+
+    def test_x11_clipboard_paste_uses_xdotool_ctrl_v(self):
+        """Test X11 clipboard-paste copies text and sends Ctrl+V."""
+        injector = TextInjector()
+
+        with patch.object(injector, "_copy_to_clipboard", return_value=True) as mock_copy:
+            result = injector._inject_via_x11_clipboard_paste("Test")
+
+        self.assertTrue(result)
+        mock_copy.assert_called_once_with("Test")
+        self.mock_subprocess.assert_any_call(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+            check=True,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=3,
+        )
+
     def test_inject_text_returns_false_on_failure(self):
         """Test that inject_text returns False on failure."""
         injector = TextInjector()
