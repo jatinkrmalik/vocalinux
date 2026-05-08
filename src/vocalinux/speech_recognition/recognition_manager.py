@@ -474,7 +474,7 @@ def _get_system_model_paths() -> list:
                 paths.append("/usr/lib/vocalinux/models")
 
             # Arch Linux doesn't use /usr/local
-            if "arch" in os_release:
+            if "arch" in os_release and "/usr/local/share/vocalinux/models" in paths:
                 paths.remove("/usr/local/share/vocalinux/models")
 
     except (IOError, OSError, FileNotFoundError):

@@ -93,7 +93,7 @@ class TestSpeechRecognitionManagerInit:
     def test_restore_managed_gpu_environment_restores_original_values(self):
         manager = _make_manager(engine="whisper_cpp")
 
-        with patch.dict(os.environ, {"GGML_VULKAN": "9"}, clear=False):
+        with patch.dict(os.environ, {"GGML_VULKAN": "9"}, clear=True):
             manager._set_managed_env("GGML_VULKAN", "1")
             manager._set_managed_env("GGML_CUDA", "0")
 
@@ -353,7 +353,7 @@ class TestSpeechRecognitionManagerInit:
             patch("os.path.exists", return_value=True),
             patch("os.path.getsize", return_value=100 * 1024 * 1024),
             patch("multiprocessing.cpu_count", return_value=4),
-            patch("time.time", side_effect=[100.0, 101.5]),
+            patch("time.time", return_value=101.5),
         ):
             manager._load_whispercpp_model("/tmp/mock.bin")
 
@@ -391,7 +391,7 @@ class TestSpeechRecognitionManagerInit:
             patch("os.path.exists", return_value=True),
             patch("os.path.getsize", return_value=100 * 1024 * 1024),
             patch("multiprocessing.cpu_count", return_value=4),
-            patch("time.time", side_effect=[200.0, 200.5]),
+            patch("time.time", return_value=200.5),
         ):
             manager._load_whispercpp_model("/tmp/mock.bin")
 
@@ -430,7 +430,7 @@ class TestSpeechRecognitionManagerInit:
             patch("os.path.exists", return_value=True),
             patch("os.path.getsize", return_value=100 * 1024 * 1024),
             patch("multiprocessing.cpu_count", return_value=4),
-            patch("time.time", side_effect=[300.0, 300.2]),
+            patch("time.time", return_value=300.2),
         ):
             manager._load_whispercpp_model("/tmp/mock.bin")
 
