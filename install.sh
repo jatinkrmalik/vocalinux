@@ -107,6 +107,7 @@ NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
 INTERACTIVE_MODE="yes"  # Default to interactive mode
 AUTO_MODE="no"
+REBUILD_WHISPERCPP="ask"
 HAS_NVIDIA_GPU="unknown"
 GPU_NAME=""
 GPU_MEMORY=""
@@ -118,7 +119,8 @@ VULKAN_DEVICE=""
 # If no terminal is available at all (headless/CI), fall back to automatic mode.
 if [ ! -t 0 ]; then
     if [ -e /dev/tty ] && [ -r /dev/tty ]; then
-        if { exec < /dev/tty; } 2>/dev/null; then
+        if { true < /dev/tty; } 2>/dev/null; then
+            exec < /dev/tty
             INTERACTIVE_MODE="ask"
         else
             AUTO_MODE="yes"
@@ -152,6 +154,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-system-deps)
             SKIP_SYSTEM_DEPS="yes"
+            shift
+            ;;
+        --rebuild-whispercpp)
+            REBUILD_WHISPERCPP="yes"
+            shift
+            ;;
+        --no-rebuild-whispercpp)
+            REBUILD_WHISPERCPP="no"
             shift
             ;;
         --engine=*)
@@ -192,6 +202,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-models    Skip downloading speech models during installation"
             echo "  --skip-system-deps"
             echo "                  Skip package-manager dependency installation (advanced)"
+            echo "  --rebuild-whispercpp     Rebuild/reinstall pywhispercpp even if already installed"
+            echo "  --no-rebuild-whispercpp  Reuse existing pywhispercpp when present (auto-mode default)"
             echo "  --tag=TAG        Install specific release tag (default: latest release)"
             echo "  --help           Show this help message"
             echo ""
@@ -1280,7 +1292,7 @@ install_system_dependencies() {
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip wl-clipboard"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config cmake wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip wl-clipboard"
-    local ZYPPER_PACKAGES="gtk3 ibus-devel gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip xclip wl-clipboard"
+    local ZYPPER_PACKAGES="gtk3 ibus-devel gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip xclip wl-clipboard typelib-1_0-Notify-0_7 libnotify4"
     # Gentoo uses Portage and different package naming convention
     local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf cmake dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
     # Alpine Linux uses apk and has musl libc
@@ -2037,6 +2049,56 @@ EOF
 chmod +x "$ACTIVATION_SCRIPT"
 print_info "Created activation script: $ACTIVATION_SCRIPT"
 
+is_pywhispercpp_installed() {
+    [ -x "$VENV_DIR/bin/python" ] || return 1
+    "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" >/dev/null 2>&1
+}
+
+get_pywhispercpp_version() {
+    [ -x "$VENV_DIR/bin/python" ] || return 1
+    "$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+from importlib import metadata
+
+try:
+    print(metadata.version("pywhispercpp"))
+except metadata.PackageNotFoundError:
+    raise SystemExit(1)
+PY
+}
+
+should_rebuild_whispercpp() {
+    local INSTALLED_VERSION
+    INSTALLED_VERSION=$(get_pywhispercpp_version || true)
+
+    print_success "Found existing pywhispercpp installation${INSTALLED_VERSION:+ (version $INSTALLED_VERSION)}"
+
+    case "$REBUILD_WHISPERCPP" in
+        yes)
+            print_info "Rebuilding pywhispercpp because --rebuild-whispercpp was specified."
+            return 0
+            ;;
+        no)
+            print_info "Reusing existing pywhispercpp installation."
+            return 1
+            ;;
+    esac
+
+    if [[ "$NON_INTERACTIVE" == "yes" ]]; then
+        print_info "Non-interactive mode: reusing existing pywhispercpp installation."
+        print_info "Use --rebuild-whispercpp to force a rebuild."
+        return 1
+    fi
+
+    read -p "Rebuild/reinstall pywhispercpp? This can take several minutes. (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        return 0
+    fi
+
+    print_info "Reusing existing pywhispercpp installation."
+    return 1
+}
+
 # Function to install Python package with error handling and verification
 install_python_package() {
     # Create a temporary directory for pip logs
@@ -2048,6 +2110,11 @@ install_python_package() {
     local GI_TYPELIB_DETECTED
     GI_TYPELIB_DETECTED=$(detect_typelib_path)
     print_info "Detected GI_TYPELIB_PATH: $GI_TYPELIB_DETECTED"
+
+    local WHISPERCPP_ALREADY_INSTALLED=false
+    if is_pywhispercpp_installed; then
+        WHISPERCPP_ALREADY_INSTALLED=true
+    fi
 
     # Function to verify package installation
     verify_package_installed() {
@@ -2113,9 +2180,21 @@ install_python_package() {
 
                 local GPU_BACKEND="CPU"
                 local GPU_INSTALL_SUCCESS=false
+                local SKIP_WHISPERCPP_INSTALL=false
+
+                if [[ "$WHISPERCPP_ALREADY_INSTALLED" == "true" ]]; then
+                    GPU_BACKEND="existing"
+                    if should_rebuild_whispercpp; then
+                        print_info "Existing pywhispercpp will be replaced."
+                    else
+                        SKIP_WHISPERCPP_INSTALL=true
+                    fi
+                fi
 
                 # Check if user explicitly chose CPU backend in interactive mode
-                if [[ "${WHISPERCPP_BACKEND}" == "cpu" ]]; then
+                if [[ "$SKIP_WHISPERCPP_INSTALL" == "true" ]]; then
+                    print_info "Skipping pywhispercpp reinstall; existing compiled bindings remain in place."
+                elif [[ "${WHISPERCPP_BACKEND}" == "cpu" ]]; then
                     print_info "ℹ Installing CPU-only version (as requested)..."
                     GPU_BACKEND="CPU"
                 else
@@ -2145,7 +2224,7 @@ install_python_package() {
                 fi
 
                 # Fall back to CPU version if GPU install failed or no GPU detected
-                if [[ "$GPU_INSTALL_SUCCESS" != "true" ]]; then
+                if [[ "$SKIP_WHISPERCPP_INSTALL" != "true" && "$GPU_INSTALL_SUCCESS" != "true" ]]; then
                     if [[ "$GPU_BACKEND" != "CPU" ]]; then
                         print_warning "Failed to install pywhispercpp with $GPU_BACKEND support, falling back to CPU version..."
 
@@ -2172,7 +2251,11 @@ install_python_package() {
                     }
                 fi
 
-                print_success "pywhispercpp installed with $GPU_BACKEND backend"
+                if [[ "$SKIP_WHISPERCPP_INSTALL" == "true" ]]; then
+                    print_success "pywhispercpp reused from existing installation"
+                else
+                    print_success "pywhispercpp installed with $GPU_BACKEND backend"
+                fi
                 echo ""
                 ;;
 

@@ -147,7 +147,7 @@ PY
         elif [[ "$DETECTED_DISTRO" == "opensuse" || "$DETECTED_DISTRO_LIKE" == *"suse"* ]]; then
             echo "openSUSE:"
             echo "  PYVER=\$(python3 -c 'import sys; print(f\"python{sys.version_info.major}{sys.version_info.minor}\")')"
-            echo "  sudo zypper install -y \"\${PYVER}-gobject\" \"\${PYVER}-gobject-cairo\" gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 gobject-introspection-devel portaudio-devel \"\${PYVER}-devel\" \"\${PYVER}-virtualenv\" pkg-config xdotool wtype"
+            echo "  sudo zypper install -y \"\${PYVER}-gobject\" \"\${PYVER}-gobject-cairo\" gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 typelib-1_0-Notify-0_7 libnotify4 gobject-introspection-devel portaudio-devel \"\${PYVER}-devel\" \"\${PYVER}-virtualenv\" pkg-config xdotool wtype"
             echo "  If \"\${PYVER}-virtualenv\" is unavailable, try \"\${PYVER}-venv\"."
         elif [[ "$DETECTED_DISTRO" == "gentoo" ]]; then
             echo "Gentoo:"

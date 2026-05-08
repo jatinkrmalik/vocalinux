@@ -134,6 +134,8 @@ class TestCrossDistroCompatibility:
         assert "suse_python_package_prefix()" in install_sh_content
         assert "suse_python_package_candidates()" in install_sh_content
         assert "typelib-1_0-AyatanaAppIndicator3-0_1" in install_sh_content
+        assert "typelib-1_0-Notify-0_7" in install_sh_content
+        assert "libnotify4" in install_sh_content
         assert "suse_install_appindicator_runtime" in install_sh_content
         assert "shaderc glslang-devel glslang" in install_sh_content
 
@@ -153,7 +155,8 @@ class TestCrossDistroCompatibility:
 
     def test_noninteractive_tty_fallback_does_not_abort(self, install_sh_content):
         """Test that missing controlling TTY falls back to non-interactive mode."""
-        assert "{ exec < /dev/tty; } 2>/dev/null" in install_sh_content
+        assert "{ true < /dev/tty; } 2>/dev/null" in install_sh_content
+        assert "exec < /dev/tty" in install_sh_content
         assert 'NON_INTERACTIVE="yes"' in install_sh_content
 
     def test_ci_workflow_uses_dynamic_detection(self, workflow_content):

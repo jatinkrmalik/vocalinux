@@ -26,6 +26,84 @@ That's it! The installer handles everything automatically:
 git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
 ```
 
+### From PyPI
+
+The PyPI package installs the Python application and Python dependencies, but it
+cannot install Linux desktop packages such as GTK typelibs, AppIndicator,
+PortAudio, or text injection tools. Install those system packages first, then
+install Vocalinux in a virtual environment.
+
+**Ubuntu/Debian:**
+
+```bash
+sudo apt install -y \
+    python3-venv python3-dev python3-gi python3-gi-cairo \
+    gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
+    libgirepository1.0-dev libcairo2-dev portaudio19-dev \
+    pkg-config xdotool wtype
+
+python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+source ~/.local/share/vocalinux-pypi/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install vocalinux
+vocalinux
+```
+
+**Fedora:**
+
+```bash
+sudo dnf install -y \
+    python3-virtualenv python3-devel python3-gobject gtk3 gtk3-devel \
+    libappindicator-gtk3 gobject-introspection-devel portaudio-devel \
+    pkg-config xdotool wtype
+
+python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+source ~/.local/share/vocalinux-pypi/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install vocalinux
+vocalinux
+```
+
+**Arch Linux:**
+
+```bash
+sudo pacman -S --needed \
+    python python-virtualenv python-gobject gtk3 libappindicator-gtk3 \
+    gobject-introspection python-cairo portaudio pkg-config xdotool wtype
+
+python -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+source ~/.local/share/vocalinux-pypi/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install vocalinux
+vocalinux
+```
+
+**openSUSE Tumbleweed:**
+
+```bash
+PYVER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")')
+
+sudo zypper install -y \
+    "${PYVER}-gobject" "${PYVER}-gobject-cairo" gtk3 \
+    typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
+    typelib-1_0-Notify-0_7 libnotify4 \
+    gobject-introspection-devel portaudio-devel "${PYVER}-devel" \
+    "${PYVER}-virtualenv" pkg-config xdotool wtype
+
+python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
+source ~/.local/share/vocalinux-pypi/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install vocalinux
+vocalinux
+```
+
+If `vocalinux` starts but reports a missing speech model, open Settings and
+download a model, or use the recommended installer which downloads the default
+model during setup.
+
+On Ubuntu 24.04+ or Pop!_OS, install `libgirepository-2.0-dev` if
+`libgirepository1.0-dev` is not available.
+
 ## System Requirements
 
 | Requirement | Details |
@@ -103,6 +181,8 @@ Options:
   --test           Run tests after installation
   --venv-dir=PATH  Specify custom virtual environment directory
   --skip-models    Skip downloading speech models during installation
+  --rebuild-whispercpp     Rebuild/reinstall pywhispercpp even if already installed
+  --no-rebuild-whispercpp  Reuse existing pywhispercpp when present (auto-mode default)
   --tag=TAG        Install specific release tag
   --help           Show this help message
 
@@ -287,6 +367,7 @@ sudo zypper install -y \
     "${PYVER}-pip" "${PYVER}-gobject" "${PYVER}-gobject-cairo" \
     "${PYVER}-devel" "${PYVER}-virtualenv" \
     gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
+    typelib-1_0-Notify-0_7 libnotify4 \
     gobject-introspection-devel portaudio-devel pkg-config cmake \
     wget curl unzip xdotool wtype
 
@@ -319,6 +400,10 @@ pip install ".[whisper]"
 # Development mode
 pip install -e ".[dev]"
 ```
+
+For PyPI instead of a local checkout, use `pip install vocalinux` after installing
+the same system packages and creating the virtual environment with
+`--system-site-packages`.
 
 ### 4. Set Up Desktop Integration
 
@@ -377,6 +462,17 @@ vulkaninfo --summary | grep -i "deviceName"
 # In Vocalinux, look for these log messages:
 # [INFO] whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU
 # [INFO] whisper.cpp using Vulkan GPU backend: AMD Radeon RX 6800
+```
+
+### Reusing Existing whisper.cpp Builds
+
+When updating an existing install, the installer checks for a working `pywhispercpp`
+installation before rebuilding it. Interactive installs ask whether to rebuild, with
+the default set to no. Automatic installs reuse the existing build by default.
+
+```bash
+./install.sh --auto                         # Reuse pywhispercpp if already installed
+./install.sh --auto --rebuild-whispercpp    # Force a rebuild/reinstall
 ```
 
 ### Switching Engines

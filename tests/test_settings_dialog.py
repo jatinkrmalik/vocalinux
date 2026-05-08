@@ -13,7 +13,7 @@ UX Design Notes tested:
 import sys
 import time
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 # Mock GTK before importing anything that might use it
 sys.modules["gi"] = MagicMock()
@@ -48,6 +48,7 @@ mock_config_manager.get = Mock(
     }
 )
 mock_config_manager.update_speech_recognition_settings = Mock()
+mock_config_manager.set = Mock()
 mock_config_manager.save_settings = Mock()
 
 
@@ -58,7 +59,12 @@ def apply_settings_internal(dialog, settings: dict) -> bool:
     """
     try:
         # 1. Update Config Manager
-        dialog.config_manager.update_speech_recognition_settings(settings)
+        sr_settings = {k: v for k, v in settings.items() if not k.startswith("whispercpp_")}
+        advanced_settings = {k: v for k, v in settings.items() if k.startswith("whispercpp_")}
+
+        dialog.config_manager.update_speech_recognition_settings(sr_settings)
+        for key, value in advanced_settings.items():
+            dialog.config_manager.set("advanced", key, value)
         dialog.config_manager.save_settings()
 
         # 2. Reconfigure Speech Engine
@@ -122,6 +128,44 @@ class TestSettingsDialog(unittest.TestCase):
 
         # Verify mocks were called with the right parameters
         mock_config_manager.update_speech_recognition_settings.assert_called_once_with(settings)
+        mock_config_manager.save_settings.assert_called_once()
+        mock_speech_engine.reconfigure.assert_called_once_with(**settings)
+
+    def test_apply_settings_persists_whispercpp_settings_to_advanced_section(self):
+        """Test whisper.cpp settings are saved outside speech_recognition config."""
+        settings = {
+            "engine": "whisper_cpp",
+            "language": "auto",
+            "model_size": "tiny",
+            "vad_sensitivity": 3,
+            "silence_timeout": 2.0,
+            "whispercpp_no_timestamps": False,
+            "whispercpp_temperature": 0.5,
+            "whispercpp_initial_prompt": "Meeting notes",
+        }
+
+        mock_speech_engine.reconfigure.side_effect = None
+
+        result = apply_settings_internal(self.dialog, settings)
+
+        self.assertTrue(result)
+        mock_config_manager.update_speech_recognition_settings.assert_called_once_with(
+            {
+                "engine": "whisper_cpp",
+                "language": "auto",
+                "model_size": "tiny",
+                "vad_sensitivity": 3,
+                "silence_timeout": 2.0,
+            }
+        )
+        mock_config_manager.set.assert_has_calls(
+            [
+                call("advanced", "whispercpp_no_timestamps", False),
+                call("advanced", "whispercpp_temperature", 0.5),
+                call("advanced", "whispercpp_initial_prompt", "Meeting notes"),
+            ],
+            any_order=True,
+        )
         mock_config_manager.save_settings.assert_called_once()
         mock_speech_engine.reconfigure.assert_called_once_with(**settings)
 
@@ -303,6 +347,154 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
 
         # _show_settings_applied_message was removed as part of instant-apply pattern
         self.assertFalse(hasattr(SettingsDialog, "_show_settings_applied_message"))
+
+    def test_advanced_initial_prompt_defers_auto_apply_while_typing(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertNotIn("focus-out-event", source_code)
+        self.assertNotIn(
+            'advanced_initial_prompt_buffer.connect("changed", self._on_advanced_param_changed)',
+            source_code,
+        )
+        self.assertIn(
+            'advanced_initial_prompt_buffer.connect("changed", self._on_advanced_prompt_changed)',
+            source_code,
+        )
+        self.assertIn("def _flush_advanced_prompt_if_dirty", source_code)
+        self.assertIn("self._advanced_prompt_dirty = True", source_code)
+        self.assertIn("self._flush_advanced_prompt_if_dirty()", source_code)
+
+    def test_advanced_initial_prompt_has_help_tooltip(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("initial_prompt_help", source_code)
+        self.assertIn("Leave blank for normal dictation.", source_code)
+        self.assertIn("prompt_scrolled.set_tooltip_text(initial_prompt_help)", source_code)
+        self.assertIn("initial_prompt_row.set_tooltip_text(initial_prompt_help)", source_code)
+
+    def test_advanced_panel_has_reset_to_defaults_button(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn('Gtk.Button(label="Reset to Defaults")', source_code)
+        self.assertIn('"clicked", self._on_reset_advanced_clicked', source_code)
+        self.assertIn("def _on_reset_advanced_clicked(self, widget):", source_code)
+        self.assertIn('defaults = DEFAULT_CONFIG["advanced"]', source_code)
+        self.assertIn("self.advanced_reset_button", source_code)
+        self.assertIn(
+            "action_area.set_child_secondary(self.advanced_reset_button, True)", source_code
+        )
+        self.assertNotIn("reset_box.pack_start(self.advanced_reset_button", source_code)
+
+    def test_advanced_reset_button_is_contextual_footer_action(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("self.advanced_page_num = notebook.append_page", source_code)
+        self.assertIn(
+            'notebook.connect("switch-page", self._on_settings_page_switched)', source_code
+        )
+        self.assertIn("def _update_advanced_reset_button_visibility", source_code)
+        self.assertIn(
+            "self.advanced_reset_button.set_visible(page_num == self.advanced_page_num)",
+            source_code,
+        )
+
+    def test_advanced_panel_omits_unsupported_non_speech_token_setting(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertNotIn("Suppress Non-Speech Tokens", source_code)
+        self.assertNotIn("advanced_suppress_nst_switch", source_code)
+
+    def test_close_button_uses_dialog_padding(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("action_area = self.get_action_area()", source_code)
+        self.assertIn("action_area.set_margin_start(16)", source_code)
+        self.assertIn("action_area.set_margin_end(16)", source_code)
+
+    def test_advanced_disclaimer_appears_before_controls(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertLess(
+            source_code.index("controls_box.pack_start(info_box"),
+            source_code.index("controls_box.pack_start(group"),
+        )
 
 
 class TestSettingsDialogHelperFunctions(unittest.TestCase):
