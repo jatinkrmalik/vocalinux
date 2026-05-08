@@ -1124,13 +1124,14 @@ class SpeechRecognitionManager:
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
 
-    def _handle_gpu_fallback(self, error, model_path: str, model_kwargs: dict, cpu_backend):
+    def _handle_gpu_fallback(self, error, model_path: str, model_kwargs, cpu_backend):
         """Handle GPU backend failure by falling back to CPU.
 
         Args:
             error: The RuntimeError from model loading.
             model_path: Path to the GGML model file.
-            model_kwargs: Dict of keyword arguments for pywhispercpp.Model.
+            model_kwargs: Dict of keyword arguments for pywhispercpp.Model, or the legacy
+                n_threads integer used by older tests/callers.
             cpu_backend: The CPU ComputeBackend enum value.
 
         Returns:
@@ -1158,6 +1159,8 @@ class SpeechRecognitionManager:
         self._set_managed_env("GGML_VULKAN", "0")
         self._set_managed_env("GGML_CUDA", "0")
         self._clear_selected_gpu()
+        if isinstance(model_kwargs, int):
+            model_kwargs = self._build_whispercpp_model_kwargs(model_kwargs)
         self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
