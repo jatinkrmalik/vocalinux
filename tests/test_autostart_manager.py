@@ -29,6 +29,32 @@ class TestAutostartManager(unittest.TestCase):
             command = autostart_manager.get_exec_command()
         self.assertEqual(command, "/usr/bin/python3 -m vocalinux.main --start-minimized")
 
+    def test_get_exec_command_flatpak_uses_flatpak_run(self):
+        with patch.dict("os.environ", {"FLATPAK_ID": "com.vocalinux.Vocalinux"}, clear=False):
+            command = autostart_manager.get_exec_command()
+        self.assertEqual(command, "flatpak run com.vocalinux.Vocalinux --start-minimized")
+
+    def test_enable_autostart_flatpak_writes_flatpak_run_exec(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                patch.dict(
+                    "os.environ",
+                    {"XDG_CONFIG_HOME": tmp_dir, "FLATPAK_ID": "com.vocalinux.Vocalinux"},
+                    clear=False,
+                ),
+            ):
+                enabled = autostart_manager.enable_autostart()
+                self.assertTrue(enabled)
+
+                desktop_file = Path(tmp_dir) / "autostart" / "vocalinux.desktop"
+                self.assertTrue(desktop_file.exists())
+                content = desktop_file.read_text(encoding="utf-8")
+                self.assertIn(
+                    "Exec=flatpak run com.vocalinux.Vocalinux --start-minimized", content
+                )
+
     def test_enable_disable_autostart_creates_and_removes_entry(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with (
