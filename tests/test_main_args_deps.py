@@ -42,6 +42,7 @@ class TestParseArguments(unittest.TestCase):
             assert args.gpu is None
             assert args.gpus is False
             assert args.wayland is False
+            assert args.text_injection == "auto"
             assert args.start_minimized is False
 
     def test_parse_args_debug_flag(self):
@@ -84,6 +85,14 @@ class TestParseArguments(unittest.TestCase):
             args = parse_arguments()
             assert args.wayland is True
 
+    def test_parse_args_text_injection_argument(self):
+        """Test parsing with text injection backend override."""
+        with patch.object(sys, "argv", ["vocalinux", "--text-injection", "ydotool-paste"]):
+            from vocalinux.main import parse_arguments
+
+            args = parse_arguments()
+            assert args.text_injection == "ydotool-paste"
+
     def test_parse_args_start_minimized_flag(self):
         """Test parsing with start-minimized flag."""
         with patch.object(sys, "argv", ["vocalinux", "--start-minimized"]):
@@ -110,6 +119,8 @@ class TestParseArguments(unittest.TestCase):
                 "Intel Arc",
                 "--gpus",
                 "--wayland",
+                "--text-injection",
+                "ydotool",
             ],
         ):
             from vocalinux.main import parse_arguments
@@ -122,6 +133,7 @@ class TestParseArguments(unittest.TestCase):
             assert args.gpu == "Intel Arc"
             assert args.gpus is True
             assert args.wayland is True
+            assert args.text_injection == "ydotool"
 
 
 class TestCheckDependencies(unittest.TestCase):

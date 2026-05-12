@@ -43,13 +43,22 @@ class TextInjector:
     application window, supporting both X11 and Wayland environments.
     """
 
-    def __init__(self, wayland_mode: bool = False):
+    def __init__(self, wayland_mode: bool = False, preferred_backend: Optional[str] = None):
         """
         Initialize the text injector.
 
         Args:
             wayland_mode: Force Wayland compatibility mode
+            preferred_backend: Optional text injection backend override
         """
+        self.preferred_backend = (preferred_backend or "auto").strip().lower().replace("_", "-")
+        valid_backends = {"auto", "ydotool", "ydotool-paste"}
+        if self.preferred_backend not in valid_backends:
+            raise ValueError(
+                f"Unknown text injection backend '{preferred_backend}'. "
+                f"Expected one of: {', '.join(sorted(valid_backends))}"
+            )
+        self._force_ydotool_paste = self.preferred_backend == "ydotool-paste"
         self._ibus_injector: Optional[IBusTextInjector] = None
         self.environment = self._detect_environment()
         self._session_environment = self.environment
@@ -145,6 +154,10 @@ class TextInjector:
         """Check for the required tools for text injection."""
         ibus_requested = False
 
+        if self.preferred_backend in {"ydotool", "ydotool-paste"}:
+            self._select_ydotool_backend(required=True)
+            return
+
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
         if is_ibus_available():
@@ -238,6 +251,41 @@ class TextInjector:
 
         if ibus_requested:
             self._start_ibus_initialization()
+
+    def _select_ydotool_backend(self, required: bool = False) -> bool:
+        """Select ydotool after verifying the daemon is reachable."""
+        if not shutil.which("ydotool"):
+            if required:
+                raise RuntimeError("ydotool backend requested, but ydotool is not installed")
+            return False
+
+        try:
+            subprocess.run(
+                ["ydotool", "type", ""],
+                check=True,
+                stderr=subprocess.PIPE,
+                timeout=2,
+            )
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+        ) as e:
+            if required:
+                raise RuntimeError(
+                    "ydotool backend requested, but ydotoold is not responding"
+                ) from e
+            return False
+
+        self.wayland_tool = "ydotool"
+        self.environment = DesktopEnvironment.WAYLAND
+        logger.info("Using ydotool for text injection")
+        if self._force_ydotool_paste:
+            logger.info(
+                "Using ydotool clipboard-paste mode "
+                "(copies text, then simulates Ctrl+V)"
+            )
+        return True
 
     def _start_ibus_initialization(self) -> None:
         if self._ibus_injector is None or self._ibus_init_thread is not None:
@@ -836,15 +884,25 @@ class TextInjector:
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
+        use_ydotool_paste = (
+            self.wayland_tool == "ydotool"
+            and (self._force_ydotool_paste or self._has_non_ascii(text))
+        )
+
         # ydotool can only handle ASCII characters because it works at the
         # evdev keycode level. For non-ASCII text, use clipboard paste instead.
-        if self.wayland_tool == "ydotool" and self._has_non_ascii(text):
-            logger.info(
-                "Text contains non-ASCII characters, using clipboard paste "
-                "for ydotool (evdev keycodes are ASCII-only)"
-            )
+        if use_ydotool_paste:
+            if self._force_ydotool_paste:
+                logger.info("Using forced ydotool clipboard-paste injection")
+            else:
+                logger.info(
+                    "Text contains non-ASCII characters, using clipboard paste "
+                    "for ydotool (evdev keycodes are ASCII-only)"
+                )
             if self._inject_via_clipboard_paste(text):
                 return
+            if self._force_ydotool_paste:
+                raise RuntimeError("Forced ydotool clipboard-paste injection failed")
             logger.warning(
                 "Clipboard paste failed, falling back to ydotool type "
                 "(non-ASCII characters may be dropped)"

@@ -76,6 +76,15 @@ def parse_arguments():
     )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
     parser.add_argument(
+        "--text-injection",
+        choices=["auto", "ydotool", "ydotool-paste"],
+        default="auto",
+        help=(
+            "Text injection backend override. Use ydotool-paste for remote clients "
+            "that need clipboard paste instead of typed key events."
+        ),
+    )
+    parser.add_argument(
         "--start-minimized",
         action="store_true",
         help="Start minimized to system tray",
@@ -313,15 +322,16 @@ def main():
     initialize_logging()
     logger.info("Logging system initialized")
 
-    # Try to start IBus daemon if not running (for text injection)
-    # This helps on desktop environments where IBus doesn't start automatically
-    try:
-        from .text_injection import start_ibus_daemon
+    # Try to start IBus daemon if not running (for text injection).
+    # Skip this when the user explicitly requested a non-IBus backend.
+    if args.text_injection == "auto":
+        try:
+            from .text_injection import start_ibus_daemon
 
-        if start_ibus_daemon():
-            logger.debug("IBus daemon started for text injection")
-    except Exception as e:
-        logger.debug(f"Could not start IBus daemon: {e}")
+            if start_ibus_daemon():
+                logger.debug("IBus daemon started for text injection")
+        except Exception as e:
+            logger.debug(f"Could not start IBus daemon: {e}")
 
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
@@ -455,7 +465,10 @@ def main():
                 config_manager.save_config()
 
         # Initialize text injection system
-        text_system = text_injector.TextInjector(wayland_mode=args.wayland)
+        text_system = text_injector.TextInjector(
+            wayland_mode=args.wayland,
+            preferred_backend=args.text_injection,
+        )
 
         # Initialize action handler
         action_handler = ActionHandler(text_system)
