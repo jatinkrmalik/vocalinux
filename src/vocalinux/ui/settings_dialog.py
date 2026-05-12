@@ -806,6 +806,8 @@ class ModelDownloadDialog(Gtk.Dialog):
 class SettingsDialog(Gtk.Dialog):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
+    RESTART_RESPONSE = 1001
+
     def __init__(
         self,
         parent: Gtk.Window,
@@ -836,7 +838,6 @@ class SettingsDialog(Gtk.Dialog):
         action_area.set_child_secondary(self.advanced_reset_button, True)
         self.restart_now_button = self.add_button("Restart Now", self.RESTART_RESPONSE)
         self.restart_now_button.get_style_context().add_class("suggested-action")
-        self.restart_now_button.connect("clicked", self._on_restart_app_clicked)
         self.restart_now_button.hide()
         self.config_manager = config_manager
         self.speech_engine = speech_engine
@@ -1816,6 +1817,14 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_settings_dialog_response(self, dialog, response_id):
         """Persist deferred text edits before the settings dialog closes."""
+        if response_id == self.RESTART_RESPONSE:
+            self._flush_advanced_prompt_if_dirty()
+            self._cancel_gpu_restart_countdown()
+            self._gpu_restart_seconds_remaining = 0
+            self._refresh_gpu_restart_notice_text()
+            self._restart_application_now()
+            return
+
         if response_id in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
             self._flush_advanced_prompt_if_dirty()
 
@@ -2349,9 +2358,11 @@ class SettingsDialog(Gtk.Dialog):
                 )
             self._refresh_gpu_restart_notice_text()
             self.gpu_restart_box.show_all()
+            self.restart_now_button.show()
         else:
             self._cancel_gpu_restart_countdown()
             self.gpu_restart_box.hide()
+            self.restart_now_button.hide()
 
     def _get_live_reconfigure_settings(self, settings: dict) -> dict:
         """Map persisted settings to values that are safe to apply in the current process."""

@@ -374,6 +374,30 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         self.assertIn("Restarting the app in", source_code)
         self.assertIn("def _on_gpu_restart_countdown_tick", source_code)
 
+    def test_restart_now_button_has_custom_response_handler(self):
+        """Restart Now should use a defined custom dialog response."""
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("RESTART_RESPONSE = 1001", source_code)
+        self.assertIn(
+            'self.restart_now_button = self.add_button("Restart Now", self.RESTART_RESPONSE)',
+            source_code,
+        )
+        self.assertIn("if response_id == self.RESTART_RESPONSE:", source_code)
+        self.assertIn("self._restart_application_now()", source_code)
+        self.assertIn("self.restart_now_button.show()", source_code)
+
     def test_settings_dialog_has_close_button_only(self):
         """Test that SettingsDialog has a Close button but no Apply button.
 
