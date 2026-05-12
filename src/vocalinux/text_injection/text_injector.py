@@ -48,6 +48,7 @@ class TextInjector:
         wayland_mode: bool = False,
         preferred_backend: Optional[str] = None,
         clipboard_timeout: float = 2.0,
+        paste_delay: float = 0.25,
     ):
         """
         Initialize the text injector.
@@ -56,9 +57,12 @@ class TextInjector:
             wayland_mode: Force Wayland compatibility mode
             preferred_backend: Optional text injection backend override
             clipboard_timeout: Seconds to wait for clipboard tools to complete
+            paste_delay: Seconds to wait after copying before simulating Ctrl+V
         """
         if clipboard_timeout <= 0:
             raise ValueError("clipboard_timeout must be greater than 0")
+        if paste_delay < 0:
+            raise ValueError("paste_delay must be greater than or equal to 0")
         self.preferred_backend = (preferred_backend or "auto").strip().lower().replace("_", "-")
         valid_backends = {"auto", "ydotool", "ydotool-paste"}
         if self.preferred_backend not in valid_backends:
@@ -76,6 +80,8 @@ class TextInjector:
         self._state_lock = threading.Lock()
         self._clipboard_tool_health = {}
         self._clipboard_timeout = clipboard_timeout
+        self._paste_delay = paste_delay
+        self._paste_key_delay = 0.05
 
         # Force Wayland mode if requested
         if wayland_mode and self.environment == DesktopEnvironment.X11:
@@ -861,19 +867,29 @@ class TextInjector:
             logger.warning("Could not copy text to clipboard for paste injection")
             return False
 
+        paste_delay = getattr(self, "_paste_delay", 0.25)
+        if paste_delay > 0:
+            logger.debug(f"Waiting {paste_delay:.2f}s before simulating paste")
+            time.sleep(paste_delay)
+
         # Simulate Ctrl+V via ydotool using evdev keycodes:
         # KEY_LEFTCTRL=29, KEY_V=47; value 1=press, 0=release.
         # wtype is intentionally not handled here: wtype uses the Wayland
         # virtual-keyboard protocol which supports Unicode natively, so it
         # never needs the clipboard-paste workaround.
         try:
-            subprocess.run(
-                ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
-                check=True,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=3,
-            )
+            key_delay = getattr(self, "_paste_key_delay", 0.05)
+            key_events = ["29:1", "47:1", "47:0", "29:0"]
+            for index, event in enumerate(key_events):
+                subprocess.run(
+                    ["ydotool", "key", event],
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=3,
+                )
+                if key_delay > 0 and index < len(key_events) - 1:
+                    time.sleep(key_delay)
             logger.info(f"Text injected via clipboard paste: '{text[:20]}...' ({len(text)} chars)")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:

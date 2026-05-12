@@ -91,6 +91,12 @@ def parse_arguments():
         help="Seconds to wait for clipboard tools in clipboard-paste injection mode.",
     )
     parser.add_argument(
+        "--paste-delay",
+        type=float,
+        default=0.25,
+        help="Seconds to wait after copying text before simulating Ctrl+V.",
+    )
+    parser.add_argument(
         "--start-minimized",
         action="store_true",
         help="Start minimized to system tray",
@@ -475,6 +481,7 @@ def main():
             wayland_mode=args.wayland,
             preferred_backend=args.text_injection,
             clipboard_timeout=args.clipboard_timeout,
+            paste_delay=args.paste_delay,
         )
 
         # Initialize action handler

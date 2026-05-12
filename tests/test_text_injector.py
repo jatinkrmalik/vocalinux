@@ -121,6 +121,16 @@ class TestTextInjector(unittest.TestCase):
         with self.assertRaises(ValueError):
             TextInjector(clipboard_timeout=0)
 
+    def test_paste_delay_can_be_configured(self):
+        """Test configuring the delay before paste simulation."""
+        injector = TextInjector(paste_delay=1.0)
+        self.assertEqual(injector._paste_delay, 1.0)
+
+    def test_paste_delay_must_not_be_negative(self):
+        """Test rejecting invalid paste delay values."""
+        with self.assertRaises(ValueError):
+            TextInjector(paste_delay=-0.1)
+
     def test_wayland_fallback_to_xdotool(self):
         """Test fallback to XWayland with xdotool when wtype fails."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
@@ -694,6 +704,37 @@ class TestTextInjector(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 text=True,
                 timeout=2.0,
+            )
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_sends_ctrl_v_as_separate_key_events(self, mock_run, mock_which):
+        """Paste simulation should send a slower Ctrl+V sequence for remote clients."""
+        mock_which.side_effect = lambda x: x in ("wl-copy", "ydotool")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector(paste_delay=0)
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+            injector._paste_key_delay = 0
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertTrue(result)
+            key_calls = [
+                c.args[0]
+                for c in mock_run.call_args_list
+                if c.args and c.args[0][:2] == ["ydotool", "key"]
+            ]
+            self.assertEqual(
+                key_calls,
+                [
+                    ["ydotool", "key", "29:1"],
+                    ["ydotool", "key", "47:1"],
+                    ["ydotool", "key", "47:0"],
+                    ["ydotool", "key", "29:0"],
+                ],
             )
 
     @patch("vocalinux.text_injection.text_injector.shutil.which")
