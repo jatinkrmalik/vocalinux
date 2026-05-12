@@ -43,14 +43,22 @@ class TextInjector:
     application window, supporting both X11 and Wayland environments.
     """
 
-    def __init__(self, wayland_mode: bool = False, preferred_backend: Optional[str] = None):
+    def __init__(
+        self,
+        wayland_mode: bool = False,
+        preferred_backend: Optional[str] = None,
+        clipboard_timeout: float = 2.0,
+    ):
         """
         Initialize the text injector.
 
         Args:
             wayland_mode: Force Wayland compatibility mode
             preferred_backend: Optional text injection backend override
+            clipboard_timeout: Seconds to wait for clipboard tools to complete
         """
+        if clipboard_timeout <= 0:
+            raise ValueError("clipboard_timeout must be greater than 0")
         self.preferred_backend = (preferred_backend or "auto").strip().lower().replace("_", "-")
         valid_backends = {"auto", "ydotool", "ydotool-paste"}
         if self.preferred_backend not in valid_backends:
@@ -67,7 +75,7 @@ class TextInjector:
         self._ibus_init_thread: Optional[threading.Thread] = None
         self._state_lock = threading.Lock()
         self._clipboard_tool_health = {}
-        self._clipboard_timeout = 0.35
+        self._clipboard_timeout = clipboard_timeout
 
         # Force Wayland mode if requested
         if wayland_mode and self.environment == DesktopEnvironment.X11:
@@ -153,8 +161,9 @@ class TextInjector:
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
         ibus_requested = False
+        preferred_backend = getattr(self, "preferred_backend", "auto")
 
-        if self.preferred_backend in {"ydotool", "ydotool-paste"}:
+        if preferred_backend in {"ydotool", "ydotool-paste"}:
             self._select_ydotool_backend(required=True)
             return
 
@@ -886,13 +895,13 @@ class TextInjector:
         """
         use_ydotool_paste = (
             self.wayland_tool == "ydotool"
-            and (self._force_ydotool_paste or self._has_non_ascii(text))
+            and (getattr(self, "_force_ydotool_paste", False) or self._has_non_ascii(text))
         )
 
         # ydotool can only handle ASCII characters because it works at the
         # evdev keycode level. For non-ASCII text, use clipboard paste instead.
         if use_ydotool_paste:
-            if self._force_ydotool_paste:
+            if getattr(self, "_force_ydotool_paste", False):
                 logger.info("Using forced ydotool clipboard-paste injection")
             else:
                 logger.info(
@@ -901,7 +910,7 @@ class TextInjector:
                 )
             if self._inject_via_clipboard_paste(text):
                 return
-            if self._force_ydotool_paste:
+            if getattr(self, "_force_ydotool_paste", False):
                 raise RuntimeError("Forced ydotool clipboard-paste injection failed")
             logger.warning(
                 "Clipboard paste failed, falling back to ydotool type "

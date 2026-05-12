@@ -111,6 +111,16 @@ class TestTextInjector(unittest.TestCase):
             # Should be forced to Wayland
             self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
 
+    def test_clipboard_timeout_can_be_configured(self):
+        """Test configuring the clipboard tool timeout."""
+        injector = TextInjector(clipboard_timeout=5.0)
+        self.assertEqual(injector._clipboard_timeout, 5.0)
+
+    def test_clipboard_timeout_must_be_positive(self):
+        """Test rejecting invalid clipboard timeout values."""
+        with self.assertRaises(ValueError):
+            TextInjector(clipboard_timeout=0)
+
     def test_wayland_fallback_to_xdotool(self):
         """Test fallback to XWayland with xdotool when wtype fails."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):

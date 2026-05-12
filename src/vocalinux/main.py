@@ -85,6 +85,12 @@ def parse_arguments():
         ),
     )
     parser.add_argument(
+        "--clipboard-timeout",
+        type=float,
+        default=2.0,
+        help="Seconds to wait for clipboard tools in clipboard-paste injection mode.",
+    )
+    parser.add_argument(
         "--start-minimized",
         action="store_true",
         help="Start minimized to system tray",
@@ -468,6 +474,7 @@ def main():
         text_system = text_injector.TextInjector(
             wayland_mode=args.wayland,
             preferred_backend=args.text_injection,
+            clipboard_timeout=args.clipboard_timeout,
         )
 
         # Initialize action handler

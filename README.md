@@ -246,6 +246,7 @@ vocalinux --gpu "Tesla P40"       # Persist GPU selection by device name
 vocalinux --gpu auto              # Clear saved GPU preference
 vocalinux --wayland               # Force Wayland mode
 vocalinux --text-injection ydotool-paste  # Use clipboard paste via ydotool
+vocalinux --clipboard-timeout 5   # Wait longer for slow remote clipboards
 vocalinux --start-minimized       # Start without first-run modal prompts
 ```
 

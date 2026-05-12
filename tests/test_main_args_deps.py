@@ -43,6 +43,7 @@ class TestParseArguments(unittest.TestCase):
             assert args.gpus is False
             assert args.wayland is False
             assert args.text_injection == "auto"
+            assert args.clipboard_timeout == 2.0
             assert args.start_minimized is False
 
     def test_parse_args_debug_flag(self):
@@ -93,6 +94,14 @@ class TestParseArguments(unittest.TestCase):
             args = parse_arguments()
             assert args.text_injection == "ydotool-paste"
 
+    def test_parse_args_clipboard_timeout_argument(self):
+        """Test parsing with clipboard timeout override."""
+        with patch.object(sys, "argv", ["vocalinux", "--clipboard-timeout", "5"]):
+            from vocalinux.main import parse_arguments
+
+            args = parse_arguments()
+            assert args.clipboard_timeout == 5.0
+
     def test_parse_args_start_minimized_flag(self):
         """Test parsing with start-minimized flag."""
         with patch.object(sys, "argv", ["vocalinux", "--start-minimized"]):
@@ -121,6 +130,8 @@ class TestParseArguments(unittest.TestCase):
                 "--wayland",
                 "--text-injection",
                 "ydotool",
+                "--clipboard-timeout",
+                "3.5",
             ],
         ):
             from vocalinux.main import parse_arguments
@@ -134,6 +145,7 @@ class TestParseArguments(unittest.TestCase):
             assert args.gpus is True
             assert args.wayland is True
             assert args.text_injection == "ydotool"
+            assert args.clipboard_timeout == 3.5
 
 
 class TestCheckDependencies(unittest.TestCase):
