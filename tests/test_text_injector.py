@@ -674,6 +674,49 @@ class TestTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.text_injector.shutil.which")
     @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_wl_copy_receives_text_via_stdin(self, mock_run, mock_which):
+        """wl-copy should receive clipboard text on stdin, not as an argument."""
+        mock_which.side_effect = lambda x: x in ("wl-copy", "ydotool")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            result = injector._copy_to_clipboard("café")
+
+            self.assertTrue(result)
+            mock_run.assert_any_call(
+                ["wl-copy"],
+                input="café",
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=2.0,
+            )
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_retries_previously_unhealthy_tool(self, mock_run, mock_which):
+        """Paste injection should retry clipboard tools after transient timeouts."""
+        mock_which.side_effect = lambda x: x in ("wl-copy", "ydotool")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+            injector._clipboard_tool_health["wl-copy"] = False
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertTrue(result)
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            self.assertTrue(any(c[0] == "wl-copy" for c in calls))
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
     def test_clipboard_paste_uses_xsel_fallback(self, mock_run, mock_which):
         """Test clipboard paste falls back to xsel when wl-copy/xclip unavailable (#362)."""
         mock_which.side_effect = lambda x: x in ("xsel", "ydotool")

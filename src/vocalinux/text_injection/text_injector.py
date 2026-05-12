@@ -351,7 +351,8 @@ class TextInjector:
     def _run_clipboard_command(self, tool: str, text: str) -> bool:
         if tool == "wl-copy":
             subprocess.run(
-                ["wl-copy", text],
+                ["wl-copy"],
+                input=text,
                 check=True,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -519,7 +520,7 @@ class TextInjector:
         logger.debug("No better tools available, continuing with xdotool fallback")
         return False
 
-    def _copy_to_clipboard(self, text: str) -> bool:
+    def _copy_to_clipboard(self, text: str, retry_unhealthy: bool = False) -> bool:
         """
         Copy text to clipboard.
 
@@ -529,6 +530,7 @@ class TextInjector:
 
         Args:
             text: The text to copy to clipboard
+            retry_unhealthy: Retry tools that failed earlier in this process
 
         Returns:
             True if clipboard copy was successful, False otherwise
@@ -536,7 +538,7 @@ class TextInjector:
         logger.info("Copying text to clipboard")
 
         for tool in self._get_clipboard_tools():
-            if self._clipboard_tool_health.get(tool) is False:
+            if self._clipboard_tool_health.get(tool) is False and not retry_unhealthy:
                 continue
 
             try:
@@ -855,7 +857,7 @@ class TextInjector:
             "(user clipboard will be temporarily overwritten)"
         )
 
-        if not self._copy_to_clipboard(text):
+        if not self._copy_to_clipboard(text, retry_unhealthy=True):
             logger.warning("Could not copy text to clipboard for paste injection")
             return False
 
