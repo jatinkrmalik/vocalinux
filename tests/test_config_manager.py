@@ -174,7 +174,9 @@ class TestConfigManager(unittest.TestCase):
         # Also test the get method works - it should return a valid engine value
         config_manager = ConfigManager()
         value = config_manager.get("speech_recognition", "engine")
-        self.assertIn(value, ["vosk", "whisper", "whisper_cpp"])  # Should be one of valid engines
+        self.assertIn(
+            value, ["vosk", "whisper", "whisper_cpp", "moonshine"]
+        )  # Should be one of valid engines
 
     def test_get_nonexistent_value(self):
         """Test getting a nonexistent configuration value."""

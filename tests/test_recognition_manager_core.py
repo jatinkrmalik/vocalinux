@@ -32,7 +32,9 @@ from conftest import mock_audio_feedback  # noqa: E402
 
 # Update import paths to use the new package structure
 from vocalinux.common_types import RecognitionState  # noqa: E402
-from vocalinux.speech_recognition.command_processor import CommandProcessor  # noqa: E402
+from vocalinux.speech_recognition.command_processor import (  # noqa: E402
+    CommandProcessor,
+)
 from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
     SpeechRecognitionManager,
     _get_supported_channels,
@@ -719,7 +721,10 @@ class TestWhispercppInitialization(unittest.TestCase):
 
         with patch.dict(
             sys.modules,
-            {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model},
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp.model,
+            },
         ):
             with patch(
                 "vocalinux.speech_recognition.recognition_manager.get_model_path",
@@ -734,7 +739,9 @@ class TestWhispercppInitialization(unittest.TestCase):
                             mock_stat.return_value.st_size = 1000000
                             # Should convert invalid model to "tiny"
                             manager = SpeechRecognitionManager(
-                                engine="whisper_cpp", model_size="invalid", defer_download=True
+                                engine="whisper_cpp",
+                                model_size="invalid",
+                                defer_download=True,
                             )
                             # Invalid size should be converted to "tiny"
                             self.assertEqual(manager.model_size, "tiny")
@@ -746,7 +753,10 @@ class TestWhispercppInitialization(unittest.TestCase):
 
         with patch.dict(
             sys.modules,
-            {"pywhispercpp": mock_pywhispercpp, "pywhispercpp.model": mock_pywhispercpp.model},
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp.model,
+            },
         ):
             # Mock get_model_path to return a non-existent path
             with patch(
@@ -995,3 +1005,188 @@ class TestDownloadModels(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _FakeMoonshineIntArray:
+    def __init__(self, values):
+        self._values = values
+
+    def astype(self, _dtype):
+        return _FakeMoonshineFloatArray(self._values)
+
+
+class _FakeMoonshineFloatArray:
+    def __init__(self, values):
+        self._values = values
+
+    def __len__(self):
+        return len(self._values)
+
+    def __truediv__(self, divisor):
+        return _FakeMoonshineListArray([value / divisor for value in self._values])
+
+
+class _FakeMoonshineListArray:
+    def __init__(self, values):
+        self._values = values
+
+    def tolist(self):
+        return list(self._values)
+
+
+class TestMoonshineRecognitionManager(unittest.TestCase):
+    """Targeted coverage tests for Moonshine recognition-manager paths."""
+
+    def setUp(self):
+        self.mockKaldi = patch.object(sys.modules["vosk"], "KaldiRecognizer")
+        self.mockModel = patch.object(sys.modules["vosk"], "Model")
+        self.mockMakeDirs = patch("os.makedirs")
+        self.mockThread = patch("threading.Thread")
+        self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
+        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
+
+        self.kaldiMock = self.mockKaldi.start()
+        self.modelMock = self.mockModel.start()
+        self.makeDirsMock = self.mockMakeDirs.start()
+        self.threadMock = self.mockThread.start()
+        self.pathMock = self.mockPath.start()
+        self.downloadMock = self.mockDownload.start()
+
+        self.pathMock.return_value = "/mock/path/vosk-model"
+        self.recognizerMock = MagicMock()
+        self.kaldiMock.return_value = self.recognizerMock
+        self.recognizerMock.FinalResult.return_value = '{"text": ""}'
+        self.threadInstance = MagicMock()
+        self.threadMock.return_value = self.threadInstance
+
+        self.patcher_exists = patch("os.path.exists", return_value=True)
+        self.mock_exists = self.patcher_exists.start()
+
+        mock_audio_feedback.play_start_sound.reset_mock()
+        mock_audio_feedback.play_stop_sound.reset_mock()
+        mock_audio_feedback.play_error_sound.reset_mock()
+
+    def tearDown(self):
+        self.mockKaldi.stop()
+        self.mockModel.stop()
+        self.mockMakeDirs.stop()
+        self.mockThread.stop()
+        self.mockPath.stop()
+        self.mockDownload.stop()
+        self.patcher_exists.stop()
+
+    def test_init_moonshine_auto_model_success(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.engine = "moonshine"
+        manager.language = "auto"
+        manager.model_size = "auto"
+
+        transcriber_cls = MagicMock()
+        transcriber_instance = MagicMock()
+        transcriber_cls.return_value = transcriber_instance
+
+        moonshine_module = MagicMock()
+        moonshine_module.Transcriber = transcriber_cls
+        moonshine_module.get_model_for_language = MagicMock(
+            return_value=("/mock/moonshine-model", 5)
+        )
+
+        moonshine_api_module = MagicMock()
+        moonshine_api_module.ModelArch = MagicMock()
+
+        with patch.dict(
+            sys.modules,
+            {
+                "moonshine_voice": moonshine_module,
+                "moonshine_voice.moonshine_api": moonshine_api_module,
+            },
+        ):
+            manager._init_moonshine()
+
+        moonshine_module.get_model_for_language.assert_called_once_with(wanted_language="en")
+        transcriber_cls.assert_called_once_with(
+            model_path="/mock/moonshine-model",
+            model_arch=5,
+        )
+        self.assertTrue(manager._model_initialized)
+        self.assertIs(manager.model, transcriber_instance)
+
+    def test_init_moonshine_import_error_sets_error_state(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.engine = "moonshine"
+
+        original_import = __import__
+
+        def raising_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "moonshine_voice":
+                raise ImportError("moonshine missing")
+            return original_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=raising_import):
+            with self.assertRaises(ImportError):
+                manager._init_moonshine()
+
+        self.assertEqual(manager.state, RecognitionState.ERROR)
+
+    def test_transcribe_with_moonshine_returns_empty_for_no_buffer(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.model = MagicMock()
+
+        text = manager._transcribe_with_moonshine([])
+
+        self.assertEqual(text, "")
+
+    def test_transcribe_with_moonshine_returns_empty_when_model_missing(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.model = None
+
+        fake_numpy = MagicMock()
+        fake_numpy.int16 = object()
+        fake_numpy.float32 = object()
+        fake_numpy.frombuffer.return_value = _FakeMoonshineIntArray([0.0, 1.0, -1.0])
+
+        with patch.dict(sys.modules, {"numpy": fake_numpy}):
+            text = manager._transcribe_with_moonshine([b"\x00\x00" * 4])
+
+        self.assertEqual(text, "")
+
+    def test_transcribe_with_moonshine_joins_filtered_lines(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+
+        transcript = MagicMock()
+        transcript.lines = [
+            MagicMock(text="hello"),
+            MagicMock(text="[BLANK_AUDIO]"),
+            MagicMock(text="world"),
+        ]
+
+        manager.model = MagicMock()
+        manager.model.transcribe_without_streaming.return_value = transcript
+
+        fake_numpy = MagicMock()
+        fake_numpy.int16 = object()
+        fake_numpy.float32 = object()
+        fake_numpy.frombuffer.return_value = _FakeMoonshineIntArray(
+            [0.0, 16384.0, -16384.0, 8192.0]
+        )
+
+        with patch.dict(sys.modules, {"numpy": fake_numpy}):
+            text = manager._transcribe_with_moonshine([b"\x00\x00" * 8])
+
+        self.assertEqual(text, "hello world")
+        manager.model.transcribe_without_streaming.assert_called_once()
+
+    def test_transcribe_with_moonshine_handles_backend_exception(self):
+        manager = SpeechRecognitionManager(engine="vosk")
+        manager.model = MagicMock()
+        manager.model.transcribe_without_streaming.side_effect = RuntimeError("boom")
+
+        fake_numpy = MagicMock()
+        fake_numpy.int16 = object()
+        fake_numpy.float32 = object()
+        fake_numpy.frombuffer.return_value = _FakeMoonshineIntArray([0.0, 1.0, -1.0])
+
+        with patch.dict(sys.modules, {"numpy": fake_numpy}):
+            text = manager._transcribe_with_moonshine([b"\x00\x00" * 4])
+
+        self.assertEqual(text, "")

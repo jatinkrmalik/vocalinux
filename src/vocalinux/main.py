@@ -28,8 +28,8 @@ def parse_arguments():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["small", "medium", "large"],
-        help="Speech recognition model size (small, medium, large)",
+        choices=["auto", "tiny", "base", "small", "medium", "large"],
+        help="Speech recognition model size (auto, tiny, base, small, medium, large)",
     )
     parser.add_argument(
         "--language",
@@ -58,7 +58,7 @@ def parse_arguments():
     parser.add_argument(
         "--engine",
         type=str,
-        choices=["vosk", "whisper", "whisper_cpp"],
+        choices=["vosk", "whisper", "whisper_cpp", "moonshine"],
         help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
     )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
