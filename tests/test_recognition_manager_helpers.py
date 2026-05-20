@@ -3,6 +3,7 @@
 import os
 import sys
 import unittest
+from importlib.machinery import EXTENSION_SUFFIXES
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -33,10 +34,13 @@ if "gi" not in sys.modules:
 if "gi.repository" not in sys.modules:
     sys.modules["gi.repository"] = MagicMock()
 
+from vocalinux.speech_recognition import recognition_manager as rm
 from vocalinux.speech_recognition.recognition_manager import (
     SpeechRecognitionManager,
     _filter_non_speech,
+    _find_pywhispercpp_shared_library_dirs,
     _get_system_model_paths,
+    _preload_pywhispercpp_shared_libraries,
     _show_notification,
 )
 from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
@@ -138,6 +142,55 @@ class TestGetSystemModelPaths(unittest.TestCase):
             with patch("builtins.open", side_effect=FileNotFoundError()):
                 paths = _get_system_model_paths()
                 self.assertIsInstance(paths, list)
+
+
+class TestPywhispercppLibraryHelpers:
+    """Test pywhispercpp native library discovery and preloading."""
+
+    def test_find_pywhispercpp_shared_library_dirs(self, tmp_path, monkeypatch):
+        site_packages = tmp_path / "site-packages"
+        package_dir = site_packages / "pywhispercpp"
+        libs_dir = site_packages / "pywhispercpp.libs"
+        package_dir.mkdir(parents=True)
+        libs_dir.mkdir()
+        (package_dir / "__init__.py").write_text("")
+        (site_packages / f"_pywhispercpp{EXTENSION_SUFFIXES[0]}").write_text("")
+        (libs_dir / "libwhisper.so.1").write_text("")
+
+        monkeypatch.syspath_prepend(str(site_packages))
+        sys.modules.pop("pywhispercpp", None)
+        sys.modules.pop("_pywhispercpp", None)
+
+        library_dirs = _find_pywhispercpp_shared_library_dirs()
+
+        assert str(libs_dir.resolve()) in library_dirs
+
+    def test_preload_pywhispercpp_shared_libraries(self, tmp_path, monkeypatch):
+        libs_dir = tmp_path / "pywhispercpp.libs"
+        libs_dir.mkdir()
+        ggml_lib = libs_dir / "libggml.so"
+        whisper_lib = libs_dir / "libwhisper.so.1"
+        ggml_lib.write_text("")
+        whisper_lib.write_text("")
+
+        loaded_handles = []
+
+        def fake_cdll(path, mode=0):
+            handle = MagicMock(path=path, mode=mode)
+            loaded_handles.append(handle)
+            return handle
+
+        monkeypatch.setattr(rm, "_PYWHISPERCPP_PRELOADED_LIBS", [])
+        monkeypatch.setattr(rm, "_find_pywhispercpp_shared_library_dirs", lambda: [str(libs_dir)])
+        monkeypatch.setattr(rm.ctypes, "CDLL", fake_cdll)
+
+        _preload_pywhispercpp_shared_libraries()
+
+        assert [handle.path for handle in loaded_handles] == [
+            str(ggml_lib),
+            str(whisper_lib),
+        ]
+        assert rm._PYWHISPERCPP_PRELOADED_LIBS == loaded_handles
 
 
 class TestTestAudioInput(unittest.TestCase):
