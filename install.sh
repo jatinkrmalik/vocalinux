@@ -100,6 +100,7 @@ RUN_TESTS="no"
 DEV_MODE="no"
 VENV_DIR="venv"
 SKIP_MODELS="no"
+SKIP_SYSTEM_DEPS="no"
 WITH_WHISPER="no"
 WHISPER_CPU="no"
 NO_WHISPER_EXPLICIT="no"
@@ -151,6 +152,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_MODELS="yes"
             shift
             ;;
+        --skip-system-deps)
+            SKIP_SYSTEM_DEPS="yes"
+            shift
+            ;;
         --rebuild-whispercpp)
             REBUILD_WHISPERCPP="yes"
             shift
@@ -195,6 +200,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory"
             echo "  --skip-models    Skip downloading speech models during installation"
+            echo "  --skip-system-deps"
+            echo "                  Skip package-manager dependency installation (advanced)"
             echo "  --rebuild-whispercpp     Rebuild/reinstall pywhispercpp even if already installed"
             echo "  --no-rebuild-whispercpp  Reuse existing pywhispercpp when present (auto-mode default)"
             echo "  --tag=TAG        Install specific release tag (default: latest release)"
@@ -1067,8 +1074,10 @@ EOF
 detect_distro
 
 # Check compatibility
-if [[ "$DISTRO_FAMILY" != "ubuntu" ]]; then
-    print_warning "This installer is primarily designed for Ubuntu-based systems. Your system: $DISTRO_NAME"
+if [[ "$DISTRO_FAMILY" == "debian" ]]; then
+    print_info "Detected Debian — fully supported. Continuing with Debian-specific configuration."
+elif [[ "$DISTRO_FAMILY" != "ubuntu" ]]; then
+    print_warning "This installer is primarily designed for Ubuntu/Debian-based systems. Your system: $DISTRO_NAME"
     print_warning "The application may still work, but you might need to install dependencies manually."
     if [[ "$NON_INTERACTIVE" == "yes" ]]; then
         print_info "Non-interactive mode: continuing anyway..."
@@ -1159,6 +1168,108 @@ pacman_package_installed() {
     pacman -Q "$1" >/dev/null 2>&1
 }
 
+suse_python_package_prefix() {
+    python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.version_info.minor}")' 2>/dev/null || echo "python3"
+}
+
+suse_python_package_candidates() {
+    local suffix="$1"
+    local PY_PREFIX
+    PY_PREFIX=$(suse_python_package_prefix)
+
+    if [[ "$PY_PREFIX" != "python3" ]]; then
+        echo "${PY_PREFIX}-${suffix} python3-${suffix}"
+    else
+        echo "python3-${suffix}"
+    fi
+}
+
+suse_package_installed() {
+    rpm -q "$1" >/dev/null 2>&1
+}
+
+suse_install_first_available() {
+    local DESCRIPTION="$1"
+    shift
+
+    local PKG
+    for PKG in "$@"; do
+        [ -z "$PKG" ] && continue
+
+        if suse_package_installed "$PKG"; then
+            print_info "$DESCRIPTION is already installed ($PKG)."
+            return 0
+        fi
+
+        if sudo zypper install -y "$PKG" 2>/dev/null; then
+            print_success "Installed $DESCRIPTION ($PKG)."
+            return 0
+        fi
+
+        print_info "$DESCRIPTION package '$PKG' not available, trying next option..."
+    done
+
+    return 1
+}
+
+suse_appindicator_gi_available() {
+    python3 - <<'PY' >/dev/null 2>&1
+import importlib
+import gi
+
+for namespace in ("AppIndicator3", "AyatanaAppIndicator3", "AyatanaAppindicator3"):
+    try:
+        gi.require_version(namespace, "0.1")
+        importlib.import_module(f"gi.repository.{namespace}")
+        raise SystemExit(0)
+    except (ImportError, ValueError):
+        pass
+
+raise SystemExit(1)
+PY
+}
+
+suse_install_appindicator_runtime() {
+    local APPINDICATOR_PACKAGES=(
+        "typelib-1_0-AyatanaAppIndicator3-0_1"
+        "typelib-1_0-AppIndicator3-0_1"
+        "typelib-1_0-AyatanaAppIndicator-0_1"
+        "libayatana-appindicator3-1"
+        "libappindicator3-1"
+        "libappindicator-gtk3"
+    )
+
+    if suse_appindicator_gi_available; then
+        print_info "AppIndicator/Ayatana GI namespace is already available."
+        return 0
+    fi
+
+    local PKG
+    for PKG in "${APPINDICATOR_PACKAGES[@]}"; do
+        if suse_package_installed "$PKG"; then
+            print_info "AppIndicator/Ayatana package is already installed ($PKG); verifying GI namespace..."
+        elif sudo zypper install -y "$PKG" 2>/dev/null; then
+            print_success "Installed AppIndicator/Ayatana package ($PKG)."
+            # Refresh the shared-library cache so the GI typelib is discoverable
+            sudo ldconfig 2>/dev/null || true
+        else
+            print_info "AppIndicator/Ayatana package '$PKG' not available, trying next option..."
+            continue
+        fi
+
+        if suse_appindicator_gi_available; then
+            print_success "AppIndicator/Ayatana GI namespace is available."
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+suse_shader_compiler_available() {
+    command_exists glslc || command_exists glslangValidator
+}
+
 # Function to install system dependencies based on the detected distribution
 install_system_dependencies() {
     print_info "Installing system dependencies..."
@@ -1179,13 +1290,18 @@ install_system_dependencies() {
         fi
     fi
 
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
-    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
+    # libssl-dev, autoconf, automake, libtool, patchelf are required for pywhispercpp source
+    # builds on Debian. On Ubuntu these are typically pulled in transitively, but on a clean
+    # Debian install they are absent and cause CMake's bootstrap to fail (Hurdle 2 from
+    # https://medium.com/@cslev/talking-to-my-linux-box-without-talking-to-the-cloud-vocalinux-on-debian-without-the-tears-10bf053ea21b).
+    local PYWHISPERCPP_BUILD_DEPS="libssl-dev autoconf automake libtool patchelf"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip wl-clipboard"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config cmake wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip wl-clipboard"
-    local ZYPPER_PACKAGES="python3-pip python3-gobject python3-gobject-cairo gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-devel glslang xclip wl-clipboard"
+    local ZYPPER_PACKAGES="gtk3 ibus-devel gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip xclip wl-clipboard typelib-1_0-Notify-0_7 libnotify4"
     # Gentoo uses Portage and different package naming convention
     local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf cmake dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
     # Alpine Linux uses apk and has musl libc
@@ -1226,9 +1342,9 @@ install_system_dependencies() {
                 if echo "$MISSING_PACKAGES" | grep -q "gir1.2-appindicator3-0.1"; then
                     FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/gir1.2-appindicator3-0.1//' | xargs)
 
-                    if ! sudo apt install -y gir1.2-appindicator3-0.1 2>/dev/null; then
+                    if ! DEBIAN_FRONTEND=noninteractive sudo apt install -y gir1.2-appindicator3-0.1 2>/dev/null; then
                         print_info "gir1.2-appindicator3-0.1 not available, trying gir1.2-ayatanaappindicator3-0.1..."
-                        if ! sudo apt install -y gir1.2-ayatanaappindicator3-0.1; then
+                        if ! DEBIAN_FRONTEND=noninteractive sudo apt install -y gir1.2-ayatanaappindicator3-0.1; then
                             print_error "Failed to install appindicator package (tried both gir1.2-appindicator3-0.1 and gir1.2-ayatanaappindicator3-0.1)"
                             exit 1
                         fi
@@ -1236,10 +1352,10 @@ install_system_dependencies() {
                     fi
 
                     if [ -n "$FILTERED_PACKAGES" ]; then
-                        sudo apt install -y $FILTERED_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+                        DEBIAN_FRONTEND=noninteractive sudo apt install -y $FILTERED_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
                     fi
                 else
-                    sudo apt install -y $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+                    DEBIAN_FRONTEND=noninteractive sudo apt install -y $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
                 fi
             else
                 print_info "All required packages are already installed."
@@ -1305,56 +1421,87 @@ install_system_dependencies() {
                 exit 1
             fi
 
-            zypper_package_installed() {
-                rpm -q "$1" >/dev/null 2>&1
-            }
+            sudo zypper refresh || true
 
+            if [[ "${SELECTED_ENGINE:-whisper_cpp}" == "whisper_cpp" && "${WHISPERCPP_BACKEND:-}" != "cpu" ]]; then
+                ZYPPER_PACKAGES="$ZYPPER_PACKAGES vulkan-tools vulkan-devel"
+            fi
+
+            local MISSING_ZYPPER_PACKAGES=()
             for pkg in $ZYPPER_PACKAGES; do
-                if ! zypper_package_installed "$pkg"; then
-                    MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+                if ! suse_package_installed "$pkg"; then
+                    MISSING_ZYPPER_PACKAGES+=("$pkg")
                 fi
             done
 
-            if [ -n "$MISSING_PACKAGES" ]; then
-                print_info "Installing missing packages:$MISSING_PACKAGES"
-                sudo zypper refresh || true
-
-                if echo "$MISSING_PACKAGES" | grep -qw "glslang"; then
-                    if ! sudo zypper install -y glslang 2>/dev/null; then
-                        print_info "glslang not found, trying glslang-devel..."
-                        if ! sudo zypper install -y glslang-devel 2>/dev/null; then
-                            print_warning "glslang not available - Vulkan shader compilation may not work"
-                            print_warning "Install glslang manually for whisper.cpp GPU support"
-                        fi
-                    fi
-                    FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/glslang//' | xargs)
-                else
-                    FILTERED_PACKAGES="$MISSING_PACKAGES"
-                fi
-
-                if echo "$FILTERED_PACKAGES" | grep -qw "libappindicator-gtk3"; then
-                    if ! sudo zypper install -y libappindicator-gtk3 2>/dev/null; then
-                        print_info "libappindicator-gtk3 not available, trying typelib-1_0-AppIndicator3-0_1..."
-                        if ! sudo zypper install -y typelib-1_0-AppIndicator3-0_1 2>/dev/null; then
-                            print_info "Trying libayatana-appindicator3-1..."
-                            if sudo zypper install -y libayatana-appindicator3-1 2>/dev/null; then
-                                print_success "Installed libayatana-appindicator3-1"
-                            else
-                                print_warning "No appindicator package found - system tray may not work"
-                            fi
-                        fi
-                    fi
-                    FILTERED_PACKAGES=$(echo "$FILTERED_PACKAGES" | sed 's/libappindicator-gtk3//' | xargs)
-                fi
-
-                if [ -n "$FILTERED_PACKAGES" ]; then
-                    sudo zypper install -y $FILTERED_PACKAGES || {
-                        print_error "Failed to install dependencies"
-                        exit 1
-                    }
-                fi
+            if [ "${#MISSING_ZYPPER_PACKAGES[@]}" -gt 0 ]; then
+                print_info "Installing missing packages: ${MISSING_ZYPPER_PACKAGES[*]}"
+                sudo zypper install -y "${MISSING_ZYPPER_PACKAGES[@]}" || {
+                    print_error "Failed to install openSUSE base dependencies"
+                    exit 1
+                }
             else
-                print_info "All required packages are already installed."
+                print_info "All base openSUSE packages are already installed."
+            fi
+
+            local PY_PIP_CANDIDATES=()
+            local PY_GOBJECT_CANDIDATES=()
+            local PY_GOBJECT_CAIRO_CANDIDATES=()
+            local PY_DEVEL_CANDIDATES=()
+            local PY_VIRTUALENV_CANDIDATES=()
+            local PY_VENV_CANDIDATES=()
+
+            read -r -a PY_PIP_CANDIDATES <<< "$(suse_python_package_candidates "pip")"
+            read -r -a PY_GOBJECT_CANDIDATES <<< "$(suse_python_package_candidates "gobject")"
+            read -r -a PY_GOBJECT_CAIRO_CANDIDATES <<< "$(suse_python_package_candidates "gobject-cairo")"
+            read -r -a PY_DEVEL_CANDIDATES <<< "$(suse_python_package_candidates "devel")"
+            read -r -a PY_VIRTUALENV_CANDIDATES <<< "$(suse_python_package_candidates "virtualenv")"
+            read -r -a PY_VENV_CANDIDATES <<< "$(suse_python_package_candidates "venv")"
+
+            print_info "Resolving openSUSE Python packages for $(suse_python_package_prefix)..."
+
+            if ! suse_install_first_available "Python pip" "${PY_PIP_CANDIDATES[@]}"; then
+                print_error "Failed to install Python pip package (tried: ${PY_PIP_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "PyGObject bindings" "${PY_GOBJECT_CANDIDATES[@]}"; then
+                print_error "Failed to install PyGObject package (tried: ${PY_GOBJECT_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "PyGObject Cairo bindings" "${PY_GOBJECT_CAIRO_CANDIDATES[@]}"; then
+                print_error "Failed to install PyGObject Cairo package (tried: ${PY_GOBJECT_CAIRO_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "Python development headers" "${PY_DEVEL_CANDIDATES[@]}"; then
+                print_error "Failed to install Python development headers (tried: ${PY_DEVEL_CANDIDATES[*]})"
+                exit 1
+            fi
+
+            if ! suse_install_first_available "Python virtualenv/venv" "${PY_VIRTUALENV_CANDIDATES[@]}" "${PY_VENV_CANDIDATES[@]}"; then
+                print_warning "Python virtualenv/venv package was not found (tried: ${PY_VIRTUALENV_CANDIDATES[*]} ${PY_VENV_CANDIDATES[*]})"
+                print_warning "Continuing because python3 -m venv may still be available."
+            fi
+
+            if ! suse_install_appindicator_runtime; then
+                print_error "Failed to install a working AppIndicator/Ayatana GI runtime on openSUSE."
+                print_error "Try manually: sudo zypper install typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1"
+                exit 1
+            fi
+
+            if [[ "${SELECTED_ENGINE:-whisper_cpp}" == "whisper_cpp" && "${WHISPERCPP_BACKEND:-}" != "cpu" ]]; then
+                if ! suse_shader_compiler_available; then
+                    if ! suse_install_first_available "Vulkan shader compiler" shaderc glslang-devel glslang; then
+                        print_warning "No Vulkan shader compiler found - whisper.cpp Vulkan build may fail"
+                        print_warning "Install shaderc manually for glslc support if you want GPU acceleration."
+                    fi
+                fi
+
+                if ! suse_shader_compiler_available; then
+                    print_warning "glslc/glslangValidator is still unavailable; CPU fallback will be used if Vulkan build fails."
+                fi
             fi
             ;;
 
@@ -1531,7 +1678,12 @@ install_system_dependencies() {
 }
 
 # Install system dependencies
-install_system_dependencies
+if [[ "$SKIP_SYSTEM_DEPS" == "yes" ]]; then
+    print_warning "Skipping system dependency installation (--skip-system-deps specified)."
+    print_warning "Make sure GTK, PyGObject, AppIndicator/Ayatana, PortAudio, and text input tools are installed."
+else
+    install_system_dependencies
+fi
 
 # Define XDG directories
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vocalinux"
@@ -1541,6 +1693,11 @@ ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 
 # Function to detect and install text input tools
 install_text_input_tools() {
+    if [[ "$SKIP_SYSTEM_DEPS" == "yes" ]]; then
+        print_warning "Skipping text input tool installation (--skip-system-deps specified)."
+        return 0
+    fi
+
     # Detect session type more robustly
     local SESSION_TYPE="unknown"
 
@@ -1567,7 +1724,7 @@ install_text_input_tools() {
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
                     if ! apt_package_installed "wtype"; then
-                        sudo apt install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                        DEBIAN_FRONTEND=noninteractive sudo apt install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
                     else
                         print_info "wtype is already installed."
                     fi
@@ -1640,7 +1797,19 @@ install_text_input_tools() {
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
                     if ! apt_package_installed "ydotool"; then
-                        sudo apt install -y ydotool 2>/dev/null || print_info "ydotool not available in repos (optional)"
+                        if ! DEBIAN_FRONTEND=noninteractive sudo apt install -y ydotool 2>/dev/null; then
+                            if [[ "$DISTRO_FAMILY" == "debian" ]]; then
+                                print_warning "ydotool is not packaged in Debian's standard repos."
+                                print_info "For full Wayland input support, you can compile ydotool from source:"
+                                print_info "  sudo apt install -y git cmake libevdev-dev"
+                                print_info "  git clone https://github.com/ReimuNotMoe/ydotool.git /tmp/ydotool"
+                                print_info "  cmake -S /tmp/ydotool -B /tmp/ydotool/build && sudo cmake --build /tmp/ydotool/build --target install"
+                                print_info "  sudo systemctl enable --now ydotoold"
+                                print_info "Alternatively, wtype (already installed) will handle most Wayland compositors."
+                            else
+                                print_info "ydotool not available in repos (optional)"
+                            fi
+                        fi
                     fi
                     ;;
                 fedora)
@@ -1677,7 +1846,7 @@ install_text_input_tools() {
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
                     if ! apt_package_installed "xdotool"; then
-                        sudo apt install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                        DEBIAN_FRONTEND=noninteractive sudo apt install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
                     else
                         print_info "xdotool is already installed."
                     fi
@@ -1752,7 +1921,7 @@ install_text_input_tools() {
             # Install both tools based on distribution
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
-                    sudo apt install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
+                    DEBIAN_FRONTEND=noninteractive sudo apt install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
                     ;;
                 fedora|mageia)
                     if command_exists dnf; then
@@ -1856,8 +2025,11 @@ setup_virtual_environment() {
     # Use --system-site-packages to access pre-compiled system packages like PyGObject
     # This avoids build failures with Python 3.13+ where PyGObject may not build from source
     python3 -m venv --system-site-packages "$VENV_DIR" || {
-        print_error "Failed to create virtual environment. Please check your Python installation."
-        exit 1
+        print_warning "python3 -m venv failed, trying python3 -m virtualenv..."
+        python3 -m virtualenv --system-site-packages "$VENV_DIR" || {
+            print_error "Failed to create virtual environment. Please check your Python installation."
+            exit 1
+        }
     }
 
     # Activate virtual environment
@@ -1898,9 +2070,87 @@ EOF
 chmod +x "$ACTIVATION_SCRIPT"
 print_info "Created activation script: $ACTIVATION_SCRIPT"
 
+get_pywhispercpp_library_path() {
+    [ -x "$VENV_DIR/bin/python" ] || return 1
+    "$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+from pathlib import Path
+import site
+import sys
+import sysconfig
+
+roots = []
+for attr in ("getsitepackages",):
+    get_paths = getattr(site, attr, None)
+    if get_paths is None:
+        continue
+    try:
+        roots.extend(get_paths())
+    except Exception:
+        pass
+
+user_site = getattr(site, "getusersitepackages", lambda: None)()
+if user_site:
+    roots.append(user_site)
+
+for key in ("platlib", "purelib"):
+    path = sysconfig.get_paths().get(key)
+    if path:
+        roots.append(path)
+
+roots.extend(path for path in sys.path if path)
+
+dirs = []
+seen = set()
+for root in roots:
+    root_path = Path(root)
+    candidates = [
+        root_path / "pywhispercpp.libs",
+        root_path / "pywhispercpp" / ".libs",
+        root_path / "pywhispercpp" / "lib",
+        root_path,
+    ]
+    for candidate in candidates:
+        try:
+            resolved = str(candidate.resolve())
+        except OSError:
+            continue
+        if resolved in seen or not candidate.is_dir():
+            continue
+        if any(candidate.glob("libwhisper*.so*")) or any(candidate.glob("libggml*.so*")):
+            seen.add(resolved)
+            dirs.append(resolved)
+
+print(":".join(dirs))
+PY
+}
+
+with_pywhispercpp_library_path() {
+    local PYWHISPERCPP_LIBRARY_PATH
+    PYWHISPERCPP_LIBRARY_PATH=$(get_pywhispercpp_library_path || true)
+
+    if [ -n "$PYWHISPERCPP_LIBRARY_PATH" ]; then
+        LD_LIBRARY_PATH="$PYWHISPERCPP_LIBRARY_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$@"
+    else
+        "$@"
+    fi
+}
+
+get_pywhispercpp_cmake_args() {
+    printf '%s\n' '-DCMAKE_INSTALL_RPATH=$ORIGIN -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON'
+}
+
+install_cpu_pywhispercpp() {
+    local PIP_LOG_FILE="$1"
+    local PYWHISPERCPP_CMAKE_ARGS
+    PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
+
+    CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" \
+        pip install --force-reinstall --no-cache-dir pywhispercpp --log "$PIP_LOG_FILE"
+}
+
 is_pywhispercpp_installed() {
     [ -x "$VENV_DIR/bin/python" ] || return 1
-    "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" >/dev/null 2>&1
+    with_pywhispercpp_library_path "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" >/dev/null 2>&1
 }
 
 get_pywhispercpp_version() {
@@ -2030,6 +2280,8 @@ install_python_package() {
                 local GPU_BACKEND="CPU"
                 local GPU_INSTALL_SUCCESS=false
                 local SKIP_WHISPERCPP_INSTALL=false
+                local PYWHISPERCPP_CMAKE_ARGS
+                PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
 
                 if [[ "$WHISPERCPP_ALREADY_INSTALLED" == "true" ]]; then
                     GPU_BACKEND="existing"
@@ -2053,7 +2305,7 @@ install_python_package() {
                         print_info "  Installing pywhispercpp with Vulkan support..."
                         GPU_BACKEND="Vulkan"
                         print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                        if GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                        if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
                             GPU_INSTALL_SUCCESS=true
                         else
                             print_warning "Vulkan build failed - checking for NVIDIA GPU to try CUDA..."
@@ -2066,7 +2318,7 @@ install_python_package() {
                         print_info "  Installing pywhispercpp with CUDA support..."
                         GPU_BACKEND="CUDA"
                         print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                        if GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                        if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
                             GPU_INSTALL_SUCCESS=true
                         fi
                     fi
@@ -2083,6 +2335,7 @@ install_python_package() {
                             print_info "    Ubuntu/Debian: sudo apt install libvulkan-dev vulkan-tools glslc || glslang-tools"
                             print_info "    Fedora: sudo dnf install vulkan-loader-devel vulkan-tools glslang"
                             print_info "    Arch: sudo pacman -S vulkan-headers vulkan-tools glslang"
+                            print_info "    openSUSE: sudo zypper install vulkan-devel vulkan-tools shaderc"
                         elif [[ "$GPU_BACKEND" == "CUDA" ]]; then
                             print_info "  To use CUDA GPU acceleration, please install CUDA toolkit:"
                             print_info "    Visit: https://developer.nvidia.com/cuda-downloads"
@@ -2093,7 +2346,7 @@ install_python_package() {
                     fi
                     GPU_BACKEND="CPU"
                     print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                    pip install pywhispercpp --log "$PIP_LOG_FILE" || {
+                    install_cpu_pywhispercpp "$PIP_LOG_FILE" || {
                         print_error "Failed to install pywhispercpp"
                         return 1
                     }
@@ -2103,6 +2356,60 @@ install_python_package() {
                     print_success "pywhispercpp reused from existing installation"
                 else
                     print_success "pywhispercpp installed with $GPU_BACKEND backend"
+                fi
+
+                if ! is_pywhispercpp_installed; then
+                    print_warning "pywhispercpp installed but import verification failed."
+                    print_warning "This can happen when libwhisper.so is installed beside the Python extension without a runtime library path."
+
+                    if [[ "$SKIP_WHISPERCPP_INSTALL" != "true" ]]; then
+                        print_warning "Trying RPATH-aware CPU pywhispercpp fallback..."
+                        GPU_BACKEND="CPU"
+                        if install_cpu_pywhispercpp "$PIP_LOG_FILE"; then
+                            print_success "CPU pywhispercpp fallback installed"
+                        else
+                            print_warning "CPU pywhispercpp fallback installation failed"
+                        fi
+                    fi
+                fi
+
+                if ! is_pywhispercpp_installed; then
+                    print_warning "pywhispercpp is still unavailable; setting VOSK as the default engine so Vocalinux can start."
+                    print_warning "You can switch back to whisper.cpp from Settings after reinstalling pywhispercpp."
+                    SELECTED_ENGINE="vosk"
+
+                    local FALLBACK_VOSK_CONFIG="$CONFIG_DIR/config.json"
+                    if [ ! -f "$FALLBACK_VOSK_CONFIG" ]; then
+                        mkdir -p "$CONFIG_DIR"
+                        cat > "$FALLBACK_VOSK_CONFIG" << 'FALLBACK_VOSK_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "vosk",
+        "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+FALLBACK_VOSK_CONFIG
+                    fi
                 fi
                 echo ""
                 ;;
@@ -2181,7 +2488,7 @@ WHISPER_CONFIG
                     print_info ""
 
                     # Fall back to whisper.cpp installation
-                    pip install pywhispercpp --log "$PIP_LOG_FILE" || {
+                    install_cpu_pywhispercpp "$PIP_LOG_FILE" || {
                         print_error "Failed to install pywhispercpp fallback"
                         print_error "Please try installing manually: pip install pywhispercpp"
                         return 1
@@ -2284,6 +2591,32 @@ VOSK_CONFIG
 # Wrapper script for Vocalinux that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
+PYWHISPERCPP_LIBRARY_PATH=""
+PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import sysconfig
+
+paths = []
+for key in ("platlib", "purelib"):
+    path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+print(" ".join(paths))
+PY
+)
+for PY_SITE in \$PY_SITE_PATHS; do
+    for PY_LIB_DIR in "\$PY_SITE/pywhispercpp.libs" "\$PY_SITE/pywhispercpp/.libs" "\$PY_SITE/pywhispercpp/lib"; do
+        if [ -d "\$PY_LIB_DIR" ] && { ls "\$PY_LIB_DIR"/libwhisper*.so* >/dev/null 2>&1 || ls "\$PY_LIB_DIR"/libggml*.so* >/dev/null 2>&1; }; then
+            if [ -z "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+                PYWHISPERCPP_LIBRARY_PATH="\$PY_LIB_DIR"
+            else
+                PYWHISPERCPP_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH:\$PY_LIB_DIR"
+            fi
+        fi
+    done
+done
+if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+    export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+fi
 
 # Check if user is in input group but current session doesn't have it
 if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
@@ -2302,6 +2635,32 @@ WRAPPER_EOF
 # Wrapper script for Vocalinux GUI that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
+PYWHISPERCPP_LIBRARY_PATH=""
+PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import sysconfig
+
+paths = []
+for key in ("platlib", "purelib"):
+    path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+print(" ".join(paths))
+PY
+)
+for PY_SITE in \$PY_SITE_PATHS; do
+    for PY_LIB_DIR in "\$PY_SITE/pywhispercpp.libs" "\$PY_SITE/pywhispercpp/.libs" "\$PY_SITE/pywhispercpp/lib"; do
+        if [ -d "\$PY_LIB_DIR" ] && { ls "\$PY_LIB_DIR"/libwhisper*.so* >/dev/null 2>&1 || ls "\$PY_LIB_DIR"/libggml*.so* >/dev/null 2>&1; }; then
+            if [ -z "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+                PYWHISPERCPP_LIBRARY_PATH="\$PY_LIB_DIR"
+            else
+                PYWHISPERCPP_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH:\$PY_LIB_DIR"
+            fi
+        fi
+    done
+done
+if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+    export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+fi
 
 # Check if user is in input group but current session doesn't have it
 if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
@@ -2760,7 +3119,7 @@ if [ "$SKIP_MODELS" = "no" ]; then
     # Check which engines are installed and download appropriate models
 
     # Install whisper.cpp model (default engine)
-    if "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" 2>/dev/null; then
+    if is_pywhispercpp_installed; then
         print_info "whisper.cpp is installed - downloading tiny model (default engine)..."
         install_whispercpp_model || print_warning "whisper.cpp model download failed - model will be downloaded on first run"
     fi
@@ -2874,6 +3233,26 @@ verify_installation() {
     if ! "$VENV_DIR/bin/python" -c "import vocalinux" &>/dev/null; then
         print_error "Vocalinux Python package cannot be imported."
         ISSUES=$((ISSUES + 1))
+    fi
+
+    # Smoke-test the selected speech engine's native library at install time so that
+    # "installed but does not run" failures (e.g. libwhisper.so.1 not found on Debian)
+    # are surfaced here with actionable guidance rather than silently at first launch.
+    local selected_engine="${SELECTED_ENGINE:-whisper_cpp}"
+    if [[ "$selected_engine" == "whisper_cpp" ]]; then
+        if ! is_pywhispercpp_installed; then
+            print_error "pywhispercpp (whisper.cpp engine) installed but cannot be imported at runtime."
+            print_error "This usually means libwhisper.so.1 is missing or not on the library path."
+            print_error ""
+            print_error "Diagnostic steps:"
+            print_error "  1. Check for unresolved symbols:"
+            print_error "     ldd \$(find $VENV_DIR -name '*.so' -path '*/pywhispercpp*' 2>/dev/null | head -1) 2>/dev/null | grep 'not found'"
+            print_error "  2. Re-run the installer with: --rebuild-whispercpp"
+            print_error "  3. Or switch to VOSK (no native build needed): --engine=vosk"
+            ISSUES=$((ISSUES + 1))
+        else
+            print_success "pywhispercpp (whisper.cpp) import verified successfully."
+        fi
     fi
 
     # Return the number of issues found
