@@ -2049,9 +2049,87 @@ EOF
 chmod +x "$ACTIVATION_SCRIPT"
 print_info "Created activation script: $ACTIVATION_SCRIPT"
 
+get_pywhispercpp_library_path() {
+    [ -x "$VENV_DIR/bin/python" ] || return 1
+    "$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+from pathlib import Path
+import site
+import sys
+import sysconfig
+
+roots = []
+for attr in ("getsitepackages",):
+    get_paths = getattr(site, attr, None)
+    if get_paths is None:
+        continue
+    try:
+        roots.extend(get_paths())
+    except Exception:
+        pass
+
+user_site = getattr(site, "getusersitepackages", lambda: None)()
+if user_site:
+    roots.append(user_site)
+
+for key in ("platlib", "purelib"):
+    path = sysconfig.get_paths().get(key)
+    if path:
+        roots.append(path)
+
+roots.extend(path for path in sys.path if path)
+
+dirs = []
+seen = set()
+for root in roots:
+    root_path = Path(root)
+    candidates = [
+        root_path / "pywhispercpp.libs",
+        root_path / "pywhispercpp" / ".libs",
+        root_path / "pywhispercpp" / "lib",
+        root_path,
+    ]
+    for candidate in candidates:
+        try:
+            resolved = str(candidate.resolve())
+        except OSError:
+            continue
+        if resolved in seen or not candidate.is_dir():
+            continue
+        if any(candidate.glob("libwhisper*.so*")) or any(candidate.glob("libggml*.so*")):
+            seen.add(resolved)
+            dirs.append(resolved)
+
+print(":".join(dirs))
+PY
+}
+
+with_pywhispercpp_library_path() {
+    local PYWHISPERCPP_LIBRARY_PATH
+    PYWHISPERCPP_LIBRARY_PATH=$(get_pywhispercpp_library_path || true)
+
+    if [ -n "$PYWHISPERCPP_LIBRARY_PATH" ]; then
+        LD_LIBRARY_PATH="$PYWHISPERCPP_LIBRARY_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$@"
+    else
+        "$@"
+    fi
+}
+
+get_pywhispercpp_cmake_args() {
+    printf '%s\n' '-DCMAKE_INSTALL_RPATH=$ORIGIN -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON'
+}
+
+install_cpu_pywhispercpp() {
+    local PIP_LOG_FILE="$1"
+    local PYWHISPERCPP_CMAKE_ARGS
+    PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
+
+    CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" \
+        pip install --force-reinstall --no-cache-dir pywhispercpp --log "$PIP_LOG_FILE"
+}
+
 is_pywhispercpp_installed() {
     [ -x "$VENV_DIR/bin/python" ] || return 1
-    "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" >/dev/null 2>&1
+    with_pywhispercpp_library_path "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" >/dev/null 2>&1
 }
 
 get_pywhispercpp_version() {
@@ -2181,6 +2259,8 @@ install_python_package() {
                 local GPU_BACKEND="CPU"
                 local GPU_INSTALL_SUCCESS=false
                 local SKIP_WHISPERCPP_INSTALL=false
+                local PYWHISPERCPP_CMAKE_ARGS
+                PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
 
                 if [[ "$WHISPERCPP_ALREADY_INSTALLED" == "true" ]]; then
                     GPU_BACKEND="existing"
@@ -2204,7 +2284,7 @@ install_python_package() {
                         print_info "  Installing pywhispercpp with Vulkan support..."
                         GPU_BACKEND="Vulkan"
                         print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                        if GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                        if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
                             GPU_INSTALL_SUCCESS=true
                         else
                             print_warning "Vulkan build failed - checking for NVIDIA GPU to try CUDA..."
@@ -2217,7 +2297,7 @@ install_python_package() {
                         print_info "  Installing pywhispercpp with CUDA support..."
                         GPU_BACKEND="CUDA"
                         print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                        if GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                        if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
                             GPU_INSTALL_SUCCESS=true
                         fi
                     fi
@@ -2245,7 +2325,7 @@ install_python_package() {
                     fi
                     GPU_BACKEND="CPU"
                     print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                    pip install pywhispercpp --log "$PIP_LOG_FILE" || {
+                    install_cpu_pywhispercpp "$PIP_LOG_FILE" || {
                         print_error "Failed to install pywhispercpp"
                         return 1
                     }
@@ -2255,6 +2335,60 @@ install_python_package() {
                     print_success "pywhispercpp reused from existing installation"
                 else
                     print_success "pywhispercpp installed with $GPU_BACKEND backend"
+                fi
+
+                if ! is_pywhispercpp_installed; then
+                    print_warning "pywhispercpp installed but import verification failed."
+                    print_warning "This can happen when libwhisper.so is installed beside the Python extension without a runtime library path."
+
+                    if [[ "$SKIP_WHISPERCPP_INSTALL" != "true" ]]; then
+                        print_warning "Trying RPATH-aware CPU pywhispercpp fallback..."
+                        GPU_BACKEND="CPU"
+                        if install_cpu_pywhispercpp "$PIP_LOG_FILE"; then
+                            print_success "CPU pywhispercpp fallback installed"
+                        else
+                            print_warning "CPU pywhispercpp fallback installation failed"
+                        fi
+                    fi
+                fi
+
+                if ! is_pywhispercpp_installed; then
+                    print_warning "pywhispercpp is still unavailable; setting VOSK as the default engine so Vocalinux can start."
+                    print_warning "You can switch back to whisper.cpp from Settings after reinstalling pywhispercpp."
+                    SELECTED_ENGINE="vosk"
+
+                    local FALLBACK_VOSK_CONFIG="$CONFIG_DIR/config.json"
+                    if [ ! -f "$FALLBACK_VOSK_CONFIG" ]; then
+                        mkdir -p "$CONFIG_DIR"
+                        cat > "$FALLBACK_VOSK_CONFIG" << 'FALLBACK_VOSK_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "vosk",
+        "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+FALLBACK_VOSK_CONFIG
+                    fi
                 fi
                 echo ""
                 ;;
@@ -2333,7 +2467,7 @@ WHISPER_CONFIG
                     print_info ""
 
                     # Fall back to whisper.cpp installation
-                    pip install pywhispercpp --log "$PIP_LOG_FILE" || {
+                    install_cpu_pywhispercpp "$PIP_LOG_FILE" || {
                         print_error "Failed to install pywhispercpp fallback"
                         print_error "Please try installing manually: pip install pywhispercpp"
                         return 1
@@ -2436,6 +2570,32 @@ VOSK_CONFIG
 # Wrapper script for Vocalinux that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
+PYWHISPERCPP_LIBRARY_PATH=""
+PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import sysconfig
+
+paths = []
+for key in ("platlib", "purelib"):
+    path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+print(" ".join(paths))
+PY
+)
+for PY_SITE in \$PY_SITE_PATHS; do
+    for PY_LIB_DIR in "\$PY_SITE/pywhispercpp.libs" "\$PY_SITE/pywhispercpp/.libs" "\$PY_SITE/pywhispercpp/lib"; do
+        if [ -d "\$PY_LIB_DIR" ] && { ls "\$PY_LIB_DIR"/libwhisper*.so* >/dev/null 2>&1 || ls "\$PY_LIB_DIR"/libggml*.so* >/dev/null 2>&1; }; then
+            if [ -z "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+                PYWHISPERCPP_LIBRARY_PATH="\$PY_LIB_DIR"
+            else
+                PYWHISPERCPP_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH:\$PY_LIB_DIR"
+            fi
+        fi
+    done
+done
+if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+    export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+fi
 
 # Check if user is in input group but current session doesn't have it
 if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
@@ -2454,6 +2614,32 @@ WRAPPER_EOF
 # Wrapper script for Vocalinux GUI that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
+PYWHISPERCPP_LIBRARY_PATH=""
+PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import sysconfig
+
+paths = []
+for key in ("platlib", "purelib"):
+    path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+print(" ".join(paths))
+PY
+)
+for PY_SITE in \$PY_SITE_PATHS; do
+    for PY_LIB_DIR in "\$PY_SITE/pywhispercpp.libs" "\$PY_SITE/pywhispercpp/.libs" "\$PY_SITE/pywhispercpp/lib"; do
+        if [ -d "\$PY_LIB_DIR" ] && { ls "\$PY_LIB_DIR"/libwhisper*.so* >/dev/null 2>&1 || ls "\$PY_LIB_DIR"/libggml*.so* >/dev/null 2>&1; }; then
+            if [ -z "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+                PYWHISPERCPP_LIBRARY_PATH="\$PY_LIB_DIR"
+            else
+                PYWHISPERCPP_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH:\$PY_LIB_DIR"
+            fi
+        fi
+    done
+done
+if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+    export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+fi
 
 # Check if user is in input group but current session doesn't have it
 if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
@@ -2912,7 +3098,7 @@ if [ "$SKIP_MODELS" = "no" ]; then
     # Check which engines are installed and download appropriate models
 
     # Install whisper.cpp model (default engine)
-    if "$VENV_DIR/bin/python" -c "from pywhispercpp.model import Model" 2>/dev/null; then
+    if is_pywhispercpp_installed; then
         print_info "whisper.cpp is installed - downloading tiny model (default engine)..."
         install_whispercpp_model || print_warning "whisper.cpp model download failed - model will be downloaded on first run"
     fi
