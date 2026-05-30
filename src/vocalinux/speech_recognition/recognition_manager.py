@@ -680,6 +680,7 @@ class SpeechRecognitionManager:
         self.whispercpp_entropy_thold = kwargs.get("whispercpp_entropy_thold", 2.4)
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
+        self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
 
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
@@ -1032,6 +1033,21 @@ class SpeechRecognitionManager:
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
         return Model(model_path, **compatible_kwargs)
 
+    def _detect_pywhispercpp_gpu_backend(self) -> str:
+        """Detect whether pywhispercpp's native library actually has GPU support."""
+        _preload_pywhispercpp_shared_libraries()
+        for library_dir in _find_pywhispercpp_shared_library_dirs():
+            root = Path(library_dir)
+            for pattern in ("libggml-vulkan*.so*", "libggml-cuda*.so*"):
+                matches = list(root.glob(pattern))
+                if matches:
+                    lib_name = matches[0].name.lower()
+                    if "vulkan" in lib_name:
+                        return "vulkan"
+                    if "cuda" in lib_name:
+                        return "cuda"
+        return "cpu"
+
     def _load_whispercpp_model(self, model_path: str):
         """Load the whisper.cpp model file and configure the compute backend.
 
@@ -1075,7 +1091,16 @@ class SpeechRecognitionManager:
         logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
         self.model = None  # Release previous model if re-initializing
 
-        n_threads = multiprocessing.cpu_count()
+        actual_gpu_backend = self._detect_pywhispercpp_gpu_backend()
+        has_gpu_libs = actual_gpu_backend in ("vulkan", "cuda")
+
+        if self.whispercpp_n_threads is not None:
+            n_threads = self.whispercpp_n_threads
+        elif has_gpu_libs:
+            n_threads = max(1, multiprocessing.cpu_count() // 4)
+        else:
+            n_threads = min(multiprocessing.cpu_count(), 8)
+
         load_start_time = time.time()
         loaded_backend = backend
 
@@ -1090,10 +1115,16 @@ class SpeechRecognitionManager:
             )
 
         load_duration = time.time() - load_start_time
-        logger.info(
-            f"whisper.cpp configured with n_threads={n_threads} "
-            f"(detected {multiprocessing.cpu_count()} CPUs)"
-        )
+        if has_gpu_libs:
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} "
+                f"(GPU backend: {actual_gpu_backend})"
+            )
+        else:
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} "
+                f"(CPU-only; pywhispercpp lacks GPU libraries)"
+            )
         logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
 
         self._model_initialized = True
@@ -2279,6 +2310,7 @@ class SpeechRecognitionManager:
             "whispercpp_entropy_thold",
             "whispercpp_logprob_thold",
             "whispercpp_no_speech_thold",
+            "whispercpp_n_threads",
         ):
             if param_name in kwargs:
                 setattr(self, param_name, kwargs[param_name])
