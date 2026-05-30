@@ -543,6 +543,7 @@ class TestTypedAccessors(unittest.TestCase):
         self.assertEqual(advanced["whispercpp_entropy_thold"], 2.4)
         self.assertEqual(advanced["whispercpp_logprob_thold"], -1.0)
         self.assertEqual(advanced["whispercpp_no_speech_thold"], 0.6)
+        self.assertEqual(advanced["whispercpp_n_threads"], 0)
 
     def test_whispercpp_advanced_persistence(self):
         self.config_manager.set("advanced", "whispercpp_temperature", 0.5)
