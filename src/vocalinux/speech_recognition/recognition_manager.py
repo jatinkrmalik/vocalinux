@@ -1148,7 +1148,7 @@ class SpeechRecognitionManager:
         actual_gpu_backend = self._detect_pywhispercpp_gpu_backend()
         has_gpu_libs = actual_gpu_backend in ("vulkan", "cuda")
 
-        if self.whispercpp_n_threads is not None:
+        if self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0:
             n_threads = self.whispercpp_n_threads
         elif has_gpu_libs:
             n_threads = max(1, multiprocessing.cpu_count() // 4)
