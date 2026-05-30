@@ -217,6 +217,60 @@ def get_audio_input_devices() -> list:
     return devices
 
 
+def _resolve_valid_input_device(audio, preferred_index: Optional[int] = None) -> Optional[int]:
+    """Resolve a valid audio input device, skipping output-only devices (e.g. HDMI).
+
+    Checks that the device has maxInputChannels > 0. Falls back from
+    preferred_index → system default → first available input device.
+
+    Args:
+        audio: PyAudio instance
+        preferred_index: User-configured device index (or None for system default)
+
+    Returns:
+        A valid device index with input channels, or None if none found.
+    """
+    input_device_indices = []
+    default_input_index = None
+
+    try:
+        default_info = audio.get_default_input_device_info()
+        default_input_index = default_info.get("index")
+    except (IOError, OSError):
+        pass
+
+    for i in range(audio.get_device_count()):
+        try:
+            info = audio.get_device_info_by_index(i)
+            if info.get("maxInputChannels", 0) > 0:
+                input_device_indices.append(i)
+        except (IOError, OSError):
+            continue
+
+    if not input_device_indices:
+        return None
+
+    if preferred_index is not None and preferred_index in input_device_indices:
+        return preferred_index
+
+    if preferred_index is not None:
+        try:
+            device_name = audio.get_device_info_by_index(preferred_index).get("name", "unknown")
+        except (IOError, OSError):
+            device_name = "unknown"
+        logger.warning(
+            "Configured audio device [%s] (%s) has no input channels. "
+            "Falling back to a valid input device.",
+            preferred_index,
+            device_name,
+        )
+
+    if default_input_index is not None and default_input_index in input_device_indices:
+        return default_input_index
+
+    return input_device_indices[0]
+
+
 def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
     """
     Detect the supported number of channels for the audio device.
@@ -1863,6 +1917,18 @@ class SpeechRecognitionManager:
             self._pyaudio_instance = pyaudio.PyAudio()
             audio = self._pyaudio_instance
 
+            # Resolve a valid input device — skip output-only devices (e.g. HDMI)
+            resolved_device_index = _resolve_valid_input_device(audio, self.audio_device_index)
+            if resolved_device_index is None:
+                logger.error("No audio input devices found with input channels.")
+                logger.error(
+                    "Please connect a microphone and ensure it is recognized by the system."
+                )
+                play_error_sound()
+                audio.terminate()
+                self._update_state(RecognitionState.ERROR)
+                return
+
             # Log available devices for debugging
             logger.debug("Available audio input devices:")
             for i in range(audio.get_device_count()):
@@ -1876,11 +1942,11 @@ class SpeechRecognitionManager:
                     continue
 
             # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio, self.audio_device_index)
+            CHANNELS = _get_supported_channels(audio, resolved_device_index)
             logger.info(f"Using {CHANNELS} channel(s) for recording")
 
             # Detect supported sample rate for the selected device
-            RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
+            RATE = _get_supported_sample_rate(audio, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.info(f"Using sample rate: {RATE}Hz")
 
@@ -1893,24 +1959,21 @@ class SpeechRecognitionManager:
                 "frames_per_buffer": CHUNK,
             }
 
-            # Use specified device if set, otherwise use system default
-            if self.audio_device_index is not None:
-                stream_kwargs["input_device_index"] = self.audio_device_index
-                try:
-                    device_info = audio.get_device_info_by_index(self.audio_device_index)
-                    logger.info(
-                        f"Using audio device [{self.audio_device_index}]: {device_info.get('name')}"
-                    )
-                except (IOError, OSError):
-                    logger.warning(f"Could not get info for device index {self.audio_device_index}")
-            else:
-                try:
-                    default_device = audio.get_default_input_device_info()
-                    logger.info(
-                        f"Using default audio device [{default_device.get('index')}]: {default_device.get('name')}"
-                    )
-                except (IOError, OSError):
-                    logger.warning("Could not get default input device info")
+            # Use the resolved device (skip if already system default)
+            try:
+                default_idx = audio.get_default_input_device_info().get("index")
+            except (IOError, OSError):
+                default_idx = None
+            if resolved_device_index != default_idx:
+                stream_kwargs["input_device_index"] = resolved_device_index
+
+            try:
+                device_info = audio.get_device_info_by_index(resolved_device_index)
+                logger.info(
+                    f"Using audio device [{resolved_device_index}]: {device_info.get('name')}"
+                )
+            except (IOError, OSError):
+                logger.warning(f"Could not get info for device index {resolved_device_index}")
 
             try:
                 self._audio_stream = audio.open(**stream_kwargs)
@@ -2398,16 +2461,24 @@ class SpeechRecognitionManager:
                 except Exception as e:
                     logger.debug(f"Error closing old audio stream: {e}")
 
+            # Resolve a valid input device — skip output-only devices (e.g. HDMI)
+            resolved_device_index = _resolve_valid_input_device(
+                audio_instance, self.audio_device_index
+            )
+            if resolved_device_index is None:
+                logger.error("Reconnection failed: no input devices available.")
+                return False
+
             # Stream configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
 
             # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio_instance, self.audio_device_index)
+            CHANNELS = _get_supported_channels(audio_instance, resolved_device_index)
             logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
 
             # Detect supported sample rate for the device
-            RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
+            RATE = _get_supported_sample_rate(audio_instance, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
@@ -2419,9 +2490,13 @@ class SpeechRecognitionManager:
                 "frames_per_buffer": CHUNK,
             }
 
-            # Use specified device if set
-            if self.audio_device_index is not None:
-                stream_kwargs["input_device_index"] = self.audio_device_index
+            # Use resolved device (skip if already system default)
+            try:
+                default_idx = audio_instance.get_default_input_device_info().get("index")
+            except (IOError, OSError):
+                default_idx = None
+            if resolved_device_index != default_idx:
+                stream_kwargs["input_device_index"] = resolved_device_index
 
             # Attempt to open new stream
             new_stream = audio_instance.open(**stream_kwargs)
