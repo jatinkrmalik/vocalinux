@@ -1455,6 +1455,11 @@ class TestIBusRuntimeFallback(unittest.TestCase):
 
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}):
             injector = TextInjector()
+            # IBus environment promotion happens in a background daemon thread
+            # (see TextInjector._initialize_ibus_in_background). Wait for it to
+            # finish so the assertion below is not subject to scheduler timing.
+            if injector._ibus_init_thread is not None:
+                injector._ibus_init_thread.join(timeout=5)
             self.assertEqual(injector.environment, DesktopEnvironment.X11_IBUS)
 
             result = injector.inject_text("Hello from fallback")
@@ -1485,6 +1490,8 @@ class TestIBusRuntimeFallback(unittest.TestCase):
 
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
             injector = TextInjector()
+            if injector._ibus_init_thread is not None:
+                injector._ibus_init_thread.join(timeout=5)
             self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
 
             result = injector.inject_text("Hello via wayland fallback")
