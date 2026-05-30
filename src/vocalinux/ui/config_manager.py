@@ -66,6 +66,7 @@ DEFAULT_CONFIG = {
         "whispercpp_entropy_thold": 2.4,
         "whispercpp_logprob_thold": -1.0,
         "whispercpp_no_speech_thold": 0.6,
+        "whispercpp_n_threads": 0,  # 0 = auto-detect optimal thread count; set to override
     },
 }
 
