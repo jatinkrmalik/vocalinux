@@ -11,6 +11,10 @@ system_packages:
     fedora: ["python3-gobject", "gtk3", "gobject-introspection-devel"]
     arch: ["python-gobject", "gtk3", "gobject-introspection", "python-cairo"]
     # Tumbleweed often uses versioned Python package names such as python313-gobject.
+    # NOTE: "python3XY" is a placeholder convention. The XY suffix is resolved at
+    # install time by install.sh via suse_python_package_prefix() and
+    # suse_python_package_candidates(), which try the active Python minor version
+    # first (e.g. python313-gobject) and fall back to the unversioned name.
     opensuse: ["python3XY-gobject", "python3XY-gobject-cairo", "gtk3", "gobject-introspection-devel"]
     gentoo: ["dev-python/pygobject:3", "x11-libs/gtk+:3"]
     alpine: ["py3-gobject3", "py3-cairo", "gtk+3.0"]
@@ -49,6 +53,7 @@ system_packages:
     fedora: ["python3-devel", "python3-virtualenv"]
     arch: ["python"]  # Arch includes venv by default
     # Tumbleweed package names follow the active Python minor version, e.g. python313-devel.
+    # NOTE: "python3XY" is a placeholder — see gtk3.opensuse comment above for details.
     opensuse: ["python3XY-devel", "python3XY-virtualenv", "python3XY-venv", "python3XY-pip"]
     gentoo: ["dev-lang/python:3.9"]
     alpine: ["py3-virtualenv"]
