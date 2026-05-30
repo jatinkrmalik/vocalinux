@@ -226,6 +226,24 @@ class TestStartStopRecognition(unittest.TestCase):
         mgr.stop_recognition()
         self.assertFalse(mgr.should_record)
 
+    def test_stop_sound_plays_after_audio_thread_join(self):
+        mgr = _make_manager()
+        mgr.state = RecognitionState.LISTENING
+        mgr.should_record = True
+        mgr.audio_thread = MagicMock()
+        mgr.audio_thread.is_alive.return_value = True
+        events = []
+        mgr.audio_thread.join.side_effect = lambda timeout=None: events.append("join")
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.play_stop_sound",
+            side_effect=lambda: events.append("sound"),
+        ):
+            mgr.stop_recognition()
+
+        # sound must play after the audio thread has joined so the cue cannot be captured
+        self.assertEqual(events[:2], ["join", "sound"])
+
     def test_stop_sound_guard_chunk_calculation(self):
         mgr = _make_manager()
 
