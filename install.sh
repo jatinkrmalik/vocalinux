@@ -1250,6 +1250,8 @@ suse_install_appindicator_runtime() {
             print_info "AppIndicator/Ayatana package is already installed ($PKG); verifying GI namespace..."
         elif sudo zypper install -y "$PKG" 2>/dev/null; then
             print_success "Installed AppIndicator/Ayatana package ($PKG)."
+            # Refresh the shared-library cache so the GI typelib is discoverable
+            sudo ldconfig 2>/dev/null || true
         else
             print_info "AppIndicator/Ayatana package '$PKG' not available, trying next option..."
             continue
