@@ -41,6 +41,7 @@ from vocalinux.speech_recognition.recognition_manager import (
     _find_pywhispercpp_shared_library_dirs,
     _get_system_model_paths,
     _preload_pywhispercpp_shared_libraries,
+    _resolve_valid_input_device,
     _show_notification,
 )
 from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
@@ -292,3 +293,146 @@ class TestTestAudioInput(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _make_audio_mock(devices, default_index=None):
+    """Build a PyAudio-like mock returning the given device dicts."""
+    audio = MagicMock()
+    audio.get_device_count.return_value = len(devices)
+    audio.get_device_info_by_index.side_effect = lambda i: devices[i]
+    if default_index is not None:
+        audio.get_default_input_device_info.return_value = devices[default_index]
+    else:
+        audio.get_default_input_device_info.side_effect = IOError("no default")
+    return audio
+
+
+class TestResolveValidInputDevice:
+    """Coverage for the HDMI-filtering audio device resolver."""
+
+    def test_preferred_index_with_input_channels_is_returned(self):
+        devices = [
+            {"index": 0, "name": "HDMI", "maxInputChannels": 0},
+            {"index": 1, "name": "USB Mic", "maxInputChannels": 2},
+        ]
+        audio = _make_audio_mock(devices, default_index=1)
+        assert _resolve_valid_input_device(audio, preferred_index=1) == 1
+
+    def test_preferred_index_without_input_falls_back_to_default(self):
+        devices = [
+            {"index": 0, "name": "HDMI", "maxInputChannels": 0},
+            {"index": 1, "name": "USB Mic", "maxInputChannels": 2},
+        ]
+        audio = _make_audio_mock(devices, default_index=1)
+        assert _resolve_valid_input_device(audio, preferred_index=0) == 1
+
+    def test_preferred_index_none_uses_default(self):
+        devices = [
+            {"index": 0, "name": "USB Mic", "maxInputChannels": 1},
+            {"index": 1, "name": "HDMI", "maxInputChannels": 0},
+        ]
+        audio = _make_audio_mock(devices, default_index=0)
+        assert _resolve_valid_input_device(audio, preferred_index=None) == 0
+
+    def test_no_default_falls_back_to_first_input(self):
+        devices = [
+            {"index": 0, "name": "HDMI", "maxInputChannels": 0},
+            {"index": 1, "name": "USB Mic", "maxInputChannels": 1},
+        ]
+        audio = _make_audio_mock(devices, default_index=None)
+        assert _resolve_valid_input_device(audio, preferred_index=None) == 1
+
+    def test_no_input_devices_returns_none(self):
+        devices = [{"index": 0, "name": "HDMI", "maxInputChannels": 0}]
+        audio = _make_audio_mock(devices, default_index=None)
+        assert _resolve_valid_input_device(audio, preferred_index=None) is None
+
+    def test_device_count_exception_returns_preferred(self):
+        audio = MagicMock()
+        audio.get_default_input_device_info.side_effect = IOError("nope")
+        audio.get_device_count.side_effect = OSError("driver dead")
+        assert _resolve_valid_input_device(audio, preferred_index=3) == 3
+
+    def test_zero_device_count_returns_preferred(self):
+        audio = MagicMock()
+        audio.get_default_input_device_info.side_effect = IOError("nope")
+        audio.get_device_count.return_value = 0
+        assert _resolve_valid_input_device(audio, preferred_index=7) == 7
+
+    def test_non_dict_info_is_treated_as_valid(self):
+        audio = MagicMock()
+        audio.get_default_input_device_info.side_effect = IOError("nope")
+        audio.get_device_count.return_value = 1
+        audio.get_device_info_by_index.return_value = MagicMock()
+        assert _resolve_valid_input_device(audio, preferred_index=0) == 0
+
+    def test_per_device_info_error_is_skipped(self):
+        audio = MagicMock()
+        audio.get_default_input_device_info.side_effect = IOError("nope")
+        audio.get_device_count.return_value = 2
+
+        def info(i):
+            if i == 0:
+                raise OSError("bad device")
+            return {"index": 1, "name": "USB Mic", "maxInputChannels": 1}
+
+        audio.get_device_info_by_index.side_effect = info
+        assert _resolve_valid_input_device(audio, preferred_index=None) == 1
+
+
+class TestDetectPywhispercppGpuBackend:
+    """Coverage for the runtime GPU library detector."""
+
+    def _make_manager(self):
+        manager = SpeechRecognitionManager.__new__(SpeechRecognitionManager)
+        return manager
+
+    def test_returns_cpu_when_no_gpu_libs(self, tmp_path, monkeypatch):
+        libs = tmp_path / "pywhispercpp.libs"
+        libs.mkdir()
+        (libs / "libwhisper.so.1").write_text("")
+        monkeypatch.setattr(rm, "_preload_pywhispercpp_shared_libraries", lambda: None)
+        monkeypatch.setattr(rm, "_find_pywhispercpp_shared_library_dirs", lambda: [str(libs)])
+        assert self._make_manager()._detect_pywhispercpp_gpu_backend() == "cpu"
+
+    def test_detects_vulkan(self, tmp_path, monkeypatch):
+        libs = tmp_path / "pywhispercpp.libs"
+        libs.mkdir()
+        (libs / "libggml-vulkan.so").write_text("")
+        monkeypatch.setattr(rm, "_preload_pywhispercpp_shared_libraries", lambda: None)
+        monkeypatch.setattr(rm, "_find_pywhispercpp_shared_library_dirs", lambda: [str(libs)])
+        assert self._make_manager()._detect_pywhispercpp_gpu_backend() == "vulkan"
+
+    def test_detects_cuda(self, tmp_path, monkeypatch):
+        libs = tmp_path / "pywhispercpp.libs"
+        libs.mkdir()
+        (libs / "libggml-cuda.so").write_text("")
+        monkeypatch.setattr(rm, "_preload_pywhispercpp_shared_libraries", lambda: None)
+        monkeypatch.setattr(rm, "_find_pywhispercpp_shared_library_dirs", lambda: [str(libs)])
+        assert self._make_manager()._detect_pywhispercpp_gpu_backend() == "cuda"
+
+    def test_returns_cpu_when_no_library_dirs(self, monkeypatch):
+        monkeypatch.setattr(rm, "_preload_pywhispercpp_shared_libraries", lambda: None)
+        monkeypatch.setattr(rm, "_find_pywhispercpp_shared_library_dirs", lambda: [])
+        assert self._make_manager()._detect_pywhispercpp_gpu_backend() == "cpu"
+
+
+class TestFindPywhispercppSharedLibraryDirsResilience:
+    """Coverage for the widened exception handling in library discovery."""
+
+    def test_typeerror_from_pathlib_is_swallowed(self, tmp_path, monkeypatch):
+        # Simulate tests that monkey-patch os.stat globally and yield non-int st_mode,
+        # causing pathlib.Path.is_dir to raise TypeError mid-iteration.
+        import pathlib
+
+        original_is_dir = pathlib.Path.is_dir
+
+        def broken_is_dir(self, *args, **kwargs):
+            raise TypeError("an integer is required")
+
+        monkeypatch.setattr(pathlib.Path, "is_dir", broken_is_dir)
+        try:
+            result = _find_pywhispercpp_shared_library_dirs()
+        finally:
+            monkeypatch.setattr(pathlib.Path, "is_dir", original_is_dir)
+        assert isinstance(result, list)
