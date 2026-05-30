@@ -2,6 +2,54 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.11.0-beta
+
+### 🚀 Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **⚙️ Advanced Settings Tab** | New Advanced tab exposing whisper.cpp anti-hallucination parameters |
+| **🔌 IBus Hardening** | Engine readiness probe, runtime failure recovery, proper destruction on layout switch |
+| **🎤 Recognition Reliability** | Preserve final speech on stop and improved stop-sound timing |
+| **📦 Distro Compatibility** | Hardened Debian layer, corrected openSUSE deps, Python 3.14 support |
+| **🔧 Installer Fixes** | pywhispercpp loading repair, proj config validation, reused builds |
+
+### ✨ New Features
+
+- **Advanced Settings tab** — New tab in the Settings dialog exposing whisper.cpp anti-hallucination parameters:
+  - Temperature override
+  - No-speech threshold
+  - Max segment length
+  - Other inference-time parameters for fine-tuning recognition
+
+### 🐛 Bug Fixes
+
+- **IBus**: Probe engine readiness at startup with hardened retries (#391)
+- **IBus**: Handle engine instance destruction on layout switch (#389)
+- **IBus**: Recover from runtime failures gracefully (#411)
+- **Recognition**: Preserve final speech when stopping (#401)
+- **Recognition**: Play stop sound immediately on release (#426) and after audio thread joins (#436)
+- **Install**: Repair pywhispercpp library loading (#433)
+- **Install**: Correct openSUSE Tumbleweed dependencies (#420, #418)
+- **Install**: Harden Debian compatibility layer (#437)
+- **Install**: Validate pyproject.toml/setup.py before local repo mode (#396)
+- **Install**: Reuse existing whispercpp builds (#421)
+- **Install**: Refresh ldconfig after openSUSE typelib install (#438)
+- **whisper.cpp**: Reduce CPU threads and ensure GPU backend builds in dev mode (#439)
+- **Logging**: Clean up runtime log noise and cache hardware detection
+- **Python 3.14 support**: Compatibility fix and lxml>=6.1.0 (#404)
+
+### 🔧 Improvements
+
+- **Installer refresh** — openSUSE fallback handling, Debian compatibility hardening
+- **Test coverage** — Recognition internals, IBus edge cases, CI notification suppression (#410, #414)
+- **Dependency bumps** — Next.js security updates (#399, #429), PostCSS
+- **PyPI docs** — Clarify installation requirements (#423)
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.11.0-beta).
+
+---
+
 ## What's New in v0.10.2-beta
 
 ### 🚀 Highlights
@@ -163,7 +211,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.10.1-beta
+git checkout v0.11.0-beta
 ./install.sh
 ```
 
