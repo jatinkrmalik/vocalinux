@@ -1074,8 +1074,10 @@ EOF
 detect_distro
 
 # Check compatibility
-if [[ "$DISTRO_FAMILY" != "ubuntu" ]]; then
-    print_warning "This installer is primarily designed for Ubuntu-based systems. Your system: $DISTRO_NAME"
+if [[ "$DISTRO_FAMILY" == "debian" ]]; then
+    print_info "Detected Debian — fully supported. Continuing with Debian-specific configuration."
+elif [[ "$DISTRO_FAMILY" != "ubuntu" ]]; then
+    print_warning "This installer is primarily designed for Ubuntu/Debian-based systems. Your system: $DISTRO_NAME"
     print_warning "The application may still work, but you might need to install dependencies manually."
     if [[ "$NON_INTERACTIVE" == "yes" ]]; then
         print_info "Non-interactive mode: continuing anyway..."
@@ -1286,8 +1288,13 @@ install_system_dependencies() {
         fi
     fi
 
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
-    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard"
+    # libssl-dev, autoconf, automake, libtool, patchelf are required for pywhispercpp source
+    # builds on Debian. On Ubuntu these are typically pulled in transitively, but on a clean
+    # Debian install they are absent and cause CMake's bootstrap to fail (Hurdle 2 from
+    # https://medium.com/@cslev/talking-to-my-linux-box-without-talking-to-the-cloud-vocalinux-on-debian-without-the-tears-10bf053ea21b).
+    local PYWHISPERCPP_BUILD_DEPS="libssl-dev autoconf automake libtool patchelf"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip wl-clipboard"
@@ -1333,9 +1340,9 @@ install_system_dependencies() {
                 if echo "$MISSING_PACKAGES" | grep -q "gir1.2-appindicator3-0.1"; then
                     FILTERED_PACKAGES=$(echo "$MISSING_PACKAGES" | sed 's/gir1.2-appindicator3-0.1//' | xargs)
 
-                    if ! sudo apt install -y gir1.2-appindicator3-0.1 2>/dev/null; then
+                    if ! DEBIAN_FRONTEND=noninteractive sudo apt install -y gir1.2-appindicator3-0.1 2>/dev/null; then
                         print_info "gir1.2-appindicator3-0.1 not available, trying gir1.2-ayatanaappindicator3-0.1..."
-                        if ! sudo apt install -y gir1.2-ayatanaappindicator3-0.1; then
+                        if ! DEBIAN_FRONTEND=noninteractive sudo apt install -y gir1.2-ayatanaappindicator3-0.1; then
                             print_error "Failed to install appindicator package (tried both gir1.2-appindicator3-0.1 and gir1.2-ayatanaappindicator3-0.1)"
                             exit 1
                         fi
@@ -1343,10 +1350,10 @@ install_system_dependencies() {
                     fi
 
                     if [ -n "$FILTERED_PACKAGES" ]; then
-                        sudo apt install -y $FILTERED_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+                        DEBIAN_FRONTEND=noninteractive sudo apt install -y $FILTERED_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
                     fi
                 else
-                    sudo apt install -y $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
+                    DEBIAN_FRONTEND=noninteractive sudo apt install -y $MISSING_PACKAGES || { print_error "Failed to install dependencies"; exit 1; }
                 fi
             else
                 print_info "All required packages are already installed."
@@ -1715,7 +1722,7 @@ install_text_input_tools() {
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
                     if ! apt_package_installed "wtype"; then
-                        sudo apt install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
+                        DEBIAN_FRONTEND=noninteractive sudo apt install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
                     else
                         print_info "wtype is already installed."
                     fi
@@ -1788,7 +1795,19 @@ install_text_input_tools() {
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
                     if ! apt_package_installed "ydotool"; then
-                        sudo apt install -y ydotool 2>/dev/null || print_info "ydotool not available in repos (optional)"
+                        if ! DEBIAN_FRONTEND=noninteractive sudo apt install -y ydotool 2>/dev/null; then
+                            if [[ "$DISTRO_FAMILY" == "debian" ]]; then
+                                print_warning "ydotool is not packaged in Debian's standard repos."
+                                print_info "For full Wayland input support, you can compile ydotool from source:"
+                                print_info "  sudo apt install -y git cmake libevdev-dev"
+                                print_info "  git clone https://github.com/ReimuNotMoe/ydotool.git /tmp/ydotool"
+                                print_info "  cmake -S /tmp/ydotool -B /tmp/ydotool/build && sudo cmake --build /tmp/ydotool/build --target install"
+                                print_info "  sudo systemctl enable --now ydotoold"
+                                print_info "Alternatively, wtype (already installed) will handle most Wayland compositors."
+                            else
+                                print_info "ydotool not available in repos (optional)"
+                            fi
+                        fi
                     fi
                     ;;
                 fedora)
@@ -1825,7 +1844,7 @@ install_text_input_tools() {
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
                     if ! apt_package_installed "xdotool"; then
-                        sudo apt install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
+                        DEBIAN_FRONTEND=noninteractive sudo apt install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
                     else
                         print_info "xdotool is already installed."
                     fi
@@ -1900,7 +1919,7 @@ install_text_input_tools() {
             # Install both tools based on distribution
             case "$DISTRO_FAMILY" in
                 ubuntu|debian)
-                    sudo apt install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
+                    DEBIAN_FRONTEND=noninteractive sudo apt install -y xdotool wtype || { print_warning "Failed to install text input tools. Text injection may not work properly."; }
                     ;;
                 fedora|mageia)
                     if command_exists dnf; then
@@ -3212,6 +3231,26 @@ verify_installation() {
     if ! "$VENV_DIR/bin/python" -c "import vocalinux" &>/dev/null; then
         print_error "Vocalinux Python package cannot be imported."
         ISSUES=$((ISSUES + 1))
+    fi
+
+    # Smoke-test the selected speech engine's native library at install time so that
+    # "installed but does not run" failures (e.g. libwhisper.so.1 not found on Debian)
+    # are surfaced here with actionable guidance rather than silently at first launch.
+    local selected_engine="${SELECTED_ENGINE:-whisper_cpp}"
+    if [[ "$selected_engine" == "whisper_cpp" ]]; then
+        if ! is_pywhispercpp_installed; then
+            print_error "pywhispercpp (whisper.cpp engine) installed but cannot be imported at runtime."
+            print_error "This usually means libwhisper.so.1 is missing or not on the library path."
+            print_error ""
+            print_error "Diagnostic steps:"
+            print_error "  1. Check for unresolved symbols:"
+            print_error "     ldd \$(find $VENV_DIR -name '*.so' -path '*/pywhispercpp*' 2>/dev/null | head -1) 2>/dev/null | grep 'not found'"
+            print_error "  2. Re-run the installer with: --rebuild-whispercpp"
+            print_error "  3. Or switch to VOSK (no native build needed): --engine=vosk"
+            ISSUES=$((ISSUES + 1))
+        else
+            print_success "pywhispercpp (whisper.cpp) import verified successfully."
+        fi
     fi
 
     # Return the number of issues found
