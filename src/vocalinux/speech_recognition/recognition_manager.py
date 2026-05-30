@@ -1768,15 +1768,15 @@ class SpeechRecognitionManager:
         # Stop recording FIRST to prevent capturing the stop sound
         self.should_record = False
 
-        # Give immediate release feedback. The recorder may still finish one
-        # in-flight chunk, so the stop-sound guard below keeps the cue out.
-        play_stop_sound()
-
         # Wait for audio thread to finish recording and enqueue any pending audio
         # This is critical to prevent race condition where recognition thread exits
         # before the final audio segment is enqueued
         if self.audio_thread and self.audio_thread.is_alive():
             self.audio_thread.join(timeout=2.0)
+
+        # Play stop sound now that the audio thread is done and cannot capture it.
+        # Kept before buffer processing so the cue still feels immediate.
+        play_stop_sound()
 
         # Trim only a small tail to avoid the stop sound without clipping the user's final word.
         with self._buffer_lock:

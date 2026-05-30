@@ -226,7 +226,7 @@ class TestStartStopRecognition(unittest.TestCase):
         mgr.stop_recognition()
         self.assertFalse(mgr.should_record)
 
-    def test_stop_sound_plays_before_audio_thread_join(self):
+    def test_stop_sound_plays_after_audio_thread_join(self):
         mgr = _make_manager()
         mgr.state = RecognitionState.LISTENING
         mgr.should_record = True
@@ -241,7 +241,8 @@ class TestStartStopRecognition(unittest.TestCase):
         ):
             mgr.stop_recognition()
 
-        self.assertEqual(events[:2], ["sound", "join"])
+        # sound must play after the audio thread has joined so the cue cannot be captured
+        self.assertEqual(events[:2], ["join", "sound"])
 
     def test_stop_sound_guard_chunk_calculation(self):
         mgr = _make_manager()
