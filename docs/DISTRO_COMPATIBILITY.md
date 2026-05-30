@@ -90,6 +90,53 @@ sudo apt install -y python3-gi gir1.2-gtk-3.0 gir1.2-gdkpixbuf-2.0 \
 
 **Note for Debian 11+:** Use `gir1.2-ayatanaappindicator3-0.1` instead of `gir1.2-appindicator3-0.1`
 
+### Debian-specific notes
+
+Debian's standard repositories differ from Ubuntu in a few ways that matter for Vocalinux:
+
+**pywhispercpp build prerequisites** — On a clean Debian install the following packages are not
+pulled in transitively (unlike Ubuntu) but are required when `pywhispercpp` must be compiled
+from source (e.g. for GPU support):
+
+```bash
+sudo apt install -y libssl-dev autoconf automake libtool patchelf
+```
+
+The installer now installs these automatically, but if you hit a CMake error like
+`Could not find OpenSSL` during a manual reinstall, add the above first.
+
+**ydotool** — `ydotool` is not packaged in Debian's standard repos. The installer falls back
+gracefully to `wtype` for most Wayland compositors. If you specifically need `ydotool`
+(e.g. for KDE Plasma Wayland), compile it from source:
+
+```bash
+sudo apt install -y git cmake libevdev-dev
+git clone https://github.com/ReimuNotMoe/ydotool.git /tmp/ydotool
+cmake -S /tmp/ydotool -B /tmp/ydotool/build
+sudo cmake --build /tmp/ydotool/build --target install
+sudo systemctl enable --now ydotoold
+```
+
+**Scoped source builds** — If you need to force `pywhispercpp` to rebuild from source, use the
+package-scoped flag to avoid compiling unrelated deps like NumPy from source (which takes a very
+long time and can fail):
+
+```bash
+source ~/.local/share/vocalinux/venv/bin/activate
+PYWHISPERCPP_CLEAN=1 pip install --force-reinstall --no-binary=pywhispercpp pywhispercpp
+deactivate
+```
+
+**Verifying libwhisper.so resolution** — If Vocalinux starts with
+`libwhisper.so.1: cannot open shared object file`, check for unresolved symbols:
+
+```bash
+ldd $(find ~/.local/share/vocalinux/venv -name '*.so' -path '*/pywhispercpp*' 2>/dev/null | head -1) | grep 'not found'
+```
+
+If any libraries are listed, re-run the installer with `--rebuild-whispercpp` or switch to
+the VOSK engine (`--engine=vosk`) as a fully-packaged alternative.
+
 ### Fedora/RHEL-based
 ```bash
 sudo dnf install -y python3-gobject gtk3-devel gobject-introspection-devel \
