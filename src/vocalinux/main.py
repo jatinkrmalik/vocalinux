@@ -355,6 +355,9 @@ def main():
     vad_sensitivity = saved_settings.get("vad_sensitivity", 3)
     silence_timeout = saved_settings.get("silence_timeout", 2.0)
     stop_sound_guard_ms = saved_settings.get("stop_sound_guard_ms", 200)
+    experimental_streaming = saved_settings.get("experimental_streaming", False)
+    streaming_chunk_duration_ms = saved_settings.get("streaming_chunk_duration_ms", 1000)
+    streaming_overlap_ms = saved_settings.get("streaming_overlap_ms", 200)
     voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto
     audio_device_index = audio_settings.get("device_index", None)
 
@@ -376,6 +379,9 @@ def main():
             vad_sensitivity=vad_sensitivity,
             silence_timeout=silence_timeout,
             stop_sound_guard_ms=stop_sound_guard_ms,
+            experimental_streaming=experimental_streaming,
+            streaming_chunk_duration_ms=streaming_chunk_duration_ms,
+            streaming_overlap_ms=streaming_overlap_ms,
             voice_commands_enabled=voice_commands_enabled,
             audio_device_index=audio_device_index,
             whispercpp_no_timestamps=advanced_settings.get("whispercpp_no_timestamps", True),
@@ -441,10 +447,17 @@ def main():
             if success:
                 action_handler.set_last_injected_text(text)
 
+        previous_recognition_state = RecognitionState.IDLE
+
         def on_state_change(state: RecognitionState) -> None:
             """Reset the last-injected buffer when a new listening session starts."""
-            if state == RecognitionState.LISTENING:
+            nonlocal previous_recognition_state
+            if (
+                state == RecognitionState.LISTENING
+                and previous_recognition_state != RecognitionState.PROCESSING
+            ):
                 action_handler.set_last_injected_text("")
+            previous_recognition_state = state
 
         # Connect speech recognition to text injection and action handling
         speech_engine.register_text_callback(text_callback_wrapper)
