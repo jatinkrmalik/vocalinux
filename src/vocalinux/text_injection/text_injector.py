@@ -262,7 +262,10 @@ class TextInjector:
             return
 
         try:
-            self._ibus_injector._setup_engine()
+            # Keep the Vocalinux IBus process warm without selecting it as the
+            # user's active keyboard engine. Activation is scoped to each text
+            # commit so normal typing keeps layout-specific compose/dead keys.
+            self._ibus_injector.prepare_engine()
             with self._state_lock:
                 self._ibus_ready = True
                 self._ibus_init_failed = False
