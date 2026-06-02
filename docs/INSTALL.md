@@ -15,6 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install
 That's it! The installer handles everything automatically:
 - ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
 - ✅ Auto-detects your GPU (AMD, Intel, NVIDIA all supported)
+- ✅ Installs neural VAD support when ONNX Runtime is available
 - ✅ Downloads the tiny model (~39MB)
 - ✅ Configures everything automatically
 
@@ -202,12 +203,13 @@ Examples:
    - **whisper.cpp** (default): High-performance C++ engine with Vulkan GPU support
    - **Whisper**: OpenAI's PyTorch-based engine (NVIDIA GPU only)
    - **VOSK**: Lightweight engine for older systems
-5. **Downloads speech recognition models**:
+5. **Installs neural VAD support** when ONNX Runtime is available, with a safe amplitude-VAD fallback otherwise
+6. **Downloads speech recognition models**:
    - whisper.cpp: ~39MB tiny model (or larger if selected)
    - Whisper: ~75MB tiny model + PyTorch dependencies (~2.3GB with CUDA)
    - VOSK: ~40MB small model
-6. **Installs desktop integration** (icons, .desktop file)
-7. **Creates activation script** for easy environment activation
+7. **Installs desktop integration** (icons, .desktop file)
+8. **Creates activation script** for easy environment activation
 
 ### Installation Time Comparison
 
@@ -397,8 +399,11 @@ pip install .
 # With Whisper support
 pip install ".[whisper]"
 
+# With neural VAD support
+pip install ".[vad]"
+
 # Development mode
-pip install -e ".[dev]"
+pip install -e ".[dev,vad]"
 ```
 
 For PyPI instead of a local checkout, use `pip install vocalinux` after installing

@@ -146,6 +146,7 @@ The installer will:
 - **Auto-detect your hardware** (GPU, RAM, Vulkan support)
 - **Recommend the best engine** for your system
 - **Download the appropriate model** (~39MB for whisper.cpp tiny)
+- **Install neural VAD support** when ONNX Runtime is available
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
 > **Note**: Always installs the latest release. For a specific version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
@@ -293,6 +294,18 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 ```
 
 You can also configure settings through the graphical Settings dialog (right-click the tray icon).
+
+### Neural Voice Activity Detection
+
+Vocalinux ships with a Silero VAD model and uses it automatically when `onnxruntime` is available. The official installer attempts to install this support automatically. Without it, recording falls back to the simpler amplitude-threshold VAD.
+
+For manual or PyPI installs, enable neural VAD with:
+
+```bash
+pip install "vocalinux[vad]"
+```
+
+Restart Vocalinux after install. The Recognition tab in Settings shows which backend is active. The same `vad_sensitivity` (1-5) works for both -- it's mapped to a Silero probability threshold internally (1 = 0.8, 5 = 0.3).
 
 ## 🔧 Development Setup
 

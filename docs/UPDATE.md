@@ -205,6 +205,7 @@ The installer will:
 - ✅ Update your existing installation
 - ✅ Preserve your configuration and models
 - ✅ Install any new dependencies
+- ✅ Attempt to install neural VAD support, falling back safely if ONNX Runtime is unavailable
 
 ### If You Installed from Source
 

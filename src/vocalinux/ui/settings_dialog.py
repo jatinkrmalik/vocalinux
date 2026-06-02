@@ -28,6 +28,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
+from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
@@ -1162,12 +1163,18 @@ class SettingsDialog(Gtk.Dialog):
         self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
         self.vad_spin.set_tooltip_text("Higher = more sensitive to quiet speech")
         _prevent_scroll_on_hover(self.vad_spin)
-        vad_row = PreferenceRow(
+        silero_active = is_silero_available()
+        vad_subtitle = (
+            "Sensitivity (1-5) -- backend: Silero neural VAD"
+            if silero_active
+            else "Sensitivity (1-5) -- backend: amplitude (install vocalinux[vad] for neural)"
+        )
+        self.vad_row = PreferenceRow(
             title="VAD Sensitivity",
-            subtitle="Voice Activity Detection sensitivity (1-5)",
+            subtitle=vad_subtitle,
             widget=self.vad_spin,
         )
-        group.add_row(vad_row)
+        group.add_row(self.vad_row)
 
         # Silence Timeout
         self.silence_spin = Gtk.SpinButton.new_with_range(0.5, 5.0, 0.1)
@@ -1195,6 +1202,33 @@ class SettingsDialog(Gtk.Dialog):
         group.add_row(voice_commands_row)
 
         self.recognition_settings_tab.pack_start(group, False, False, 0)
+
+        if not silero_active:
+            vad_info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            vad_info_box.get_style_context().add_class("info-box")
+            vad_info_box.set_margin_start(4)
+            vad_info_box.set_margin_end(4)
+            vad_info_box.set_margin_top(4)
+
+            info_icon = Gtk.Image.new_from_icon_name(
+                "dialog-information-symbolic", Gtk.IconSize.MENU
+            )
+            vad_info_box.pack_start(info_icon, False, False, 0)
+
+            vad_info_label = Gtk.Label(
+                label=(
+                    "Neural VAD is more accurate at separating speech from background "
+                    "noise. To enable it, install onnxruntime and restart Vocalinux:\n"
+                    '    pip install "vocalinux[vad]"'
+                ),
+                xalign=0,
+                wrap=True,
+                selectable=True,
+            )
+            vad_info_label.get_style_context().add_class("tip-label")
+            vad_info_box.pack_start(vad_info_label, True, True, 0)
+
+            self.recognition_settings_tab.pack_start(vad_info_box, False, False, 0)
 
         # Connect signals
         self.vad_spin.connect("value-changed", self._on_vad_changed)

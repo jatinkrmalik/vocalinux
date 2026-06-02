@@ -103,14 +103,9 @@ def check_dependencies():
                 "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
             )
 
-    # pynput is used for keyboard detection but we check at module startup
-    # requests is used by various components
-    # These are intentional checks to provide user-friendly error messages
-    try:
-        import pynput  # noqa: F401
-    except ImportError:
-        missing_python_deps.append("pynput (install with: pip install pynput)")
-
+    # Keyboard backends are optional and checked lazily by the shortcut manager.
+    # Importing pynput can fail on Wayland/X-less sessions even when installed.
+    # requests is used by various components and should remain a required check.
     try:
         import requests  # noqa: F401
     except ImportError:
