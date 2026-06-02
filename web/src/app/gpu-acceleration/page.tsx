@@ -187,7 +187,7 @@ export default function GpuAccelerationPage() {
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           Leverage your GPU for faster speech recognition. Vocalinux supports AMD, Intel, and NVIDIA
-          GPUs via Vulkan—with automatic fallback to CPU when needed.
+          GPUs via Vulkan - with automatic fallback to CPU when needed.
         </p>
       </section>
 

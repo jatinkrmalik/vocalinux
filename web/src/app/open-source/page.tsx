@@ -276,7 +276,7 @@ export default function OpenSourcePage() {
             </h3>
             <p className="mb-4 text-sm text-blue-700 dark:text-blue-400">
               We welcome contributions! Whether it&apos;s bug fixes, features, documentation, or
-              translations—join the community.
+              translations - join the community.
             </p>
             <a
               href="https://github.com/jatinkrmalik/vocalinux"

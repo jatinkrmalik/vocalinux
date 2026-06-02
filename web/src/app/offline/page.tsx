@@ -33,7 +33,7 @@ const benefits = [
   {
     title: "No Account Required",
     description:
-      "No signup, no login, no password to forget. Download and run—that's it.",
+      "No signup, no login, no password to forget. Download and run - that's it.",
     icon: Lock,
     iconColor: "text-violet-500",
     iconBg: "bg-violet-100 dark:bg-violet-900/30",
@@ -228,16 +228,16 @@ export default function OfflinePage() {
         <ul className="space-y-2 text-sm text-emerald-700 dark:text-emerald-400">
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>whisper.cpp</strong> — C++ port of OpenAI Whisper, runs locally with GPU
+            <strong>whisper.cpp</strong> - C++ port of OpenAI Whisper, runs locally with GPU
             acceleration
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>VOSK</strong> — Lightweight offline engine, minimal resources
+            <strong>VOSK</strong> - Lightweight offline engine, minimal resources
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>OpenAI Whisper</strong> — PyTorch-based, runs on NVIDIA GPU or CPU
+            <strong>OpenAI Whisper</strong> - PyTorch-based, runs on NVIDIA GPU or CPU
           </li>
         </ul>
         <p className="mt-4 text-sm text-emerald-700 dark:text-emerald-400">
@@ -251,7 +251,7 @@ export default function OfflinePage() {
           Verify It Yourself
         </h2>
         <p className="mb-3 text-sm text-amber-700 dark:text-amber-400">
-          Don&apos;t trust—verify. Vocalinux is open source. You can:
+          Don&apos;t trust - verify. Vocalinux is open source. You can:
         </p>
         <ul className="space-y-2 text-sm text-amber-700 dark:text-amber-400">
           <li className="flex items-start gap-2">
@@ -273,7 +273,7 @@ export default function OfflinePage() {
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             Monitor with <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">tcpdump</code> or{" "}
-            <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">wireshark</code>—you&apos;ll see silence
+            <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">wireshark</code> - you&apos;ll see silence
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />

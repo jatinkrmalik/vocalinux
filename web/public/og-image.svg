@@ -64,7 +64,7 @@
     </g>
   </g>
 
-  <!-- GitHub CTA button — icon and text vertically centered -->
+  <!-- GitHub CTA button - icon and text vertically centered -->
   <g transform="translate(80, 400)">
     <rect width="280" height="50" rx="12" fill="#18181b"/>
     <!-- GitHub icon + text centered as a group: total content ~200px wide, button 280px, offset=(280-200)/2=40 -->
@@ -95,7 +95,7 @@
   <!-- URL branding -->
   <text x="80" y="545" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#a1a1aa">vocalinux.com</text>
 
-  <!-- ==================== RIGHT SIDE — FEATURE CARDS ==================== -->
+  <!-- ==================== RIGHT SIDE - FEATURE CARDS ==================== -->
   <!-- 4 cards, each 118px tall, with 20px gap between them -->
   <!-- Total cards height: 4*118 + 3*20 = 532. Canvas usable = 630 - 8 (accent lines) = 622 -->
   <!-- Top offset: (622 - 532) / 2 + 4 = 49 -->
@@ -103,7 +103,7 @@
   <!-- Card 1: 100% Local Processing -->
   <g transform="translate(620, 49)">
     <rect width="510" height="118" rx="16" fill="white" stroke="#e4e4e7" stroke-width="1.2"/>
-    <!-- Icon — vertically centered: (118-50)/2 = 34 -->
+    <!-- Icon - vertically centered: (118-50)/2 = 34 -->
     <g transform="translate(24, 34)">
       <rect width="50" height="50" rx="13" fill="#f0fdf4"/>
       <g transform="translate(13, 10)">
@@ -111,11 +111,11 @@
         <path d="M9 12l2 2 4-4" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </g>
     </g>
-    <!-- Text block — vertically centered: icon center at 34+25=59, text block ~40px tall, starts at 59-20+6=45 -->
+    <!-- Text block - vertically centered: icon center at 34+25=59, text block ~40px tall, starts at 59-20+6=45 -->
     <text x="90" y="49" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="19" font-weight="700" fill="#18181b">100% Local Processing</text>
     <text x="90" y="72" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="14" fill="#71717a">No cloud, no subscriptions, no data</text>
     <text x="90" y="89" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="14" fill="#71717a">leaves your machine</text>
-    <!-- Badge — vertically centered alongside title -->
+    <!-- Badge - vertically centered alongside title -->
     <rect x="418" y="37" width="72" height="26" rx="6" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
     <text x="454" y="55" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#166534" text-anchor="middle">PRIVATE</text>
   </g>

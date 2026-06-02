@@ -565,10 +565,11 @@ export default function HomePage() {
           <FadeInSection>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-                Try Linux Speech-to-Text in Your Browser
+                Try a Speech-to-Text Preview in Your Browser
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Experience voice-to-text right here in your browser. Click the microphone and start speaking!
+                This preview runs when your browser exposes SpeechRecognition. Vocalinux itself
+                runs offline after install.
               </p>
             </div>
           </FadeInSection>

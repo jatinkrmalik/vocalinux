@@ -144,19 +144,19 @@ export default function PrivacyPage() {
             <p>When you dictate, here's exactly what happens:</p>
             <ol className="space-y-3 pl-4">
               <li className="border-l-2 border-primary pl-4">
-                <strong className="text-foreground">1. Audio Capture</strong> — Your microphone
+                <strong className="text-foreground">1. Audio Capture</strong> - Your microphone
                 records audio temporarily in RAM
               </li>
               <li className="border-l-2 border-primary pl-4">
-                <strong className="text-foreground">2. Local Processing</strong> — Audio is
+                <strong className="text-foreground">2. Local Processing</strong> - Audio is
                 processed by whisper.cpp, Whisper, or VOSK on your CPU/GPU
               </li>
               <li className="border-l-2 border-primary pl-4">
-                <strong className="text-foreground">3. Text Output</strong> — Transcribed text is
+                <strong className="text-foreground">3. Text Output</strong> - Transcribed text is
                 injected into your active application
               </li>
               <li className="border-l-2 border-primary pl-4">
-                <strong className="text-foreground">4. Immediate Deletion</strong> — Audio data is
+                <strong className="text-foreground">4. Immediate Deletion</strong> - Audio data is
                 discarded immediately after processing
               </li>
             </ol>
