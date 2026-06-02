@@ -241,17 +241,17 @@ export default function WaylandPage() {
         <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-400">
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>IBus Engine</strong> — A custom IBus input method that receives text from
+            <strong>IBus Engine</strong> - A custom IBus input method that receives text from
             Vocalinux and types it into the focused application
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>wtype</strong> — Native Wayland typing tool for compositors that support the
+            <strong>wtype</strong> - Native Wayland typing tool for compositors that support the
             virtual keyboard protocol
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>X11 Fallback</strong> — xdotool for XWayland applications
+            <strong>X11 Fallback</strong> - xdotool for XWayland applications
           </li>
         </ul>
         <p className="mt-4 text-sm text-blue-700 dark:text-blue-400">

@@ -247,7 +247,7 @@ export default function WritersPage() {
         <h2 className="mb-3 text-2xl font-bold">Start Writing with Your Voice</h2>
         <p className="mb-6 max-w-3xl text-muted-foreground">
           Install Vocalinux and start dictating novels, blog posts, academic notes, and newsroom
-          drafts directly on Linux—without cloud lock-in.
+          drafts directly on Linux - without cloud lock-in.
         </p>
         <Link
           href="/install/"
