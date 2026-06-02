@@ -22,6 +22,7 @@ from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_so
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
+from .silero_vad import SILERO_CHUNK_SIZE, load_silero_vad
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -742,6 +743,13 @@ class SpeechRecognitionManager:
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
 
+        # Silero VAD (neural-network-based, falls back to amplitude if unavailable)
+        self._silero_vad = load_silero_vad()
+        if self._silero_vad is not None:
+            logger.info("Using Silero neural VAD")
+        else:
+            logger.info("Using amplitude-based VAD (install vocalinux[vad] for neural VAD)")
+
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
 
@@ -764,6 +772,7 @@ class SpeechRecognitionManager:
         self.should_record = False
         self._recognition_mode = "toggle"  # "toggle" or "push_to_talk"
         self.audio_buffer = []
+        self._recording_segment_has_speech = False
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue = queue.Queue(maxsize=32)
@@ -1895,10 +1904,17 @@ class SpeechRecognitionManager:
                     self.stop_sound_guard_ms,
                 )
 
-            if self.audio_buffer:
-                logger.debug(f"Enqueuing final buffer with {len(self.audio_buffer)} chunks")
+            if self.audio_buffer and self._recording_segment_has_speech:
+                logger.debug(f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
+            elif self.audio_buffer:
+                logger.debug(
+                    "Dropping final audio buffer with no detected speech "
+                    f"({len(self.audio_buffer)} chunks)"
+                )
+                self.audio_buffer = []
+            self._recording_segment_has_speech = False
 
         # Wake up recognition thread so it can drain queued segments and stop
         self._signal_recognition_stop()
@@ -2016,8 +2032,20 @@ class SpeechRecognitionManager:
             # Record audio while should_record is True
             silence_counter = 0
             speech_detected_in_session = False
+            self._recording_segment_has_speech = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
+            # Accumulator for 512-sample Silero chunks.  When the capture rate
+            # is higher than 16 kHz (e.g. 48 kHz), resampling produces fewer
+            # than 1024 samples per read (~341 at 48 kHz), so the buffer may
+            # need several reads to fill a full 512-sample chunk.  This is
+            # expected -- VAD decisions simply arrive less frequently (every
+            # ~128 ms instead of ~64 ms) with no impact on accuracy.
+            silero_chunk_buf = np.array([], dtype=np.int16)
+
+            # Reset Silero VAD state for this recording session
+            if self._silero_vad is not None:
+                self._silero_vad.reset()
 
             while self.should_record:
                 try:
@@ -2057,7 +2085,7 @@ class SpeechRecognitionManager:
 
                         self.audio_buffer.append(data)
 
-                    # Simple Voice Activity Detection (VAD)
+                    # Voice Activity Detection (VAD)
                     audio_data = np.frombuffer(data, dtype=np.int16)
                     volume = np.abs(audio_data).mean()
 
@@ -2082,22 +2110,54 @@ class SpeechRecognitionManager:
                         )
                         log_level_interval = 0
 
-                    # Threshold based on sensitivity (1-5)
-                    # Ensure vad_sensitivity is treated as integer for calculation
-                    try:
-                        vad_sens = int(self.vad_sensitivity)
-                        threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
-                    except ValueError:
-                        logger.warning(
-                            f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
-                        )
-                        threshold = 500 / 3
+                    # Determine if current chunk contains speech
+                    is_speech = False
+                    if self._silero_vad is not None:
+                        # Silero VAD: accumulate samples into 512-sample chunks
+                        speech_prob = 0.0
+                        chunk_processed = False
+                        silero_chunk_buf = np.concatenate([silero_chunk_buf, audio_data])
+                        while len(silero_chunk_buf) >= SILERO_CHUNK_SIZE:
+                            chunk_512 = silero_chunk_buf[:SILERO_CHUNK_SIZE]
+                            silero_chunk_buf = silero_chunk_buf[SILERO_CHUNK_SIZE:]
+                            speech_prob = max(speech_prob, self._silero_vad.process(chunk_512))
+                            chunk_processed = True
 
-                    if volume < threshold:  # Silence
+                        # Map vad_sensitivity (1-5) to threshold:
+                        # 1 (least sensitive) -> 0.8, 5 (most sensitive) -> 0.3
+                        try:
+                            vad_sens = int(self.vad_sensitivity)
+                            vad_sens = max(1, min(5, vad_sens))
+                        except ValueError:
+                            vad_sens = 3
+                        silero_threshold = 0.8 - (vad_sens - 1) * 0.125
+
+                        # Skip speech decision until at least one full chunk
+                        # has been processed to avoid false silence detection
+                        if chunk_processed:
+                            is_speech = speech_prob >= silero_threshold
+                    else:
+                        # Amplitude fallback when Silero is unavailable
+                        try:
+                            vad_sens = int(self.vad_sensitivity)
+                            threshold = 500 / max(1, min(5, vad_sens))
+                        except ValueError:
+                            logger.warning(
+                                f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
+                            )
+                            threshold = 500 / 3
+                        is_speech = volume >= threshold
+
+                    if not is_speech:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if silence_counter > self.silence_timeout:  # Use self.silence_timeout
+                        if silence_counter > self.silence_timeout:
                             if len(self.audio_buffer) > 0:
-                                if self._recognition_mode == "push_to_talk":
+                                if not self._recording_segment_has_speech:
+                                    logger.debug(
+                                        "Silence detected with no speech, dropping audio buffer"
+                                    )
+                                    self.audio_buffer = []
+                                elif self._recognition_mode == "push_to_talk":
                                     logger.debug(
                                         "Silence detected in push-to-talk mode, "
                                         "deferring transcription until key release"
@@ -2106,13 +2166,21 @@ class SpeechRecognitionManager:
                                     logger.debug("Silence detected, queueing audio segment")
                                     self._enqueue_audio_segment(self.audio_buffer)
                                     self.audio_buffer = []
+                                    self._recording_segment_has_speech = False
                             silence_counter = 0
                     else:  # Speech
+                        self._recording_segment_has_speech = True
                         if not speech_detected_in_session:
-                            logger.debug(
-                                f"Speech detected (level={normalized_level:.1f}%, "
-                                f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
-                            )
+                            if self._silero_vad is not None:
+                                logger.debug(
+                                    f"Speech detected (silero_prob={speech_prob:.2f}, "
+                                    f"threshold={silero_threshold:.3f})"
+                                )
+                            else:
+                                logger.debug(
+                                    f"Speech detected (level={normalized_level:.1f}%, "
+                                    f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
+                                )
                             speech_detected_in_session = True
                         silence_counter = 0
                 except (IOError, OSError) as e:

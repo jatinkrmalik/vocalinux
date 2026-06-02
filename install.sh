@@ -1659,7 +1659,7 @@ install_system_dependencies() {
             print_info "4. Or install from source in a virtual environment:"
             print_info "   python3 -m venv venv"
             print_info "   source venv/bin/activate"
-            print_info "   pip install -e .[whisper]"
+            print_info "   pip install -e .[whisper,vad]"
             print_info ""
             print_info "For more information, see the project wiki:"
             print_info "  https://github.com/jatinkrmalik/vocalinux/wiki"
@@ -2402,6 +2402,40 @@ install_python_package() {
         return $?
     }
 
+    # Silero/ONNX Runtime gives much better speech/silence decisions, but
+    # onnxruntime wheels are not guaranteed for every Python/platform combo.
+    # Install it opportunistically so fresh installs and rerun-updates get the
+    # neural VAD when available without blocking the amplitude fallback path.
+    install_vad_support() {
+        local PIP_LOG_FILE="$1"
+        local EDITABLE_MODE="${2:-no}"
+
+        print_info "Installing neural VAD support (Silero / ONNX Runtime)..."
+        local VAD_INSTALL_SUCCESS=false
+        if [[ "$EDITABLE_MODE" == "yes" ]]; then
+            pip install -e ".[vad]" --log "$PIP_LOG_FILE" && VAD_INSTALL_SUCCESS=true
+        else
+            pip install ".[vad]" --log "$PIP_LOG_FILE" && VAD_INSTALL_SUCCESS=true
+        fi
+
+        if [[ "$VAD_INSTALL_SUCCESS" == "true" ]]; then
+            if "$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+from vocalinux.speech_recognition.silero_vad import is_silero_available
+raise SystemExit(0 if is_silero_available() else 1)
+PY
+            then
+                print_success "Neural VAD support installed and verified successfully."
+            else
+                print_warning "Neural VAD dependencies installed, but Silero VAD could not be verified."
+                print_warning "Vocalinux will use amplitude-based VAD until this is resolved."
+            fi
+        else
+            print_warning "Failed to install neural VAD support."
+            print_warning "Vocalinux will still work using amplitude-based VAD."
+            print_warning "Check the pip log for details: $PIP_LOG_FILE"
+        fi
+    }
+
     if [[ "$DEV_MODE" == "yes" ]]; then
         print_info "Installing Vocalinux in development mode..."
 
@@ -2420,10 +2454,12 @@ install_python_package() {
 
         # Install all optional dependencies for development
         print_info "Installing all optional dependencies for development..."
-        pip install ".[whisper,dev]" --log "$PIP_LOG_FILE" || {
+        pip install -e ".[whisper,dev]" --log "$PIP_LOG_FILE" || {
             print_warning "Failed to install some optional dependencies."
             print_warning "Some features may not work correctly."
         }
+
+        install_vad_support "$PIP_LOG_FILE" yes
 
         if [[ "${SELECTED_ENGINE:-whisper_cpp}" == "whisper_cpp" ]]; then
             install_whispercpp_with_gpu_support "$PIP_LOG_FILE"
@@ -2437,6 +2473,8 @@ install_python_package() {
             print_error "Check the pip log for details: $PIP_LOG_FILE"
             return 1
         }
+
+        install_vad_support "$PIP_LOG_FILE"
 
         # Engine installation logic:
         # - SELECTED_ENGINE is set by interactive mode or --engine flag
