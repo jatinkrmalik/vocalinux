@@ -772,6 +772,7 @@ class SpeechRecognitionManager:
         self.should_record = False
         self._recognition_mode = "toggle"  # "toggle" or "push_to_talk"
         self.audio_buffer = []
+        self._recording_segment_has_speech = False
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue = queue.Queue(maxsize=32)
@@ -1903,10 +1904,17 @@ class SpeechRecognitionManager:
                     self.stop_sound_guard_ms,
                 )
 
-            if self.audio_buffer:
-                logger.debug(f"Enqueuing final buffer with {len(self.audio_buffer)} chunks")
+            if self.audio_buffer and self._recording_segment_has_speech:
+                logger.debug(f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
+            elif self.audio_buffer:
+                logger.debug(
+                    "Dropping final audio buffer with no detected speech "
+                    f"({len(self.audio_buffer)} chunks)"
+                )
+                self.audio_buffer = []
+            self._recording_segment_has_speech = False
 
         # Wake up recognition thread so it can drain queued segments and stop
         self._signal_recognition_stop()
@@ -2024,6 +2032,7 @@ class SpeechRecognitionManager:
             # Record audio while should_record is True
             silence_counter = 0
             speech_detected_in_session = False
+            self._recording_segment_has_speech = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
             # Accumulator for 512-sample Silero chunks.  When the capture rate
@@ -2143,7 +2152,12 @@ class SpeechRecognitionManager:
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
                         if silence_counter > self.silence_timeout:
                             if len(self.audio_buffer) > 0:
-                                if self._recognition_mode == "push_to_talk":
+                                if not self._recording_segment_has_speech:
+                                    logger.debug(
+                                        "Silence detected with no speech, dropping audio buffer"
+                                    )
+                                    self.audio_buffer = []
+                                elif self._recognition_mode == "push_to_talk":
                                     logger.debug(
                                         "Silence detected in push-to-talk mode, "
                                         "deferring transcription until key release"
@@ -2152,8 +2166,10 @@ class SpeechRecognitionManager:
                                     logger.debug("Silence detected, queueing audio segment")
                                     self._enqueue_audio_segment(self.audio_buffer)
                                     self.audio_buffer = []
+                                    self._recording_segment_has_speech = False
                             silence_counter = 0
                     else:  # Speech
+                        self._recording_segment_has_speech = True
                         if not speech_detected_in_session:
                             if self._silero_vad is not None:
                                 logger.debug(

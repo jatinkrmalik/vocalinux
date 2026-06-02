@@ -4,23 +4,23 @@ Integration-style tests for the Silero VAD path in _record_audio.
 Drives the recording loop with a mocked PyAudio stream and a Mock SileroVAD
 returning scripted speech probabilities. Verifies:
 
-- silence -> _enqueue_audio_segment is called after silence_timeout
-- speech  -> silence_counter resets, no premature flush
+- silence-only input -> no transcription segment is enqueued
+- speech followed by silence -> _enqueue_audio_segment is called after silence_timeout
+- speech -> silence_counter resets, no premature flush
 - vad_sensitivity threshold mapping kicks in (sens=1 vs sens=5 give different decisions)
 - Silero state is reset at the start of every recording session
 """
 
 import sys
+import unittest  # noqa: E402
+from unittest.mock import MagicMock, patch  # noqa: E402
 
 # Earlier test modules (test_recognition_manager_core.py etc.) install
 # `sys.modules["numpy"] = MagicMock()` at module load and don't restore it.
-# Drop the top-level reference so the next `import numpy` gives real numpy
-# (cached submodules stay in place to avoid re-importing the C extension,
-# which raises "cannot load module more than once per process").
-sys.modules.pop("numpy", None)
-
-import unittest  # noqa: E402
-from unittest.mock import MagicMock, patch  # noqa: E402
+# Drop the top-level reference only when it is actually mocked; reloading a
+# real NumPy module while its submodules remain cached can break import state.
+if isinstance(sys.modules.get("numpy"), MagicMock):
+    sys.modules.pop("numpy", None)
 
 import numpy as np  # noqa: E402
 
@@ -72,8 +72,19 @@ def _make_manager():
 def _make_pyaudio_module(stream):
     """Build a fake pyaudio module that returns the given stream from audio.open()."""
     audio = MagicMock()
-    audio.get_device_count.return_value = 0
-    audio.get_default_input_device_info.return_value = {"index": 0, "name": "mock"}
+    audio.get_device_count.return_value = 1
+    audio.get_default_input_device_info.return_value = {
+        "index": 0,
+        "name": "mock",
+        "maxInputChannels": 1,
+        "defaultSampleRate": 16000,
+    }
+    audio.get_device_info_by_index.return_value = {
+        "index": 0,
+        "name": "mock",
+        "maxInputChannels": 1,
+        "defaultSampleRate": 16000,
+    }
     audio.is_format_supported.return_value = True
     audio.open.return_value = stream
 
@@ -179,13 +190,19 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         self._drive(probs=[0.1] * 5)
         self.assertTrue(self.mgr._silero_vad.reset.called)
 
-    def test_silence_triggers_segment_enqueue(self):
-        """Sustained silence past silence_timeout should flush the audio buffer."""
+    def test_silence_only_drops_buffer_without_enqueue(self):
+        """Sustained silence past silence_timeout should not reach transcription."""
         # Each chunk = 1024/16000 = 0.064s. silence_timeout=0.5s, so ~8 chunks
-        # of silence flushes once. Run 20 chunks to ensure the threshold fires.
+        # of silence crosses the timeout. Run 20 chunks to ensure the threshold fires.
         self._drive(probs=[0.05] * 20, vad_sensitivity=3)
+        self.assertEqual(len(self.enqueued), 0, "silence-only input should be dropped")
+
+    def test_speech_then_silence_triggers_segment_enqueue(self):
+        """Speech followed by sustained silence should flush the speech segment."""
+        probs = [0.95] * 6 + [0.05] * 20
+        self._drive(probs=probs, vad_sensitivity=3)
         self.assertGreaterEqual(
-            len(self.enqueued), 1, "expected at least one silence-flush enqueue"
+            len(self.enqueued), 1, "expected speech-followed-by-silence to enqueue"
         )
 
     def test_speech_prevents_premature_flush(self):
@@ -199,9 +216,9 @@ class TestRecordAudioSileroPath(unittest.TestCase):
     def test_sensitivity_lowest_blocks_borderline_speech(self):
         """At sensitivity=1 (threshold 0.8), prob=0.6 is silence."""
         # 20 chunks of borderline prob; with strict threshold these read as silence
-        # and the buffer gets flushed.
+        # and the silence-only buffer gets dropped.
         self._drive(probs=[0.6] * 20, vad_sensitivity=1)
-        self.assertGreaterEqual(len(self.enqueued), 1)
+        self.assertEqual(len(self.enqueued), 0)
 
     def test_sensitivity_highest_accepts_borderline_speech(self):
         """At sensitivity=5 (threshold 0.3), prob=0.6 is speech, no flush."""
@@ -260,10 +277,10 @@ class TestRecordAudioAmplitudeFallback(unittest.TestCase):
         ):
             self.mgr._record_audio()
 
-    def test_silence_flushes_buffer(self):
-        """All-zero samples -> volume below threshold -> silence flush."""
+    def test_silence_drops_buffer(self):
+        """All-zero samples -> volume below threshold -> no transcription segment."""
         self._drive(payload=b"\x00" * (1024 * 2), max_iters=20)
-        self.assertGreaterEqual(len(self.enqueued), 1)
+        self.assertEqual(len(self.enqueued), 0)
 
     def test_loud_audio_is_speech(self):
         """Loud samples -> volume above threshold -> speech, no flush."""

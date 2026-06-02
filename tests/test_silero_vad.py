@@ -9,16 +9,14 @@ Covers:
 """
 
 import sys
+from unittest.mock import MagicMock, patch  # noqa: E402
 
 # Earlier test modules (test_recognition_manager_core.py etc.) install
 # `sys.modules["numpy"] = MagicMock()` at module load and don't restore it.
-# Pop the top-level reference so a fresh `import numpy` returns the real
-# package -- only the top level, leaving cached submodules in place to avoid
-# re-importing the numpy C extension (which raises "cannot load module more
-# than once per process").
-sys.modules.pop("numpy", None)
-
-from unittest.mock import MagicMock, patch  # noqa: E402
+# Drop the top-level reference only when it is actually mocked; reloading a
+# real NumPy module while its submodules remain cached can break import state.
+if isinstance(sys.modules.get("numpy"), MagicMock):
+    sys.modules.pop("numpy", None)
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
