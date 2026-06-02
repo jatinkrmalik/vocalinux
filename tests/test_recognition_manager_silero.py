@@ -70,6 +70,31 @@ def _make_manager():
     return mgr
 
 
+class TestManagerSileroInitialization(unittest.TestCase):
+    def test_logs_when_silero_vad_loads(self):
+        """Manager initialization should report when neural VAD is active."""
+        vad = MagicMock()
+        with (
+            patch.object(SpeechRecognitionManager, "_init_vosk"),
+            patch.object(SpeechRecognitionManager, "_init_whisper"),
+            patch.object(SpeechRecognitionManager, "_init_whispercpp"),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager.load_silero_vad",
+                return_value=vad,
+            ),
+            patch("vocalinux.speech_recognition.recognition_manager.logger") as logger_mock,
+        ):
+            mgr = SpeechRecognitionManager(
+                engine="whisper_cpp",
+                model_size="small",
+                language="en-us",
+                defer_download=True,
+            )
+
+        self.assertIs(mgr._silero_vad, vad)
+        logger_mock.info.assert_any_call("Using Silero neural VAD")
+
+
 def _make_pyaudio_module(stream):
     """Build a fake pyaudio module that returns the given stream from audio.open()."""
     audio = MagicMock()
@@ -226,6 +251,21 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         self._drive(probs=[0.6] * 20, vad_sensitivity=5)
         self.assertEqual(len(self.enqueued), 0)
 
+    def test_invalid_sensitivity_uses_default_silero_threshold(self):
+        """Bad sensitivity values should fall back to the default Silero threshold."""
+        self._drive(probs=[0.95] * 20, vad_sensitivity="bad")
+        self.assertEqual(len(self.enqueued), 0)
+
+    def test_push_to_talk_defers_speech_segment_until_release(self):
+        """Push-to-talk should keep a spoken segment buffered after silence."""
+        self.mgr._recognition_mode = "push_to_talk"
+
+        self._drive(probs=[0.95] * 6 + [0.05] * 20, vad_sensitivity=3)
+
+        self.assertEqual(len(self.enqueued), 0)
+        self.assertGreater(len(self.mgr.audio_buffer), 0)
+        self.assertTrue(self.mgr._recording_segment_has_speech)
+
     def test_stereo_capture_is_downmixed_without_error(self):
         """CHANNELS=2 -> the stereo->mono branch runs and the loop completes."""
         self._drive(probs=[0.05] * 12, vad_sensitivity=3, channels=2, chunk_bytes=1024 * 2 * 2)
@@ -280,6 +320,12 @@ class TestRecordAudioAmplitudeFallback(unittest.TestCase):
 
     def test_silence_drops_buffer(self):
         """All-zero samples -> volume below threshold -> no transcription segment."""
+        self._drive(payload=b"\x00" * (1024 * 2), max_iters=20)
+        self.assertEqual(len(self.enqueued), 0)
+
+    def test_invalid_sensitivity_uses_default_amplitude_threshold(self):
+        """Bad sensitivity values should fall back to the default amplitude threshold."""
+        self.mgr.vad_sensitivity = "bad"
         self._drive(payload=b"\x00" * (1024 * 2), max_iters=20)
         self.assertEqual(len(self.enqueued), 0)
 
