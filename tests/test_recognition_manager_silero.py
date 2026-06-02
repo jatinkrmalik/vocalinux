@@ -15,14 +15,13 @@ import sys
 import unittest  # noqa: E402
 from unittest.mock import MagicMock, patch  # noqa: E402
 
-# Earlier test modules (test_recognition_manager_core.py etc.) install
-# `sys.modules["numpy"] = MagicMock()` at module load and don't restore it.
-# Drop the NumPy module family only when the top-level reference is mocked; a
-# mocked top-level package with real cached submodules can break NumPy reloads.
+# Earlier test modules install `sys.modules["numpy"] = MagicMock()` at module
+# load and don't restore it. Reuse the real module cached by conftest instead
+# of unloading/re-importing NumPy's compiled extensions.
 if isinstance(sys.modules.get("numpy"), MagicMock):
-    for _module_name in list(sys.modules):
-        if _module_name == "numpy" or _module_name.startswith("numpy."):
-            sys.modules.pop(_module_name, None)
+    _real_numpy = getattr(sys, "_vocalinux_real_numpy", None)
+    if _real_numpy is not None:
+        sys.modules["numpy"] = _real_numpy
 
 import numpy as np  # noqa: E402
 
