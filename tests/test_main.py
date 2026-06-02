@@ -447,6 +447,25 @@ class TestCheckDependencies(unittest.TestCase):
             result = check_dependencies()
             self.assertTrue(result)
 
+    def test_check_dependencies_does_not_require_pynput(self):
+        """Test startup is allowed when the optional pynput backend is unavailable."""
+        mock_gi = MagicMock()
+        mock_gi.require_version = MagicMock()
+        mock_gtk = MagicMock()
+        mock_appindicator = MagicMock()
+        mock_requests = MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "gi": mock_gi,
+                "gi.repository": MagicMock(Gtk=mock_gtk, AppIndicator3=mock_appindicator),
+                "requests": mock_requests,
+            },
+        ):
+            result = check_dependencies()
+            self.assertTrue(result)
+
     def test_check_dependencies_missing_gtk(self):
         """Test when GTK is missing."""
 
