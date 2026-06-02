@@ -17,10 +17,12 @@ from unittest.mock import MagicMock, patch  # noqa: E402
 
 # Earlier test modules (test_recognition_manager_core.py etc.) install
 # `sys.modules["numpy"] = MagicMock()` at module load and don't restore it.
-# Drop the top-level reference only when it is actually mocked; reloading a
-# real NumPy module while its submodules remain cached can break import state.
+# Drop the NumPy module family only when the top-level reference is mocked; a
+# mocked top-level package with real cached submodules can break NumPy reloads.
 if isinstance(sys.modules.get("numpy"), MagicMock):
-    sys.modules.pop("numpy", None)
+    for _module_name in list(sys.modules):
+        if _module_name == "numpy" or _module_name.startswith("numpy."):
+            sys.modules.pop(_module_name, None)
 
 import numpy as np  # noqa: E402
 

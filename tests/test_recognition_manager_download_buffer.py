@@ -339,6 +339,7 @@ class TestBufferManagement(unittest.TestCase):
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
         manager.audio_buffer = [b"small"]
+        manager._recording_segment_has_speech = True
         manager.audio_thread = MagicMock()
         manager.audio_thread.is_alive.return_value = False
         manager.recognition_thread = MagicMock()
@@ -357,6 +358,7 @@ class TestBufferManagement(unittest.TestCase):
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
         manager.audio_buffer = [b"x" * 100 for _ in range(20)]
+        manager._recording_segment_has_speech = True
         manager.audio_thread = MagicMock()
         manager.audio_thread.is_alive.return_value = False
         manager.recognition_thread = MagicMock()
