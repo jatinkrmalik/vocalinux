@@ -139,6 +139,17 @@ def check_dependencies():
             logger.error("  Arch Linux:")
             logger.error("    sudo pacman -S python-gobject gtk3 libappindicator")
             logger.error("")
+            logger.error("  openSUSE Tumbleweed:")
+            logger.error(
+                "    PYVER=$(python3 -c 'import sys; "
+                'print(f"python{sys.version_info.major}{sys.version_info.minor}")\')'
+            )
+            logger.error(
+                '    sudo zypper install "${PYVER}-gobject" gtk3 '
+                "typelib-1_0-AyatanaAppIndicator3-0_1 "
+                "typelib-1_0-Notify-0_7 libnotify4"
+            )
+            logger.error("")
             logger.error(
                 "For pipx users: Install system packages BEFORE running 'pipx install vocalinux'"
             )
@@ -375,6 +386,7 @@ def main():
             whispercpp_entropy_thold=advanced_settings.get("whispercpp_entropy_thold", 2.4),
             whispercpp_logprob_thold=advanced_settings.get("whispercpp_logprob_thold", -1.0),
             whispercpp_no_speech_thold=advanced_settings.get("whispercpp_no_speech_thold", 0.6),
+            whispercpp_n_threads=advanced_settings.get("whispercpp_n_threads", 0),
         )
 
         # Initialize text injection system

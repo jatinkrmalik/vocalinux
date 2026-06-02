@@ -341,6 +341,7 @@ git push origin v0.5.1-beta
 | 0.10.0-beta | 2026-03-25 | Beta | Keyboard/audio reliability hardening, IBus/tray stability fixes, CI + test coverage improvements |
 | 0.10.1-beta | 2026-03-27 | Beta | Stability patch: tray resource bundling, engine-switch segfault prevention, settings close action, XKB layout preservation |
 | 0.10.2-beta | 2026-04-08 | Beta | Non-ASCII text injection, IBus Wayland detection, Pop!_OS deps, code quality refactor |
+| 0.11.0-beta | 2026-05-30 | Beta | Advanced Settings tab, IBus/recognition hardening, installer fixes, distro compatibility |
 
 ## Questions?
 

@@ -32,40 +32,51 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.10.2-beta
+## 📚 What's New in v0.11.0-beta
 
-> 🎉 **Release: non-ASCII text injection, IBus Wayland detection fixes, Pop!_OS dependency support, and code quality improvements.**
+> 🎉 **Release: Advanced Settings tab with anti-hallucination parameters, IBus/recognition hardening, and distro compatibility improvements.**
 
-### 🚀 Highlights (v0.10.1 → v0.10.2)
+### 🚀 Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **🌍 Non-ASCII Text Injection** | ydotool now falls back to clipboard paste for non-ASCII characters (á, é, ñ, etc.) |
-| **🔌 IBus on Wayland** | IBus now detected and started correctly on Wayland without legacy env vars |
-| **🚀 IBus Engine Startup** | Engine process now starts before registration check — fixes startup on some systems |
-| **📦 Pop!\_OS / Ubuntu 24.04+** | Added missing system dependencies (cmake, libcairo2-dev, libgirepository1.0-dev) |
-| **⚡ Code Quality** | Systematic refactor across 20 quality dimensions |
-| **🖼️ Website OG Image** | Redesigned Open Graph image — cleaner and more professional |
+| **⚙️ Advanced Settings Tab** | New Advanced tab with whisper.cpp anti-hallucination parameters (temperature, no_speech_threshold, etc.) |
+| **🔌 IBus Hardening** | Engine readiness probe at startup, runtime failure recovery, and proper engine destruction on layout switch |
+| **🎤 Recognition Reliability** | Preserve final speech on stop and improved stop-sound playback timing |
+| **📦 Distro Compatibility** | Hardened Debian layer, corrected openSUSE Tumbleweed deps, Python 3.14 support |
+| **🔧 Installer Fixes** | Repair pywhispercpp loading, validate proj configs before local repo mode, reuse existing whispercpp builds |
 
-### ✨ Scope
+### ✨ New Features
 
-- **Patch release focused on compatibility** - IBus/Wayland improvements, non-ASCII text injection, and distro support
-- **Broader platform coverage** - Pop!_OS, Ubuntu 24.04+, Wayland IBus users
-- **Code quality** - Systematic refactor across 20 dimensions for long-term maintainability
+- **Advanced Settings tab** — New tab in Settings dialog exposing whisper.cpp anti-hallucination parameters:
+  - Temperature override
+  - No-speech threshold
+  - Max segment length
+  - Other inference-time parameters for fine-tuning recognition behavior
 
-### 🐛 Bug Fixes (v0.10.2)
+### 🐛 Bug Fixes
 
-- **#362 / #376**: Handle non-ASCII characters with ydotool via clipboard paste fallback
-- **#360 / #361**: Start IBus engine process before checking registration
-- **#381**: Detect IBus on Wayland without legacy env vars and fix text injection
-- **#379**: Add missing dependencies for Pop!_OS and Ubuntu 24.04+
+- **IBus**: Probe engine readiness at startup with hardened retries (#391)
+- **IBus**: Handle engine instance destruction on layout switch (#389)
+- **IBus**: Recover from runtime failures gracefully (#411)
+- **Recognition**: Preserve final speech when stopping (#401)
+- **Recognition**: Play stop sound immediately on release (#426) and after audio thread joins (#436)
+- **Install**: Repair pywhispercpp library loading (#433)
+- **Install**: Correct openSUSE Tumbleweed dependencies (#420, #418)
+- **Install**: Harden Debian compatibility layer (#437)
+- **Install**: Validate pyproject.toml/setup.py before local repo mode (#396)
+- **Install**: Reuse existing whispercpp builds (#421)
+- **Install**: Refresh ldconfig after openSUSE typelib install (#438)
+- **whisper.cpp**: Reduce CPU threads and ensure GPU backend builds in dev mode (#439)
+- **Logging**: Clean up runtime log noise and cache hardware detection
+- **Python 3.14 support**: Compatibility fix and lxml>=6.1.0 (#404)
 
 ### 🔧 Improvements
 
-- **Code quality** - Systematic refactor across 20 quality dimensions (#377)
-- **Debian support** - Clarify missing GNOME AppIndicator support messaging (#385)
-- **Website** - Redesigned OG image for vocalinux.com (#392)
-- **Tests** - Additional coverage for tray, IBus, and notification edge cases
+- **Installer refresh** — openSUSE fallback handling, Debian compatibility hardening
+- **Test coverage** — Recognition internals, IBus edge cases, CI notification suppression (#410, #414)
+- **Dependency bumps** — Next.js security updates (#399, #429), PostCSS (#2753679)
+- **PyPI docs** — Clarify installation requirements (#423)
 
 ---
 
@@ -381,7 +392,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.10.2 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.11.0 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 

@@ -114,15 +114,17 @@ def _find_pywhispercpp_shared_library_dirs() -> list[str]:
     for candidate_dir in candidate_dirs:
         try:
             resolved_dir = str(candidate_dir.resolve())
-        except OSError:
+            if resolved_dir in seen or not candidate_dir.is_dir():
+                continue
+
+            has_native_lib = any(candidate_dir.glob("libwhisper*.so*")) or any(
+                candidate_dir.glob("libggml*.so*")
+            )
+        except (OSError, TypeError, ValueError):
+            # TypeError/ValueError can surface when tests monkey-patch os.stat or
+            # when pathlib internals receive unexpected types from mocks.
             continue
 
-        if resolved_dir in seen or not candidate_dir.is_dir():
-            continue
-
-        has_native_lib = any(candidate_dir.glob("libwhisper*.so*")) or any(
-            candidate_dir.glob("libggml*.so*")
-        )
         if has_native_lib:
             seen.add(resolved_dir)
             library_dirs.append(resolved_dir)
@@ -216,6 +218,78 @@ def get_audio_input_devices() -> list:
         logger.error(f"Error enumerating audio devices: {e}")
 
     return devices
+
+
+def _resolve_valid_input_device(audio, preferred_index: Optional[int] = None) -> Optional[int]:
+    """Resolve a valid audio input device, skipping output-only devices (e.g. HDMI).
+
+    Checks that the device has maxInputChannels > 0. Falls back from
+    preferred_index → system default → first available input device.
+
+    Args:
+        audio: PyAudio instance
+        preferred_index: User-configured device index (or None for system default)
+
+    Returns:
+        A valid device index with input channels, or None if none found.
+    """
+    input_device_indices = []
+    default_input_index = None
+
+    try:
+        default_info = audio.get_default_input_device_info()
+        default_input_index = default_info.get("index")
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        pass
+
+    try:
+        device_count = int(audio.get_device_count())
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        # MagicMock-based tests or misbehaving drivers can yield non-int counts.
+        return preferred_index
+
+    if device_count <= 0:
+        # No enumeration available; let PyAudio fall back to system default.
+        return preferred_index
+
+    for i in range(device_count):
+        try:
+            info = audio.get_device_info_by_index(i)
+        except (IOError, OSError, TypeError, ValueError, AttributeError):
+            continue
+
+        if not isinstance(info, dict):
+            # Non-dict result (e.g. MagicMock in tests) — can't filter by channels,
+            # so include the device rather than excluding all of them.
+            input_device_indices.append(i)
+            continue
+
+        channels = info.get("maxInputChannels", 0)
+        if isinstance(channels, (int, float)) and channels > 0:
+            input_device_indices.append(i)
+
+    if not input_device_indices:
+        return None
+
+    if preferred_index is not None and preferred_index in input_device_indices:
+        return preferred_index
+
+    if preferred_index is not None:
+        try:
+            device_name = audio.get_device_info_by_index(preferred_index).get("name", "unknown")
+        except (IOError, OSError):
+            device_name = "unknown"
+        logger.warning(
+            "Configured audio device [%s] (%s) has no input channels. "
+            "Falling back to a valid input device.",
+            preferred_index,
+            device_name,
+        )
+
+    if default_input_index is not None and default_input_index in input_device_indices:
+        return default_input_index
+
+    return input_device_indices[0]
 
 
 def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
@@ -688,6 +762,7 @@ class SpeechRecognitionManager:
         self.whispercpp_entropy_thold = kwargs.get("whispercpp_entropy_thold", 2.4)
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
+        self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
 
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
@@ -1040,6 +1115,21 @@ class SpeechRecognitionManager:
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
         return Model(model_path, **compatible_kwargs)
 
+    def _detect_pywhispercpp_gpu_backend(self) -> str:
+        """Detect whether pywhispercpp's native library actually has GPU support."""
+        _preload_pywhispercpp_shared_libraries()
+        for library_dir in _find_pywhispercpp_shared_library_dirs():
+            root = Path(library_dir)
+            for pattern in ("libggml-vulkan*.so*", "libggml-cuda*.so*"):
+                matches = list(root.glob(pattern))
+                if matches:
+                    lib_name = matches[0].name.lower()
+                    if "vulkan" in lib_name:
+                        return "vulkan"
+                    if "cuda" in lib_name:
+                        return "cuda"
+        return "cpu"
+
     def _load_whispercpp_model(self, model_path: str):
         """Load the whisper.cpp model file and configure the compute backend.
 
@@ -1083,7 +1173,16 @@ class SpeechRecognitionManager:
         logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
         self.model = None  # Release previous model if re-initializing
 
-        n_threads = multiprocessing.cpu_count()
+        actual_gpu_backend = self._detect_pywhispercpp_gpu_backend()
+        has_gpu_libs = actual_gpu_backend in ("vulkan", "cuda")
+
+        if self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0:
+            n_threads = self.whispercpp_n_threads
+        elif has_gpu_libs:
+            n_threads = max(1, multiprocessing.cpu_count() // 4)
+        else:
+            n_threads = min(multiprocessing.cpu_count(), 8)
+
         load_start_time = time.time()
         loaded_backend = backend
 
@@ -1098,10 +1197,16 @@ class SpeechRecognitionManager:
             )
 
         load_duration = time.time() - load_start_time
-        logger.info(
-            f"whisper.cpp configured with n_threads={n_threads} "
-            f"(detected {multiprocessing.cpu_count()} CPUs)"
-        )
+        if has_gpu_libs:
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} "
+                f"(GPU backend: {actual_gpu_backend})"
+            )
+        else:
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} "
+                f"(CPU-only; pywhispercpp lacks GPU libraries)"
+            )
         logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
 
         self._model_initialized = True
@@ -1840,6 +1945,18 @@ class SpeechRecognitionManager:
             self._pyaudio_instance = pyaudio.PyAudio()
             audio = self._pyaudio_instance
 
+            # Resolve a valid input device — skip output-only devices (e.g. HDMI)
+            resolved_device_index = _resolve_valid_input_device(audio, self.audio_device_index)
+            if resolved_device_index is None:
+                logger.error("No audio input devices found with input channels.")
+                logger.error(
+                    "Please connect a microphone and ensure it is recognized by the system."
+                )
+                play_error_sound()
+                audio.terminate()
+                self._update_state(RecognitionState.ERROR)
+                return
+
             # Log available devices for debugging
             logger.debug("Available audio input devices:")
             for i in range(audio.get_device_count()):
@@ -1853,11 +1970,11 @@ class SpeechRecognitionManager:
                     continue
 
             # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio, self.audio_device_index)
+            CHANNELS = _get_supported_channels(audio, resolved_device_index)
             logger.info(f"Using {CHANNELS} channel(s) for recording")
 
             # Detect supported sample rate for the selected device
-            RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
+            RATE = _get_supported_sample_rate(audio, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.info(f"Using sample rate: {RATE}Hz")
 
@@ -1870,24 +1987,21 @@ class SpeechRecognitionManager:
                 "frames_per_buffer": CHUNK,
             }
 
-            # Use specified device if set, otherwise use system default
-            if self.audio_device_index is not None:
-                stream_kwargs["input_device_index"] = self.audio_device_index
-                try:
-                    device_info = audio.get_device_info_by_index(self.audio_device_index)
-                    logger.info(
-                        f"Using audio device [{self.audio_device_index}]: {device_info.get('name')}"
-                    )
-                except (IOError, OSError):
-                    logger.warning(f"Could not get info for device index {self.audio_device_index}")
-            else:
-                try:
-                    default_device = audio.get_default_input_device_info()
-                    logger.info(
-                        f"Using default audio device [{default_device.get('index')}]: {default_device.get('name')}"
-                    )
-                except (IOError, OSError):
-                    logger.warning("Could not get default input device info")
+            # Use the resolved device (skip if already system default)
+            try:
+                default_idx = audio.get_default_input_device_info().get("index")
+            except (IOError, OSError):
+                default_idx = None
+            if resolved_device_index != default_idx:
+                stream_kwargs["input_device_index"] = resolved_device_index
+
+            try:
+                device_info = audio.get_device_info_by_index(resolved_device_index)
+                logger.info(
+                    f"Using audio device [{resolved_device_index}]: {device_info.get('name')}"
+                )
+            except (IOError, OSError):
+                logger.warning(f"Could not get info for device index {resolved_device_index}")
 
             try:
                 self._audio_stream = audio.open(**stream_kwargs)
@@ -2331,6 +2445,7 @@ class SpeechRecognitionManager:
             "whispercpp_entropy_thold",
             "whispercpp_logprob_thold",
             "whispercpp_no_speech_thold",
+            "whispercpp_n_threads",
         ):
             if param_name in kwargs:
                 setattr(self, param_name, kwargs[param_name])
@@ -2418,16 +2533,24 @@ class SpeechRecognitionManager:
                 except Exception as e:
                     logger.debug(f"Error closing old audio stream: {e}")
 
+            # Resolve a valid input device — skip output-only devices (e.g. HDMI)
+            resolved_device_index = _resolve_valid_input_device(
+                audio_instance, self.audio_device_index
+            )
+            if resolved_device_index is None:
+                logger.error("Reconnection failed: no input devices available.")
+                return False
+
             # Stream configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
 
             # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio_instance, self.audio_device_index)
+            CHANNELS = _get_supported_channels(audio_instance, resolved_device_index)
             logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
 
             # Detect supported sample rate for the device
-            RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
+            RATE = _get_supported_sample_rate(audio_instance, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
@@ -2439,9 +2562,13 @@ class SpeechRecognitionManager:
                 "frames_per_buffer": CHUNK,
             }
 
-            # Use specified device if set
-            if self.audio_device_index is not None:
-                stream_kwargs["input_device_index"] = self.audio_device_index
+            # Use resolved device (skip if already system default)
+            try:
+                default_idx = audio_instance.get_default_input_device_info().get("index")
+            except (IOError, OSError):
+                default_idx = None
+            if resolved_device_index != default_idx:
+                stream_kwargs["input_device_index"] = resolved_device_index
 
             # Attempt to open new stream
             new_stream = audio_instance.open(**stream_kwargs)

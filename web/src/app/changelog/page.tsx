@@ -6,6 +6,31 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.11.0-beta",
+    date: "2026-05-30",
+    type: "beta",
+    highlights: [
+      "New Advanced Settings tab with whisper.cpp anti-hallucination parameters — temperature, no_speech_threshold, max segment length, and more (PR #415)",
+      "IBus engine readiness probe at startup with hardened retries (PR #391)",
+      "IBus runtime failure recovery without app restart (PR #411)",
+      "IBus engine instance destruction handled on keyboard layout switch (fixes #388, closes #389)",
+      "Preserve final speech on stop — no more truncated transcriptions (fixes #401)",
+      "Play stop sound immediately on release and after audio thread joins (PR #426, #436)",
+      "Repair pywhispercpp library loading in installer (PR #433)",
+      "Reduce whisper.cpp CPU threads and ensure GPU backend builds in dev mode (PR #439)",
+      "Correct openSUSE Tumbleweed dependencies with fallback handling (PR #418, #420)",
+      "Harden Debian compatibility layer in installer (PR #437)",
+      "Add Python 3.14 support and bump lxml>=6.1.0 (fixes #404)",
+      "Validate pyproject.toml/setup.py content before entering local repo mode (fixes #396)",
+      "Reuse existing whispercpp builds during install (PR #421)",
+      "Refresh ldconfig after openSUSE typelib install, clarify python3XY placeholder convention (PR #438)",
+      "Clean up runtime log noise and cache hardware detection",
+      "Test coverage: recognition internals, IBus edge cases, CI notification suppression (PR #410, #414)",
+      "Clarify PyPI installation requirements (PR #423)",
+      "Dependency bumps: Next.js security updates (PR #399, #429), PostCSS",
+    ],
+  },
+  {
     version: "v0.10.2-beta",
     date: "2026-04-08",
     type: "beta",
@@ -222,7 +247,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-03-30",
+    dateModified: "2026-05-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
