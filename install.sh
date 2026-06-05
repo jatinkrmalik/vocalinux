@@ -4,6 +4,10 @@
 
 set -e  # Exit on error
 
+# Keep the venv isolated from ~/.local site packages while still allowing
+# --system-site-packages to expose distro-provided GTK/PyGObject bindings.
+export PYTHONNOUSERSITE=1
+
 # Function to display colored output
 print_info() {
     echo -e "\e[1;34m[INFO]\e[0m $1"
@@ -516,6 +520,139 @@ detect_nvidia_gpu() {
     fi
 }
 
+cuda_toolkit_root_has_runtime_library() {
+    local CUDA_ROOT="$1"
+
+    compgen -G "$CUDA_ROOT/lib64/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/lib/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/lib/x86_64-linux-gnu/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/targets/x86_64-linux/lib/libcudart.so*" >/dev/null && return 0
+    return 1
+}
+
+validate_cuda_toolkit_root() {
+    local CUDA_ROOT="$1"
+
+    [ -n "$CUDA_ROOT" ] || return 1
+    [ -x "$CUDA_ROOT/bin/nvcc" ] || return 1
+    [ -f "$CUDA_ROOT/include/cuda_runtime.h" ] || return 1
+    cuda_toolkit_root_has_runtime_library "$CUDA_ROOT" || return 1
+}
+
+candidate_cuda_toolkit_roots() {
+    local CUDA_VAR
+    for CUDA_VAR in CUDAToolkit_ROOT CUDA_HOME CUDA_PATH; do
+        local CUDA_ROOT="${!CUDA_VAR:-}"
+        [ -n "$CUDA_ROOT" ] && printf '%s\n' "$CUDA_ROOT"
+    done
+
+    if command -v nvcc >/dev/null 2>&1; then
+        local NVCC_PATH
+        local NVCC_ROOT
+        NVCC_PATH=$(command -v nvcc)
+        NVCC_ROOT=$(cd "$(dirname "$NVCC_PATH")/.." 2>/dev/null && pwd -P)
+        [ -n "$NVCC_ROOT" ] && printf '%s\n' "$NVCC_ROOT"
+    fi
+
+    local CUDA_ROOT
+    for CUDA_ROOT in /usr/local/cuda /usr/local/cuda-* /opt/cuda; do
+        [ -d "$CUDA_ROOT" ] && printf '%s\n' "$CUDA_ROOT"
+    done
+}
+
+find_valid_cuda_toolkit_root() {
+    local QUIET="${1:-no}"
+    local SEEN_ROOTS=""
+    local CUDA_ROOT
+
+    while IFS= read -r CUDA_ROOT; do
+        [ -n "$CUDA_ROOT" ] || continue
+
+        local NORMALIZED_ROOT
+        NORMALIZED_ROOT=$(cd "$CUDA_ROOT" 2>/dev/null && pwd -P) || NORMALIZED_ROOT="$CUDA_ROOT"
+
+        if [[ ":$SEEN_ROOTS:" == *":$NORMALIZED_ROOT:"* ]]; then
+            continue
+        fi
+        SEEN_ROOTS="${SEEN_ROOTS:+$SEEN_ROOTS:}$NORMALIZED_ROOT"
+
+        if validate_cuda_toolkit_root "$NORMALIZED_ROOT"; then
+            printf '%s\n' "$NORMALIZED_ROOT"
+            return 0
+        fi
+
+        if [[ "$QUIET" != "quiet" ]]; then
+            print_warning "Ignoring incomplete CUDA toolkit root: $NORMALIZED_ROOT" >&2
+            print_warning "  Required: bin/nvcc, include/cuda_runtime.h, and libcudart.so*" >&2
+        fi
+    done < <(candidate_cuda_toolkit_roots)
+
+    return 1
+}
+
+detect_nvidia_compute_architectures() {
+    command -v nvidia-smi >/dev/null 2>&1 || return 1
+
+    local COMPUTE_CAPS
+    COMPUTE_CAPS=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null || true)
+    [ -n "$COMPUTE_CAPS" ] || return 1
+
+    printf '%s\n' "$COMPUTE_CAPS" | awk '
+        {
+            gsub(/[[:space:]]/, "", $1)
+            if ($1 ~ /^[0-9]+(\.[0-9]+)?$/) {
+                split($1, parts, ".")
+                minor = parts[2]
+                if (minor == "") {
+                    minor = "0"
+                }
+                print parts[1] minor "-real"
+            }
+        }
+    ' | sort -u | paste -sd ';' -
+}
+
+cuda_toolkit_supports_architectures() {
+    local CUDA_ROOT="$1"
+    local CUDA_ARCHS="$2"
+    [ -n "$CUDA_ARCHS" ] || return 0
+
+    local NVCC_ARCHS
+    NVCC_ARCHS=$("$CUDA_ROOT/bin/nvcc" --list-gpu-arch 2>/dev/null || true)
+    if [ -z "$NVCC_ARCHS" ]; then
+        print_warning "Could not query supported CUDA architectures from $CUDA_ROOT/bin/nvcc" >&2
+        print_warning "Continuing with detected CMAKE_CUDA_ARCHITECTURES=$CUDA_ARCHS" >&2
+        return 0
+    fi
+
+    local IFS=';'
+    local CUDA_ARCH
+    for CUDA_ARCH in $CUDA_ARCHS; do
+        local ARCH_DIGITS="${CUDA_ARCH%%-*}"
+        if ! printf '%s\n' "$NVCC_ARCHS" | grep -q "compute_$ARCH_DIGITS"; then
+            print_warning "CUDA toolkit at $CUDA_ROOT cannot target compute capability $ARCH_DIGITS." >&2
+            print_warning "Install a newer CUDA toolkit, such as CUDA 11.8+ for RTX 40/Ada GPUs." >&2
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+get_cuda_cmake_args() {
+    local CUDA_ROOT="$1"
+    local CUDA_ARGS="-DCUDAToolkit_ROOT=$CUDA_ROOT -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc"
+    local CUDA_ARCHS
+
+    CUDA_ARCHS=$(detect_nvidia_compute_architectures || true)
+    if [ -n "$CUDA_ARCHS" ]; then
+        cuda_toolkit_supports_architectures "$CUDA_ROOT" "$CUDA_ARCHS" || return 1
+        CUDA_ARGS="$CUDA_ARGS -DCMAKE_CUDA_ARCHITECTURES=$CUDA_ARCHS"
+    fi
+
+    printf '%s\n' "$CUDA_ARGS"
+}
+
 # Detect Vulkan support for whisper.cpp
 detect_vulkan() {
     # Check for vulkaninfo command
@@ -696,7 +833,7 @@ detect_whispercpp_backends() {
 
     # Check for CUDA
     local HAS_CUDA_DEV=false
-    if command -v nvcc >/dev/null 2>&1; then
+    if find_valid_cuda_toolkit_root quiet >/dev/null 2>&1; then
         HAS_CUDA_DEV=true
     fi
 
@@ -2108,6 +2245,7 @@ ACTIVATION_SCRIPT="$ACTIVATION_SCRIPT_DIR/activate-vocalinux.sh"
 cat > "$ACTIVATION_SCRIPT" << EOF
 #!/bin/bash
 # This script activates the Vocalinux virtual environment
+export PYTHONNOUSERSITE=1
 source "$VENV_DIR/bin/activate"
 echo "Vocalinux virtual environment activated."
 echo "To start the application, run: vocalinux"
@@ -2134,7 +2272,7 @@ for attr in ("getsitepackages",):
         pass
 
 user_site = getattr(site, "getusersitepackages", lambda: None)()
-if user_site:
+if user_site and getattr(site, "ENABLE_USER_SITE", False):
     roots.append(user_site)
 
 for key in ("platlib", "purelib"):
@@ -2181,6 +2319,95 @@ is_pywhispercpp_gpu_capable() {
         fi
     done
     return 1
+}
+
+is_pywhispercpp_backend_capable() {
+    local BACKEND
+    BACKEND=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+
+    local LIB_DIRS
+    LIB_DIRS=$(get_pywhispercpp_library_path || true)
+    [ -n "$LIB_DIRS" ] || return 1
+
+    local EXPECTED_LIB=""
+    case "$BACKEND" in
+        cuda)
+            EXPECTED_LIB="libggml-cuda.so"
+            ;;
+        vulkan)
+            EXPECTED_LIB="libggml-vulkan.so"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    local IFS=:
+    local LIB_DIR
+    for LIB_DIR in $LIB_DIRS; do
+        if compgen -G "$LIB_DIR/$EXPECTED_LIB*" >/dev/null; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+is_pywhispercpp_cuda_linkage_usable() {
+    command -v readelf >/dev/null 2>&1 || return 0
+
+    local LIB_DIRS
+    LIB_DIRS=$(get_pywhispercpp_library_path || true)
+    [ -n "$LIB_DIRS" ] || return 1
+
+    local IFS=:
+    local LIB_DIR
+    for LIB_DIR in $LIB_DIRS; do
+        local CUDA_LIB
+        for CUDA_LIB in "$LIB_DIR"/libggml-cuda.so*; do
+            [ -f "$CUDA_LIB" ] || continue
+            if readelf -d "$CUDA_LIB" 2>/dev/null | grep -Eq 'Shared library: \[libcuda-[^]]+\.so'; then
+                print_warning "CUDA backend links against a bundled libcuda build instead of libcuda.so.1:"
+                print_warning "  $CUDA_LIB"
+                print_warning "Treating CUDA verification as failed so the installer does not report broken GPU support."
+                return 1
+            fi
+        done
+    done
+
+    return 0
+}
+
+verify_pywhispercpp_backend_install() {
+    local BACKEND="$1"
+
+    if ! is_pywhispercpp_installed; then
+        print_warning "pywhispercpp installed but import verification failed for $BACKEND backend."
+        return 1
+    fi
+
+    if ! is_pywhispercpp_backend_capable "$BACKEND"; then
+        print_warning "pywhispercpp installed but $BACKEND backend libraries were not found."
+        return 1
+    fi
+
+    if [[ "$BACKEND" == "CUDA" ]] && ! is_pywhispercpp_cuda_linkage_usable; then
+        return 1
+    fi
+
+    return 0
+}
+
+print_pip_log_tail() {
+    local PIP_LOG_FILE="$1"
+    local LINE_COUNT="${2:-80}"
+
+    if [ -s "$PIP_LOG_FILE" ]; then
+        print_warning "Last $LINE_COUNT lines from pip build log ($PIP_LOG_FILE):"
+        tail -n "$LINE_COUNT" "$PIP_LOG_FILE" | sed 's/^/    /'
+    else
+        print_warning "Pip build log is empty or missing: $PIP_LOG_FILE"
+    fi
 }
 
 with_pywhispercpp_library_path() {
@@ -2312,10 +2539,17 @@ install_whispercpp_with_gpu_support() {
             print_info "  Installing pywhispercpp with Vulkan support..."
             GPU_BACKEND="Vulkan"
             print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-            if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
-                GPU_INSTALL_SUCCESS=true
+            if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" \
+                GGML_VULKAN=1 \
+                pip install --verbose --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                if verify_pywhispercpp_backend_install "$GPU_BACKEND"; then
+                    GPU_INSTALL_SUCCESS=true
+                else
+                    print_pip_log_tail "$PIP_LOG_FILE"
+                fi
             else
-                print_warning "Vulkan build failed - checking for NVIDIA GPU to try CUDA..."
+                print_warning "Vulkan build failed; checking for NVIDIA GPU to try CUDA..."
+                print_pip_log_tail "$PIP_LOG_FILE"
             fi
         fi
 
@@ -2324,9 +2558,31 @@ install_whispercpp_with_gpu_support() {
             print_info "✓ NVIDIA GPU detected: $GPU_NAME"
             print_info "  Installing pywhispercpp with CUDA support..."
             GPU_BACKEND="CUDA"
-            print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-            if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
-                GPU_INSTALL_SUCCESS=true
+
+            local CUDA_TOOLKIT_ROOT=""
+            local CUDA_CMAKE_ARGS=""
+            if CUDA_TOOLKIT_ROOT=$(find_valid_cuda_toolkit_root); then
+                if CUDA_CMAKE_ARGS=$(get_cuda_cmake_args "$CUDA_TOOLKIT_ROOT"); then
+                    print_info "Using CUDA toolkit: $CUDA_TOOLKIT_ROOT"
+                    print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
+                    if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS $CUDA_CMAKE_ARGS" \
+                        GGML_CUDA=1 \
+                        pip install --verbose --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                        if verify_pywhispercpp_backend_install "$GPU_BACKEND"; then
+                            GPU_INSTALL_SUCCESS=true
+                        else
+                            print_pip_log_tail "$PIP_LOG_FILE"
+                        fi
+                    else
+                        print_warning "CUDA build failed."
+                        print_pip_log_tail "$PIP_LOG_FILE"
+                    fi
+                else
+                    print_warning "Skipping CUDA build because the detected toolkit cannot target this NVIDIA GPU."
+                fi
+            else
+                print_warning "No complete CUDA toolkit root found; skipping CUDA build."
+                print_info "  Required CUDA files: bin/nvcc, include/cuda_runtime.h, and libcudart.so*"
             fi
         fi
     fi
@@ -2350,6 +2606,9 @@ install_whispercpp_with_gpu_support() {
         elif [[ "${WHISPERCPP_BACKEND}" != "cpu" ]]; then
             print_info "ℹ No GPU detected - installing CPU-only version"
             print_info "  CPU mode is still very fast!"
+        fi
+        if [[ "$GPU_BACKEND" != "CPU" ]]; then
+            print_warning "Continuing with CPU-only pywhispercpp; GPU acceleration is not active."
         fi
         GPU_BACKEND="CPU"
         print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
@@ -2774,6 +3033,7 @@ REMOTE_CONFIG
 #!/bin/bash
 # Wrapper script for Vocalinux that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
+export PYTHONNOUSERSITE=1
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 PYWHISPERCPP_LIBRARY_PATH=""
 PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
@@ -2818,6 +3078,7 @@ WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux GUI that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
+export PYTHONNOUSERSITE=1
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 PYWHISPERCPP_LIBRARY_PATH=""
 PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
