@@ -195,7 +195,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --interactive, -i  Force interactive mode (default)"
             echo "  --auto           Non-interactive automatic installation"
-            echo "  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk"
+            echo "  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk, remote_api"
             echo "  --dev            Install in development mode with all dev dependencies"
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory"
@@ -890,6 +890,15 @@ EOF
     echo "  │     • Good for basic dictation needs                        │"
     echo "  └─────────────────────────────────────────────────────────────┘"
     echo ""
+    echo "  ┌─────────────────────────────────────────────────────────────┐"
+    echo "  │  4. REMOTE API (ADVANCED)                                    │"
+    echo "  │     • Offload processing to a GPU server on your network     │"
+    echo "  │     • Ideal for laptops without GPU                          │"
+    echo "  │     • Supports whisper.cpp server & OpenAI-compatible APIs    │"
+    echo "  │     • Minimal local resources needed                         │"
+    echo "  │     • Requires a remote server to be running                 │"
+    echo "  └─────────────────────────────────────────────────────────────┘"
+    echo ""
 
     # Show recommendation
     case "$RECOMMENDED_ENGINE" in
@@ -908,7 +917,7 @@ EOF
     esac
     echo ""
 
-    read -p "Choose engine [1-3] (default: $DEFAULT_CHOICE): " ENGINE_CHOICE
+    read -p "Choose engine [1-4] (default: $DEFAULT_CHOICE): " ENGINE_CHOICE
     ENGINE_CHOICE=${ENGINE_CHOICE:-$DEFAULT_CHOICE}
 
     case "$ENGINE_CHOICE" in
@@ -923,6 +932,10 @@ EOF
         3)
             SELECTED_ENGINE="vosk"
             ENGINE_DISPLAY="VOSK (Lightweight)"
+            ;;
+        4)
+            SELECTED_ENGINE="remote_api"
+            ENGINE_DISPLAY="Remote API"
             ;;
         *)
             SELECTED_ENGINE="whisper_cpp"
@@ -1029,7 +1042,31 @@ EOF
         echo ""
     fi
 
-    # Step 4: Model download preference
+    # Step 3 for Remote API: Configure server URL
+    if [[ "$SELECTED_ENGINE" == "remote_api" ]]; then
+        print_header "Step 3: Configure Remote Server"
+        echo ""
+        print_info "You need a speech recognition server running on your local network."
+        echo ""
+        echo "  Supported servers:"
+        echo "    • whisper.cpp server:  ./server -m model.bin --host 0.0.0.0 --port 8080"
+        echo "    • LocalAI:            docker run -p 8080:8080 localai/localai"
+        echo "    • Faster Whisper:      faster-whisper-server --host 0.0.0.0 --port 8080"
+        echo "    • Any OpenAI-compatible speech API"
+        echo ""
+        read -p "Enter remote server URL (or leave blank to set later): " REMOTE_API_URL_INPUT
+        if [ -n "$REMOTE_API_URL_INPUT" ]; then
+            REMOTE_API_URL="$REMOTE_API_URL_INPUT"
+            REMOTE_DISPLAY="$REMOTE_API_URL"
+        else
+            REMOTE_API_URL=""
+            REMOTE_DISPLAY="(configure later in Settings)"
+        fi
+        echo ""
+    fi
+
+    # Step 4: Model download preference (skip for remote_api)
+    if [[ "$SELECTED_ENGINE" != "remote_api" ]]; then
     print_header "Step 4: Model Download"
     echo ""
     echo "Speech recognition models can be downloaded now or later."
@@ -1052,6 +1089,11 @@ EOF
     else
         MODELS_DISPLAY="Download now (recommended)"
     fi
+    else
+        # Remote API: No need to download model
+        SKIP_MODELS="yes"
+        MODELS_DISPLAY="Not needed (remote processing)"
+    fi
 
     # Summary
     print_header "Installation Summary"
@@ -1062,6 +1104,9 @@ EOF
         if [[ "${WHISPERCPP_BACKEND}" == "gpu" ]]; then
             echo "  Note: GPU build will compile from source (2-5 minutes)"
         fi
+    fi
+    if [[ "$SELECTED_ENGINE" == "remote_api" ]]; then
+        echo "  Remote Server: $REMOTE_DISPLAY"
     fi
     echo "  Models: $MODELS_DISPLAY"
     echo "  Install Location: ${INSTALL_DIR:-\$HOME/.local/share/vocalinux}"
@@ -1144,7 +1189,7 @@ if [[ "$NON_INTERACTIVE" == "yes" ]] && [[ -z "$SELECTED_ENGINE" ]]; then
     # Default to whisper.cpp for best performance
     SELECTED_ENGINE="whisper_cpp"
     print_info "Automatic mode: Installing with whisper.cpp (default engine)"
-    print_info "For other engines, use: --engine=whisper or --engine=vosk"
+    print_info "For other engines, use: --engine=whisper or --engine=vosk or --engine=remote_api"
     echo ""
 fi
 
@@ -2640,6 +2685,74 @@ FALLBACK_CONFIG
 VOSK_CONFIG
                 fi
                 ;;
+
+            remote_api)
+                print_info "Setting up Remote API engine..."
+                print_info ""
+                print_info "╔════════════════════════════════════════════════════════╗"
+                print_info "║  Setting up REMOTE API Engine                          ║"
+                print_info "╠════════════════════════════════════════════════════════╣"
+                print_info "║  • Offloads speech recognition to a remote server      ║"
+                print_info "║  • Ideal for laptops without GPU                       ║"
+                print_info "║  • Supports whisper.cpp server & OpenAI APIs           ║"
+                print_info "║  • Requires: a server running on your network          ║"
+                print_info "╚════════════════════════════════════════════════════════╝"
+                print_info ""
+
+                # Ensure requests library is installed
+                print_info "Installing requests library..."
+                pip install requests --log "$PIP_LOG_FILE" || {
+                    print_error "Failed to install requests library"
+                    return 1
+                }
+                print_success "requests library installed"
+
+                # URL was collected upfront by run_interactive_install
+                # (or left blank in auto/non-interactive mode).
+                local REMOTE_API_URL="${REMOTE_API_URL:-}"
+
+                # Create configuration file
+                local REMOTE_CONFIG_FILE="$CONFIG_DIR/config.json"
+                if [ ! -f "$REMOTE_CONFIG_FILE" ]; then
+                    mkdir -p "$CONFIG_DIR"
+                    cat > "$REMOTE_CONFIG_FILE" << REMOTE_CONFIG
+{
+    "speech_recognition": {
+        "engine": "remote_api",
+        "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
+        "remote_api_url": "${REMOTE_API_URL}",
+        "remote_api_key": "",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+REMOTE_CONFIG
+                fi
+
+                if [ -n "$REMOTE_API_URL" ]; then
+                    print_success "Remote API configured with server: $REMOTE_API_URL"
+                else
+                    print_warning "No server URL configured. You can set it later in Settings."
+                fi
+                ;;
         esac
     fi
 
@@ -3375,6 +3488,10 @@ EOF
         vosk)
             ENGINE_DISPLAY_NAME="VOSK"
             BACKEND_INFO="Lightweight"
+            ;;
+        remote_api)
+            ENGINE_DISPLAY_NAME="Remote API"
+            BACKEND_INFO="Network (offloaded to remote server)"
             ;;
     esac
 

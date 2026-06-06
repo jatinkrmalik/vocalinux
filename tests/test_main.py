@@ -231,6 +231,9 @@ class TestMainModule(unittest.TestCase):
                 whispercpp_logprob_thold=-1.0,
                 whispercpp_no_speech_thold=0.6,
                 whispercpp_n_threads=0,
+                remote_api_url="",
+                remote_api_key="",
+                remote_api_endpoint="/inference",
             )
             mock_text.assert_called_once_with(wayland_mode=True)
             mock_action_handler.assert_called_once_with(mock_text_instance)

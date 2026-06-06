@@ -569,6 +569,14 @@ def _filter_non_speech(text: str) -> str:
     [BLANK_AUDIO], music notes, or other non-speech artifacts when
     transcribing silent or ambiguous audio.
 
+    A trailing newline returned by the upstream transcription service is
+    preserved in the output. Some pipelines (post-processing proxies,
+    fixup layers) emit a meaningful trailing '\\n' to signal that the
+    typed text should be submitted (Enter key); stripping it silently
+    discards that signal. Pattern matching still runs against a
+    whitespace-stripped probe so the existing non-speech checks are
+    unaffected.
+
     Args:
         text: The transcribed text to filter
 
@@ -580,7 +588,8 @@ def _filter_non_speech(text: str) -> str:
     if not text or not text.strip():
         return ""
 
-    text = text.strip()
+    # Probe is used for non-speech-pattern matching only.
+    probe = text.strip()
 
     # Non-speech patterns to filter out
     non_speech_patterns = [
@@ -596,20 +605,24 @@ def _filter_non_speech(text: str) -> str:
     ]
 
     for pattern in non_speech_patterns:
-        if re.match(pattern, text, re.IGNORECASE):
-            logger.debug(f"Filtered non-speech token: '{text}'")
+        if re.match(pattern, probe, re.IGNORECASE):
+            logger.debug(f"Filtered non-speech token: '{probe}'")
             return ""
 
     # Check if text has enough actual speech content
     # At least 30% of characters should be alphanumeric or common speech punctuation
-    speech_chars = sum(1 for c in text if c.isalnum() or c in ".,!?-'\"")
-    total_chars = len(text)
+    speech_chars = sum(1 for c in probe if c.isalnum() or c in ".,!?-'\"")
+    total_chars = len(probe)
 
     if total_chars > 0 and speech_chars / total_chars < 0.3:
-        logger.debug(f"Filtered low-speech-content text: '{text}'")
+        logger.debug(f"Filtered low-speech-content text: '{probe}'")
         return ""
 
-    return text
+    # Strip whitespace as before, but preserve a trailing newline if the
+    # upstream API sent one — it carries an explicit submit/Enter signal
+    # from post-processing proxies.
+    trailing_newline = text.endswith(("\n", "\r"))
+    return probe + "\n" if trailing_newline else probe
 
 
 def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
@@ -764,6 +777,12 @@ class SpeechRecognitionManager:
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
         self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
 
+        # Remote API settings
+        self.remote_api_url = kwargs.get("remote_api_url", "")
+        self.remote_api_key = kwargs.get("remote_api_key", "")
+        self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+        self._http_session = None
+
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
         self._audio_level_callbacks: list[Callable[[float], None]] = []
@@ -801,6 +820,8 @@ class SpeechRecognitionManager:
             self._init_whisper()
         elif engine == "whisper_cpp":
             self._init_whispercpp()
+        elif engine == "remote_api":
+            self._init_remote_api()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
 
@@ -1339,6 +1360,252 @@ class SpeechRecognitionManager:
             logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
             return ""
 
+    def _init_remote_api(self):
+        """Initialize remote API speech recognition engine.
+
+        Verify URL settings and try connection test. No need to load local model.
+        """
+        if not self.remote_api_url:
+            logger.warning("Remote API URL not set. Please enter the server URL in settings.")
+            self._model_initialized = False
+            return
+
+        if not self.remote_api_url.startswith(("http://", "https://")):
+            logger.error(
+                f"Remote API URL must start with http:// or https://, "
+                f"got: '{self.remote_api_url}'"
+            )
+            self._model_initialized = False
+            return
+
+        # Clean trailing slash from URL
+        self.remote_api_url = self.remote_api_url.rstrip("/")
+
+        logger.info(f"Initialize remote API engine, server: {self.remote_api_url}")
+
+        # Replace any existing session (prevents leak on back-to-back inits)
+        import requests
+
+        if self._http_session:
+            self._http_session.close()
+        self._http_session = requests.Session()
+
+        # Try connection test
+        try:
+            test_url = self.remote_api_url
+            headers = {}
+            if self.remote_api_key:
+                headers["Authorization"] = f"Bearer {self.remote_api_key}"
+
+            response = self._http_session.get(test_url, headers=headers, timeout=5)
+            if response.ok:
+                logger.info(
+                    f"Remote server connection test successful (status={response.status_code})"
+                )
+            else:
+                logger.warning(
+                    f"Remote server connection test returned non-success status: "
+                    f"{response.status_code}. Will try again during recognition."
+                )
+        except Exception as e:
+            logger.warning(
+                f"Remote server connection test failed: {e}. "
+                "Will try to connect again during recognition."
+            )
+
+        # Remote API does not need local models, directly mark as ready
+        self._model_initialized = True
+        logger.info("Remote API engine setup complete.")
+
+    def _transcribe_with_remote_api(self, audio_buffer: list[bytes]) -> str:
+        """Transcribe audio via remote API.
+
+        Package audio buffer into WAV format and send to remote server via HTTP POST.
+        Supports OpenAI compatible format (/v1/audio/transcriptions) and
+        whisper.cpp server format (/inference).
+
+        Args:
+            audio_buffer: Audio data chunk list (16-bit PCM at 16kHz)
+
+        Returns:
+            Transcribed text
+        """
+        import io
+        import time
+        import wave
+
+        try:
+            if not audio_buffer:
+                return ""
+
+            if not self.remote_api_url:
+                logger.error("Remote API URL not set")
+                return ""
+
+            # Convert audio buffer to WAV format
+            audio_data = b"".join(audio_buffer)
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, "wb") as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(16000)  # 16kHz
+                wav_file.writeframes(audio_data)
+
+            wav_buffer.seek(0)
+            wav_bytes = wav_buffer.read()
+
+            duration = len(audio_data) / (2 * 16000)  # 16-bit = 2 bytes/sample
+            logger.debug(
+                f"Remote API transcription: {duration:.2f} seconds audio, "
+                f"{len(wav_bytes)} bytes WAV"
+            )
+
+            # Prepare language parameters
+            lang = self.language
+            if lang == "en-us":
+                lang = "en"
+            elif lang == "auto":
+                lang = None
+
+            # Prepare HTTP request headers
+            headers = {}
+            if self.remote_api_key:
+                headers["Authorization"] = f"Bearer {self.remote_api_key}"
+
+            transcribe_start = time.time()
+
+            text = None
+            if self.remote_api_endpoint == "/inference":
+                text = self._try_whispercpp_server_api(wav_bytes, lang, headers)
+            else:
+                text = self._try_openai_api(wav_bytes, lang, headers)
+
+            # If both formats fail
+            if text is None:
+                logger.error(
+                    "Remote API transcription failed: Cannot connect to server or API format not supported"
+                )
+                return ""
+
+            transcribe_duration = time.time() - transcribe_start
+            rtf = transcribe_duration / duration if duration > 0 else 0
+
+            # Filter non-speech content. Do NOT pre-strip — _filter_non_speech
+            # preserves a trailing '\n' from the upstream API (used by
+            # post-processing proxies to signal Enter), and a pre-strip here
+            # would silently discard it.
+            text = _filter_non_speech(text) if text else ""
+
+            if text:
+                logger.info(f"Remote API transcription result: '{text}'")
+                logger.info(
+                    f"Remote API transcription took {transcribe_duration:.3f}s "
+                    f"({duration:.2f}s audio, RTF: {rtf:.2f}x)"
+                )
+            else:
+                logger.debug(
+                    f"Remote API returned blank transcription result ({transcribe_duration:.3f}s)"
+                )
+
+            return text
+
+        except Exception as e:
+            audio_info = (
+                f"audio buffer: {len(audio_buffer)} chunks"
+                if audio_buffer
+                else "empty audio buffer"
+            )
+            logger.error(f"Remote API transcription error: {e} ({audio_info})", exc_info=True)
+            return ""
+
+    def _try_openai_api(self, wav_bytes: bytes, lang, headers: dict):
+        """Try to transcribe using OpenAI compatible API format.
+
+        Args:
+            wav_bytes: Audio data in WAV format
+            lang: Language core (e.g. "en", None for auto detect)
+            headers: HTTP request headers
+
+        Returns:
+            Transcribed text, or None if format is not supported
+        """
+        import requests
+
+        url = f"{self.remote_api_url}{self.remote_api_endpoint}"
+
+        files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+        data = {"model": "whisper-1"}
+        if lang:
+            data["language"] = lang
+
+        try:
+            response = self._http_session.post(
+                url, headers=headers, files=files, data=data, timeout=30
+            )
+
+            if response.status_code == 404:
+                logger.debug("OpenAI API endpoint does not exist, try other formats")
+                return None
+
+            response.raise_for_status()
+            result = response.json()
+
+            # OpenAI format returns {"text": "..."}
+            return result.get("text", "")
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Cannot connect to remote server {url}: {e}")
+            return None
+        except Exception as e:
+            logger.debug(f"OpenAI API format attempt failed: {e}")
+            return None
+
+    def _try_whispercpp_server_api(self, wav_bytes: bytes, lang, headers: dict):
+        """Try to transcribe using whisper.cpp server API format.
+
+        Args:
+            wav_bytes: Audio data in WAV format
+            lang: Language core (e.g. "en", None for auto detect)
+            headers: HTTP request headers
+
+        Returns:
+            Transcribed text, or None if format is not supported
+        """
+        import requests
+
+        url = f"{self.remote_api_url}{self.remote_api_endpoint}"
+
+        files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+        data = {
+            "temperature": "0.0",
+            "temperature_inc": "0.2",
+            "response_format": "json",
+        }
+        if lang:
+            data["language"] = lang
+
+        try:
+            response = self._http_session.post(
+                url, headers=headers, files=files, data=data, timeout=30
+            )
+
+            if response.status_code == 404:
+                logger.debug("whisper.cpp server endpoint does not exist")
+                return None
+
+            response.raise_for_status()
+            result = response.json()
+
+            # whisper.cpp server format returns {"text": "..."}
+            return result.get("text", "")
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Cannot connect to remote server {url}: {e}")
+            return None
+        except Exception as e:
+            logger.debug(f"whisper.cpp server API format attempt failed: {e}")
+            return None
+
     def _download_whispercpp_model(self):
         """Download a whisper.cpp model with progress tracking."""
         import requests
@@ -1816,6 +2083,9 @@ class SpeechRecognitionManager:
     @property
     def model_ready(self) -> bool:
         """Check if the model is initialized and ready for recognition."""
+        # Remote API does not need local models
+        if self.engine == "remote_api":
+            return self._model_initialized
         return self._model_initialized and self.model is not None
 
     def _get_stop_sound_guard_chunks(self) -> int:
@@ -2279,6 +2549,9 @@ class SpeechRecognitionManager:
         elif self.engine == "whisper_cpp":
             text = self._transcribe_with_whispercpp(audio_buffer)
 
+        elif self.engine == "remote_api":
+            text = self._transcribe_with_remote_api(audio_buffer)
+
         else:
             logger.error(f"Unknown engine: {self.engine}")
             return
@@ -2418,6 +2691,7 @@ class SpeechRecognitionManager:
         )
 
         restart_needed = False
+        old_engine = self.engine
         if engine is not None and engine != self.engine:
             self.engine = engine
             restart_needed = True
@@ -2467,6 +2741,18 @@ class SpeechRecognitionManager:
                 setattr(self, param_name, kwargs[param_name])
                 restart_needed = True
 
+        # Handle Remote API settings
+        if "remote_api_url" in kwargs:
+            new_url = kwargs.get("remote_api_url", "")
+            if new_url != self.remote_api_url:
+                self.remote_api_url = new_url
+                if self.engine == "remote_api":
+                    restart_needed = True
+        if "remote_api_key" in kwargs:
+            self.remote_api_key = kwargs.get("remote_api_key", "")
+        if "remote_api_endpoint" in kwargs:
+            self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
         if restart_needed:
@@ -2490,6 +2776,10 @@ class SpeechRecognitionManager:
                 # Release old resources explicitly if necessary (Python's GC might handle it)
                 self.model = None
                 self.recognizer = None
+                if old_engine == "remote_api" and self.engine != "remote_api":
+                    if self._http_session is not None:
+                        self._http_session.close()
+                    self._http_session = None
                 try:
                     if self.engine == "vosk":
                         self._init_vosk()
@@ -2497,6 +2787,8 @@ class SpeechRecognitionManager:
                         self._init_whisper()
                     elif self.engine == "whisper_cpp":
                         self._init_whispercpp()
+                    elif self.engine == "remote_api":
+                        self._init_remote_api()
                     else:
                         raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                     logger.info("Speech engine re-initialized successfully.")
@@ -2628,6 +2920,7 @@ class SpeechRecognitionManager:
         with self._model_lock:
             self.model = None
             self.recognizer = None
+            self._http_session = None
             self._model_initialized = False
 
             try:
@@ -2637,6 +2930,8 @@ class SpeechRecognitionManager:
                     self._init_whisper()
                 elif self.engine == "whisper_cpp":
                     self._init_whispercpp()
+                elif self.engine == "remote_api":
+                    self._init_remote_api()
                 else:
                     logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
                     return
