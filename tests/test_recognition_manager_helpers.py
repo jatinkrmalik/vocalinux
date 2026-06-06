@@ -89,6 +89,23 @@ class TestFilterNonSpeech(unittest.TestCase):
         self.assertIn("are", result)
         self.assertIn("you", result)
 
+    def test_trailing_newline_preserved(self):
+        # A trailing '\n' from the upstream API is meaningful (e.g. a
+        # post-processing proxy emitting Enter) and must survive filtering.
+        self.assertEqual(_filter_non_speech("cd ..\n"), "cd ..\n")
+
+    def test_trailing_newline_with_leading_whitespace(self):
+        # Leading whitespace is stripped; trailing '\n' is preserved.
+        self.assertEqual(_filter_non_speech("  hello world\n"), "hello world\n")
+
+    def test_trailing_spaces_stripped_newline_kept(self):
+        # Spaces/tabs/CR before a trailing '\n' should be cleaned, '\n' kept.
+        self.assertEqual(_filter_non_speech("cmd  \t\n"), "cmd\n")
+
+    def test_lone_newline_filtered_as_whitespace(self):
+        # A bare '\n' (no speech) is whitespace-only -> filtered to "".
+        self.assertEqual(_filter_non_speech("\n"), "")
+
 
 class TestShowNotification(unittest.TestCase):
     """Test _show_notification function."""

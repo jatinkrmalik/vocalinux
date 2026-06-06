@@ -58,7 +58,7 @@ def parse_arguments():
     parser.add_argument(
         "--engine",
         type=str,
-        choices=["vosk", "whisper", "whisper_cpp"],
+        choices=["vosk", "whisper", "whisper_cpp", "remote_api"],
         help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
     )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
@@ -382,6 +382,10 @@ def main():
             whispercpp_logprob_thold=advanced_settings.get("whispercpp_logprob_thold", -1.0),
             whispercpp_no_speech_thold=advanced_settings.get("whispercpp_no_speech_thold", 0.6),
             whispercpp_n_threads=advanced_settings.get("whispercpp_n_threads", 0),
+
+            remote_api_url=saved_settings.get("remote_api_url", ""),
+            remote_api_key=saved_settings.get("remote_api_key", ""),
+            remote_api_endpoint=saved_settings.get("remote_api_endpoint", "/inference"),
         )
 
         # Initialize text injection system
