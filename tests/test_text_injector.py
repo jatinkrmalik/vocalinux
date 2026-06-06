@@ -5,6 +5,7 @@ Tests for text injection functionality.
 import os
 import subprocess
 import sys
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -317,6 +318,7 @@ class TestTextInjector(unittest.TestCase):
             # Clear all environment variables
             with patch.object(TextInjector, "_check_dependencies"):
                 injector = TextInjector.__new__(TextInjector)
+                injector._state_lock = threading.Lock()
                 env = injector._detect_environment()
                 # Should default to X11 when unknown
                 self.assertEqual(env, DesktopEnvironment.X11)
@@ -326,6 +328,7 @@ class TestTextInjector(unittest.TestCase):
         with patch.dict("os.environ", {"WAYLAND_DISPLAY": "wayland-0"}, clear=True):
             with patch.object(TextInjector, "_check_dependencies"):
                 injector = TextInjector.__new__(TextInjector)
+                injector._state_lock = threading.Lock()
                 env = injector._detect_environment()
                 self.assertEqual(env, DesktopEnvironment.WAYLAND)
 
@@ -334,6 +337,7 @@ class TestTextInjector(unittest.TestCase):
         with patch.dict("os.environ", {"DISPLAY": ":0"}, clear=True):
             with patch.object(TextInjector, "_check_dependencies"):
                 injector = TextInjector.__new__(TextInjector)
+                injector._state_lock = threading.Lock()
                 env = injector._detect_environment()
                 self.assertEqual(env, DesktopEnvironment.X11)
 
@@ -835,6 +839,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
         clean_env = {"XDG_SESSION_TYPE": "", "PATH": os.environ.get("PATH", "")}
         with patch.dict("os.environ", clean_env, clear=True):
             injector = TextInjector.__new__(TextInjector)
+            injector._state_lock = threading.Lock()
             # Don't call __init__, just test _detect_environment
             result = injector._detect_environment()
             # Should default to X11 when unknown (no WAYLAND_DISPLAY or DISPLAY)
@@ -845,6 +850,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
         # Clear session type but set WAYLAND_DISPLAY
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "", "WAYLAND_DISPLAY": "wayland-0"}):
             injector = TextInjector.__new__(TextInjector)
+            injector._state_lock = threading.Lock()
             result = injector._detect_environment()
             self.assertEqual(result, DesktopEnvironment.WAYLAND)
 
@@ -860,6 +866,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
             with patch.dict("os.environ", env_copy, clear=True):
                 injector = TextInjector.__new__(TextInjector)
+                injector._state_lock = threading.Lock()
                 result = injector._detect_environment()
                 self.assertEqual(result, DesktopEnvironment.X11)
 
@@ -1005,6 +1012,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
                 # Create injector in WAYLAND_XDOTOOL mode
                 injector = TextInjector.__new__(TextInjector)
+                injector._state_lock = threading.Lock()
                 injector.environment = DesktopEnvironment.WAYLAND_XDOTOOL
 
                 # Mock subprocess.run
@@ -1263,6 +1271,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
                 # Create injector directly in WAYLAND_XDOTOOL mode
                 injector = TextInjector.__new__(TextInjector)
+                injector._state_lock = threading.Lock()
                 injector.environment = DesktopEnvironment.WAYLAND_XDOTOOL
 
                 # Mock subprocess.run
@@ -1504,6 +1513,7 @@ class TestIBusRuntimeFallback(unittest.TestCase):
         """X11 IBus fallback should fail cleanly when xdotool is unavailable."""
         self.mock_which.return_value = None
         injector = TextInjector.__new__(TextInjector)
+        injector._state_lock = threading.Lock()
         injector.environment = DesktopEnvironment.X11_IBUS
 
         result = injector._switch_to_non_ibus_backend()
@@ -1515,6 +1525,7 @@ class TestIBusRuntimeFallback(unittest.TestCase):
         """Wayland IBus fallback should prefer ydotool when its daemon responds."""
         self.mock_which.side_effect = lambda cmd: {"ydotool": "/usr/bin/ydotool"}.get(cmd)
         injector = TextInjector.__new__(TextInjector)
+        injector._state_lock = threading.Lock()
         injector.environment = DesktopEnvironment.WAYLAND_IBUS
         injector.wayland_tool = None
 
@@ -1535,6 +1546,7 @@ class TestIBusRuntimeFallback(unittest.TestCase):
         }.get(cmd)
         self.mock_subprocess.side_effect = subprocess.CalledProcessError(1, ["ydotool"])
         injector = TextInjector.__new__(TextInjector)
+        injector._state_lock = threading.Lock()
         injector.environment = DesktopEnvironment.WAYLAND_IBUS
         injector.wayland_tool = None
 
@@ -1548,6 +1560,7 @@ class TestIBusRuntimeFallback(unittest.TestCase):
         """Wayland IBus fallback should use xdotool/XWayland when native tools are absent."""
         self.mock_which.side_effect = lambda cmd: {"xdotool": "/usr/bin/xdotool"}.get(cmd)
         injector = TextInjector.__new__(TextInjector)
+        injector._state_lock = threading.Lock()
         injector.environment = DesktopEnvironment.WAYLAND_IBUS
         injector.wayland_tool = None
 
@@ -1560,6 +1573,7 @@ class TestIBusRuntimeFallback(unittest.TestCase):
         """Wayland IBus fallback should fail when no non-IBus tools are available."""
         self.mock_which.return_value = None
         injector = TextInjector.__new__(TextInjector)
+        injector._state_lock = threading.Lock()
         injector.environment = DesktopEnvironment.WAYLAND_IBUS
         injector.wayland_tool = None
 
@@ -1571,6 +1585,7 @@ class TestIBusRuntimeFallback(unittest.TestCase):
     def test_switch_to_non_ibus_backend_noop_outside_ibus_mode(self):
         """Non-IBus modes are already on fallback backends."""
         injector = TextInjector.__new__(TextInjector)
+        injector._state_lock = threading.Lock()
         injector.environment = DesktopEnvironment.X11
 
         self.assertTrue(injector._switch_to_non_ibus_backend())
