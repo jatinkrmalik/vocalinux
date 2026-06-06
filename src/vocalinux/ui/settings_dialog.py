@@ -891,7 +891,9 @@ class SettingsDialog(Gtk.Dialog):
 
         # Advanced tab - whisper.cpp parameters and power-user features (remote API, etc.)
         advanced_label = Gtk.Label(label="Advanced")
-        advanced_label.set_tooltip_text("Advanced whisper.cpp parameters and settings for power users")
+        advanced_label.set_tooltip_text(
+            "Advanced whisper.cpp parameters and settings for power users"
+        )
         self.advanced_page_num = notebook.append_page(self.advanced_tab, advanced_label)
         notebook.connect("switch-page", self._on_settings_page_switched)
 

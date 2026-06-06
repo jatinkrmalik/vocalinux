@@ -1539,7 +1539,9 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = self._http_session.post(url, headers=headers, files=files, data=data, timeout=30)
+            response = self._http_session.post(
+                url, headers=headers, files=files, data=data, timeout=30
+            )
 
             if response.status_code == 404:
                 logger.debug("OpenAI API endpoint does not exist, try other formats")
@@ -1583,7 +1585,9 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = self._http_session.post(url, headers=headers, files=files, data=data, timeout=30)
+            response = self._http_session.post(
+                url, headers=headers, files=files, data=data, timeout=30
+            )
 
             if response.status_code == 404:
                 logger.debug("whisper.cpp server endpoint does not exist")

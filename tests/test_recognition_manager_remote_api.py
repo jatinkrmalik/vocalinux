@@ -588,11 +588,12 @@ class TestRemoteAPIReinitializeAfterResume(unittest.TestCase):
         )
         manager.engine = "bogus_engine"
 
-        with patch.object(manager, "_init_remote_api") as mock_remote, patch.object(
-            manager, "_init_vosk"
-        ) as mock_vosk, patch.object(manager, "_init_whisper") as mock_whisper, patch.object(
-            manager, "_init_whispercpp"
-        ) as mock_whispercpp:
+        with (
+            patch.object(manager, "_init_remote_api") as mock_remote,
+            patch.object(manager, "_init_vosk") as mock_vosk,
+            patch.object(manager, "_init_whisper") as mock_whisper,
+            patch.object(manager, "_init_whispercpp") as mock_whispercpp,
+        ):
             manager.reinitialize_after_resume()
 
         mock_remote.assert_not_called()
