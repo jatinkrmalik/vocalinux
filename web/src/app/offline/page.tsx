@@ -241,7 +241,7 @@ export default function OfflinePage() {
           </li>
         </ul>
         <p className="mt-4 text-sm text-emerald-700 dark:text-emerald-400">
-          Models are downloaded once (39MB-1.5GB depending on size), then all processing happens
+          Models are downloaded once (74MB-3.0GB depending on size), then all processing happens
           locally. No network requests during dictation.
         </p>
       </section>

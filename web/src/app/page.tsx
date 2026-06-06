@@ -1051,7 +1051,7 @@ export default function HomePage() {
                     "10x faster installation (~1-2 min)",
                     "Universal GPU support (AMD/Intel/NVIDIA)",
                     "C++ optimized, true multi-threading",
-                    "Tiny model only ~39MB",
+                    "Tiny model only ~74MB",
                   ].map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -1060,7 +1060,7 @@ export default function HomePage() {
                   ))}
                 </ul>
                 <div className="text-sm text-muted-foreground">
-                  <strong>Model sizes:</strong> Tiny (39MB) • Base (74MB) • Small (244MB) • Medium (769MB) • Large (1.5GB)
+                  <strong>Model sizes:</strong> Tiny (74MB) • Base (141MB) • Small (465MB) • Medium (1.5GB) • Large (3.0GB)
                 </div>
                 <div className="mt-4">
                   <Link href="/gpu-acceleration/" className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
@@ -1165,7 +1165,7 @@ export default function HomePage() {
                 question: "What are the system requirements?",
                 answer: (
                   <>
-                    Minimum: 4GB RAM, Python 3.9+, ~200MB disk space. 8GB+ RAM recommended for larger Whisper models. The default whisper.cpp tiny model (~39MB) works great on modest hardware. GPU acceleration is available via Vulkan for AMD, Intel, and NVIDIA GPUs.{" "}
+                    Minimum: 4GB RAM, Python 3.9+, ~200MB disk space. 8GB+ RAM recommended for larger Whisper models. The default whisper.cpp tiny model (~74MB) works great on modest hardware. GPU acceleration is available via Vulkan for AMD, Intel, and NVIDIA GPUs.{" "}
                     <Link href="/install/" className="text-primary hover:underline">View full installation requirements</Link>.
                   </>
                 ),

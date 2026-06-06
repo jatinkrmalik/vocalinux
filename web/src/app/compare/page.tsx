@@ -10,7 +10,7 @@ const engineTable = [
     speed: "Fastest startup + low latency",
     hardware: "CPU + AMD/Intel/NVIDIA GPU",
     accuracy: "High (best overall balance)",
-    footprint: "Small models available (~39MB tiny)",
+    footprint: "Small models available (~74MB tiny)",
     bestFor: "Most users who want strong speed + quality",
     icon: Zap,
     iconColor: "text-amber-500",
