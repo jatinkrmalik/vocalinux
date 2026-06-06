@@ -214,6 +214,7 @@ class TestReinitializeAfterResume(unittest.TestCase):
         mgr._model_lock = MagicMock()
         mgr._model_lock.__enter__ = MagicMock(return_value=None)
         mgr._model_lock.__exit__ = MagicMock(return_value=False)
+        mgr._http_session = None
         mgr._reconnection_attempts = 3
         mgr._update_state = MagicMock()
         mgr._init_vosk = MagicMock()
