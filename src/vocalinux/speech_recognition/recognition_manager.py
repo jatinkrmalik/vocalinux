@@ -1390,34 +1390,11 @@ class SpeechRecognitionManager:
             self._http_session.close()
         self._http_session = requests.Session()
 
-        # Try connection test
-        try:
-            test_url = self.remote_api_url
-            headers = {}
-            if self.remote_api_key:
-                headers["Authorization"] = f"Bearer {self.remote_api_key}"
-
-            response = self._http_session.get(test_url, headers=headers, timeout=5)
-            if response.ok:
-                logger.info(
-                    f"Remote server connection test successful (status={response.status_code})"
-                )
-            else:
-                logger.warning(
-                    f"Remote server connection test returned non-success status: "
-                    f"{response.status_code}. Will try again during recognition."
-                )
-        except Exception as e:
-            logger.warning(
-                f"Remote server connection test failed: {e}. "
-                "Will try to connect again during recognition."
-            )
-
         # Remote API does not need local models, directly mark as ready
         self._model_initialized = True
         logger.info("Remote API engine setup complete.")
 
-    def _transcribe_with_remote_api(self, audio_buffer: list[bytes]) -> str:
+    def _transcribe_with_remote_api(self, audio_buffer: list[bytes], session) -> str:
         """Transcribe audio via remote API.
 
         Package audio buffer into WAV format and send to remote server via HTTP POST.
@@ -1426,6 +1403,7 @@ class SpeechRecognitionManager:
 
         Args:
             audio_buffer: Audio data chunk list (16-bit PCM at 16kHz)
+            session: A requests.Session snapshot (obtained under _model_lock)
 
         Returns:
             Transcribed text
@@ -1476,9 +1454,9 @@ class SpeechRecognitionManager:
 
             text = None
             if self.remote_api_endpoint == "/inference":
-                text = self._try_whispercpp_server_api(wav_bytes, lang, headers)
+                text = self._try_whispercpp_server_api(wav_bytes, lang, headers, session)
             else:
-                text = self._try_openai_api(wav_bytes, lang, headers)
+                text = self._try_openai_api(wav_bytes, lang, headers, session)
 
             # If both formats fail
             if text is None:
@@ -1518,13 +1496,14 @@ class SpeechRecognitionManager:
             logger.error(f"Remote API transcription error: {e} ({audio_info})", exc_info=True)
             return ""
 
-    def _try_openai_api(self, wav_bytes: bytes, lang, headers: dict):
+    def _try_openai_api(self, wav_bytes: bytes, lang, headers: dict, session):
         """Try to transcribe using OpenAI compatible API format.
 
         Args:
             wav_bytes: Audio data in WAV format
             lang: Language core (e.g. "en", None for auto detect)
             headers: HTTP request headers
+            session: A requests.Session snapshot (obtained under _model_lock)
 
         Returns:
             Transcribed text, or None if format is not supported
@@ -1539,9 +1518,7 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = self._http_session.post(
-                url, headers=headers, files=files, data=data, timeout=30
-            )
+            response = session.post(url, headers=headers, files=files, data=data, timeout=30)
 
             if response.status_code == 404:
                 logger.debug("OpenAI API endpoint does not exist, try other formats")
@@ -1560,13 +1537,14 @@ class SpeechRecognitionManager:
             logger.debug(f"OpenAI API format attempt failed: {e}")
             return None
 
-    def _try_whispercpp_server_api(self, wav_bytes: bytes, lang, headers: dict):
+    def _try_whispercpp_server_api(self, wav_bytes: bytes, lang, headers: dict, session):
         """Try to transcribe using whisper.cpp server API format.
 
         Args:
             wav_bytes: Audio data in WAV format
             lang: Language core (e.g. "en", None for auto detect)
             headers: HTTP request headers
+            session: A requests.Session snapshot (obtained under _model_lock)
 
         Returns:
             Transcribed text, or None if format is not supported
@@ -1585,9 +1563,7 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = self._http_session.post(
-                url, headers=headers, files=files, data=data, timeout=30
-            )
+            response = session.post(url, headers=headers, files=files, data=data, timeout=30)
 
             if response.status_code == 404:
                 logger.debug("whisper.cpp server endpoint does not exist")
@@ -2550,7 +2526,18 @@ class SpeechRecognitionManager:
             text = self._transcribe_with_whispercpp(audio_buffer)
 
         elif self.engine == "remote_api":
-            text = self._transcribe_with_remote_api(audio_buffer)
+            # Snapshot the HTTP session under lock to prevent race with
+            # reconfigure() / reinitialize_after_resume() which close/recreate
+            # the session under _model_lock.  The snapshot (a local reference)
+            # remains valid even if another thread closes the old session —
+            # urllib3's PoolManager keeps existing connections alive until the
+            # in-flight request completes.
+            with self._model_lock:
+                session = self._http_session
+            if session is None:
+                logger.error("Remote API HTTP session not initialized")
+                return
+            text = self._transcribe_with_remote_api(audio_buffer, session)
 
         else:
             logger.error(f"Unknown engine: {self.engine}")
@@ -2920,6 +2907,8 @@ class SpeechRecognitionManager:
         with self._model_lock:
             self.model = None
             self.recognizer = None
+            if self._http_session is not None:
+                self._http_session.close()
             self._http_session = None
             self._model_initialized = False
 

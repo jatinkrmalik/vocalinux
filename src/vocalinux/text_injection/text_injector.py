@@ -113,10 +113,11 @@ class TextInjector:
 
         Call this when shutting down Vocalinux.
         """
-        if self._ibus_injector:
-            logger.info("Stopping IBus text injector")
-            self._ibus_injector.stop()
-            self._ibus_injector = None
+        with self._state_lock:
+            if self._ibus_injector:
+                logger.info("Stopping IBus text injector")
+                self._ibus_injector.stop()
+                self._ibus_injector = None
             self._ibus_ready = False
 
     def _detect_environment(self) -> DesktopEnvironment:
@@ -330,7 +331,8 @@ class TextInjector:
         """Switch from IBus mode to a non-IBus backend for runtime fallback."""
         if self.environment == DesktopEnvironment.X11_IBUS:
             if shutil.which("xdotool"):
-                self.environment = DesktopEnvironment.X11
+                with self._state_lock:
+                    self.environment = DesktopEnvironment.X11
                 logger.warning("IBus injection failed, switching to X11 xdotool fallback")
                 return True
 
@@ -350,8 +352,9 @@ class TextInjector:
                         stderr=subprocess.PIPE,
                         timeout=2,
                     )
-                    self.wayland_tool = "ydotool"
-                    self.environment = DesktopEnvironment.WAYLAND
+                    with self._state_lock:
+                        self.wayland_tool = "ydotool"
+                        self.environment = DesktopEnvironment.WAYLAND
                     logger.warning("IBus injection failed, switching to Wayland ydotool fallback")
                     return True
                 except (
@@ -362,13 +365,15 @@ class TextInjector:
                     logger.debug("ydotool fallback unavailable (daemon not running)")
 
             if wtype_available:
-                self.wayland_tool = "wtype"
-                self.environment = DesktopEnvironment.WAYLAND
+                with self._state_lock:
+                    self.wayland_tool = "wtype"
+                    self.environment = DesktopEnvironment.WAYLAND
                 logger.warning("IBus injection failed, switching to Wayland wtype fallback")
                 return True
 
             if xdotool_available:
-                self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                with self._state_lock:
+                    self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                 logger.warning("IBus injection failed, switching to XWayland xdotool fallback")
                 return True
 
@@ -564,12 +569,16 @@ class TextInjector:
             self._try_recover_from_fallback()
 
         try:
+            with self._state_lock:
+                current_env = self.environment
+                ibus_injector = self._ibus_injector
+
             if (
-                self.environment == DesktopEnvironment.WAYLAND_IBUS
-                or self.environment == DesktopEnvironment.X11_IBUS
+                current_env == DesktopEnvironment.WAYLAND_IBUS
+                or current_env == DesktopEnvironment.X11_IBUS
             ):
-                if self._ibus_injector is not None:
-                    result = self._ibus_injector.inject_text(text)
+                if ibus_injector is not None:
+                    result = ibus_injector.inject_text(text)
                     if result:
                         logger.info("Text injection completed successfully")
                         if self._should_copy_to_clipboard():
@@ -594,9 +603,12 @@ class TextInjector:
                             "IBus injector not initialized and no non-IBus fallback is available"
                         )
 
+            with self._state_lock:
+                current_env = self.environment
+
             if (
-                self.environment == DesktopEnvironment.X11
-                or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
+                current_env == DesktopEnvironment.X11
+                or current_env == DesktopEnvironment.WAYLAND_XDOTOOL
             ):
                 self._inject_with_xdotool(text)
             else:
@@ -613,7 +625,8 @@ class TextInjector:
                         logger.info(
                             "Switching to XWayland fallback - will re-check for better tools"
                         )
-                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                        with self._state_lock:
+                            self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         self._inject_with_xdotool(text)
                     else:
                         raise

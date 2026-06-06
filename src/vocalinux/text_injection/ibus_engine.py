@@ -674,11 +674,12 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
                                     continue
 
                                 text = data.decode("utf-8")
-                                # Schedule injection on main thread
-                                if cls._active_instance:
+                                # Snapshot active instance to avoid TOCTOU race with do_destroy
+                                instance = cls._active_instance
+                                if instance:
 
-                                    def do_inject(t):
-                                        cls._active_instance.inject_text(t)
+                                    def do_inject(t, inst=instance):
+                                        inst.inject_text(t)
                                         return False  # Run only once
 
                                     GLib.idle_add(do_inject, text)
