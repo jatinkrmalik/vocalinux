@@ -646,7 +646,7 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
 
         cls._server_running = True
 
-        def server_thread():
+        def server_thread():  # pragma: no cover
             try:
                 cls._server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 cls._server_socket.bind(str(SOCKET_PATH))

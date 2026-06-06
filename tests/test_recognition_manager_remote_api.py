@@ -702,5 +702,70 @@ class TestHTTPSession(unittest.TestCase):
         self.assertIs(manager._http_session, second_session)
 
 
+class TestProcessAudioBufferRemoteAPI(unittest.TestCase):
+    """Test _process_audio_buffer dispatching to remote API engine."""
+
+    def setUp(self):
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        self.manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+        )
+        self.manager._voice_commands_enabled = False
+        self.manager.text_callbacks = []
+        self.manager.action_callbacks = []
+
+    def test_process_audio_buffer_remote_api_success(self):
+        """_process_audio_buffer snapshots session under lock and dispatches to remote API."""
+        from unittest.mock import patch
+
+        with patch.object(
+            self.manager, "_transcribe_with_remote_api", return_value="hello"
+        ) as mock_transcribe:
+            self.manager._process_audio_buffer([b"audio-data"])
+
+        mock_transcribe.assert_called_once()
+        args, _ = mock_transcribe.call_args
+        self.assertEqual(args[0], [b"audio-data"])
+        self.assertIs(args[1], self.manager._http_session)
+
+    def test_process_audio_buffer_remote_api_session_none_returns_early(self):
+        """_process_audio_buffer returns early when _http_session is None."""
+        from unittest.mock import patch
+
+        self.manager._http_session = None
+
+        with patch.object(self.manager, "_transcribe_with_remote_api") as mock_transcribe:
+            self.manager._process_audio_buffer([b"audio-data"])
+
+        mock_transcribe.assert_not_called()
+
+
+class TestReinitializeAfterResumeSessionClose(unittest.TestCase):
+    """Test that reinitialize_after_resume closes the HTTP session."""
+
+    def test_reinitialize_after_resume_closes_http_session(self):
+        """reinitialize_after_resume calls session.close() before nulling _http_session."""
+        from unittest.mock import patch
+
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+        )
+
+        session = manager._http_session
+
+        with patch.object(manager, "_init_remote_api"):
+            manager.reinitialize_after_resume()
+
+        session.close.assert_called_once()
+        self.assertIsNone(manager._http_session)
+
+
 if __name__ == "__main__":
     unittest.main()
