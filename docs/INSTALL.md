@@ -16,7 +16,7 @@ That's it! The installer handles everything automatically:
 - ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
 - ✅ Auto-detects your GPU (AMD, Intel, NVIDIA all supported)
 - ✅ Installs neural VAD support when ONNX Runtime is available
-- ✅ Downloads the tiny model (~39MB)
+- ✅ Downloads the tiny model (~74MB)
 - ✅ Configures everything automatically
 
 > ⏱️ **Installation Time**: ~1-2 minutes (vs 5-10 minutes with old Whisper AI)
@@ -205,7 +205,7 @@ Examples:
    - **VOSK**: Lightweight engine for older systems
 5. **Installs neural VAD support** when ONNX Runtime is available, with a safe amplitude-VAD fallback otherwise
 6. **Downloads speech recognition models**:
-   - whisper.cpp: ~39MB tiny model (or larger if selected)
+   - whisper.cpp: ~74MB tiny model (or larger if selected)
    - Whisper: ~75MB tiny model + PyTorch dependencies (~2.3GB with CUDA)
    - VOSK: ~40MB small model
 7. **Installs desktop integration** (icons, .desktop file)
@@ -215,7 +215,7 @@ Examples:
 
 | Engine | Download Size | Install Time | GPU Support |
 |--------|---------------|--------------|-------------|
-| **whisper.cpp** (default) | ~39-500MB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
+| **whisper.cpp** (default) | ~74-500MB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
 | Whisper (OpenAI) | ~2.3GB+ | ~5-10 min | NVIDIA only (CUDA) |
 | VOSK | ~40MB | ~30 sec | CPU only |
 
@@ -438,7 +438,7 @@ gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 **whisper.cpp** is a high-performance C++ port of OpenAI's Whisper speech recognition model. It's now the **default engine** in Vocalinux because it offers significant advantages:
 
 **Performance Benefits:**
-- **10x faster installation** - No 2.3GB PyTorch download (just ~39MB model)
+- **10x faster installation** - No 2.3GB PyTorch download (just ~74MB model)
 - **C++ optimized inference** - Faster than Python-based Whisper
 - **True multi-threading** - Uses all CPU cores (no Python GIL limitations)
 - **Lower memory usage** - More efficient than PyTorch
@@ -450,11 +450,11 @@ gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 
 **Models:**
 whisper.cpp uses the same models as OpenAI Whisper, converted to `ggml` format:
-- **tiny** (~39MB) - Fastest, good for real-time dictation
-- **base** (~74MB) - Good balance of speed and accuracy
-- **small** (~244MB) - Better accuracy, still fast
-- **medium** (~769MB) - High accuracy
-- **large** (~1.5GB) - Best accuracy, slower
+- **tiny** (~74MB) - Fastest, good for real-time dictation
+- **base** (~141MB) - Good balance of speed and accuracy
+- **small** (~465MB) - Better accuracy, still fast
+- **medium** (~1.5GB) - High accuracy
+- **large** (~3.0GB) - Best accuracy, slower
 
 ### Checking GPU Support
 

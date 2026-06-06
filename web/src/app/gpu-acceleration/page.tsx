@@ -65,7 +65,7 @@ const gpuBackends = [
 const modelPerformance = [
   {
     model: "tiny",
-    size: "~39MB",
+    size: "~74MB",
     cpuSpeed: "~0.5s",
     gpuSpeed: "~0.2s",
     accuracy: "Good for real-time",
@@ -73,7 +73,7 @@ const modelPerformance = [
   },
   {
     model: "base",
-    size: "~74MB",
+    size: "~141MB",
     cpuSpeed: "~0.8s",
     gpuSpeed: "~0.3s",
     accuracy: "Better accuracy",
@@ -81,7 +81,7 @@ const modelPerformance = [
   },
   {
     model: "small",
-    size: "~244MB",
+    size: "~465MB",
     cpuSpeed: "~1.5s",
     gpuSpeed: "~0.5s",
     accuracy: "High accuracy",
@@ -89,7 +89,7 @@ const modelPerformance = [
   },
   {
     model: "medium",
-    size: "~769MB",
+    size: "~1.5GB",
     cpuSpeed: "~4s",
     gpuSpeed: "~1.2s",
     accuracy: "Very high accuracy",
@@ -97,7 +97,7 @@ const modelPerformance = [
   },
   {
     model: "large",
-    size: "~1.5GB",
+    size: "~3.0GB",
     cpuSpeed: "~8s",
     gpuSpeed: "~2.5s",
     accuracy: "Best accuracy",

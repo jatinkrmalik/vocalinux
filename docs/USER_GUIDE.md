@@ -116,11 +116,11 @@ Vocalinux now offers **three speech recognition engines**:
    - whisper
    - vosk
 4. Select your **Model Size**:
-   - **tiny** (~39MB) - Fastest, good for real-time dictation
-   - **base** (~74MB) - Good balance
-   - **small** (~244MB) - Better accuracy
-   - **medium** (~769MB) - High accuracy
-   - **large** (~1.5GB) - Best accuracy, slower
+   - **tiny** (~74MB) - Fastest, good for real-time dictation
+   - **base** (~141MB) - Good balance
+   - **small** (~465MB) - Better accuracy
+   - **medium** (~1.5GB) - High accuracy
+   - **large** (~3.0GB) - Best accuracy, slower
 
 ### When to Use Each Model
 

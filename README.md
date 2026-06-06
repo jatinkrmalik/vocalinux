@@ -145,7 +145,7 @@ curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /
 The installer will:
 - **Auto-detect your hardware** (GPU, RAM, Vulkan support)
 - **Recommend the best engine** for your system
-- **Download the appropriate model** (~39MB for whisper.cpp tiny)
+- **Download the appropriate model** (~74MB for whisper.cpp tiny)
 - **Install neural VAD support** when ONNX Runtime is available
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
