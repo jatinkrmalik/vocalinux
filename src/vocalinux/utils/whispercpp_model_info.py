@@ -17,31 +17,31 @@ logger = logging.getLogger(__name__)
 # Models are downloaded from Hugging Face (ggml format)
 WHISPERCPP_MODEL_INFO = {
     "tiny": {
-        "size_mb": 39,
+        "size_mb": 74,
         "params": "39M",
         "desc": "Fastest, lowest accuracy",
         "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
     },
     "base": {
-        "size_mb": 74,
+        "size_mb": 141,
         "params": "74M",
         "desc": "Fast, good for basic use",
         "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
     },
     "small": {
-        "size_mb": 244,
+        "size_mb": 465,
         "params": "244M",
         "desc": "Balanced speed/accuracy",
         "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
     },
     "medium": {
-        "size_mb": 769,
+        "size_mb": 1463,
         "params": "769M",
         "desc": "High accuracy, slower",
         "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
     },
     "large": {
-        "size_mb": 1550,
+        "size_mb": 2952,
         "params": "1550M",
         "desc": "Highest accuracy, slowest",
         "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
