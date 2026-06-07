@@ -527,6 +527,8 @@ cuda_toolkit_root_has_runtime_library() {
     compgen -G "$CUDA_ROOT/lib/libcudart.so*" >/dev/null && return 0
     compgen -G "$CUDA_ROOT/lib/x86_64-linux-gnu/libcudart.so*" >/dev/null && return 0
     compgen -G "$CUDA_ROOT/targets/x86_64-linux/lib/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/targets/aarch64-linux/lib/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/targets/sbsa-linux/lib/libcudart.so*" >/dev/null && return 0
     return 1
 }
 
@@ -549,7 +551,7 @@ candidate_cuda_toolkit_roots() {
     if command -v nvcc >/dev/null 2>&1; then
         local NVCC_PATH
         local NVCC_ROOT
-        NVCC_PATH=$(command -v nvcc)
+        NVCC_PATH=$(readlink -f "$(command -v nvcc)" 2>/dev/null || command -v nvcc)
         NVCC_ROOT=$(cd "$(dirname "$NVCC_PATH")/.." 2>/dev/null && pwd -P)
         [ -n "$NVCC_ROOT" ] && printf '%s\n' "$NVCC_ROOT"
     fi
@@ -2354,11 +2356,19 @@ is_pywhispercpp_backend_capable() {
 }
 
 is_pywhispercpp_cuda_linkage_usable() {
-    command -v readelf >/dev/null 2>&1 || return 0
+    if ! command -v readelf >/dev/null 2>&1; then
+        print_warning "readelf not found; skipping CUDA linkage verification." >&2
+        return 0
+    fi
 
     local LIB_DIRS
     LIB_DIRS=$(get_pywhispercpp_library_path || true)
     [ -n "$LIB_DIRS" ] || return 1
+
+    local HAS_PATCHELF=false
+    if command -v patchelf >/dev/null 2>&1; then
+        HAS_PATCHELF=true
+    fi
 
     local IFS=:
     local LIB_DIR
@@ -2366,12 +2376,33 @@ is_pywhispercpp_cuda_linkage_usable() {
         local CUDA_LIB
         for CUDA_LIB in "$LIB_DIR"/libggml-cuda.so*; do
             [ -f "$CUDA_LIB" ] || continue
-            if readelf -d "$CUDA_LIB" 2>/dev/null | grep -Eq 'Shared library: \[libcuda-[^]]+\.so'; then
-                print_warning "CUDA backend links against a bundled libcuda build instead of libcuda.so.1:"
-                print_warning "  $CUDA_LIB"
-                print_warning "Treating CUDA verification as failed so the installer does not report broken GPU support."
-                return 1
+            local BUNDLED_LIBS
+            BUNDLED_LIBS=$(readelf -d "$CUDA_LIB" 2>/dev/null | sed -En 's/.*Shared library: \[(libcuda-[^]]+\.so).*/\1/p')
+            if [ -z "$BUNDLED_LIBS" ]; then
+                continue
             fi
+
+            local BUNDLED_LIB
+            while IFS= read -r BUNDLED_LIB; do
+                [ -n "$BUNDLED_LIB" ] || continue
+                print_warning "CUDA backend links against bundled $BUNDLED_LIB instead of libcuda.so.1:"
+                print_warning "  $CUDA_LIB"
+
+                if [[ "$HAS_PATCHELF" == "true" ]]; then
+                    print_info "Attempting to relink with patchelf ($BUNDLED_LIB → libcuda.so.1)..."
+                    if patchelf --replace-needed "$BUNDLED_LIB" libcuda.so.1 "$CUDA_LIB" 2>/dev/null; then
+                        print_success "Successfully relinked $CUDA_LIB to libcuda.so.1"
+                    else
+                        print_warning "patchelf relink failed for $CUDA_LIB"
+                        print_warning "Treating CUDA verification as failed so the installer does not report broken GPU support."
+                        return 1
+                    fi
+                else
+                    print_warning "Install patchelf to attempt automatic relinking: sudo apt install patchelf"
+                    print_warning "Treating CUDA verification as failed so the installer does not report broken GPU support."
+                    return 1
+                fi
+            done <<< "$BUNDLED_LIBS"
         done
     done
 
@@ -2431,7 +2462,7 @@ install_cpu_pywhispercpp() {
     PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
 
     CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" \
-        pip install --force-reinstall --no-cache-dir pywhispercpp --log "$PIP_LOG_FILE"
+        pip install --verbose --force-reinstall --no-cache-dir pywhispercpp --log "$PIP_LOG_FILE"
 }
 
 is_pywhispercpp_installed() {

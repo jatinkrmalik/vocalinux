@@ -60,6 +60,14 @@ class InstallerCudaDiagnosticsTests(unittest.TestCase):
         self.assertIn("libcuda.so.1", source)
         self.assertIn("libcuda-[^]]+\\.so", source)
 
+    def test_patchelf_remediation_is_attempted_for_bundled_libcuda(self) -> None:
+        """Bundled libcuda should trigger patchelf relinking when available."""
+        source = _installer_source()
+
+        self.assertIn("patchelf", source)
+        self.assertIn("--replace-needed", source)
+        self.assertIn("readelf not found", source)
+
 
 if __name__ == "__main__":
     unittest.main()
