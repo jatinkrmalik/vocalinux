@@ -1233,35 +1233,35 @@ class SettingsDialog(Gtk.Dialog):
 
                 clean_url = url.rstrip("/")
 
-                # Try connecting to the server
-                response = requests.get(clean_url, headers=headers, timeout=5)
-
-                # Determine server type
-                server_info = ""
-
+                session = requests.Session()
                 try:
-                    if endpoint == "/v1/audio/transcriptions":
-                        # Try OpenAI endpoint
-                        openai_resp = requests.get(
-                            f"{clean_url}/v1/models", headers=headers, timeout=5
-                        )
-                        if openai_resp.status_code == 200:
-                            server_info = " (OpenAI compatible)"
-                    elif endpoint == "/inference":
-                        # Try whisper.cpp server endpoint
-                        whispercpp_resp = requests.get(
-                            f"{clean_url}/inference", headers=headers, timeout=5
-                        )
-                        if whispercpp_resp.status_code != 404:
-                            server_info = " (whisper.cpp server)"
-                except Exception:
-                    pass
+                    response = session.get(clean_url, headers=headers, timeout=5)
 
-                GLib.idle_add(
-                    self.remote_status_label.set_markup,
-                    f"<span foreground='#26a269'>✓ Connected! "
-                    f"(status={response.status_code}){server_info}</span>",
-                )
+                    server_info = ""
+
+                    try:
+                        if endpoint == "/v1/audio/transcriptions":
+                            openai_resp = session.get(
+                                f"{clean_url}/v1/models", headers=headers, timeout=5
+                            )
+                            if openai_resp.status_code == 200:
+                                server_info = " (OpenAI compatible)"
+                        elif endpoint == "/inference":
+                            whispercpp_resp = session.get(
+                                f"{clean_url}/inference", headers=headers, timeout=5
+                            )
+                            if whispercpp_resp.status_code != 404:
+                                server_info = " (whisper.cpp server)"
+                    except Exception:
+                        pass
+
+                    GLib.idle_add(
+                        self.remote_status_label.set_markup,
+                        f"<span foreground='#26a269'>✓ Connected! "
+                        f"(status={response.status_code}){server_info}</span>",
+                    )
+                finally:
+                    session.close()
 
             except Exception as e:
                 error_msg = str(e)[:80]
@@ -1270,7 +1270,6 @@ class SettingsDialog(Gtk.Dialog):
                     f"<span foreground='#c01c28'>✗ Connection failed: {error_msg}</span>",
                 )
 
-            # Restore button state
             GLib.idle_add(self.remote_test_btn.set_sensitive, True)
             GLib.idle_add(self.remote_test_btn.set_label, "Test Connection")
 
@@ -1628,10 +1627,12 @@ class SettingsDialog(Gtk.Dialog):
         # Opt-in toggle at the top of the tab
         opt_in_group = PreferencesGroup(title="Advanced Access")
         self.power_user_switch = Gtk.Switch()
-        self.power_user_switch.set_tooltip_text("Reveal advanced whisper.cpp tuning parameters")
+        self.power_user_switch.set_tooltip_text(
+            "Reveal advanced settings including remote server and whisper.cpp tuning parameters"
+        )
         power_user_row = PreferenceRow(
             title="Unlock Advanced Settings",
-            subtitle="I know what I'm doing — show me the whisper.cpp tuning knobs",
+            subtitle="I know what I'm doing — show me the whisper.cpp tuning knobs and remote server",
             widget=self.power_user_switch,
         )
         opt_in_group.add_row(power_user_row)
@@ -1644,7 +1645,7 @@ class SettingsDialog(Gtk.Dialog):
         # Scrollable container for the controls
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_min_content_height(350)
+        scrolled.set_min_content_height(500)
 
         controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
 
@@ -1771,7 +1772,7 @@ class SettingsDialog(Gtk.Dialog):
         info_box.pack_start(info_icon, False, False, 0)
 
         self.advanced_info_label = Gtk.Label(
-            label="These settings only apply when the whisper.cpp engine is selected.",
+            label="Whisper.cpp tuning only applies with that engine. Remote Server overrides any local engine.",
             xalign=0,
             wrap=True,
         )
@@ -1780,6 +1781,11 @@ class SettingsDialog(Gtk.Dialog):
 
         controls_box.pack_start(info_box, False, False, 0)
         controls_box.pack_start(group, False, False, 0)
+
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator.set_margin_top(8)
+        separator.set_margin_bottom(8)
+        controls_box.pack_start(separator, False, False, 0)
 
         scrolled.add(controls_box)
         self.advanced_revealer.add(scrolled)
@@ -1878,14 +1884,14 @@ class SettingsDialog(Gtk.Dialog):
         )
         self.remote_api_group.add_row(remote_test_row)
 
-        self.advanced_tab.pack_start(self.remote_api_group, False, False, 0)
+        controls_box.pack_start(self.remote_api_group, False, False, 0)
 
         # Status label below the group
         self.remote_status_label = Gtk.Label(label="", use_markup=True, xalign=0)
         self.remote_status_label.set_margin_start(16)
         self.remote_status_label.set_margin_top(4)
         self.remote_status_label.get_style_context().add_class("status-info")
-        self.advanced_tab.pack_start(self.remote_status_label, False, False, 0)
+        controls_box.pack_start(self.remote_status_label, False, False, 0)
 
         # Load saved values into the widgets
         saved_url = self.config_manager.get("speech_recognition", "remote_api_url", "")
@@ -2003,6 +2009,16 @@ class SettingsDialog(Gtk.Dialog):
         """Toggle remote-engine override: forces engine to remote_api when on."""
         if self._initializing or self._applying_settings:
             return
+
+        if switch.get_active():
+            url = self.remote_api_url_entry.get_text().strip()
+            if not url:
+                self.remote_status_label.set_markup(
+                    "<span foreground='#c01c28'>⚠ Please enter a server URL before enabling remote server</span>"
+                )
+                self.remote_api_url_entry.grab_focus()
+                return
+
         self._update_engine_specific_ui()
         self._auto_apply_settings()
 

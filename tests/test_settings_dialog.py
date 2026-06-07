@@ -496,6 +496,42 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
             source_code.index("controls_box.pack_start(group"),
         )
 
+    def test_remote_api_group_inside_revealer(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("controls_box.pack_start(self.remote_api_group", source_code)
+        self.assertIn("controls_box.pack_start(self.remote_status_label", source_code)
+        self.assertNotIn("advanced_tab.pack_start(self.remote_api_group", source_code)
+        self.assertNotIn("advanced_tab.pack_start(self.remote_status_label", source_code)
+
+    def test_connection_test_uses_session(self):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("session = requests.Session()", source_code)
+        self.assertIn("session.close()", source_code)
+
 
 class TestSettingsDialogHelperFunctions(unittest.TestCase):
     """Test cases for settings dialog helper functions."""
