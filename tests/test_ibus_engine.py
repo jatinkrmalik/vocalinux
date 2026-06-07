@@ -594,9 +594,14 @@ class TestIBusTextInjector(unittest.TestCase):
         result = injector.inject_text("Hello")
         self.assertFalse(result)
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    def test_inject_text_success(self, mock_ensure_dir):
+    def test_inject_text_success(
+        self, mock_ensure_dir, mock_switch, mock_is_active, mock_get_current
+    ):
         """Test successful text injection via socket."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
@@ -946,6 +951,9 @@ class TestIBusTextInjector(unittest.TestCase):
 
         self.assertFalse(result)
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -959,6 +967,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine,
         mock_socket_path,
         mock_ensure_dir,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
     ):
         """Test retry behavior when first socket connect is refused."""
         mock_socket_path.exists.return_value = True
@@ -982,6 +993,9 @@ class TestIBusTextInjector(unittest.TestCase):
 
         self.assertTrue(result)
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -998,6 +1012,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine,
         mock_socket_path,
         mock_ensure_dir,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
     ):
         """Test injector restarts the engine process when its socket is not ready."""
         mock_socket_path.exists.side_effect = [False, True, True]
@@ -1018,6 +1035,9 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertTrue(result)
         mock_start_engine.assert_called_once()
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -1029,6 +1049,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine,
         mock_socket_path,
         mock_ensure_dir,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
     ):
         """Missing socket plus failed engine restart should abort cleanly."""
         mock_socket_path.exists.return_value = False
@@ -1041,6 +1064,9 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertFalse(result)
         mock_start_engine.assert_called_once()
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -1052,6 +1078,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_process_running,
         mock_socket_path,
         mock_ensure_dir,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
     ):
         """Persistent missing socket should reach the final error branch."""
         mock_socket_path.exists.return_value = False
@@ -1064,6 +1093,9 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(mock_socket_path.exists.call_count, 3)
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -1075,6 +1107,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_process_running,
         mock_socket_path,
         mock_ensure_dir,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
     ):
         """Repeated socket timeouts should exercise retry and terminal timeout branches."""
         mock_socket_path.exists.return_value = True
@@ -1095,6 +1130,9 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(sock.connect.call_count, 3)
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -1106,6 +1144,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine,
         mock_socket_path,
         mock_ensure_dir,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
     ):
         """Connection refusal with a dead process should fail if restart fails."""
         mock_socket_path.exists.return_value = True
@@ -1126,7 +1167,9 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertFalse(result)
         mock_start_engine.assert_called_once()
 
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=False)
@@ -1137,6 +1180,9 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_start_engine,
         mock_socket_path,
         mock_ensure_dir,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
     ):
         """Socket disappearance with a dead process should fail if restart fails."""
         mock_socket_path.exists.return_value = True
