@@ -811,7 +811,7 @@ class SettingsDialog(Gtk.Dialog):
         else:
             screen_height = 1080  # Default fallback
             screen_width = 1920
-        dialog_height = int(screen_height * 0.5)
+        dialog_height = int(screen_height * 0.4)
         dialog_width = min(700, int(screen_width * 0.8))
         self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
@@ -1646,7 +1646,7 @@ class SettingsDialog(Gtk.Dialog):
         # Scrollable container for the controls
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_min_content_height(500)
+        scrolled.set_min_content_height(350)
 
         controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
 
