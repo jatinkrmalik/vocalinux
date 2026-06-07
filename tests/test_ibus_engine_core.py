@@ -1000,6 +1000,7 @@ class TestIBusEngineStartupReadiness(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
     @patch("socket.socket")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -1008,6 +1009,7 @@ class TestIBusEngineStartupReadiness(unittest.TestCase):
         mock_socket_path,
         mock_socket_cls,
         mock_is_active,
+        mock_get_current,
         mock_switch_engine,
         mock_ensure_dir,
     ):
@@ -1024,7 +1026,10 @@ class TestIBusEngineStartupReadiness(unittest.TestCase):
         result = injector.inject_text("hello")
 
         self.assertTrue(result)
-        mock_switch_engine.assert_called_once_with(ENGINE_NAME)
+        self.assertEqual(
+            [call.args[0] for call in mock_switch_engine.call_args_list],
+            [ENGINE_NAME, "xkb:us::eng"],
+        )
 
 
 if __name__ == "__main__":
