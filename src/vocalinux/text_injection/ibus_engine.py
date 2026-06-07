@@ -982,24 +982,22 @@ class IBusTextInjector:
         logger.info(f"Starting IBus text injection: '{text[:20]}...' (length: {len(text)})")
 
         restore_engine: Optional[str] = None
-        can_reactivate_engine = is_engine_active()
-        if not can_reactivate_engine:
+        if not is_engine_active():
             current_engine = get_current_engine() or self._previous_engine
             if current_engine:
                 restore_engine = current_engine
-                can_reactivate_engine = True
                 logger.debug(
                     "Temporarily activating Vocalinux IBus engine "
                     f"(will restore {current_engine})"
                 )
-                if not switch_engine(ENGINE_NAME):
-                    logger.error("Failed to activate Vocalinux IBus engine for injection")
-                    return False
             else:
-                logger.warning(
-                    "Could not determine current IBus engine; trying existing "
-                    "Vocalinux engine instance without switching"
+                logger.debug(
+                    "Could not determine current IBus engine; "
+                    "activating Vocalinux engine without restore"
                 )
+            if not switch_engine(ENGINE_NAME):
+                logger.error("Failed to activate Vocalinux IBus engine for injection")
+                return False
 
         # Try injection with bounded retries for transient socket/engine races.
         # This can happen if IBus re-created the engine instance or if the
@@ -1049,13 +1047,6 @@ class IBusTextInjector:
                         elif response == "NO_ENGINE" and attempt < max_attempts - 1:
                             # Engine instance was destroyed (layout switch).
                             # Re-activate to create a new instance and retry.
-                            if not can_reactivate_engine:
-                                logger.error(
-                                    "IBus engine instance is not active and the previous "
-                                    "engine could not be captured safely"
-                                )
-                                return False
-
                             logger.info("Engine instance not active, re-activating and retrying...")
                             switch_engine(ENGINE_NAME)
                             time.sleep(0.3)

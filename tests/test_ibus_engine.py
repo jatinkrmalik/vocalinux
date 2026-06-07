@@ -716,11 +716,11 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
-    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
-    def test_inject_text_warns_when_current_engine_unknown(
+    def test_inject_text_activates_without_restore_when_engine_unknown(
         self,
         mock_socket_path,
         mock_ensure_dir,
@@ -728,7 +728,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_is_active,
         mock_get_current,
     ):
-        """Test inject_text proceeds without switching when current engine is unknown."""
+        """Test inject_text activates engine but doesn't restore when current engine is unknown."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
         mock_socket_path.exists.return_value = True
@@ -742,28 +742,30 @@ class TestIBusTextInjector(unittest.TestCase):
             result = injector.inject_text("Hello")
 
         self.assertTrue(result)
-        mock_switch.assert_not_called()
+        # Should activate engine once, no restore (previous engine unknown)
+        mock_switch.assert_called_once_with("vocalinux")
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
-    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    def test_inject_text_no_engine_fails_when_cannot_reactivate(
+    def test_inject_text_no_engine_retries_when_no_previous_engine(
         self, mock_ensure_dir, mock_switch, mock_is_active, mock_get_current
     ):
-        """Test NO_ENGINE retry fails when previous engine could not be captured."""
+        """Test NO_ENGINE retries even when previous engine could not be captured."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
         server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server_sock.bind(str(self.socket_path))
-        server_sock.listen(1)
+        server_sock.listen(3)
 
         def handle_connection():
-            conn, _ = server_sock.accept()
-            with conn:
-                conn.recv(65536)
-                conn.sendall(b"NO_ENGINE")
+            for _ in range(3):
+                conn, _ = server_sock.accept()
+                with conn:
+                    conn.recv(65536)
+                    conn.sendall(b"NO_ENGINE")
 
         server_thread = threading.Thread(target=handle_connection, daemon=True)
         server_thread.start()
@@ -775,6 +777,8 @@ class TestIBusTextInjector(unittest.TestCase):
 
         server_sock.close()
         self.assertFalse(result)
+        # Should have tried to activate engine once at start, then re-activated on each retry
+        self.assertEqual(mock_switch.call_count, 3)
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:fr::fra")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
