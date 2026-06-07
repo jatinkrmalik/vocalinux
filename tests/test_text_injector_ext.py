@@ -415,7 +415,7 @@ class TestBackgroundIBusInitialization(unittest.TestCase):
 
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         obj._ibus_injector = MagicMock()
-        obj._ibus_injector._setup_engine.side_effect = RuntimeError("not ready")
+        obj._ibus_injector.prepare_engine.side_effect = RuntimeError("not ready")
 
         obj._initialize_ibus_in_background()
 
