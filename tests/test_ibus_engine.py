@@ -222,6 +222,16 @@ class TestGetCurrentEngine(unittest.TestCase):
         result = get_current_engine()
         self.assertIsNone(result)
 
+    @patch("subprocess.run")
+    def test_get_current_engine_empty_output(self, mock_run):
+        """Test that empty output returns None instead of empty string."""
+        mock_run.return_value = MagicMock(stdout="", returncode=0)
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine
+
+        result = get_current_engine()
+        self.assertIsNone(result)
+
 
 class TestSwitchEngine(unittest.TestCase):
     """Tests for switch_engine function."""
@@ -464,6 +474,28 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:fr::fra")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
+    def test_prepare_engine_captures_current_engine(
+        self,
+        mock_wait_ready,
+        mock_start_engine,
+        mock_ensure_dir,
+        mock_is_active,
+        mock_get_current,
+    ):
+        """Test prepare_engine captures the current engine for later restore."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector.prepare_engine()
+
+        self.assertEqual(injector._previous_engine, "xkb:fr::fra")
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:fr::fra")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("socket.socket")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
@@ -496,6 +528,42 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertEqual(
             [call.args[0] for call in mock_switch.call_args_list],
             [ENGINE_NAME, "xkb:fr::fra"],
+        )
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
+    @patch("socket.socket")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_inject_text_uses_captured_engine_when_get_current_fails(
+        self,
+        mock_ensure_dir,
+        mock_socket_path,
+        mock_socket_cls,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
+    ):
+        """Test inject_text uses _previous_engine when get_current_engine returns None."""
+        from vocalinux.text_injection.ibus_engine import ENGINE_NAME, IBusTextInjector
+
+        mock_socket_path.exists.return_value = True
+        mock_sock = MagicMock()
+        mock_sock.__enter__.return_value = mock_sock
+        mock_sock.__exit__.return_value = None
+        mock_sock.recv.return_value = b"OK"
+        mock_socket_cls.return_value = mock_sock
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._previous_engine = "xkb:de::deu"
+        result = injector.inject_text("Hallo")
+
+        self.assertTrue(result)
+        self.assertEqual(
+            [call.args[0] for call in mock_switch.call_args_list],
+            [ENGINE_NAME, "xkb:de::deu"],
         )
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)

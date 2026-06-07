@@ -287,7 +287,8 @@ def get_current_engine() -> Optional[str]:
             timeout=5,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
+            engine = result.stdout.strip()
+            return engine if engine else None
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return None
@@ -847,6 +848,13 @@ class IBusTextInjector:
         the user's normal IBus/XKB engine active preserves dead-key composition and
         layout-specific behavior during ordinary typing.
         """
+        # Capture the current engine before starting the Vocalinux process
+        # so inject_text() can restore it after committing text
+        if not is_engine_active():
+            self._previous_engine = get_current_engine()
+            if self._previous_engine:
+                logger.debug(f"Captured current engine for later restore: {self._previous_engine}")
+
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
@@ -976,7 +984,7 @@ class IBusTextInjector:
         restore_engine: Optional[str] = None
         can_reactivate_engine = is_engine_active()
         if not can_reactivate_engine:
-            current_engine = get_current_engine()
+            current_engine = get_current_engine() or self._previous_engine
             if current_engine:
                 restore_engine = current_engine
                 can_reactivate_engine = True
