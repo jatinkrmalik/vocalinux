@@ -6,6 +6,23 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.12.0-beta",
+    date: "2026-06-07",
+    type: "beta",
+    highlights: [
+      "Remote API speech recognition engine with installation and configuration support (PR #335)",
+      "Silero VAD drops silence-only buffers for cleaner dictation when ONNX Runtime support is available (PR #447)",
+      "Thread safety hardening for Remote API, IBus, and text injection paths (PR #452)",
+      "IBus preserves user engines for dead keys and captures the current engine during scoped activation (PR #457, #458)",
+      "Remote Server settings now respect the Advanced toggle and the settings dialog fits lower-resolution screens (PR #454, #456)",
+      "CUDA diagnostics now include auto-remediation and behavioral tests (PR #451)",
+      "Corrected whisper.cpp and VOSK model download size metadata (PR #453)",
+      "Startup now works without the pynput backend (PR #448)",
+      "Remote API developer test server documentation (PR #455)",
+      "Website speech demo browser support clarification (PR #449) and GitHub Sponsors funding configuration",
+    ],
+  },
+  {
     version: "v0.11.0-beta",
     date: "2026-05-30",
     type: "beta",
@@ -247,7 +264,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-05-30",
+    dateModified: "2026-06-07",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
