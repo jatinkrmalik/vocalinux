@@ -3,17 +3,31 @@
 import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 
+type SyntaxHighlighterStyle = Record<string, React.CSSProperties>;
+
+type SyntaxHighlighterProps = {
+  children: string;
+  language: string;
+  style: SyntaxHighlighterStyle;
+  className: string;
+  customStyle?: React.CSSProperties;
+  wrapLongLines: boolean;
+};
+
 // Lazy load syntax highlighter to reduce initial bundle size (~84KB savings)
-const SyntaxHighlighter = dynamic(
-  () => import("react-syntax-highlighter").then(mod => mod.default),
+const SyntaxHighlighter = dynamic<SyntaxHighlighterProps>(
+  () =>
+    import("react-syntax-highlighter").then(
+      (mod) => mod.default as React.ComponentType<SyntaxHighlighterProps>,
+    ),
   {
     ssr: false,
     loading: () => (
-      <div className="bg-zinc-900 rounded-lg p-4 text-sm">
-        <pre className="text-green-400 whitespace-pre-wrap">Loading...</pre>
+      <div className="rounded-lg bg-zinc-900 p-4 text-sm">
+        <pre className="whitespace-pre-wrap text-green-400">Loading...</pre>
       </div>
     ),
-  }
+  },
 );
 
 interface CodeBlockProps {
@@ -31,19 +45,22 @@ export function CodeBlock({
   customStyle,
   wrapLongLines = false,
 }: CodeBlockProps) {
-  const [style, setStyle] = useState<any>(null);
+  const [style, setStyle] = useState<SyntaxHighlighterStyle | null>(null);
 
   useEffect(() => {
     // Lazy load the style
-    import("react-syntax-highlighter/dist/esm/styles/hljs").then(mod => {
-      setStyle(mod.atomOneDark);
+    import("react-syntax-highlighter/dist/esm/styles/hljs").then((mod) => {
+      setStyle(mod.atomOneDark as SyntaxHighlighterStyle);
     });
   }, []);
 
   if (!style) {
     return (
-      <div className={`bg-zinc-900 rounded-lg p-4 text-sm ${className}`} style={customStyle}>
-        <pre className="text-green-400 whitespace-pre-wrap">{children}</pre>
+      <div
+        className={`rounded-lg bg-zinc-900 p-4 text-sm ${className}`}
+        style={customStyle}
+      >
+        <pre className="whitespace-pre-wrap text-green-400">{children}</pre>
       </div>
     );
   }

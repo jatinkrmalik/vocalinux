@@ -32,51 +32,41 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.11.0-beta
+## 📚 What's New in v0.12.0-beta
 
-> 🎉 **Release: Advanced Settings tab with anti-hallucination parameters, IBus/recognition hardening, and distro compatibility improvements.**
+> 🎉 **Release: Remote API recognition, Silero VAD, and reliability hardening across threading, IBus, settings, installer, and model metadata.**
 
 ### 🚀 Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **⚙️ Advanced Settings Tab** | New Advanced tab with whisper.cpp anti-hallucination parameters (temperature, no_speech_threshold, etc.) |
-| **🔌 IBus Hardening** | Engine readiness probe at startup, runtime failure recovery, and proper engine destruction on layout switch |
-| **🎤 Recognition Reliability** | Preserve final speech on stop and improved stop-sound playback timing |
-| **📦 Distro Compatibility** | Hardened Debian layer, corrected openSUSE Tumbleweed deps, Python 3.14 support |
-| **🔧 Installer Fixes** | Repair pywhispercpp loading, validate proj configs before local repo mode, reuse existing whispercpp builds |
+| **🌐 Remote API Engine** | New speech recognition backend for self-hosted or compatible remote transcription services |
+| **🎙️ Silero VAD** | Neural voice activity detection drops silence-only buffers for cleaner, faster dictation |
+| **🧵 Thread Safety** | Hardened Remote API, IBus, and text injection threading behavior |
+| **🔌 IBus Reliability** | Preserves user engines for dead keys and captures scoped engines during activation |
+| **⚙️ Settings Polish** | Remote Server section now respects the Advanced toggle and the dialog fits lower-resolution screens |
+| **📦 Installer & Models** | CUDA diagnostics include auto-remediation and model download sizes are corrected |
 
 ### ✨ New Features
 
-- **Advanced Settings tab** — New tab in Settings dialog exposing whisper.cpp anti-hallucination parameters:
-  - Temperature override
-  - No-speech threshold
-  - Max segment length
-  - Other inference-time parameters for fine-tuning recognition behavior
+- **Remote API speech recognition engine** — Configure Vocalinux to use compatible remote transcription services while keeping existing local engines available (#335)
+- **Silero VAD** — Neural voice activity detection filters silence-only buffers for cleaner recognition when ONNX Runtime support is installed (#447)
 
 ### 🐛 Bug Fixes
 
-- **IBus**: Probe engine readiness at startup with hardened retries (#391)
-- **IBus**: Handle engine instance destruction on layout switch (#389)
-- **IBus**: Recover from runtime failures gracefully (#411)
-- **Recognition**: Preserve final speech when stopping (#401)
-- **Recognition**: Play stop sound immediately on release (#426) and after audio thread joins (#436)
-- **Install**: Repair pywhispercpp library loading (#433)
-- **Install**: Correct openSUSE Tumbleweed dependencies (#420, #418)
-- **Install**: Harden Debian compatibility layer (#437)
-- **Install**: Validate pyproject.toml/setup.py before local repo mode (#396)
-- **Install**: Reuse existing whispercpp builds (#421)
-- **Install**: Refresh ldconfig after openSUSE typelib install (#438)
-- **whisper.cpp**: Reduce CPU threads and ensure GPU backend builds in dev mode (#439)
-- **Logging**: Clean up runtime log noise and cache hardware detection
-- **Python 3.14 support**: Compatibility fix and lxml>=6.1.0 (#404)
+- **Threading**: Harden Remote API, IBus, and text injection thread safety (#452)
+- **IBus**: Preserve user engines for dead keys and capture the current engine during scoped activation (#457, #458)
+- **UI**: Keep the Remote Server section behind the Advanced toggle and reduce settings dialog height for lower-resolution screens (#454, #456)
+- **Installer**: Harden CUDA diagnostics with auto-remediation and behavioral tests (#451)
+- **Models**: Correct whisper.cpp and VOSK download size metadata (#453)
+- **Startup**: Allow launch without the pynput backend (#448)
+- **Website**: Clarify speech demo browser support (#449)
 
 ### 🔧 Improvements
 
-- **Installer refresh** — openSUSE fallback handling, Debian compatibility hardening
-- **Test coverage** — Recognition internals, IBus edge cases, CI notification suppression (#410, #414)
-- **Dependency bumps** — Next.js security updates (#399, #429), PostCSS (#2753679)
-- **PyPI docs** — Clarify installation requirements (#423)
+- **Developer docs** — Remote API test server instructions for easier backend testing (#455)
+- **Community** — GitHub Sponsors funding configuration added
+- **Behavioral coverage** — CUDA diagnostics and release-facing reliability fixes include targeted tests
 
 ---
 
@@ -393,7 +383,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.11.0 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.12.0 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 
