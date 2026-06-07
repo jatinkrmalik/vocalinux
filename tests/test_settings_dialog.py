@@ -496,7 +496,7 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
             source_code.index("controls_box.pack_start(group"),
         )
 
-    def test_remote_api_group_inside_revealer(self):
+    def test_remote_api_section_in_speech_engine_tab(self):
         import os
 
         source_path = os.path.join(
@@ -510,10 +510,11 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         with open(source_path, "r") as f:
             source_code = f.read()
 
-        self.assertIn("controls_box.pack_start(self.remote_api_group", source_code)
-        self.assertIn("controls_box.pack_start(self.remote_status_label", source_code)
-        self.assertNotIn("advanced_tab.pack_start(self.remote_api_group", source_code)
+        self.assertIn("self.content_box.pack_start(self.remote_server_group", source_code)
+        self.assertIn("self.content_box.pack_start(self.remote_status_label", source_code)
+        self.assertNotIn("advanced_tab.pack_start(self.remote_server_group", source_code)
         self.assertNotIn("advanced_tab.pack_start(self.remote_status_label", source_code)
+        self.assertNotIn("self.use_remote_switch", source_code)
 
     def test_connection_test_uses_session(self):
         import os
