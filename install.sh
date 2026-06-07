@@ -1005,7 +1005,7 @@ EOF
     print_header "Step 2: Choose Speech Recognition Engine"
     echo ""
     echo "  ┌─────────────────────────────────────────────────────────────┐"
-    echo "  │  1. WHISPER.CPP  ★ RECOMMENDED                              │"
+    echo "  │  1. WHISPER.CPP  * RECOMMENDED                              │"
     echo "  │     • Fastest, most accurate, works with any GPU            │"
     echo "  │     • Supports NVIDIA (CUDA), AMD, Intel (Vulkan)           │"
     echo "  │     • CPU-only mode available for older systems             │"
@@ -1122,7 +1122,7 @@ EOF
 
         if [[ "$CAN_BUILD_GPU" == "true" ]]; then
             echo "  ┌─────────────────────────────────────────────────────────────┐"
-            echo "  │  1. GPU (Vulkan/CUDA)  ★ RECOMMENDED                        │"
+            echo "  │  1. GPU (Vulkan/CUDA)  * RECOMMENDED                        │"
             echo "  │     • Fastest performance with GPU acceleration             │"
             echo "  │     • $RECOMMENDED_REASON                                   │"
             echo "  │     • Requires building from source (takes ~2-5 min)        │"
@@ -1146,7 +1146,7 @@ EOF
             echo "  └─────────────────────────────────────────────────────────────┘"
             echo ""
             echo "  ┌─────────────────────────────────────────────────────────────┐"
-            echo "  │  2. CPU (Pre-built)  ★ RECOMMENDED                          │"
+            echo "  │  2. CPU (Pre-built)  * RECOMMENDED                          │"
             echo "  │     • Works on all systems                                  │"
             echo "  │     • Fast installation (no compilation)                    │"
             echo "  │     • Good performance on modern CPUs                       │"
