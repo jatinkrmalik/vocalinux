@@ -559,11 +559,32 @@ sudo apt install xdotool
 # Test: xdotool type "hello"
 ```
 
+For KDE Plasma Wayland:
+
+1. Install IBus if it is missing:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt install ibus
+
+   # Fedora
+   sudo dnf install ibus
+
+   # Arch
+   sudo pacman -S ibus
+   ```
+2. Open **System Settings -> Keyboard -> Virtual Keyboard**.
+3. Select **IBus Wayland**.
+4. Restart Vocalinux, or log out and back in if text still does not appear.
+
 For Wayland:
 ```bash
 sudo apt install wtype
 # Test: wtype "hello"
 ```
+
+On KDE Plasma Wayland, `wtype` may fail because the compositor does not expose
+the required virtual keyboard protocol to regular clients. Use **IBus Wayland**
+from KDE System Settings for the most reliable direct text injection.
 
 ### Model Download Fails
 

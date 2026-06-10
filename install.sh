@@ -29,6 +29,21 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+is_kde_plasma_session() {
+    local desktop="${XDG_CURRENT_DESKTOP:-} ${DESKTOP_SESSION:-} ${GDMSESSION:-}"
+    local kde_session="${KDE_FULL_SESSION:-}"
+    local desktop_lower="${desktop,,}"
+    local kde_session_lower="${kde_session,,}"
+
+    [[ "$desktop_lower" == *kde* || "$desktop_lower" == *plasma* || "$kde_session_lower" == "true" ]]
+}
+
+print_kde_wayland_ibus_hint() {
+    print_warning "KDE Plasma Wayland detected."
+    print_info "For direct dictation into apps, open System Settings -> Keyboard -> Virtual Keyboard and select 'IBus Wayland'."
+    print_info "After changing it, restart Vocalinux or log out and back in."
+}
+
 get_vocalinux_pids() {
     pgrep -f "vocalinux" 2>/dev/null | while read -r pid; do
         [ -z "$pid" ] && continue
@@ -1900,6 +1915,9 @@ install_text_input_tools() {
     fi
 
     print_info "Detected session type: $SESSION_TYPE"
+    if [[ "$SESSION_TYPE" == "wayland" ]] && is_kde_plasma_session; then
+        print_kde_wayland_ibus_hint
+    fi
 
     # Install appropriate tools based on session type and distribution
     case "$SESSION_TYPE" in
