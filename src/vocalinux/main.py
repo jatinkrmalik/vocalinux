@@ -409,8 +409,8 @@ def main():
         #
         #   state_callback(state: RecognitionState)
         #       Called whenever the engine transitions state (IDLE → LISTENING,
-        #       etc.).  Used here to clear the "last injected" buffer when a
-        #       new listening session starts.
+        #       etc.).  Used here to clear the "last injected" buffer after a
+        #       listening session ends.
         # ------------------------------------------------------------------
 
         def text_callback_wrapper(text: str) -> None:
@@ -437,11 +437,11 @@ def main():
 
             success = text_system.inject_text(text_to_inject)
             if success:
-                action_handler.set_last_injected_text(text)
+                action_handler.set_last_injected_text(text_to_inject)
 
         def on_state_change(state: RecognitionState) -> None:
-            """Reset the last-injected buffer when a new listening session starts."""
-            if state == RecognitionState.LISTENING:
+            """Reset the last-injected buffer when a listening session ends."""
+            if state == RecognitionState.IDLE:
                 action_handler.set_last_injected_text("")
 
         # Connect speech recognition to text injection and action handling
