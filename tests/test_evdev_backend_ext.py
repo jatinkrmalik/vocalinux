@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, Mock, mock_open, patch
 import pytest
 
 from vocalinux.ui.keyboard_backends.evdev_backend import (
+    DEVICE_RESCAN_SECONDS,
     EVDEV_AVAILABLE,
     MODIFIER_KEY_CODES,
     EvdevKeyboardBackend,
@@ -443,6 +444,96 @@ class TestEvdevKeyboardBackendStop:
         assert backend.running is False
         assert backend.devices == []
         assert backend.device_fds == []
+
+
+class TestEvdevKeyboardBackendHotplug:
+    """Test hotplug discovery for evdev keyboard devices."""
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.find_keyboard_devices")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_scan_for_new_devices_opens_hotplugged_keyboard(
+        self, mock_input_device, mock_find_devices
+    ):
+        """Test that rescanning opens keyboard devices that appear after startup."""
+        existing_device = MagicMock()
+        existing_device.fileno.return_value = 10
+        new_device = MagicMock()
+        new_device.fileno.return_value = 11
+        new_device.name = "External Keyboard"
+        mock_input_device.return_value = new_device
+        mock_find_devices.return_value = ["/dev/input/event0", "/dev/input/event1"]
+
+        backend = EvdevKeyboardBackend()
+        backend.devices = [existing_device]
+        backend.device_fds = [10]
+        backend.device_paths = {"/dev/input/event0"}
+        backend._device_paths_by_fd = {10: "/dev/input/event0"}
+
+        added = backend._scan_for_new_devices()
+
+        assert added == 1
+        mock_input_device.assert_called_once_with("/dev/input/event1")
+        assert new_device in backend.devices
+        assert 11 in backend.device_fds
+        assert "/dev/input/event1" in backend.device_paths
+        assert backend._device_paths_by_fd[11] == "/dev/input/event1"
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_removed_device_path_can_be_reopened(self, mock_input_device):
+        """Test that disconnected device paths are forgotten for later replug."""
+        old_device = MagicMock()
+        old_device.fileno.return_value = 10
+        old_device.name = "External Keyboard"
+        new_device = MagicMock()
+        new_device.fileno.return_value = 12
+        new_device.name = "External Keyboard"
+        mock_input_device.return_value = new_device
+
+        backend = EvdevKeyboardBackend()
+        backend.devices = [old_device]
+        backend.device_fds = [10]
+        backend.device_paths = {"/dev/input/event4"}
+        backend._device_paths_by_fd = {10: "/dev/input/event4"}
+        backend.key_pressed_devices = {id(old_device)}
+
+        backend._remove_keyboard_device(10, old_device)
+
+        assert backend.devices == []
+        assert backend.device_fds == []
+        assert backend.device_paths == set()
+        assert backend.key_pressed_devices == set()
+        old_device.close.assert_called_once()
+
+        reopened = backend._open_keyboard_device("/dev/input/event4")
+
+        assert reopened is True
+        mock_input_device.assert_called_once_with("/dev/input/event4")
+        assert new_device in backend.devices
+        assert backend._device_paths_by_fd[12] == "/dev/input/event4"
+
+    def test_monitor_scans_when_all_devices_are_disconnected(self):
+        """Test that the monitor keeps rescanning after the last fd is removed."""
+        backend = EvdevKeyboardBackend()
+        backend.running = True
+        backend.device_fds = []
+        backend._scan_for_new_devices = MagicMock(return_value=0)
+
+        def stop_after_sleep(seconds):
+            backend.running = False
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, DEVICE_RESCAN_SECONDS + 0.1],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.sleep",
+                side_effect=stop_after_sleep,
+            ),
+        ):
+            backend._monitor_devices()
+
+        backend._scan_for_new_devices.assert_called_once()
 
 
 class TestEvdevKeyboardBackendHandleKeyEvent:
