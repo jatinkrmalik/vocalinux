@@ -106,8 +106,9 @@ The installer now installs these automatically, but if you hit a CMake error lik
 `Could not find OpenSSL` during a manual reinstall, add the above first.
 
 **ydotool** — `ydotool` is not packaged in Debian's standard repos. The installer falls back
-gracefully to `wtype` for most Wayland compositors. If you specifically need `ydotool`
-(e.g. for KDE Plasma Wayland), compile it from source:
+gracefully to IBus or `wtype` for most Wayland compositors. KDE Plasma Wayland users should
+first select **IBus Wayland** in **System Settings -> Keyboard -> Virtual Keyboard**. If you
+specifically need `ydotool` as a fallback, compile it from source:
 
 ```bash
 sudo apt install -y git cmake libevdev-dev
@@ -358,8 +359,9 @@ Vocalinux requires text injection tools to work with X11 or Wayland:
 - **xdotool**: Required for X11 sessions
 
 ### For Wayland
-- **wtype**: Recommended for Wayland native sessions
-- **ydotool**: Universal alternative that works with both X11 and Wayland
+- **IBus**: Recommended for KDE Plasma Wayland and generally the most reliable direct text input path
+- **wtype**: Recommended for wlroots-style Wayland compositors such as sway
+- **ydotool**: Universal alternative that works with both X11 and Wayland, but requires `ydotoold`
 - **xdotool**: May work via XWayland fallback
 
 ### Installation by Distribution
@@ -399,7 +401,7 @@ For unsupported or experimental distributions:
 | Desktop Environment | Status | Notes |
 |---------------------|--------|-------|
 | GNOME | ✅ Full Support | Primary target, uses AppIndicator |
-| KDE Plasma | ✅ Full Support | Works with AppIndicator |
+| KDE Plasma | ✅ Full Support | On Wayland, select IBus Wayland in System Settings -> Keyboard -> Virtual Keyboard |
 | Xfce | ✅ Full Support | Works with AppIndicator |
 | Cinnamon | ✅ Full Support | Works with AppIndicator |
 | MATE | ✅ Full Support | Works with AppIndicator |
@@ -428,7 +430,7 @@ Practical caveat:
 | Display Server | Status | Notes |
 |----------------|--------|-------|
 | X11 | ✅ Full Support | Uses xdotool for text injection |
-| Wayland | ✅ Full Support | Uses wtype (native) or xdotool (XWayland) |
+| Wayland | ✅ Full Support | Uses IBus, wtype, ydotool, or xdotool fallback depending on compositor |
 | XWayland | ✅ Full Support | Automatically detected, falls back to xdotool if needed |
 
 ## Architecture Support
