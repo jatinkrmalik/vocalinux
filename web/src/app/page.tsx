@@ -195,7 +195,7 @@ const FeatureCard = ({
       initial={{ opacity: 0, y: 20 }}
       animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
       transition={{ duration: 0.5 }}
-      className={`flex h-full rounded-xl border border-zinc-100 bg-white p-6 shadow-md transition-all hover:shadow-xl dark:border-zinc-700 dark:bg-zinc-800 flex-col${href ? "group cursor-pointer" : ""}`}
+      className={`flex h-full flex-col rounded-xl border border-zinc-100 bg-white p-6 shadow-md transition-all hover:shadow-xl dark:border-zinc-700 dark:bg-zinc-800 ${href ? "group cursor-pointer" : ""}`}
     >
       <div className="mb-4 flex items-center gap-4">
         <div className="bg-primary/10 rounded-lg p-3">{icon}</div>
