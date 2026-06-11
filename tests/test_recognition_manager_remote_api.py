@@ -232,6 +232,19 @@ class TestRemoteAPIEngine(unittest.TestCase):
         )
         self.assertEqual(manager.remote_api_endpoint, "/v1/audio/transcriptions")
 
+    def test_remote_api_init_with_model_name(self):
+        """Test remote API initialization stores a configurable model name."""
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:8000",
+            remote_api_endpoint="/v1/chat/completions",
+            remote_api_model="Qwen/Qwen3-ASR-0.6B",
+        )
+        self.assertEqual(manager.remote_api_model, "Qwen/Qwen3-ASR-0.6B")
+
     def test_model_ready_remote_api_initialized(self):
         """Test model_ready returns True for remote API when initialized."""
         SpeechRecognitionManager = _import_manager()
@@ -295,6 +308,21 @@ class TestRemoteAPITranscription(unittest.TestCase):
             )
 
             self.assertEqual(result, "test transcription")
+
+    def test_transcribe_with_chat_completions_endpoint_success(self):
+        """Test successful transcription via chat-completions audio endpoint."""
+        from unittest.mock import patch
+
+        with patch.object(self.manager, "_try_chat_completions_audio_api") as mock_chat:
+            mock_chat.return_value = "chat transcription"
+
+            self.manager.remote_api_endpoint = "/v1/chat/completions"
+            result = self.manager._transcribe_with_remote_api(
+                [b"test-audio-data"], self.manager._http_session
+            )
+
+            self.assertEqual(result, "chat transcription")
+            mock_chat.assert_called_once()
 
     def test_transcribe_with_whisper_cpp_server_endpoint_success(self):
         """Test successful transcription via whisper.cpp server endpoint."""
@@ -432,6 +460,16 @@ class TestOpenAIAPIFormat(unittest.TestCase):
         call_kwargs = mock_post.call_args[1]
         self.assertEqual(call_kwargs["data"]["language"], "fr")
 
+    def test_try_openai_api_uses_configured_model(self):
+        """Test OpenAI API sends the configured model name."""
+        mock_post = _setup_requests_post_ok({"text": "result"})
+        self.manager.remote_api_model = "custom-asr-model"
+
+        self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        call_kwargs = mock_post.call_args[1]
+        self.assertEqual(call_kwargs["data"]["model"], "custom-asr-model")
+
     def test_try_openai_api_server_error(self):
         """Test OpenAI API handles 500 server error via raise_for_status."""
         _setup_requests_post_status(500, Exception("500 Server Error"))
@@ -515,6 +553,68 @@ class TestWhisperCppServerAPIFormat(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestChatCompletionsAudioAPIFormat(unittest.TestCase):
+    """Test cases for chat-completions audio API format."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        self.manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:8000",
+            remote_api_key="server-key",
+            remote_api_endpoint="/v1/chat/completions",
+            remote_api_model="Qwen/Qwen3-ASR-0.6B",
+        )
+
+    def test_try_chat_completions_audio_api_success(self):
+        """Test successful transcription via chat-completions audio API."""
+        mock_post = _setup_requests_post_ok(
+            {"choices": [{"message": {"content": "language English\nhello world"}}]}
+        )
+
+        result = self.manager._try_chat_completions_audio_api(
+            b"audio-wav", "en", {"Authorization": "Bearer key"}, self.manager._http_session
+        )
+
+        self.assertEqual(result, "hello world")
+        call_kwargs = mock_post.call_args[1]
+        self.assertEqual(call_kwargs["json"]["model"], "Qwen/Qwen3-ASR-0.6B")
+        self.assertIn("data:audio/wav;base64,", str(call_kwargs["json"]))
+
+    def test_try_chat_completions_audio_api_json_text_content(self):
+        """Test chat responses that return a JSON-encoded text object."""
+        _setup_requests_post_ok({"choices": [{"message": {"content": '{"text": "hello"}'}}]})
+
+        result = self.manager._try_chat_completions_audio_api(
+            b"audio-wav", None, {}, self.manager._http_session
+        )
+
+        self.assertEqual(result, "hello")
+
+    def test_try_chat_completions_audio_api_404(self):
+        """Test chat-completions audio API returns None for 404."""
+        _setup_requests_post_status(404)
+
+        result = self.manager._try_chat_completions_audio_api(
+            b"wav", "en", {}, self.manager._http_session
+        )
+
+        self.assertIsNone(result)
+
+    def test_try_chat_completions_audio_api_server_error(self):
+        """Test chat-completions audio API handles server errors."""
+        _setup_requests_post_status(500, Exception("500 Server Error"))
+
+        result = self.manager._try_chat_completions_audio_api(
+            b"wav", "en", {}, self.manager._http_session
+        )
+
+        self.assertIsNone(result)
+
+
 class TestRemoteAPIReconfiguration(unittest.TestCase):
     """Test cases for remote API settings updates."""
 
@@ -548,6 +648,11 @@ class TestRemoteAPIReconfiguration(unittest.TestCase):
         """Test updating remote API endpoint via reconfigure."""
         self.manager.reconfigure(remote_api_endpoint="/v1/audio/transcriptions")
         self.assertEqual(self.manager.remote_api_endpoint, "/v1/audio/transcriptions")
+
+    def test_update_remote_api_model(self):
+        """Test updating remote API model via reconfigure."""
+        self.manager.reconfigure(remote_api_model="Qwen/Qwen3-ASR-0.6B")
+        self.assertEqual(self.manager.remote_api_model, "Qwen/Qwen3-ASR-0.6B")
 
 
 class TestRemoteAPIReinitializeAfterResume(unittest.TestCase):

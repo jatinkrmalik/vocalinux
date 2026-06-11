@@ -2,14 +2,15 @@
 
 Vocalinux can offload speech recognition to a remote HTTP server instead of running a local model. This is useful when you want faster transcription on a more powerful machine, want to share one model across several clients, or want to keep your laptop free of GPU/model overhead.
 
-Vocalinux speaks two wire formats out of the box:
+Vocalinux speaks three wire formats out of the box:
 
 - **OpenAI-compatible** — `POST /v1/audio/transcriptions` (e.g. OpenAI, [Speaches](https://github.com/speaches-ai/speaches), LocalAI, vLLM with Whisper)
 - **whisper.cpp server** — `POST /inference` (the binary shipped with [whisper.cpp](https://github.com/ggerganov/whisper.cpp))
+- **Chat-completions audio** — `POST /v1/chat/completions` for ASR servers that expose audio through the OpenAI chat-completions shape, including Qwen3-ASR via vLLM
 
-Pick whichever your server exposes — the rest of this guide applies to both.
+Pick whichever your server exposes — the rest of this guide applies to all three.
 
-> **Tip — share the server with your phone.** Both formats are open standards, so the same self-hosted server can also back mobile dictation apps. On Android, apps like *Dictate* and *Transcribro* speak OpenAI-compatible Whisper; on iOS, Shortcuts-based dictation clients can hit the same endpoint. Run one Whisper server, point your laptop and phone at it, and you get consistent dictation everywhere without uploading audio to a third party.
+> **Tip — share the server with your phone.** These HTTP formats are open enough that the same self-hosted server can also back mobile dictation apps. On Android, apps like *Dictate* and *Transcribro* speak OpenAI-compatible Whisper; on iOS, Shortcuts-based dictation clients can hit the same endpoint. Run one Whisper server, point your laptop and phone at it, and you get consistent dictation everywhere without uploading audio to a third party.
 
 ## How It Works
 
@@ -24,7 +25,7 @@ No audio is ever written to disk. The local machine still runs the VAD/segmentat
 
 ## Server-Side Setup
 
-You need a server that accepts audio uploads and returns `{"text": "..."}`. Two common options:
+You need a server that accepts audio uploads and returns text. Three common options:
 
 ### Option A: whisper.cpp server
 
@@ -53,6 +54,22 @@ docker run --rm -p 8000:8000 ghcr.io/speaches-ai/speaches:latest
 
 The endpoint is `/v1/audio/transcriptions`.
 
+### Option C: Qwen3-ASR / vLLM chat-completions server
+
+Qwen3-ASR exposes an OpenAI-style chat-completions server through `qwen-asr-serve`:
+
+```bash
+pip install -U "qwen-asr[vllm]"
+qwen-asr-serve Qwen/Qwen3-ASR-0.6B \
+    --gpu-memory-utilization 0.8 \
+    --host 0.0.0.0 \
+    --port 8000
+```
+
+Set the endpoint to `/v1/chat/completions` and the model to `Qwen/Qwen3-ASR-0.6B`.
+The same client format can be used by other chat-completions audio servers that accept
+`audio_url` content containing a base64 WAV data URL.
+
 ### Network checklist
 
 - The server must be reachable from the client over HTTP or HTTPS.
@@ -71,7 +88,8 @@ The remote engine is a power-user override and lives on the **Advanced** tab so 
 3. Fill in the fields:
    - **Server URL**: base URL of the server, e.g. `http://192.168.1.100:8080` (no trailing slash needed; one is stripped automatically).
    - **API Key** (optional): sent as `Authorization: Bearer <key>`. Leave blank if your server doesn't require auth.
-   - **API Endpoint**: pick **Whisper.cpp (`/inference`)** or **OpenAI (`/v1/audio/transcriptions`)** to match your server.
+   - **API Endpoint**: pick **Whisper.cpp (`/inference`)**, **OpenAI (`/v1/audio/transcriptions`)**, or **Chat audio (`/v1/chat/completions`)** to match your server.
+   - **Model**: model identifier sent to compatible servers. Use `whisper-1` for classic OpenAI-style Whisper servers, or the server's actual model name such as `Qwen/Qwen3-ASR-0.6B`.
 4. Click **Test Connection** — a successful test means the URL is reachable and credentials (if any) are accepted. A failure here is just a warning; Vocalinux will still try again on the first transcription.
 
 Settings auto-save and re-initialise the engine immediately, so you can start dictating as soon as the test passes. Toggling the switch off restores the local engine selected on the Speech Engine tab.
@@ -86,7 +104,8 @@ The same options live in `~/.config/vocalinux/config.json`:
     "engine": "remote_api",
     "remote_api_url": "http://192.168.1.100:8080",
     "remote_api_key": "",
-    "remote_api_endpoint": "/inference"
+    "remote_api_endpoint": "/inference",
+    "remote_api_model": "whisper-1"
   }
 }
 ```
@@ -151,7 +170,33 @@ en
 --boundary--
 ```
 
-### Response (both formats)
+### Request — chat-completions audio format (`/v1/chat/completions`)
+
+```json
+{
+  "model": "Qwen/Qwen3-ASR-0.6B",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "audio_url",
+          "audio_url": {
+            "url": "data:audio/wav;base64,<base64 WAV bytes>"
+          }
+        }
+      ]
+    }
+  ],
+  "temperature": 0
+}
+```
+
+The response is read from `choices[0].message.content`. If the server returns a leading
+line such as `language English`, Vocalinux removes that metadata and injects only the
+transcribed text.
+
+### Response (`/inference` and `/v1/audio/transcriptions`)
 
 ```json
 { "text": "the transcribed utterance" }
@@ -199,6 +244,7 @@ Both should return JSON with a `text` field.
 | Connection test reports "failed" | Wrong host/port, firewall, or server not running | Check `curl <url>` from the client; check server logs |
 | HTTP 401/403 | API key missing or wrong | Set the **API Key** field; ensure the server is configured for that key |
 | HTTP 404 on first send | Endpoint format mismatch | Switch the **API Endpoint** dropdown to the format your server actually exposes |
+| Chat-completions server returns model errors | Model field doesn't match the served model | Set **Model** to the server's model identifier |
 | Transcription always empty | Server rejected the WAV (sample rate, channels) | Confirm server accepts 16 kHz mono 16-bit WAV; check server logs |
 | First transcription is slow | Cold model load on the server | Warm the server before dictating, or increase the client timeout server-side |
 | Garbled text in foreign language | Wrong `language` setting | Set the language explicitly in Settings instead of `auto` |

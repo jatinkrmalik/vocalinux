@@ -3,7 +3,8 @@
 Vocalinux Remote API Test Server
 
 A simple mock server for testing Vocalinux's remote API feature.
-Supports both whisper.cpp (/inference) and OpenAI-compatible (/v1/audio/transcriptions) formats.
+Supports whisper.cpp (/inference), OpenAI-compatible (/v1/audio/transcriptions),
+and chat-completions audio (/v1/chat/completions) formats.
 
 Usage:
     python test_remote_server.py [--port PORT] [--delay SECONDS]
@@ -41,6 +42,7 @@ class RemoteAPITestHandler(BaseHTTPRequestHandler):
                 "endpoints": [
                     "/inference (whisper.cpp format)",
                     "/v1/audio/transcriptions (OpenAI format)",
+                    "/v1/chat/completions (chat audio format)",
                     "/v1/models (OpenAI models list)",
                 ],
             }
@@ -58,7 +60,13 @@ class RemoteAPITestHandler(BaseHTTPRequestHandler):
                         "object": "model",
                         "created": 1234567890,
                         "owned_by": "openai",
-                    }
+                    },
+                    {
+                        "id": "Qwen/Qwen3-ASR-0.6B",
+                        "object": "model",
+                        "created": 1767225600,
+                        "owned_by": "mock",
+                    },
                 ],
                 "object": "list",
             }
@@ -118,6 +126,39 @@ class RemoteAPITestHandler(BaseHTTPRequestHandler):
 
             self.wfile.write(json.dumps(response, indent=2).encode())
             print(f"  → Transcribed '{filename}': {transcription}")
+
+        elif self.path == "/v1/chat/completions":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+
+            try:
+                payload = json.loads(body.decode("utf-8"))
+                model = payload.get("model", "mock-chat-audio")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                model = "mock-chat-audio"
+
+            transcription = self._generate_mock_transcription("chat-audio.wav")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            response = {
+                "id": "chatcmpl-mock",
+                "object": "chat.completion",
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": transcription,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+            self.wfile.write(json.dumps(response, indent=2).encode())
+            print(f"  → Chat audio transcription ({model}): {transcription}")
 
         else:
             self.send_response(404)
@@ -188,6 +229,7 @@ def main():
     print("  GET  /inference                 - whisper.cpp health check")
     print("  POST /inference                 - whisper.cpp transcription")
     print("  POST /v1/audio/transcriptions   - OpenAI transcription")
+    print("  POST /v1/chat/completions       - Chat audio transcription")
     print()
     print("Press Ctrl+C to stop")
     print("=" * 60)

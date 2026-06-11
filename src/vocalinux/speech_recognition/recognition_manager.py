@@ -5,6 +5,7 @@ This module provides a unified interface to different speech recognition engines
 currently supporting VOSK, Whisper, and whisper.cpp.
 """
 
+import base64
 import ctypes
 import importlib.util
 import json
@@ -844,6 +845,7 @@ class SpeechRecognitionManager:
         self.remote_api_url = kwargs.get("remote_api_url", "")
         self.remote_api_key = kwargs.get("remote_api_key", "")
         self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+        self.remote_api_model = kwargs.get("remote_api_model", "whisper-1")
         self._http_session = None
 
         # Audio diagnostics tracking
@@ -1527,6 +1529,8 @@ class SpeechRecognitionManager:
             text = None
             if self.remote_api_endpoint == "/inference":
                 text = self._try_whispercpp_server_api(wav_bytes, lang, headers, session)
+            elif self.remote_api_endpoint == "/v1/chat/completions":
+                text = self._try_chat_completions_audio_api(wav_bytes, lang, headers, session)
             else:
                 text = self._try_openai_api(wav_bytes, lang, headers, session)
 
@@ -1585,7 +1589,7 @@ class SpeechRecognitionManager:
         url = f"{self.remote_api_url}{self.remote_api_endpoint}"
 
         files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
-        data = {"model": "whisper-1"}
+        data = {"model": self.remote_api_model or "whisper-1"}
         if lang:
             data["language"] = lang
 
@@ -1608,6 +1612,108 @@ class SpeechRecognitionManager:
         except Exception as e:
             logger.debug(f"OpenAI API format attempt failed: {e}")
             return None
+
+    def _try_chat_completions_audio_api(self, wav_bytes: bytes, lang, headers: dict, session):
+        """Try to transcribe using a chat-completions audio API format.
+
+        This covers ASR servers such as Qwen3-ASR via vLLM that accept audio
+        through ``/v1/chat/completions`` rather than the classic Whisper-style
+        ``/v1/audio/transcriptions`` endpoint.
+
+        Args:
+            wav_bytes: Audio data in WAV format
+            lang: Language core (e.g. "en", None for auto detect)
+            headers: HTTP request headers
+            session: A requests.Session snapshot (obtained under _model_lock)
+
+        Returns:
+            Transcribed text, or None if format is not supported
+        """
+        import requests
+
+        url = f"{self.remote_api_url}{self.remote_api_endpoint}"
+
+        request_headers = dict(headers)
+        request_headers["Content-Type"] = "application/json"
+        audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
+
+        content = [
+            {
+                "type": "audio_url",
+                "audio_url": {"url": f"data:audio/wav;base64,{audio_b64}"},
+            }
+        ]
+        if lang:
+            content.append(
+                {
+                    "type": "text",
+                    "text": f"Transcribe the audio in language code '{lang}'.",
+                }
+            )
+
+        data = {
+            "model": self.remote_api_model or "Qwen/Qwen3-ASR-0.6B",
+            "messages": [{"role": "user", "content": content}],
+            "temperature": 0,
+        }
+
+        try:
+            response = session.post(url, headers=request_headers, json=data, timeout=30)
+
+            if response.status_code == 404:
+                logger.debug("Chat completions audio endpoint does not exist")
+                return None
+
+            response.raise_for_status()
+            result = response.json()
+            content = (
+                result.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            return self._parse_chat_completion_transcription(content)
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Cannot connect to remote server {url}: {e}")
+            return None
+        except Exception as e:
+            logger.debug(f"Chat completions audio API format attempt failed: {e}")
+            return None
+
+    def _parse_chat_completion_transcription(self, content: object) -> str:
+        """Extract transcript text from chat-completion ASR responses."""
+        if content is None:
+            return ""
+
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if text:
+                        parts.append(str(text))
+                elif item:
+                    parts.append(str(item))
+            content = "\n".join(parts)
+
+        text = str(content).strip()
+        if not text:
+            return ""
+
+        try:
+            payload = json.loads(text)
+            if isinstance(payload, dict) and isinstance(payload.get("text"), str):
+                return payload["text"].strip()
+        except (TypeError, ValueError):
+            pass
+
+        # Qwen3-ASR may return a leading language metadata line when language is
+        # auto-detected. Keep plain outputs untouched.
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if lines and lines[0].lower().startswith("language ") and len(lines) > 1:
+            return "\n".join(lines[1:]).strip()
+
+        return text
 
     def _try_whispercpp_server_api(self, wav_bytes: bytes, lang, headers: dict, session):
         """Try to transcribe using whisper.cpp server API format.
@@ -2834,6 +2940,8 @@ class SpeechRecognitionManager:
             self.remote_api_key = kwargs.get("remote_api_key", "")
         if "remote_api_endpoint" in kwargs:
             self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+        if "remote_api_model" in kwargs:
+            self.remote_api_model = kwargs.get("remote_api_model", "whisper-1")
 
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
