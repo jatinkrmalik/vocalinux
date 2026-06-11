@@ -431,15 +431,15 @@ export default function HomePage() {
         <div className="pointer-events-none absolute inset-0 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_10%,black_84%,transparent)]">
           <div className="absolute inset-0 bg-white/[0.015] backdrop-blur-[1px] dark:bg-white/[0.008]" />
           <motion.div
-            className="absolute inset-x-[-18%] top-[-12%] h-[90%] blur-3xl dark:hidden"
+            className="absolute inset-x-[-18%] top-[-12%] h-[90%] mix-blend-multiply blur-3xl dark:hidden"
             style={{
               background:
-                "radial-gradient(70% 48% at 16% 46%, hsl(var(--primary) / 0.2), transparent 68%), radial-gradient(64% 44% at 82% 44%, rgb(6 182 212 / 0.2), transparent 70%), linear-gradient(105deg, transparent 8%, rgb(20 184 166 / 0.14) 36%, rgb(6 182 212 / 0.16) 55%, transparent 86%)",
+                "radial-gradient(70% 48% at 16% 46%, hsl(var(--primary) / 0.28), transparent 64%), radial-gradient(64% 44% at 82% 44%, rgb(6 182 212 / 0.3), transparent 66%), linear-gradient(105deg, transparent 8%, rgb(20 184 166 / 0.2) 36%, rgb(6 182 212 / 0.24) 55%, transparent 86%)",
               backgroundSize: "170% 170%",
             }}
             animate={{
               backgroundPosition: ["0% 46%", "100% 54%", "0% 46%"],
-              opacity: [0.68, 0.94, 0.68],
+              opacity: [0.82, 1, 0.82],
             }}
             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
           />
@@ -457,17 +457,17 @@ export default function HomePage() {
             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute inset-x-[-12%] top-[16%] h-[52%] blur-3xl dark:hidden"
+            className="absolute inset-x-[-12%] top-[16%] h-[52%] mix-blend-multiply blur-2xl dark:hidden"
             style={{
               background:
-                "linear-gradient(100deg, transparent 4%, hsl(var(--primary) / 0.22) 30%, rgb(20 184 166 / 0.2) 48%, rgb(6 182 212 / 0.22) 68%, transparent 94%)",
+                "linear-gradient(100deg, transparent 4%, hsl(var(--primary) / 0.34) 30%, rgb(20 184 166 / 0.3) 48%, rgb(6 182 212 / 0.34) 68%, transparent 94%)",
               clipPath:
                 "polygon(0 44%, 10% 36%, 24% 43%, 39% 34%, 55% 42%, 72% 32%, 88% 39%, 100% 34%, 100% 72%, 86% 65%, 70% 73%, 54% 63%, 38% 72%, 22% 62%, 8% 69%, 0 64%)",
             }}
             animate={{
               x: ["-4%", "4%", "-4%"],
               y: [0, -16, 0],
-              opacity: [0.72, 0.96, 0.72],
+              opacity: [0.84, 1, 0.84],
               scale: [1, 1.05, 1],
             }}
             transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
