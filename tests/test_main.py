@@ -12,6 +12,7 @@ sys.modules["gi"] = MagicMock()
 sys.modules["gi.repository"] = MagicMock()
 
 # Update import to use the new package structure
+from vocalinux.common_types import RecognitionState
 from vocalinux.main import check_dependencies, main, parse_arguments
 
 
@@ -250,6 +251,68 @@ class TestMainModule(unittest.TestCase):
 
             # Verify the tray indicator was started
             mock_tray_instance.run.assert_called_once()
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_registered_callbacks_keep_spacing_across_processing_to_listening(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Test main callback wiring preserves spacing between in-session segments."""
+        mock_check_deps.return_value = True
+
+        mock_config_instance = MagicMock()
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
+        mock_config_manager.return_value = mock_config_instance
+
+        mock_speech_instance = MagicMock()
+        mock_text_instance = MagicMock()
+        mock_text_instance.inject_text.return_value = True
+        mock_tray_instance = MagicMock()
+
+        mock_speech.return_value = mock_speech_instance
+        mock_text.return_value = mock_text_instance
+        mock_tray.return_value = mock_tray_instance
+
+        with patch("vocalinux.main.parse_arguments") as mock_parse:
+            mock_args = MagicMock()
+            mock_args.debug = False
+            mock_args.model = "medium"
+            mock_args.engine = "vosk"
+            mock_args.language = "en-us"
+            mock_args.wayland = False
+            mock_args.start_minimized = False
+            mock_parse.return_value = mock_args
+
+            main()
+
+        text_callback = mock_speech_instance.register_text_callback.call_args.args[0]
+        state_callback = mock_speech_instance.register_state_callback.call_args.args[0]
+
+        text_callback("Hello.")
+        state_callback(RecognitionState.PROCESSING)
+        state_callback(RecognitionState.LISTENING)
+        text_callback("World")
+
+        calls = [call.args[0] for call in mock_text_instance.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello.", " World"])
+
+        state_callback(RecognitionState.IDLE)
+        mock_text_instance.inject_text.reset_mock()
+        text_callback("Next session")
+        mock_text_instance.inject_text.assert_called_once_with("Next session")
 
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.ui.action_handler.ActionHandler")
@@ -700,42 +763,46 @@ class TestTextCallbackSpacing(unittest.TestCase):
                 text_to_inject = " " + text_to_inject
             success = text_system.inject_text(text_to_inject)
             if success:
-                action_handler.set_last_injected_text(text)
+                action_handler.set_last_injected_text(text_to_inject)
 
-        return text_callback_wrapper, text_system, action_handler
+        def on_state_change(state: RecognitionState):
+            if state == RecognitionState.IDLE:
+                action_handler.set_last_injected_text("")
+
+        return text_callback_wrapper, on_state_change, text_system, action_handler
 
     def test_first_segment_has_no_leading_space(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("Hello world")
         text_system.inject_text.assert_called_once_with("Hello world")
 
     def test_subsequent_segment_gets_space_separator(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("Hello")
         cb("world")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
         self.assertEqual(calls, ["Hello", " world"])
 
     def test_reset_clears_leading_space(self):
-        cb, text_system, ah = self._make_callback()
+        cb, on_state_change, text_system, _ = self._make_callback()
         cb("first session")
-        ah.set_last_injected_text("")
+        on_state_change(RecognitionState.IDLE)
         text_system.inject_text.reset_mock()
         cb("second session")
         text_system.inject_text.assert_called_once_with("second session")
 
     def test_whitespace_only_input_is_skipped(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("   ")
         text_system.inject_text.assert_not_called()
 
     def test_input_with_leading_space_is_stripped(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb(" Hello world")
         text_system.inject_text.assert_called_once_with("Hello world")
 
     def test_multiple_segments_all_get_separators(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("one")
         cb("two")
         cb("three")
@@ -743,8 +810,17 @@ class TestTextCallbackSpacing(unittest.TestCase):
         self.assertEqual(calls, ["one", " two", " three"])
 
     def test_space_after_punctuation_segment(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("Hello.")
+        cb("World")
+        calls = [c.args[0] for c in text_system.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello.", " World"])
+
+    def test_processing_to_listening_keeps_segment_spacing(self):
+        cb, on_state_change, text_system, _ = self._make_callback()
+        cb("Hello.")
+        on_state_change(RecognitionState.PROCESSING)
+        on_state_change(RecognitionState.LISTENING)
         cb("World")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
         self.assertEqual(calls, ["Hello.", " World"])

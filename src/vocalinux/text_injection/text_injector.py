@@ -24,6 +24,28 @@ from .ibus_engine import (
 logger = logging.getLogger(__name__)
 
 
+def _is_kde_plasma_session() -> bool:
+    """Return True when the current desktop session appears to be KDE Plasma."""
+    if os.environ.get("KDE_FULL_SESSION", "").lower() == "true":
+        return True
+
+    desktop_values = [
+        os.environ.get("XDG_CURRENT_DESKTOP", ""),
+        os.environ.get("DESKTOP_SESSION", ""),
+        os.environ.get("GDMSESSION", ""),
+    ]
+    desktop = " ".join(value for value in desktop_values if value).lower()
+    return "kde" in desktop or "plasma" in desktop
+
+
+def _kde_wayland_ibus_hint() -> str:
+    """Return the KDE Plasma Wayland IBus setup hint."""
+    return (
+        "Open System Settings -> Keyboard -> Virtual Keyboard, select "
+        "'IBus Wayland', then restart Vocalinux or log out and back in."
+    )
+
+
 class DesktopEnvironment(Enum):
     """Enum representing the desktop environment."""
 
@@ -88,6 +110,11 @@ class TextInjector:
                         "Wayland compositor does not support virtual "
                         f"keyboard protocol: {error_output}"
                     )
+                    if _is_kde_plasma_session():
+                        logger.warning(
+                            "KDE Plasma Wayland detected. wtype is not a reliable "
+                            f"text injection path on this compositor. {_kde_wayland_ibus_hint()}"
+                        )
                     if shutil.which("xdotool"):
                         logger.info("Automatically switching to XWayland fallback with xdotool")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
@@ -153,10 +180,17 @@ class TextInjector:
             # This is important because IBus may be installed but not being used,
             # e.g., when the user has configured ydotool or Fcitx instead
             if not is_ibus_active_input_method():
-                logger.info(
-                    "IBus is installed but not the active input method. "
-                    "Falling back to alternative text injection method."
-                )
+                if self.environment == DesktopEnvironment.WAYLAND and _is_kde_plasma_session():
+                    logger.warning(
+                        "IBus is installed but is not active for KDE Plasma Wayland. "
+                        f"{_kde_wayland_ibus_hint()} Falling back to alternative "
+                        "text injection method."
+                    )
+                else:
+                    logger.info(
+                        "IBus is installed but not the active input method. "
+                        "Falling back to alternative text injection method."
+                    )
             # Check if ibus-daemon is running before attempting setup
             elif not is_ibus_daemon_running():
                 logger.info(
@@ -230,7 +264,8 @@ class TextInjector:
                     "- xdotool: sudo apt install xdotool (X11/XWayland only)\n"
                     "\n"
                     "For KDE Plasma Wayland users: wtype is not supported. "
-                    "Install ydotool or wl-copy for clipboard fallback:\n"
+                    f"{_kde_wayland_ibus_hint()}\n"
+                    "Or install ydotool/wl-copy for fallback:\n"
                     "  sudo apt install ydotool\n"
                     "  sudo systemctl enable --now ydotoold\n"
                     "Or for clipboard fallback: sudo apt install wl-copy"
@@ -619,12 +654,23 @@ class TextInjector:
                     self._inject_with_wayland_tool(text)
                 except subprocess.CalledProcessError as e:
                     stderr_msg = e.stderr.strip() if e.stderr else "No stderr output"
+                    unsupported_wayland = (
+                        "compositor does not support" in str(e).lower()
+                        or "compositor does not support" in stderr_msg.lower()
+                    )
                     logger.warning(
                         f"Wayland tool failed: {e}. stderr: {stderr_msg}. Falling back to xdotool"
                     )
-                    if "compositor does not support" in str(
-                        e
-                    ).lower() + " " + stderr_msg.lower() and shutil.which("xdotool"):
+                    if (
+                        unsupported_wayland
+                        and current_env == DesktopEnvironment.WAYLAND
+                        and _is_kde_plasma_session()
+                    ):
+                        logger.warning(
+                            "KDE Plasma Wayland rejected virtual keyboard injection. "
+                            f"{_kde_wayland_ibus_hint()}"
+                        )
+                    if unsupported_wayland and shutil.which("xdotool"):
                         logger.info(
                             "Switching to XWayland fallback - will re-check for better tools"
                         )
