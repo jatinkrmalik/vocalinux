@@ -596,7 +596,7 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
         )
         self.assertIn("large-v3-turbo", WHISPERCPP_MODEL_INFO)
         self.assertIn("large-v3-turbo-q5_0", WHISPERCPP_MODEL_INFO)
-        self.assertIn("small.en-tdrz", WHISPERCPP_MODEL_INFO)
+        self.assertNotIn("small.en-tdrz", WHISPERCPP_MODEL_INFO)
 
     def test_model_display_name_large_v3_turbo(self):
         """Test display labels for whisper.cpp model variants."""
@@ -605,7 +605,6 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
         self.assertEqual(_model_display_name("large"), "Large v3")
         self.assertEqual(_model_display_name("large-v3-turbo"), "Large v3 Turbo")
         self.assertEqual(_model_display_name("large-v3-turbo-q5_0"), "Large v3 Turbo Q5_0")
-        self.assertEqual(_model_display_name("small.en-tdrz"), "Small EN TinyDiarize")
         self.assertEqual(_model_display_name("tiny.en-q5_1"), "Tiny EN Q5_1")
 
     def test_model_specialization_display_name(self):

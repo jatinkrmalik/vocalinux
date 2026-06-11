@@ -108,8 +108,6 @@ def _model_display_name(model_name: str) -> str:
         if part.endswith(".en"):
             display_parts.append(part[:-3].capitalize())
             display_parts.append("EN")
-        elif part == "tdrz":
-            display_parts.append("TinyDiarize")
         elif part.startswith("q"):
             display_parts.append(part.upper())
         elif part == "turbo":
@@ -126,9 +124,6 @@ def _model_specialization_display_name(model_name: str) -> str:
     """Get a concise label for a whisper.cpp model variant."""
     if model_name == "large":
         return "Standard v3"
-
-    if model_name.endswith("-tdrz"):
-        return "English-only TinyDiarize"
 
     quantization = None
     for part in model_name.split("-"):
@@ -212,12 +207,6 @@ LANGUAGE_TOOLTIP = (
 
 def _model_specialization_tooltip(model_name: str) -> str:
     """Return hover guidance for a whisper.cpp specialization."""
-    if model_name.endswith("-tdrz"):
-        return (
-            "Choose this only for English audio when you want TinyDiarize support; "
-            "for normal dictation, Standard multilingual or English-only is simpler."
-        )
-
     is_english_only = is_english_only_whispercpp_model(model_name)
     is_quantized = any(part.startswith("q") for part in model_name.split("-"))
 

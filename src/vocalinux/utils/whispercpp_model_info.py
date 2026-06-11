@@ -16,13 +16,12 @@ logger = logging.getLogger(__name__)
 # Whisper.cpp model information
 # Models are downloaded from Hugging Face (ggml format)
 _WHISPERCPP_REPO_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
-_TINYDIARIZE_REPO_URL = "https://huggingface.co/akashmjn/tinydiarize-whisper.cpp/resolve/main"
 
 
-def _model_url(model_name: str, repo_url: str = _WHISPERCPP_REPO_URL) -> str:
+def _model_url(model_name: str) -> str:
     """Build the Hugging Face URL for a ggml whisper.cpp model."""
     file_model_name = "large-v3" if model_name == "large" else model_name
-    return f"{repo_url}/ggml-{file_model_name}.bin"
+    return f"{_WHISPERCPP_REPO_URL}/ggml-{file_model_name}.bin"
 
 
 _WHISPERCPP_MODEL_SPECS = [
@@ -38,13 +37,6 @@ _WHISPERCPP_MODEL_SPECS = [
     ("base-q8_0", 82, "74M", "Q8 quantized base model"),
     ("small", 465, "244M", "Balanced speed/accuracy"),
     ("small.en", 465, "244M", "English-only small model"),
-    (
-        "small.en-tdrz",
-        465,
-        "244M",
-        "English-only small model with TinyDiarize",
-        _TINYDIARIZE_REPO_URL,
-    ),
     ("small-q5_1", 163, "244M", "Quantized small model, lower memory"),
     ("small.en-q5_1", 163, "244M", "Quantized English-only small model"),
     ("small-q8_0", 190, "244M", "Q8 quantized small model"),
@@ -69,7 +61,7 @@ WHISPERCPP_MODEL_INFO = {
         "size_mb": spec[1],
         "params": spec[2],
         "desc": spec[3],
-        "url": _model_url(spec[0], spec[4] if len(spec) > 4 else _WHISPERCPP_REPO_URL),
+        "url": _model_url(spec[0]),
     }
     for spec in _WHISPERCPP_MODEL_SPECS
 }
@@ -85,7 +77,6 @@ MODEL_VARIANTS_BY_SIZE = {
     "small": [
         "small",
         "small.en",
-        "small.en-tdrz",
         "small-q5_1",
         "small.en-q5_1",
         "small-q8_0",

@@ -130,8 +130,8 @@ class TestModelInfo(unittest.TestCase):
 
         self.assertEqual(set(AVAILABLE_MODELS), set(WHISPERCPP_MODEL_INFO.keys()))
 
-    def test_available_models_tracks_upstream_download_script_models(self):
-        """Test that AVAILABLE_MODELS covers upstream models, preserving large alias."""
+    def test_available_models_tracks_upstream_dictation_models(self):
+        """Test that AVAILABLE_MODELS covers upstream dictation models."""
         from vocalinux.utils.whispercpp_model_info import AVAILABLE_MODELS
 
         expected_models = [
@@ -147,7 +147,6 @@ class TestModelInfo(unittest.TestCase):
             "base-q8_0",
             "small",
             "small.en",
-            "small.en-tdrz",
             "small-q5_1",
             "small.en-q5_1",
             "small-q8_0",
@@ -181,11 +180,16 @@ class TestModelInfo(unittest.TestCase):
         self.assertEqual(MODEL_VARIANTS_BY_SIZE["medium"][0], "medium")
         self.assertIn("medium.en-q5_0", MODEL_VARIANTS_BY_SIZE["medium"])
         self.assertIn("large-v3-turbo-q8_0", MODEL_VARIANTS_BY_SIZE["large"])
+        self.assertNotIn("small.en-tdrz", MODEL_VARIANTS_BY_SIZE["small"])
 
         grouped_models = {
             model_name for variants in MODEL_VARIANTS_BY_SIZE.values() for model_name in variants
         }
         self.assertEqual(grouped_models, set(WHISPERCPP_MODEL_INFO.keys()))
+        self.assertFalse(
+            any(model_name.endswith("-tdrz") for model_name in grouped_models),
+            "TinyDiarize needs diarization-specific runtime support, not the base dictation picker",
+        )
 
     def test_model_variant_helpers_identify_size_and_english_only_variants(self):
         """Test helpers that drive the split whisper.cpp model selectors."""
@@ -197,9 +201,7 @@ class TestModelInfo(unittest.TestCase):
 
         self.assertEqual(get_model_size("medium.en-q5_0"), "medium")
         self.assertEqual(get_model_size("large-v3-turbo-q8_0"), "large")
-        self.assertIn("small.en-tdrz", get_model_variants("small"))
         self.assertTrue(is_english_only_model("tiny.en-q5_1"))
-        self.assertTrue(is_english_only_model("small.en-tdrz"))
         self.assertFalse(is_english_only_model("large-v3-turbo"))
 
 
@@ -656,13 +658,6 @@ class TestGetModelPath(unittest.TestCase):
 
         path = get_model_path("large-v3-turbo-q5_0")
         self.assertIn("ggml-large-v3-turbo-q5_0.bin", path)
-
-    def test_get_model_path_tinydiarize_model(self):
-        """Test get_model_path for TinyDiarize model."""
-        from vocalinux.utils.whispercpp_model_info import get_model_path
-
-        path = get_model_path("small.en-tdrz")
-        self.assertIn("ggml-small.en-tdrz.bin", path)
 
 
 class TestIsModelDownloaded(unittest.TestCase):
