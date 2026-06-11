@@ -28,8 +28,10 @@ def parse_arguments():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["small", "medium", "large"],
-        help="Speech recognition model size (small, medium, large)",
+        help=(
+            "Speech recognition model ID. Examples: small, medium, large, "
+            "medium.en-q5_0, large-v3-turbo"
+        ),
     )
     parser.add_argument(
         "--language",

@@ -16,7 +16,7 @@ That's it! The installer handles everything automatically:
 - ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
 - ✅ Auto-detects your GPU (AMD, Intel, NVIDIA all supported)
 - ✅ Installs neural VAD support when ONNX Runtime is available
-- ✅ Downloads the tiny model (~74MB)
+- ✅ Downloads the default whisper.cpp tiny model (~74MB)
 - ✅ Configures everything automatically
 
 > ⏱️ **Installation Time**: ~1-2 minutes (vs 5-10 minutes with old Whisper AI)
@@ -205,7 +205,7 @@ Examples:
    - **VOSK**: Lightweight engine for older systems
 5. **Installs neural VAD support** when ONNX Runtime is available, with a safe amplitude-VAD fallback otherwise
 6. **Downloads speech recognition models**:
-   - whisper.cpp: ~74MB tiny model (or larger if selected)
+   - whisper.cpp: default ~74MB tiny model; selectable variants range from smaller quantized models to large models
    - Whisper: ~75MB tiny model + PyTorch dependencies (~2.3GB with CUDA)
    - VOSK: ~40MB small model
 7. **Installs desktop integration** (icons, .desktop file)
@@ -215,7 +215,7 @@ Examples:
 
 | Engine | Download Size | Install Time | GPU Support |
 |--------|---------------|--------------|-------------|
-| **whisper.cpp** (default) | ~74-500MB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
+| **whisper.cpp** (default) | ~74MB default; variants from ~15MB-3GB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
 | Whisper (OpenAI) | ~2.3GB+ | ~5-10 min | NVIDIA only (CUDA) |
 | VOSK | ~40MB | ~30 sec | CPU only |
 
@@ -247,6 +247,8 @@ vocalinux --model tiny            # Use tiny model (default, fastest)
 vocalinux --model small           # Use small model
 vocalinux --model medium          # Use medium model
 vocalinux --model large           # Use large model
+vocalinux --model medium.en-q5_0  # Use exact whisper.cpp model variant
+vocalinux --model large-v3-turbo  # Use large-v3 Turbo with whisper.cpp
 vocalinux --wayland               # Force Wayland compatibility mode
 vocalinux --start-minimized       # Start without first-run modal prompts
 ```
@@ -449,12 +451,24 @@ gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 - **No special drivers** - Just needs standard Vulkan support
 
 **Models:**
-whisper.cpp uses the same models as OpenAI Whisper, converted to `ggml` format:
+whisper.cpp uses OpenAI Whisper models converted to `ggml` format. Vocalinux lets you
+pick a top-level size and, for whisper.cpp, a specialization:
+
 - **tiny** (~74MB) - Fastest, good for real-time dictation
 - **base** (~141MB) - Good balance of speed and accuracy
 - **small** (~465MB) - Better accuracy, still fast
 - **medium** (~1.5GB) - High accuracy
 - **large** (~3.0GB) - Best accuracy, slower
+
+Available whisper.cpp specializations include:
+- **Standard multilingual** - Best default for auto-detect or non-English dictation
+- **English-only** - Choose when you dictate only in English
+- **Quantized** - Lower memory and smaller downloads with a possible accuracy tradeoff
+- **Turbo** - Faster large-v3 option with strong accuracy
+- **Legacy large** - Use only if you specifically need an older large model version
+
+Examples of exact whisper.cpp model IDs are `tiny.en`, `small.en-q5_1`,
+`medium-q5_0`, `medium.en-q5_0`, `large-v3-turbo`, and `large-v3-turbo-q8_0`.
 
 ### Checking GPU Support
 
@@ -494,12 +508,13 @@ Change the `engine` field:
 {
   "speech_recognition": {
     "engine": "whisper_cpp",  // Options: whisper_cpp, whisper, vosk
-    "model_size": "tiny"
+    "model_size": "tiny"      // Or an exact whisper.cpp ID like medium.en-q5_0
   }
 }
 ```
 
-Or use the GUI: Right-click tray icon → Settings → Speech Engine
+Or use the GUI: Right-click tray icon → Settings → Speech Engine. For whisper.cpp,
+the GUI splits this into **Model Size** and **Specialization**.
 
 ## Troubleshooting
 

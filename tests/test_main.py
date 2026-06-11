@@ -57,8 +57,8 @@ class TestMainModule(unittest.TestCase):
             self.assertTrue(args.wayland)
             self.assertTrue(args.start_minimized)
 
-    def test_parse_arguments_model_choices(self):
-        """Test that model only accepts valid choices."""
+    def test_parse_arguments_model_values(self):
+        """Test model parsing for base and exact whisper.cpp model IDs."""
         with patch("sys.argv", ["vocalinux", "--model", "small"]):
             args = parse_arguments()
             self.assertEqual(args.model, "small")
@@ -70,6 +70,14 @@ class TestMainModule(unittest.TestCase):
         with patch("sys.argv", ["vocalinux", "--model", "large"]):
             args = parse_arguments()
             self.assertEqual(args.model, "large")
+
+        with patch("sys.argv", ["vocalinux", "--model", "medium.en-q5_0"]):
+            args = parse_arguments()
+            self.assertEqual(args.model, "medium.en-q5_0")
+
+        with patch("sys.argv", ["vocalinux", "--model", "large-v3-turbo"]):
+            args = parse_arguments()
+            self.assertEqual(args.model, "large-v3-turbo")
 
     def test_parse_arguments_engine_choices(self):
         """Test that engine only accepts valid choices."""
