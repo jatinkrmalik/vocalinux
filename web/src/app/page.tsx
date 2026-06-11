@@ -427,37 +427,37 @@ export default function HomePage() {
       <section className="relative overflow-hidden px-4 pb-16 pt-28 sm:px-6 sm:pb-24 sm:pt-36">
         <div className="from-primary/5 dark:from-primary/10 absolute inset-0 bg-gradient-to-br via-transparent to-cyan-500/5 dark:to-cyan-500/10" />
 
-        {/* Full-width glass waveform texture */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[44rem] overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_14%,black_78%,transparent)]">
+        {/* Full-width shifting wave gradient */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_10%,black_84%,transparent)]">
           <div className="absolute inset-0 bg-white/[0.015] backdrop-blur-[1px] dark:bg-white/[0.008]" />
-          <div className="via-primary/10 dark:via-primary/15 absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent to-transparent" />
-          <svg
-            viewBox="0 0 1440 520"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-            className="absolute left-1/2 top-12 h-[30rem] w-[150vw] -translate-x-1/2 text-primary opacity-[0.34] dark:opacity-[0.26]"
-          >
-            <motion.g
-              animate={{ x: [-18, 18, -18], y: [0, -5, 0] }}
-              transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <path
-                d="M-80 260 C 40 185, 160 335, 280 260 S 520 185, 640 260 S 880 335, 1000 260 S 1240 185, 1360 260 S 1600 335, 1720 260"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-              <path
-                d="M-80 260 C 40 185, 160 335, 280 260 S 520 185, 640 260 S 880 335, 1000 260 S 1240 185, 1360 260 S 1600 335, 1720 260"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="16"
-                strokeLinecap="round"
-                className="opacity-[0.12] blur-xl"
-              />
-            </motion.g>
-          </svg>
+          <motion.div
+            className="absolute inset-x-[-18%] top-[-12%] h-[90%] opacity-75 blur-3xl dark:opacity-55"
+            style={{
+              background:
+                "radial-gradient(70% 48% at 16% 46%, hsl(var(--primary) / 0.13), transparent 68%), radial-gradient(64% 44% at 82% 44%, rgb(6 182 212 / 0.13), transparent 70%), linear-gradient(105deg, transparent 8%, rgb(20 184 166 / 0.08) 36%, rgb(6 182 212 / 0.1) 55%, transparent 86%)",
+              backgroundSize: "170% 170%",
+            }}
+            animate={{
+              backgroundPosition: ["0% 46%", "100% 54%", "0% 46%"],
+              opacity: [0.62, 0.78, 0.62],
+            }}
+            transition={{ duration: 28, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute inset-x-[-12%] top-[16%] h-[52%] opacity-70 blur-3xl dark:opacity-50"
+            style={{
+              background:
+                "linear-gradient(100deg, transparent 4%, hsl(var(--primary) / 0.13) 30%, rgb(20 184 166 / 0.12) 48%, rgb(6 182 212 / 0.14) 68%, transparent 94%)",
+              clipPath:
+                "polygon(0 44%, 10% 36%, 24% 43%, 39% 34%, 55% 42%, 72% 32%, 88% 39%, 100% 34%, 100% 72%, 86% 65%, 70% 73%, 54% 63%, 38% 72%, 22% 62%, 8% 69%, 0 64%)",
+            }}
+            animate={{
+              x: ["-3%", "3%", "-3%"],
+              y: [0, -12, 0],
+              scale: [1, 1.04, 1],
+            }}
+            transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
+          />
         </div>
 
         <div className="relative mx-auto max-w-7xl">
