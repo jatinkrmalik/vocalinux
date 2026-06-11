@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { BookOpen, CheckCircle2, ChevronRight, Clock, Download, Sparkles, Tag, Zap } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Download,
+  Sparkles,
+  Tag,
+  Zap,
+} from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
@@ -223,17 +232,20 @@ const getTypeStyles = (type: string) => {
   switch (type) {
     case "stable":
       return {
-        badge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+        badge:
+          "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
         label: "Stable",
       };
     case "beta":
       return {
-        badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        badge:
+          "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
         label: "Beta",
       };
     case "alpha":
       return {
-        badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+        badge:
+          "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
         label: "Alpha",
       };
     default:
@@ -264,7 +276,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-06-07",
+    dateModified: "2026-06-11",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -289,7 +301,7 @@ export default function ChangelogPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <Clock className="h-4 w-4" />
           Release History
         </p>
@@ -297,8 +309,8 @@ export default function ChangelogPage() {
           Vocalinux Changelog
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Track every release and see how Vocalinux has evolved. From initial alpha to stable
-          releases, follow the journey of Linux voice dictation.
+          Track every release and see how Vocalinux has evolved. From initial
+          alpha to stable releases, follow the journey of Linux voice dictation.
         </p>
       </section>
 
@@ -321,23 +333,54 @@ export default function ChangelogPage() {
                   {styles.label}
                 </span>
                 {index === 0 && (
-                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                  <span className="bg-primary/10 rounded-full px-3 py-1 text-xs font-semibold text-primary">
                     Latest
                   </span>
                 )}
-                <span className="text-sm text-muted-foreground">{release.date}</span>
+                <span className="text-sm text-muted-foreground">
+                  {release.date}
+                </span>
               </div>
 
               <ul className="space-y-2">
                 {release.highlights.map((highlight) => (
-                  <li key={highlight} className="flex items-start gap-2 text-muted-foreground">
+                  <li
+                    key={highlight}
+                    className="flex items-start gap-2 text-muted-foreground"
+                  >
                     <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                     {highlight}
                   </li>
                 ))}
               </ul>
 
-              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+              {index === 0 && (
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {[
+                    { href: "/remote-api/", label: "Remote API guide" },
+                    {
+                      href: "/voice-activity-detection/",
+                      label: "Silero VAD guide",
+                    },
+                    { href: "/advanced-settings/", label: "Advanced settings" },
+                    {
+                      href: "/desktop-reliability/",
+                      label: "Reliability overview",
+                    },
+                  ].map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="border-primary/30 bg-primary/10 hover:bg-primary/15 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold text-primary"
+                    >
+                      {link.label}
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-700">
                 <a
                   href={`https://github.com/jatinkrmalik/vocalinux/releases/tag/${release.version}`}
                   target="_blank"
@@ -368,7 +411,10 @@ export default function ChangelogPage() {
           <li className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-primary" />
             Check the{" "}
-            <Link href="/install/" className="font-semibold text-primary hover:underline">
+            <Link
+              href="/install/"
+              className="font-semibold text-primary hover:underline"
+            >
               install guide
             </Link>{" "}
             for update instructions

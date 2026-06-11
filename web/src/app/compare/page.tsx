@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { CheckCircle2, Cpu, Sparkles, Zap } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronRight,
+  Cpu,
+  Server,
+  Sparkles,
+  Zap,
+} from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
@@ -38,15 +45,27 @@ const engineTable = [
     iconColor: "text-cyan-500",
     iconBg: "bg-cyan-500/10",
   },
+  {
+    engine: "Remote API",
+    speed: "Depends on server + network latency",
+    hardware: "Client CPU + remote Whisper server",
+    accuracy: "Depends on remote model",
+    footprint: "No local model required",
+    bestFor: "Powerful LAN servers or shared transcription backends",
+    icon: Server,
+    iconColor: "text-green-500",
+    iconBg: "bg-green-500/10",
+  },
 ];
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "Whisper.cpp vs Whisper vs VOSK for Linux Voice Dictation",
+  title: "Whisper.cpp vs Whisper vs VOSK vs Remote API for Linux",
   description:
-    "Compare whisper.cpp, Whisper, and VOSK for Linux speech-to-text. See speed, hardware requirements, model size, and which engine is best for your workflow.",
+    "Compare whisper.cpp, Whisper, VOSK, and Remote API for Linux speech-to-text. See speed, hardware requirements, privacy tradeoffs, and best use cases.",
   path: "/compare",
   keywords: [
     "whisper.cpp vs vosk",
+    "remote api speech recognition linux",
     "linux speech recognition comparison",
     "best voice dictation engine linux",
     "whisper vs vosk linux",
@@ -57,10 +76,11 @@ export default function CompareEnginesPage() {
   const articleJsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
-    headline: "Whisper.cpp vs Whisper vs VOSK for Linux Voice Dictation",
+    headline:
+      "Whisper.cpp vs Whisper vs VOSK vs Remote API for Linux Voice Dictation",
     description:
-      "Technical comparison of speech recognition engines for offline Linux voice typing.",
-    dateModified: "2026-03-30",
+      "Technical comparison of local and remote speech recognition engines for Linux voice typing.",
+    dateModified: "2026-06-11",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -85,16 +105,17 @@ export default function CompareEnginesPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <Sparkles className="h-4 w-4" />
           Speech Engine Comparison
         </p>
         <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          whisper.cpp vs Whisper vs VOSK on Linux
+          whisper.cpp vs Whisper vs VOSK vs Remote API on Linux
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          If you are choosing a Linux speech-to-text engine, this page gives a practical side-by-side
-          comparison focused on latency, hardware support, install footprint, and real desktop usage.
+          If you are choosing a Linux speech-to-text engine, this page gives a
+          practical side-by-side comparison focused on latency, hardware
+          support, install footprint, privacy boundary, and real desktop usage.
         </p>
       </section>
 
@@ -120,17 +141,29 @@ export default function CompareEnginesPage() {
                 >
                   <td className="px-4 py-4 font-semibold">
                     <span className="inline-flex items-center gap-2">
-                      <span className={`inline-flex rounded-md p-1.5 ${row.iconBg}`}>
+                      <span
+                        className={`inline-flex rounded-md p-1.5 ${row.iconBg}`}
+                      >
                         <Icon className={`h-4 w-4 ${row.iconColor}`} />
                       </span>
                       {row.engine}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.speed}</td>
-                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.hardware}</td>
-                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.accuracy}</td>
-                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.footprint}</td>
-                  <td className="px-4 py-4 text-sm text-muted-foreground">{row.bestFor}</td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">
+                    {row.speed}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">
+                    {row.hardware}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">
+                    {row.accuracy}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">
+                    {row.footprint}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-muted-foreground">
+                    {row.bestFor}
+                  </td>
                 </tr>
               );
             })}
@@ -139,38 +172,61 @@ export default function CompareEnginesPage() {
       </section>
 
       <section className="mt-8 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-3 text-2xl font-semibold">Switching Between Engines</h2>
+        <h2 className="mb-3 text-2xl font-semibold">
+          Switching Between Engines
+        </h2>
         <p className="text-sm text-muted-foreground">
-          You can switch between whisper.cpp, Whisper, and VOSK at any time from Settings. v0.10.1+
-          safely stops recognition before switching to prevent segfaults. Each engine has its own
-          model files.
+          You can switch between whisper.cpp, Whisper, VOSK, and Remote API from
+          Settings. v0.10.1+ safely stops recognition before switching to
+          prevent crashes. v0.12.0 adds Remote API configuration under Advanced
+          settings for compatible transcription servers.
         </p>
       </section>
 
-      <section className="mt-12 grid gap-6 md:grid-cols-3">
+      <section className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-3 text-2xl font-semibold">When to pick whisper.cpp</h2>
+          <h2 className="mb-3 text-2xl font-semibold">
+            When to pick whisper.cpp
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Choose whisper.cpp when you want the best speed-to-accuracy ratio and broad hardware support.
-            It is the default in Vocalinux for a reason. Safe engine switching - v0.10.1+ stops
-            recognition before switching to prevent crashes.
+            Choose whisper.cpp when you want the best speed-to-accuracy ratio
+            and broad hardware support. It is the default in Vocalinux for a
+            reason. Safe engine switching - v0.10.1+ stops recognition before
+            switching to prevent crashes.
           </p>
         </article>
 
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
           <h2 className="mb-3 text-2xl font-semibold">When to pick Whisper</h2>
           <p className="text-sm text-muted-foreground">
-            Choose OpenAI Whisper if your environment already depends on PyTorch/CUDA workflows and you
-            prefer that runtime profile.
+            Choose OpenAI Whisper if your environment already depends on
+            PyTorch/CUDA workflows and you prefer that runtime profile.
           </p>
         </article>
 
         <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
           <h2 className="mb-3 text-2xl font-semibold">When to pick VOSK</h2>
           <p className="text-sm text-muted-foreground">
-            Choose VOSK on older laptops, low-RAM systems, or lightweight VMs where small model size and
-            minimal overhead matter most.
+            Choose VOSK on older laptops, low-RAM systems, or lightweight VMs
+            where small model size and minimal overhead matter most.
           </p>
+        </article>
+
+        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+          <h2 className="mb-3 text-2xl font-semibold">
+            When to pick Remote API
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Choose Remote API when a trusted server has stronger hardware,
+            larger models, or a shared Whisper backend. Use local engines when
+            your voice data must stay entirely on-device.
+          </p>
+          <Link
+            href="/remote-api/"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+          >
+            Remote setup <ChevronRight className="h-4 w-4" />
+          </Link>
         </article>
       </section>
 
@@ -181,15 +237,24 @@ export default function CompareEnginesPage() {
             <span className="inline-flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               Install by distro:
-              <Link href="/install/ubuntu/" className="font-semibold text-primary hover:underline">
+              <Link
+                href="/install/ubuntu/"
+                className="font-semibold text-primary hover:underline"
+              >
                 Ubuntu
               </Link>
               ,
-              <Link href="/install/fedora/" className="font-semibold text-primary hover:underline">
+              <Link
+                href="/install/fedora/"
+                className="font-semibold text-primary hover:underline"
+              >
                 Fedora
               </Link>
               ,
-              <Link href="/install/arch/" className="font-semibold text-primary hover:underline">
+              <Link
+                href="/install/arch/"
+                className="font-semibold text-primary hover:underline"
+              >
                 Arch Linux
               </Link>
               .
@@ -198,13 +263,15 @@ export default function CompareEnginesPage() {
           <li>
             <span className="inline-flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
-              Use interactive install to detect your hardware and pick the best engine defaults.
+              Use interactive install to detect your hardware and pick the best
+              engine defaults.
             </span>
           </li>
           <li>
             <span className="inline-flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
-              After install, tune model size for your preferred latency and accuracy level.
+              After install, tune model size, VAD sensitivity, or Remote API
+              settings for your preferred latency and accuracy level.
             </span>
           </li>
         </ul>

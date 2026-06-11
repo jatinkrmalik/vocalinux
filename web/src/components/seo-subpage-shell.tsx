@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
+  Activity,
   ChevronDown,
   ChevronRight,
   Code2,
@@ -16,6 +17,9 @@ import {
   Menu,
   Monitor,
   Power,
+  Server,
+  ShieldCheck,
+  SlidersHorizontal,
   Shield,
   Sun,
   X,
@@ -42,9 +46,25 @@ const navCategories = [
     label: "Features",
     items: [
       { href: "/compare/", label: "Engine Comparison", icon: Cpu },
+      { href: "/remote-api/", label: "Remote API", icon: Server },
       { href: "/languages/", label: "Multilingual", icon: Globe },
       { href: "/wayland/", label: "Wayland Support", icon: Monitor },
       { href: "/gpu-acceleration/", label: "GPU Acceleration", icon: Cpu },
+      {
+        href: "/voice-activity-detection/",
+        label: "Silero VAD",
+        icon: Activity,
+      },
+      {
+        href: "/advanced-settings/",
+        label: "Advanced Settings",
+        icon: SlidersHorizontal,
+      },
+      {
+        href: "/desktop-reliability/",
+        label: "Desktop Reliability",
+        icon: ShieldCheck,
+      },
       { href: "/autostart/", label: "Autostart", icon: Power },
     ],
   },
@@ -61,7 +81,11 @@ const navCategories = [
   {
     label: "Comparisons",
     items: [
-      { href: "/vs-nerd-dictation/", label: "vs Nerd Dictation", icon: BookOpen },
+      {
+        href: "/vs-nerd-dictation/",
+        label: "vs Nerd Dictation",
+        icon: BookOpen,
+      },
       { href: "/whisper-model-guide/", label: "Whisper Models", icon: Cpu },
       { href: "/voice-typing-vscode/", label: "VS Code", icon: Code2 },
     ],
@@ -85,11 +109,7 @@ const navCategories = [
   },
 ];
 
-function DropdownMenu({
-  category,
-}: {
-  category: (typeof navCategories)[0];
-}) {
+function DropdownMenu({ category }: { category: (typeof navCategories)[0] }) {
   return (
     <div className="group relative">
       <button
@@ -97,12 +117,10 @@ function DropdownMenu({
         className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground focus:bg-zinc-100 focus:text-foreground focus:outline-none dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
       >
         {category.label}
-        <ChevronDown
-          className="h-3.5 w-3.5 transition-transform group-hover:rotate-180 group-focus-within:rotate-180"
-        />
+        <ChevronDown className="h-3.5 w-3.5 transition-transform group-focus-within:rotate-180 group-hover:rotate-180" />
       </button>
 
-      <div className="pointer-events-none invisible absolute left-0 top-full z-50 mt-0 w-56 rounded-xl border border-zinc-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 dark:border-zinc-700 dark:bg-zinc-800">
+      <div className="pointer-events-none invisible absolute left-0 top-full z-50 mt-0 w-56 rounded-xl border border-zinc-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 dark:border-zinc-700 dark:bg-zinc-800">
         {category.items.map((item) => {
           const Icon = item.icon;
           return (
@@ -154,20 +172,20 @@ function Breadcrumbs() {
 
   return (
     <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-      <Link href="/" className="hover:text-foreground transition-colors">
+      <Link href="/" className="transition-colors hover:text-foreground">
         Home
       </Link>
       {breadcrumbs.map((crumb, index) => (
         <React.Fragment key={crumb.href}>
           <ChevronRight className="h-4 w-4" />
           {index === breadcrumbs.length - 1 ? (
-            <span className="text-foreground font-medium">
+            <span className="font-medium text-foreground">
               {getPageTitle(crumb.href)}
             </span>
           ) : (
             <Link
               href={crumb.href}
-              className="hover:text-foreground transition-colors"
+              className="transition-colors hover:text-foreground"
             >
               {crumb.label}
             </Link>
@@ -200,9 +218,25 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
       label: "Features",
       items: [
         { href: "/compare/", label: "Engine Comparison", icon: Cpu },
+        { href: "/remote-api/", label: "Remote API", icon: Server },
         { href: "/whisper-model-guide/", label: "Whisper Models", icon: Cpu },
         { href: "/wayland/", label: "Wayland", icon: Monitor },
         { href: "/gpu-acceleration/", label: "GPU Acceleration", icon: Cpu },
+        {
+          href: "/voice-activity-detection/",
+          label: "Silero VAD",
+          icon: Activity,
+        },
+        {
+          href: "/advanced-settings/",
+          label: "Advanced Settings",
+          icon: SlidersHorizontal,
+        },
+        {
+          href: "/desktop-reliability/",
+          label: "Reliability",
+          icon: ShieldCheck,
+        },
       ],
     },
     {
@@ -218,7 +252,11 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
     {
       label: "Compare",
       items: [
-        { href: "/vs-nerd-dictation/", label: "vs Nerd Dictation", icon: BookOpen },
+        {
+          href: "/vs-nerd-dictation/",
+          label: "vs Nerd Dictation",
+          icon: BookOpen,
+        },
         { href: "/alternatives/", label: "Alternatives", icon: BookOpen },
         { href: "/offline/", label: "100% Offline", icon: Shield },
         { href: "/open-source/", label: "Open Source", icon: Code2 },
@@ -237,7 +275,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
-      <header className="sticky top-0 z-50 border-b border-zinc-200/80 bg-background/95 backdrop-blur-md dark:border-zinc-800/80">
+      <header className="bg-background/95 sticky top-0 z-50 border-b border-zinc-200/80 backdrop-blur-md dark:border-zinc-800/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <Link href="/" className="group flex items-center gap-2">
             <VocalinuxLogo
@@ -260,7 +298,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
             {mounted && (
               <button
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="w-8 h-8 sm:w-9 sm:h-9 bg-muted hover:bg-muted/80 rounded-md flex items-center justify-center transition-all"
+                className="hover:bg-muted/80 flex h-8 w-8 items-center justify-center rounded-md bg-muted transition-all sm:h-9 sm:w-9"
                 aria-label="Toggle theme"
               >
                 {theme === "dark" ? (
@@ -328,14 +366,17 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <p className="text-sm font-semibold">Want the full product overview?</p>
+              <p className="text-sm font-semibold">
+                Want the full product overview?
+              </p>
               <p className="text-sm text-muted-foreground">
-                Go back to the homepage for the live demo and one-command installer.
+                Go back to the homepage for the live demo and one-command
+                installer.
               </p>
             </div>
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+              className="hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black"
             >
               Home Page
               <ChevronRight className="h-4 w-4" />
@@ -353,7 +394,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                       >
                         {item.label}
                       </Link>
