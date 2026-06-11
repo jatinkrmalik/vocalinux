@@ -2314,9 +2314,7 @@ class SettingsDialog(Gtk.Dialog):
         saved_endpoint = self.config_manager.get(
             "speech_recognition", "remote_api_endpoint", "/inference"
         )
-        saved_model = self.config_manager.get(
-            "speech_recognition", "remote_api_model", "whisper-1"
-        )
+        saved_model = self.config_manager.get("speech_recognition", "remote_api_model", "whisper-1")
         if saved_url:
             self.remote_api_url_entry.set_text(saved_url)
         if saved_key:

@@ -1666,11 +1666,7 @@ class SpeechRecognitionManager:
 
             response.raise_for_status()
             result = response.json()
-            content = (
-                result.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-            )
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
             return self._parse_chat_completion_transcription(content)
 
         except requests.exceptions.ConnectionError as e:
