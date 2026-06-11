@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { BookOpen, ChevronRight, CircleHelp, Cpu, Laptop, Lock, Mic, Volume2, Zap } from "lucide-react";
+import {
+  BookOpen,
+  ChevronRight,
+  CircleHelp,
+  Cpu,
+  Laptop,
+  Lock,
+  Mic,
+  Volume2,
+  Zap,
+} from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { buildPageMetadata } from "@/lib/seo";
 
@@ -31,11 +41,11 @@ const faqCategories = [
     questions: [
       {
         q: "Is Vocalinux really 100% offline?",
-        a: "Yes. All speech recognition runs locally on your Linux machine. Your voice data never leaves your computer. No internet connection is required after installation.",
+        a: "Yes for local engines. whisper.cpp, Whisper, and VOSK run on your Linux machine. Vocalinux also offers an optional Remote API engine for servers you configure yourself.",
       },
       {
         q: "Does Vocalinux send any data to external servers?",
-        a: "No. Vocalinux does not collect, transmit, or store any voice data externally. Everything is processed locally using open-source speech recognition engines.",
+        a: "Local engines do not send voice data externally. Remote API mode sends audio only to the transcription server URL you configure.",
       },
       {
         q: "Is my voice data stored anywhere?",
@@ -50,7 +60,7 @@ const faqCategories = [
     questions: [
       {
         q: "Which speech recognition engines are available?",
-        a: "Vocalinux supports three engines: whisper.cpp (default, fastest), OpenAI Whisper (high accuracy), and VOSK (lightweight for older hardware).",
+        a: "Vocalinux supports whisper.cpp (default), OpenAI Whisper, VOSK, and Remote API for compatible self-hosted or trusted transcription servers.",
       },
       {
         q: "How accurate is the transcription?",
@@ -59,6 +69,10 @@ const faqCategories = [
       {
         q: "Can I use Vocalinux in languages other than English?",
         a: "Yes! whisper.cpp and Whisper support 99+ languages with automatic language detection. VOSK supports several languages with separate models.",
+      },
+      {
+        q: "What is Silero VAD?",
+        a: "Silero VAD is neural voice activity detection. Vocalinux uses it when ONNX Runtime support is available to drop silence-only buffers before recognition.",
       },
     ],
   },
@@ -127,7 +141,7 @@ export default function FaqPage() {
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    dateModified: "2026-03-30",
+    dateModified: "2026-06-11",
     mainEntity: faqCategories.flatMap((cat) =>
       cat.questions.map((q) => ({
         "@type": "Question",
@@ -136,7 +150,7 @@ export default function FaqPage() {
           "@type": "Answer",
           text: q.a,
         },
-      }))
+      })),
     ),
   };
 
@@ -148,7 +162,7 @@ export default function FaqPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <CircleHelp className="h-4 w-4" />
           Help Center
         </p>
@@ -156,8 +170,8 @@ export default function FaqPage() {
           Frequently Asked Questions
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Find answers to common questions about Vocalinux. From installation to advanced features,
-          we've got you covered.
+          Find answers to common questions about Vocalinux. From installation to
+          advanced features, we've got you covered.
         </p>
       </section>
 
@@ -178,7 +192,10 @@ export default function FaqPage() {
 
               <div className="space-y-6">
                 {category.questions.map((item, index) => (
-                  <div key={index} className="border-b border-zinc-100 pb-6 last:border-0 last:pb-0 dark:border-zinc-700">
+                  <div
+                    key={index}
+                    className="border-b border-zinc-100 pb-6 last:border-0 last:pb-0 dark:border-zinc-700"
+                  >
                     <h3 className="mb-2 text-lg font-semibold">{item.q}</h3>
                     <p className="text-muted-foreground">{item.a}</p>
                   </div>
@@ -196,7 +213,10 @@ export default function FaqPage() {
             <span className="inline-flex items-center gap-2">
               <Laptop className="h-4 w-4 text-primary" />
               Check the{" "}
-              <Link href="/install/" className="font-semibold text-primary hover:underline">
+              <Link
+                href="/install/"
+                className="font-semibold text-primary hover:underline"
+              >
                 install guide
               </Link>{" "}
               for setup help
@@ -206,7 +226,10 @@ export default function FaqPage() {
             <span className="inline-flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-primary" />
               See the{" "}
-              <Link href="/troubleshooting/" className="font-semibold text-primary hover:underline">
+              <Link
+                href="/troubleshooting/"
+                className="font-semibold text-primary hover:underline"
+              >
                 troubleshooting guide
               </Link>{" "}
               for common issues
