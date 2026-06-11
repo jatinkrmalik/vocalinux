@@ -12,7 +12,6 @@ import {
   Laptop,
   Keyboard,
   Settings,
-  Code,
   Github,
   Star,
   Download,
@@ -26,7 +25,6 @@ import {
   Shield,
   ShieldCheck,
   Server,
-  SlidersHorizontal,
   Globe,
   Cpu,
   Volume2,
@@ -40,15 +38,17 @@ import { useInView } from "react-intersection-observer";
 // The one-liner install command (split into three lines for display)
 // Always uses main/install.sh. The installer dynamically resolves the latest release tag via GitHub API
 const installCommands = {
-  interactiveInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive`,
-
-  oneClickInstallCommand: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh`,
-
-  oneClickInstallWhisper: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=whisper`,
-
-  oneClickInstallVosk: `curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --engine=vosk`,
+  interactiveInstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive`,
+  interactiveInstallDisplayCommand: `curl -fsSL \\
+  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
+  -o /tmp/vl.sh && \\
+bash /tmp/vl.sh --interactive`,
 
   uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
+  uninstallDisplayCommand: `curl -fsSL \\
+  https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh \\
+  -o /tmp/vul.sh && \\
+bash /tmp/vul.sh`,
 };
 
 const homeJsonLd = [
@@ -108,6 +108,14 @@ const homeJsonLd = [
         acceptedAnswer: {
           "@type": "Answer",
           text: "Yes for local engines. All local speech recognition runs on your Linux machine. Vocalinux also offers an optional Remote API engine for user-configured servers.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "Does Vocalinux collect usage telemetry?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "No. The installed app does not send usage telemetry, analytics events, or background usage pings. Even the project maintainer cannot see how many people install or actively use Vocalinux.",
         },
       },
       {
@@ -308,10 +316,9 @@ export default function HomePage() {
 
   const {
     interactiveInstallCommand,
-    oneClickInstallCommand,
-    oneClickInstallWhisper,
-    oneClickInstallVosk,
+    interactiveInstallDisplayCommand,
     uninstallCommand,
+    uninstallDisplayCommand,
   } = installCommands;
 
   return (
@@ -420,13 +427,37 @@ export default function HomePage() {
       <section className="relative overflow-hidden px-4 pb-16 pt-28 sm:px-6 sm:pb-24 sm:pt-36">
         <div className="from-primary/5 dark:from-primary/10 absolute inset-0 bg-gradient-to-br via-transparent to-cyan-500/5 dark:to-cyan-500/10" />
 
-        {/* Animated background elements */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 50, repeat: Infinity, ease: "linear" }}
-            className="from-primary/5 absolute -right-1/2 -top-1/2 h-full w-full rounded-full bg-gradient-to-br to-transparent blur-3xl"
-          />
+        {/* Full-width glass waveform texture */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[44rem] overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_14%,black_78%,transparent)]">
+          <div className="absolute inset-0 bg-white/[0.015] backdrop-blur-[1px] dark:bg-white/[0.008]" />
+          <div className="via-primary/10 dark:via-primary/15 absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent to-transparent" />
+          <svg
+            viewBox="0 0 1440 520"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            className="absolute left-1/2 top-12 h-[30rem] w-[150vw] -translate-x-1/2 text-primary opacity-[0.34] dark:opacity-[0.26]"
+          >
+            <motion.g
+              animate={{ x: [-18, 18, -18], y: [0, -5, 0] }}
+              transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <path
+                d="M-80 260 C 40 185, 160 335, 280 260 S 520 185, 640 260 S 880 335, 1000 260 S 1240 185, 1360 260 S 1600 335, 1720 260"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+              <path
+                d="M-80 260 C 40 185, 160 335, 280 260 S 520 185, 640 260 S 880 335, 1000 260 S 1240 185, 1360 260 S 1600 335, 1720 260"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="16"
+                strokeLinecap="round"
+                className="opacity-[0.12] blur-xl"
+              />
+            </motion.g>
+          </svg>
         </div>
 
         <div className="relative mx-auto max-w-7xl">
@@ -474,7 +505,7 @@ export default function HomePage() {
                   aria-label="View Vocalinux source code on GitHub (opens in a new tab)"
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-8 py-4 text-lg font-semibold text-white transition-all hover:scale-105 hover:bg-zinc-800 hover:shadow-md dark:border-zinc-300 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
                 >
-                  <Code className="h-5 w-5" />
+                  <Github className="h-5 w-5" />
                   We&apos;re Open Source
                 </a>
                 <a
@@ -523,7 +554,7 @@ export default function HomePage() {
                   <div className="p-4 sm:p-5">
                     <pre className="whitespace-pre-wrap text-left font-mono text-sm text-green-400 sm:text-base">
                       <span className="select-none text-zinc-500">$ </span>
-                      {interactiveInstallCommand}
+                      {interactiveInstallDisplayCommand}
                     </pre>
                   </div>
                 </div>
@@ -532,16 +563,16 @@ export default function HomePage() {
                 <div className="mt-5 flex flex-col gap-3 border-t border-zinc-800/50 pt-5 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-zinc-400">
                     <span className="text-zinc-500">Compatible:</span> Ubuntu,
-                    Fedora, Debian, Arch & more
+                    Fedora, Debian, Arch, openSUSE &amp; more
                   </p>
                   <div className="flex items-center gap-4 text-xs text-zinc-500">
                     <span className="flex items-center gap-1.5">
                       <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                      No sudo required
+                      Guided setup
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Zap className="h-3.5 w-3.5 text-green-500" />
-                      ~1-2 min
+                      ~1-2 min default
                     </span>
                   </div>
                 </div>
@@ -551,15 +582,15 @@ export default function HomePage() {
                   <span className="flex items-center gap-1.5">
                     <Zap className="h-3.5 w-3.5 text-yellow-500" />
                     <strong className="text-zinc-300">whisper.cpp</strong>{" "}
-                    powered
+                    default
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <Globe className="h-3.5 w-3.5 text-blue-500" />
-                    AMD, Intel & NVIDIA GPUs
+                    <Cpu className="h-3.5 w-3.5 text-blue-500" />
+                    Vulkan GPU ready
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <Code className="h-3.5 w-3.5 text-purple-500" />
-                    Free & open-source
+                    <Settings className="h-3.5 w-3.5 text-purple-500" />
+                    Interactive engine choice
                   </span>
                 </div>
               </div>
@@ -578,11 +609,11 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-2">
                 <Lock className="h-5 w-5 text-blue-500" />
-                <span>Privacy First</span>
+                <span>No Telemetry</span>
               </div>
               <div className="flex items-center gap-2">
-                <Code className="h-5 w-5 text-purple-500" />
-                <span>Open Source (GPL-3.0)</span>
+                <Activity className="h-5 w-5 text-purple-500" />
+                <span>Local Models</span>
               </div>
               <div className="flex items-center gap-2">
                 <Globe className="h-5 w-5 text-orange-500" />
@@ -624,34 +655,41 @@ export default function HomePage() {
                   title: "Flexible Shortcut Modes",
                   description:
                     "Use toggle mode (double-tap) or push-to-talk mode to dictate anywhere",
+                  href: "/shortcuts/",
                 },
                 {
                   icon: <Zap className="h-6 w-6 text-primary" />,
                   title: "Real-time Transcription",
                   description:
-                    "See your words appear as you speak with minimal latency",
+                    "Compare engines and model choices for low-latency dictation",
+                  href: "/compare/",
                 },
                 {
                   icon: <Volume2 className="h-6 w-6 text-primary" />,
                   title: "Audio Feedback",
                   description:
-                    "Subtle sounds let you know when recording starts and stops",
+                    "Use sound effects to know when recording starts and stops",
+                  href: "/shortcuts/",
                 },
               ].map((item, i) => (
-                <div
+                <Link
                   key={i}
-                  className="flex items-start gap-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800"
+                  href={item.href}
+                  className="hover:border-primary/50 hover:bg-primary/5 dark:hover:border-primary/50 dark:hover:bg-primary/10 group flex items-start gap-4 rounded-xl border border-zinc-200 bg-white p-4 transition-colors dark:border-zinc-700 dark:bg-zinc-800"
                 >
                   <div className="bg-primary/10 rounded-lg p-2">
                     {item.icon}
                   </div>
                   <div>
-                    <h3 className="mb-1 font-semibold">{item.title}</h3>
+                    <h3 className="mb-1 inline-flex items-center gap-1 font-semibold">
+                      {item.title}
+                      <ChevronRight className="h-4 w-4 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
+                    </h3>
                     <p className="text-sm text-muted-foreground">
                       {item.description}
                     </p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </FadeInSection>
@@ -728,12 +766,6 @@ export default function HomePage() {
               title="Desktop Reliability"
               description="Suspend/resume recovery, IBus runtime hardening, keyboard layout preservation, and non-ASCII text injection fallbacks."
               href="/desktop-reliability/"
-            />
-            <FeatureCard
-              icon={<SlidersHorizontal className="h-6 w-6 text-primary" />}
-              title="Advanced Whisper Tuning"
-              description="Power-user whisper.cpp controls for no-speech thresholds, context, prompts, confidence fallbacks, and hallucination reduction."
-              href="/advanced-settings/"
             />
           </div>
 
@@ -826,19 +858,19 @@ export default function HomePage() {
           <FadeInSection delay={0.1}>
             <div className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-800">
               <div className="p-6 sm:p-8">
-                {/* Default: whisper.cpp install */}
-                <div className="mb-8">
+                {/* Interactive install */}
+                <div>
                   <div className="mb-4 flex items-center gap-3">
                     <div className="rounded-lg bg-green-500/10 p-2">
                       <Zap className="h-5 w-5 text-green-500" />
                     </div>
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold">
-                        Recommended: whisper.cpp (Default)
+                        Recommended: interactive installer
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Fastest installation (~1-2 min), Vulkan GPU support for
-                        AMD/Intel/NVIDIA
+                        Detects your system, lets you choose an engine, and sets
+                        up the desktop app.
                       </p>
                     </div>
                   </div>
@@ -849,82 +881,69 @@ export default function HomePage() {
                         <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
                         <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
                       </div>
-                      <CopyButton text={oneClickInstallCommand} />
+                      <CopyButton text={interactiveInstallCommand} />
                     </div>
                     <div className="p-4 sm:p-5">
-                      <pre className="whitespace-pre-wrap break-all text-left font-mono text-sm text-green-400 sm:text-base">
+                      <pre className="overflow-x-auto whitespace-pre-wrap text-left font-mono text-sm text-green-400 sm:text-base">
                         <span className="select-none text-zinc-500">$ </span>
-                        {oneClickInstallCommand}
+                        {interactiveInstallDisplayCommand}
                       </pre>
                     </div>
                   </div>
                 </div>
 
-                {/* Alternative install - Whisper (OpenAI) */}
-                <div className="border-t border-zinc-200 pt-6 dark:border-zinc-700">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="rounded-lg bg-cyan-500/10 p-2">
-                      <Cpu className="h-5 w-5 text-cyan-500" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold">
-                        OpenAI Whisper (PyTorch)
-                      </h3>
+                <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="font-semibold">
+                        Choose your engine during setup
+                      </h4>
                       <p className="text-sm text-muted-foreground">
-                        PyTorch-based engine, NVIDIA GPU only (~5-10 min, ~2.3GB
-                        download)
+                        Start with the guided installer, then pick the runtime
+                        that fits your hardware.
                       </p>
                     </div>
+                    <Link
+                      href="/compare/"
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                    >
+                      Compare engines <ChevronRight className="h-4 w-4" />
+                    </Link>
                   </div>
-                  <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80">
-                    <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-                      </div>
-                      <CopyButton text={oneClickInstallWhisper} />
-                    </div>
-                    <div className="p-4 sm:p-5">
-                      <pre className="whitespace-pre-wrap break-all text-left font-mono text-sm text-green-400 sm:text-base">
-                        <span className="select-none text-zinc-500">$ </span>
-                        {oneClickInstallWhisper}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Alternative install - VOSK only */}
-                <div className="border-t border-zinc-200 pt-6 dark:border-zinc-700">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="rounded-lg bg-orange-500/10 p-2">
-                      <Zap className="h-5 w-5 text-orange-500" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold">
-                        VOSK Only (Lightweight)
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        For low-RAM systems (4GB or less) - minimal footprint
-                        (~40MB)
-                      </p>
-                    </div>
-                  </div>
-                  <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80">
-                    <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {[
+                      {
+                        icon: <Zap className="h-4 w-4 text-green-500" />,
+                        title: "whisper.cpp",
+                        description: "Default, fast, Vulkan-capable",
+                      },
+                      {
+                        icon: <Cpu className="h-4 w-4 text-cyan-500" />,
+                        title: "Whisper",
+                        description: "PyTorch/CUDA workflow",
+                      },
+                      {
+                        icon: <Server className="h-4 w-4 text-orange-500" />,
+                        title: "VOSK",
+                        description: "Small footprint for older systems",
+                      },
+                    ].map((engine) => (
+                      <div
+                        key={engine.title}
+                        className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-800"
+                      >
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className="rounded-md bg-zinc-100 p-1.5 dark:bg-zinc-700">
+                            {engine.icon}
+                          </span>
+                          <h5 className="font-semibold">{engine.title}</h5>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {engine.description}
+                        </p>
                       </div>
-                      <CopyButton text={oneClickInstallVosk} />
-                    </div>
-                    <div className="p-4 sm:p-5">
-                      <pre className="whitespace-pre-wrap break-all text-left font-mono text-sm text-green-400 sm:text-base">
-                        <span className="select-none text-zinc-500">$ </span>
-                        {oneClickInstallVosk}
-                      </pre>
-                    </div>
+                    ))}
                   </div>
                 </div>
 
@@ -969,18 +988,23 @@ export default function HomePage() {
 
           {/* System requirements */}
           <FadeInSection delay={0.2}>
-            <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            <div className="mt-8 space-y-6">
               <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
                 <h4 className="mb-4 flex items-center gap-2 font-semibold">
                   <Cpu className="h-5 w-5 text-primary" />
                   System Requirements
                 </h4>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>• Ubuntu 22.04+ (or equivalent)</li>
-                  <li>• Python 3.9 or newer</li>
-                  <li>• 4GB RAM (8GB for large models)</li>
-                  <li>• Microphone</li>
-                  <li>• X11 or Wayland display server</li>
+                <ul className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                  <li>
+                    • Ubuntu, Debian, Fedora, Arch, openSUSE, or equivalent
+                  </li>
+                  <li>• Python 3.9+ with GTK 3/PyGObject dependencies</li>
+                  <li>• 4GB RAM minimum; 8GB+ recommended for larger models</li>
+                  <li>• Microphone plus X11 or Wayland desktop session</li>
+                  <li>• ~200MB disk for the default whisper.cpp setup</li>
+                  <li>
+                    • Optional Vulkan GPU for AMD, Intel, or NVIDIA acceleration
+                  </li>
                 </ul>
               </div>
               <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
@@ -1005,9 +1029,9 @@ export default function HomePage() {
                     <CopyButton text={uninstallCommand} />
                   </div>
                   <div className="p-4 sm:p-5">
-                    <pre className="whitespace-pre-wrap break-all text-left font-mono text-sm text-green-400 sm:text-base">
+                    <pre className="overflow-x-auto whitespace-pre-wrap text-left font-mono text-sm text-green-400 sm:text-base">
                       <span className="select-none text-zinc-500">$ </span>
-                      {uninstallCommand}
+                      {uninstallDisplayCommand}
                     </pre>
                   </div>
                 </div>
@@ -1140,12 +1164,7 @@ export default function HomePage() {
             </FadeInSection>
 
             <FadeInSection delay={0.2}>
-              <div className="relative h-full overflow-hidden rounded-xl border-2 border-primary bg-white p-6 dark:bg-zinc-800">
-                <div className="absolute right-4 top-4">
-                  <span className="rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground dark:text-black">
-                    DEFAULT
-                  </span>
-                </div>
+              <div className="flex h-full flex-col overflow-hidden rounded-xl border-2 border-primary bg-white p-6 dark:bg-zinc-800">
                 <div className="mb-4 flex items-center gap-3">
                   <div className="bg-primary/10 rounded-lg p-3">
                     <Zap className="h-6 w-6 text-primary" />
@@ -1173,13 +1192,10 @@ export default function HomePage() {
                   <strong>Model sizes:</strong> Tiny (74MB) • Base (141MB) •
                   Small (465MB) • Medium (1.5GB) • Large (3.0GB)
                 </div>
-                <div className="mt-4">
-                  <Link
-                    href="/gpu-acceleration/"
-                    className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                  >
-                    GPU acceleration <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
+                <div className="mt-auto flex justify-center pt-6">
+                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground dark:text-black">
+                    Default engine
+                  </span>
                 </div>
               </div>
             </FadeInSection>
@@ -1244,14 +1260,6 @@ export default function HomePage() {
                   <strong>Best for:</strong> powerful LAN servers and shared
                   Whisper backends
                 </div>
-                <div className="mt-4">
-                  <Link
-                    href="/remote-api/"
-                    className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                  >
-                    Remote API setup <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
               </div>
             </FadeInSection>
           </div>
@@ -1300,6 +1308,11 @@ export default function HomePage() {
                       .
                     </>
                   ),
+                },
+                {
+                  question: "Does Vocalinux collect usage telemetry?",
+                  answer:
+                    "No. The installed app does not send usage telemetry, analytics events, or background usage pings. Even the project maintainer cannot see how many people have installed or actively use Vocalinux, and you can verify this by watching for external network calls after installation.",
                 },
                 {
                   question: "Which Linux distributions are supported?",
@@ -1528,14 +1541,15 @@ export default function HomePage() {
           <div className="grid gap-8 md:grid-cols-3">
             {/* VocaMac Card */}
             <FadeInSection delay={0.1}>
-              <div className="relative h-full rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+              <div className="group relative h-full overflow-hidden rounded-xl border border-zinc-300/80 bg-gradient-to-br from-zinc-50 via-white to-zinc-200 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-zinc-400 hover:shadow-xl hover:shadow-zinc-500/10 dark:border-zinc-600 dark:from-zinc-800 dark:via-zinc-800 dark:to-zinc-700/70">
+                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-70 dark:via-white/20" />
                 <div className="absolute right-4 top-4">
                   <span className="rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground dark:text-black">
                     Beta
                   </span>
                 </div>
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex items-center justify-center rounded-lg bg-zinc-100 p-3 dark:bg-zinc-700">
+                  <div className="flex items-center justify-center rounded-lg bg-gradient-to-br from-zinc-100 to-zinc-300 p-3 shadow-inner transition-transform duration-300 group-hover:scale-105 dark:from-zinc-700 dark:to-zinc-500">
                     <img
                       src="https://cdn.simpleicons.org/apple/000000"
                       alt="macOS"
@@ -1589,14 +1603,15 @@ export default function HomePage() {
 
             {/* VocaLinux Card (center) */}
             <FadeInSection delay={0.2}>
-              <div className="relative h-full rounded-xl border-2 border-primary bg-white p-6 dark:bg-zinc-800">
+              <div className="from-primary/10 shadow-primary/10 hover:shadow-primary/20 group relative h-full overflow-hidden rounded-xl border-2 border-primary bg-gradient-to-br via-white to-emerald-500/10 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:via-zinc-800 dark:to-emerald-500/15">
+                <div className="via-primary/70 pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent to-transparent" />
                 <div className="absolute right-4 top-4">
                   <span className="rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground dark:text-black">
                     Beta
                   </span>
                 </div>
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex items-center justify-center rounded-lg bg-zinc-100 p-3 dark:bg-zinc-700">
+                  <div className="from-primary/15 dark:from-primary/20 flex items-center justify-center rounded-lg bg-gradient-to-br to-emerald-500/20 p-3 shadow-inner transition-transform duration-300 group-hover:scale-105 dark:to-emerald-500/20">
                     <img
                       src="https://cdn.simpleicons.org/linux/000000"
                       alt="Linux"
@@ -1648,14 +1663,15 @@ export default function HomePage() {
 
             {/* VocaWin Card */}
             <FadeInSection delay={0.3}>
-              <div className="relative h-full rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+              <div className="group relative h-full overflow-hidden rounded-xl border border-sky-300/60 bg-gradient-to-br from-sky-50 via-white to-blue-100 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-sky-400 hover:shadow-xl hover:shadow-sky-500/10 dark:border-sky-900/80 dark:from-zinc-800 dark:via-zinc-800 dark:to-blue-950/50">
+                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/70 to-transparent dark:via-sky-500/40" />
                 <div className="absolute right-4 top-4">
                   <span className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                     Coming Soon
                   </span>
                 </div>
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex items-center justify-center rounded-lg bg-zinc-100 p-3 dark:bg-zinc-700">
+                  <div className="flex items-center justify-center rounded-lg bg-gradient-to-br from-sky-100 to-blue-200 p-3 shadow-inner transition-transform duration-300 group-hover:scale-105 dark:from-blue-950 dark:to-sky-900">
                     <svg
                       viewBox="0 0 88 88"
                       width={24}
@@ -1748,7 +1764,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="bg-zinc-900 px-4 py-12 text-white sm:px-6">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-12 grid grid-cols-2 gap-8 lg:grid-cols-5">
+          <div className="mb-12 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-6">
             <div className="col-span-2 mb-4 lg:col-span-1 lg:mb-0">
               <Link href="/" className="mb-4 flex items-center gap-2">
                 <VocalinuxLogo width={32} height={32} className="h-8 w-8" />
@@ -1802,14 +1818,6 @@ export default function HomePage() {
                 </li>
                 <li>
                   <Link
-                    href="/use-cases/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Use Cases
-                  </Link>
-                </li>
-                <li>
-                  <Link
                     href="/autostart/"
                     className="text-zinc-400 transition-colors hover:text-white"
                   >
@@ -1821,7 +1829,7 @@ export default function HomePage() {
 
             <div>
               <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Learn
+                Recognition
               </h3>
               <ul className="space-y-2.5 text-sm">
                 <li>
@@ -1872,6 +1880,14 @@ export default function HomePage() {
                     vs Nerd Dictation
                   </Link>
                 </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Desktop
+              </h3>
+              <ul className="space-y-2.5 text-sm">
                 <li>
                   <Link
                     href="/wayland/"
@@ -1894,6 +1910,22 @@ export default function HomePage() {
                     className="text-zinc-400 transition-colors hover:text-white"
                   >
                     Desktop Reliability
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/shortcuts/"
+                    className="text-zinc-400 transition-colors hover:text-white"
+                  >
+                    Voice Commands
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/offline/"
+                    className="text-zinc-400 transition-colors hover:text-white"
+                  >
+                    100% Offline
                   </Link>
                 </li>
               </ul>
@@ -1966,14 +1998,6 @@ export default function HomePage() {
                     className="text-zinc-400 transition-colors hover:text-white"
                   >
                     Troubleshooting
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/shortcuts/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Voice Commands
                   </Link>
                 </li>
                 <li>
