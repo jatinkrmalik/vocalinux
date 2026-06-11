@@ -431,7 +431,20 @@ export default function HomePage() {
         <div className="pointer-events-none absolute inset-0 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_10%,black_84%,transparent)]">
           <div className="absolute inset-0 bg-white/[0.015] backdrop-blur-[1px] dark:bg-white/[0.008]" />
           <motion.div
-            className="absolute inset-x-[-18%] top-[-12%] h-[90%] opacity-75 blur-3xl dark:opacity-55"
+            className="absolute inset-x-[-18%] top-[-12%] h-[90%] blur-3xl dark:hidden"
+            style={{
+              background:
+                "radial-gradient(70% 48% at 16% 46%, hsl(var(--primary) / 0.2), transparent 68%), radial-gradient(64% 44% at 82% 44%, rgb(6 182 212 / 0.2), transparent 70%), linear-gradient(105deg, transparent 8%, rgb(20 184 166 / 0.14) 36%, rgb(6 182 212 / 0.16) 55%, transparent 86%)",
+              backgroundSize: "170% 170%",
+            }}
+            animate={{
+              backgroundPosition: ["0% 46%", "100% 54%", "0% 46%"],
+              opacity: [0.68, 0.94, 0.68],
+            }}
+            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute inset-x-[-18%] top-[-12%] hidden h-[90%] blur-3xl dark:block"
             style={{
               background:
                 "radial-gradient(70% 48% at 16% 46%, hsl(var(--primary) / 0.13), transparent 68%), radial-gradient(64% 44% at 82% 44%, rgb(6 182 212 / 0.13), transparent 70%), linear-gradient(105deg, transparent 8%, rgb(20 184 166 / 0.08) 36%, rgb(6 182 212 / 0.1) 55%, transparent 86%)",
@@ -439,12 +452,28 @@ export default function HomePage() {
             }}
             animate={{
               backgroundPosition: ["0% 46%", "100% 54%", "0% 46%"],
-              opacity: [0.62, 0.78, 0.62],
+              opacity: [0.58, 0.82, 0.58],
             }}
-            transition={{ duration: 28, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute inset-x-[-12%] top-[16%] h-[52%] opacity-70 blur-3xl dark:opacity-50"
+            className="absolute inset-x-[-12%] top-[16%] h-[52%] blur-3xl dark:hidden"
+            style={{
+              background:
+                "linear-gradient(100deg, transparent 4%, hsl(var(--primary) / 0.22) 30%, rgb(20 184 166 / 0.2) 48%, rgb(6 182 212 / 0.22) 68%, transparent 94%)",
+              clipPath:
+                "polygon(0 44%, 10% 36%, 24% 43%, 39% 34%, 55% 42%, 72% 32%, 88% 39%, 100% 34%, 100% 72%, 86% 65%, 70% 73%, 54% 63%, 38% 72%, 22% 62%, 8% 69%, 0 64%)",
+            }}
+            animate={{
+              x: ["-4%", "4%", "-4%"],
+              y: [0, -16, 0],
+              opacity: [0.72, 0.96, 0.72],
+              scale: [1, 1.05, 1],
+            }}
+            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute inset-x-[-12%] top-[16%] hidden h-[52%] blur-3xl dark:block"
             style={{
               background:
                 "linear-gradient(100deg, transparent 4%, hsl(var(--primary) / 0.13) 30%, rgb(20 184 166 / 0.12) 48%, rgb(6 182 212 / 0.14) 68%, transparent 94%)",
@@ -452,11 +481,12 @@ export default function HomePage() {
                 "polygon(0 44%, 10% 36%, 24% 43%, 39% 34%, 55% 42%, 72% 32%, 88% 39%, 100% 34%, 100% 72%, 86% 65%, 70% 73%, 54% 63%, 38% 72%, 22% 62%, 8% 69%, 0 64%)",
             }}
             animate={{
-              x: ["-3%", "3%", "-3%"],
-              y: [0, -12, 0],
-              scale: [1, 1.04, 1],
+              x: ["-4%", "4%", "-4%"],
+              y: [0, -16, 0],
+              opacity: [0.54, 0.76, 0.54],
+              scale: [1, 1.05, 1],
             }}
-            transition={{ duration: 24, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
           />
         </div>
 
@@ -477,9 +507,22 @@ export default function HomePage() {
 
               <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
                 Voice Dictation for Linux,{" "}
-                <span className="bg-gradient-to-r from-primary via-teal-500 to-cyan-600 bg-clip-text text-transparent">
+                <motion.span
+                  className="inline-block bg-gradient-to-r from-primary via-teal-500 to-cyan-600 bg-clip-text text-transparent"
+                  style={{
+                    backgroundSize: "220% 100%",
+                  }}
+                  animate={{
+                    backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
+                  }}
+                  transition={{
+                    duration: 14,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                >
                   Finally Done Right
-                </span>
+                </motion.span>
               </h1>
 
               <p className="mx-auto mb-2 max-w-3xl text-lg text-muted-foreground sm:text-xl md:text-2xl">
