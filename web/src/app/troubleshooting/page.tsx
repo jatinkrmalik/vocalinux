@@ -21,7 +21,7 @@ const troubleshootingItems = [
       "Application crashes on launch",
     ],
     solutions: [
-      "Ensure you ran the installer: curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash",
+      "Ensure you ran the installer from the homepage or install guide",
       "Check if the virtual environment is activated: source ~/.local/share/vocalinux/venv/bin/activate",
       "Verify Python version (3.9+ required): python3 --version",
       "Try reinstalling: ./uninstall.sh && ./install.sh",
@@ -252,7 +252,9 @@ export default function TroubleshootingPage() {
               </p>
               <ul className="ml-6 list-disc text-sm text-amber-600 dark:text-amber-300">
                 {item.symptoms.map((symptom) => (
-                  <li key={symptom}>{symptom}</li>
+                  <li key={symptom} className="break-words">
+                    {symptom}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -264,7 +266,9 @@ export default function TroubleshootingPage() {
               </p>
               <ul className="ml-6 list-disc text-sm text-green-600 dark:text-green-300">
                 {item.solutions.map((solution) => (
-                  <li key={solution}>{solution}</li>
+                  <li key={solution} className="break-words">
+                    {solution}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -278,58 +282,66 @@ export default function TroubleshootingPage() {
           Still having issues?
         </h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li className="flex items-center gap-2">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            Check the{" "}
-            <Link
-              href="/faq/"
-              className="font-semibold text-primary hover:underline"
-            >
-              FAQ page
-            </Link>{" "}
-            for common questions
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              Check the{" "}
+              <Link
+                href="/faq/"
+                className="font-semibold text-primary hover:underline"
+              >
+                FAQ page
+              </Link>{" "}
+              for common questions
+            </span>
           </li>
-          <li className="flex items-center gap-2">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            Review{" "}
-            <Link
-              href="/remote-api/"
-              className="font-semibold text-primary hover:underline"
-            >
-              Remote API setup
-            </Link>{" "}
-            or{" "}
-            <Link
-              href="/voice-activity-detection/"
-              className="font-semibold text-primary hover:underline"
-            >
-              Silero VAD behavior
-            </Link>{" "}
-            for newer recognition features
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              Review{" "}
+              <Link
+                href="/remote-api/"
+                className="font-semibold text-primary hover:underline"
+              >
+                Remote API setup
+              </Link>{" "}
+              or{" "}
+              <Link
+                href="/voice-activity-detection/"
+                className="font-semibold text-primary hover:underline"
+              >
+                Silero VAD behavior
+              </Link>{" "}
+              for newer recognition features
+            </span>
           </li>
-          <li className="flex items-center gap-2">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            <a
-              href="https://github.com/jatinkrmalik/vocalinux/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
-            >
-              Search existing issues on GitHub
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              <a
+                href="https://github.com/jatinkrmalik/vocalinux/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+              >
+                Search existing issues on GitHub
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </span>
           </li>
-          <li className="flex items-center gap-2">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            <a
-              href="https://github.com/jatinkrmalik/vocalinux/issues/new"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
-            >
-              Open a new issue (include debug logs)
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              <a
+                href="https://github.com/jatinkrmalik/vocalinux/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+              >
+                Open a new issue (include debug logs)
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </span>
           </li>
         </ul>
       </section>

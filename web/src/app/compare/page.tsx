@@ -119,7 +119,42 @@ export default function CompareEnginesPage() {
         </p>
       </section>
 
-      <section className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+      <section className="space-y-4 md:hidden">
+        {engineTable.map((row) => {
+          const Icon = row.icon;
+          return (
+            <article
+              key={row.engine}
+              className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <span className={`inline-flex rounded-md p-2 ${row.iconBg}`}>
+                  <Icon className={`h-5 w-5 ${row.iconColor}`} />
+                </span>
+                <h2 className="text-xl font-semibold">{row.engine}</h2>
+              </div>
+              <dl className="grid gap-3 text-sm">
+                {[
+                  ["Speed", row.speed],
+                  ["Hardware", row.hardware],
+                  ["Accuracy", row.accuracy],
+                  ["Footprint", row.footprint],
+                  ["Best for", row.bestFor],
+                ].map(([label, value]) => (
+                  <div key={label} className="grid gap-1">
+                    <dt className="text-xs font-semibold uppercase text-muted-foreground">
+                      {label}
+                    </dt>
+                    <dd className="text-foreground">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="hidden overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800 md:block">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-zinc-200 dark:border-zinc-700">
@@ -233,9 +268,9 @@ export default function CompareEnginesPage() {
       <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-4 text-2xl font-bold">Next steps</h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li>
-            <span className="inline-flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <li className="flex gap-2">
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-green-500" />
+            <span>
               Install by distro:
               <Link
                 href="/install/ubuntu/"
@@ -260,16 +295,16 @@ export default function CompareEnginesPage() {
               .
             </span>
           </li>
-          <li>
-            <span className="inline-flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <li className="flex gap-2">
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-green-500" />
+            <span>
               Use interactive install to detect your hardware and pick the best
               engine defaults.
             </span>
           </li>
-          <li>
-            <span className="inline-flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <li className="flex gap-2">
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-green-500" />
+            <span>
               After install, tune model size, VAD sensitivity, or Remote API
               settings for your preferred latency and accuracy level.
             </span>

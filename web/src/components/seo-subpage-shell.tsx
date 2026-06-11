@@ -287,7 +287,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
           </Link>
 
           {/* Desktop nav with dropdowns */}
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden items-center gap-1 lg:flex">
             {mainNavCategories.map((category) => (
               <DropdownMenu key={category.label} category={category} />
             ))}
@@ -313,7 +313,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
                 e.stopPropagation();
                 setMobileMenuOpen(!mobileMenuOpen);
               }}
-              className="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800 md:hidden"
+              className="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800 lg:hidden"
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             >
               {mobileMenuOpen ? (
@@ -327,7 +327,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="border-t border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900 md:hidden">
+          <div className="border-t border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900 lg:hidden">
             <nav className="max-h-[calc(100vh-4rem)] overflow-y-auto px-4 py-4">
               {mainNavCategories.map((category) => (
                 <div key={category.label} className="mb-4">
