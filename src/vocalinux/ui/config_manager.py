@@ -31,7 +31,7 @@ DEFAULT_CONFIG = {
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
         "remote_api_url": "",  # Remote speech recognition server URL (e.g. http://192.168.1.100:8080)
         "remote_api_key": "",  # Remote server API key (optional)
-        "remote_api_endpoint": "/inference",  # Remote server API endpoint format (/v1/audio/transcriptions or /inference)
+        "remote_api_endpoint": "/inference",  # Remote server API endpoint format
         "remote_api_model": "whisper-1",  # Model name sent to compatible remote APIs
     },
     "audio": {

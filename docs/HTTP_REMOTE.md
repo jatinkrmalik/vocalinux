@@ -4,7 +4,7 @@ Vocalinux can offload speech recognition to a remote HTTP server instead of runn
 
 Vocalinux speaks three wire formats out of the box:
 
-- **OpenAI-compatible** — `POST /v1/audio/transcriptions` (e.g. OpenAI, [Speaches](https://github.com/speaches-ai/speaches), LocalAI, vLLM with Whisper)
+- **OpenAI-compatible** — `POST /v1/audio/transcriptions` (e.g. OpenAI, [Speaches](https://github.com/speaches-ai/speaches), LocalAI, FunASR/SenseVoice)
 - **whisper.cpp server** — `POST /inference` (the binary shipped with [whisper.cpp](https://github.com/ggerganov/whisper.cpp))
 - **Chat-completions audio** — `POST /v1/chat/completions` for ASR servers that expose audio through the OpenAI chat-completions shape, including Qwen3-ASR via vLLM
 
@@ -18,14 +18,14 @@ When the **Remote API** engine is active, Vocalinux:
 
 1. Captures microphone audio locally (16 kHz, mono, 16-bit PCM).
 2. On end-of-utterance, packages the buffer as a WAV file in memory.
-3. Uploads it via `multipart/form-data` to the configured server.
-4. Reads the transcribed text from the JSON response (`{"text": "..."}`) and types it into the focused window.
+3. Uploads it using the configured HTTP format.
+4. Reads the transcribed text from the JSON response and types it into the focused window.
 
 No audio is ever written to disk. The local machine still runs the VAD/segmentation logic — only the heavy ASR step is remote.
 
 ## Server-Side Setup
 
-You need a server that accepts audio uploads and returns text. Three common options:
+You need a server that accepts audio uploads and returns text. Four common setups:
 
 ### Option A: whisper.cpp server
 
@@ -54,7 +54,30 @@ docker run --rm -p 8000:8000 ghcr.io/speaches-ai/speaches:latest
 
 The endpoint is `/v1/audio/transcriptions`.
 
-### Option C: Qwen3-ASR / vLLM chat-completions server
+### Option C: FunASR/SenseVoice local server
+
+[FunASR](https://github.com/modelscope/FunASR) can run a local
+OpenAI-compatible transcription service, which keeps audio on your own machine
+or LAN while letting Vocalinux use SenseVoice or Paraformer-family models:
+
+```bash
+pip install torch torchaudio
+pip install funasr vllm fastapi uvicorn python-multipart
+funasr-server --device cuda
+```
+
+The server listens on `http://localhost:8000` by default and exposes
+`POST /v1/audio/transcriptions`. In Vocalinux, set:
+
+- **Server URL**: `http://localhost:8000`
+- **API Endpoint**: `OpenAI/FunASR (/v1/audio/transcriptions)`
+- **Model**: `sensevoice`
+
+Use `--device cpu` for CPU-only testing if your FunASR install supports it. A
+remote GPU host works too: bind the server to the LAN interface, open the port,
+and point Vocalinux at that host.
+
+### Option D: Qwen3-ASR / vLLM chat-completions server
 
 Qwen3-ASR exposes an OpenAI-style chat-completions server through `qwen-asr-serve`:
 
@@ -81,15 +104,15 @@ The same client format can be used by other chat-completions audio servers that 
 
 ### Via the Settings dialog
 
-The remote engine is a power-user override and lives on the **Advanced** tab so casual users aren't confronted with it.
+The remote engine is a power-user option in the **Speech Engine** settings.
 
-1. Launch Vocalinux and open **Settings → Advanced → Remote Server**.
-2. Toggle **Use remote server** on. This overrides whatever local engine is selected on the Speech Engine tab.
+1. Launch Vocalinux and open **Settings → Speech Engine → Remote Server**.
+2. Toggle **Use remote server** on. This overrides whatever local engine is selected above it.
 3. Fill in the fields:
    - **Server URL**: base URL of the server, e.g. `http://192.168.1.100:8080` (no trailing slash needed; one is stripped automatically).
    - **API Key** (optional): sent as `Authorization: Bearer <key>`. Leave blank if your server doesn't require auth.
-   - **API Endpoint**: pick **Whisper.cpp (`/inference`)**, **OpenAI (`/v1/audio/transcriptions`)**, or **Chat audio (`/v1/chat/completions`)** to match your server.
-   - **Model**: model identifier sent to compatible servers. Use `whisper-1` for classic OpenAI-style Whisper servers, or the server's actual model name such as `Qwen/Qwen3-ASR-0.6B`.
+   - **API Endpoint**: pick **Whisper.cpp (`/inference`)**, **OpenAI/FunASR (`/v1/audio/transcriptions`)**, or **Chat audio (`/v1/chat/completions`)** to match your server.
+   - **Model**: model identifier sent to compatible servers. Use `whisper-1` for classic OpenAI-style Whisper servers, `sensevoice` for FunASR/SenseVoice, or the server's actual model name such as `Qwen/Qwen3-ASR-0.6B`.
 4. Click **Test Connection** — a successful test means the URL is reachable and credentials (if any) are accepted. A failure here is just a warning; Vocalinux will still try again on the first transcription.
 
 Settings auto-save and re-initialise the engine immediately, so you can start dictating as soon as the test passes. Toggling the switch off restores the local engine selected on the Speech Engine tab.
@@ -111,6 +134,20 @@ The same options live in `~/.config/vocalinux/config.json`:
 ```
 
 Restart Vocalinux after editing the file by hand.
+
+FunASR/SenseVoice example:
+
+```json
+{
+  "speech_recognition": {
+    "engine": "remote_api",
+    "remote_api_url": "http://localhost:8000",
+    "remote_api_key": "",
+    "remote_api_endpoint": "/v1/audio/transcriptions",
+    "remote_api_model": "sensevoice"
+  }
+}
+```
 
 ## Wire Protocol Reference
 
@@ -202,6 +239,25 @@ transcribed text.
 { "text": "the transcribed utterance" }
 ```
 
+For OpenAI-compatible FunASR/SenseVoice wrappers, extra metadata is allowed and
+ignored by Vocalinux:
+
+```json
+{
+  "text": "the transcribed utterance",
+  "language": "en",
+  "emotion": "neutral",
+  "segments": [
+    { "text": "the transcribed utterance", "start": 0.0, "end": 1.4 }
+  ]
+}
+```
+
+If `text` is not present, Vocalinux also accepts `transcript`, `transcription`,
+or a `segments` list with per-segment `text` fields. If a SenseVoice wrapper
+returns rich labels inline, for example `<|en|><|NEUTRAL|><|Speech|>hello`,
+Vocalinux strips the leading labels before text injection.
+
 Empty utterances should return `{"text": ""}`. HTTP 4xx/5xx responses are surfaced as transcription errors in the Vocalinux log.
 
 ### Language handling
@@ -233,9 +289,22 @@ curl -H "Authorization: Bearer $API_KEY" \
      -F file=@sample.wav \
      -F model=whisper-1 \
      http://192.168.1.100:8000/v1/audio/transcriptions
+
+# FunASR/SenseVoice
+curl -F file=@sample.wav \
+     -F model=sensevoice \
+     http://localhost:8000/v1/audio/transcriptions
+
+# Chat-completions audio
+python scripts/benchmark_remote_asr.py \
+    --server-url http://localhost:8000 \
+    --endpoint /v1/chat/completions \
+    --model Qwen/Qwen3-ASR-0.6B \
+    sample.wav
 ```
 
-Both should return JSON with a `text` field.
+The multipart endpoints should return JSON with a text field or one of the
+compatible response shapes above.
 
 ## Troubleshooting
 
@@ -244,7 +313,9 @@ Both should return JSON with a `text` field.
 | Connection test reports "failed" | Wrong host/port, firewall, or server not running | Check `curl <url>` from the client; check server logs |
 | HTTP 401/403 | API key missing or wrong | Set the **API Key** field; ensure the server is configured for that key |
 | HTTP 404 on first send | Endpoint format mismatch | Switch the **API Endpoint** dropdown to the format your server actually exposes |
+| FunASR/SenseVoice server returns model errors | Model field does not match the served model | Try `sensevoice`, `paraformer`, or the exact model configured on the server |
 | Chat-completions server returns model errors | Model field doesn't match the served model | Set **Model** to the server's model identifier |
+| SenseVoice labels appear in injected text | Wrapper returned labels somewhere other than the leading transcript prefix | Return plain text in `text` and put language/emotion/speech labels in JSON metadata |
 | Transcription always empty | Server rejected the WAV (sample rate, channels) | Confirm server accepts 16 kHz mono 16-bit WAV; check server logs |
 | First transcription is slow | Cold model load on the server | Warm the server before dictating, or increase the client timeout server-side |
 | Garbled text in foreign language | Wrong `language` setting | Set the language explicitly in Settings instead of `auto` |

@@ -1437,7 +1437,7 @@ class SettingsDialog(Gtk.Dialog):
         self.language_combo.connect("changed", self._on_language_changed)
 
     def _on_remote_api_settings_changed(self, widget):
-        """Handle remote API URL/Key/endpoint changes (Advanced tab)."""
+        """Handle remote API URL/Key/endpoint changes."""
         if self._initializing or self._applying_settings:
             return
 
@@ -2260,7 +2260,7 @@ class SettingsDialog(Gtk.Dialog):
             "Select the API format of the remote server (API Endpoint Format)"
         )
         self.remote_api_endpoint_combo.append(
-            "/v1/audio/transcriptions", "OpenAI (/v1/audio/transcriptions)"
+            "/v1/audio/transcriptions", "OpenAI/FunASR (/v1/audio/transcriptions)"
         )
         self.remote_api_endpoint_combo.append("/inference", "Whisper.cpp (/inference)")
         self.remote_api_endpoint_combo.append(
@@ -2278,12 +2278,12 @@ class SettingsDialog(Gtk.Dialog):
         self.remote_api_model_entry = Gtk.Entry()
         self.remote_api_model_entry.set_placeholder_text("whisper-1")
         self.remote_api_model_entry.set_tooltip_text(
-            "Model identifier sent to OpenAI-compatible and chat-completions servers"
+            "Model identifier sent to OpenAI-compatible, FunASR, and chat-completions servers"
         )
         self.remote_api_model_entry.set_size_request(280, -1)
         remote_model_row = PreferenceRow(
             title="Model",
-            subtitle="Remote model name, for example whisper-1 or Qwen/Qwen3-ASR-0.6B",
+            subtitle="Remote model name, for example whisper-1, sensevoice, or Qwen/Qwen3-ASR-0.6B",
             widget=self.remote_api_model_entry,
         )
         self.remote_server_group.add_row(remote_model_row)

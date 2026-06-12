@@ -4,6 +4,7 @@
 import argparse
 import base64
 import json
+import re
 import statistics
 import string
 import time
@@ -168,6 +169,42 @@ def post_multipart(
         return json.loads(response.read().decode("utf-8"))
 
 
+def clean_transcription_text(text: str) -> str:
+    if not text.strip():
+        return ""
+    return re.sub(r"^\s*(?:<\|[^|>\n]+\|>)+\s*", "", text)
+
+
+def extract_transcription_text(payload: object) -> str:
+    if payload is None:
+        return ""
+    if isinstance(payload, str):
+        return clean_transcription_text(payload)
+    if isinstance(payload, list):
+        parts = [extract_transcription_text(item).strip() for item in payload]
+        return "\n".join(part for part in parts if part)
+    if not isinstance(payload, dict):
+        return clean_transcription_text(str(payload))
+
+    for key in ("text", "transcript", "transcription"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            return clean_transcription_text(value)
+
+    segments = payload.get("segments")
+    if isinstance(segments, list):
+        text = extract_transcription_text(segments)
+        if text:
+            return text
+
+    for key in ("result", "data", "output"):
+        text = extract_transcription_text(payload.get(key))
+        if text:
+            return text
+
+    return ""
+
+
 def parse_chat_text(content: object) -> str:
     if content is None:
         return ""
@@ -186,15 +223,16 @@ def parse_chat_text(content: object) -> str:
 
     try:
         payload = json.loads(text)
-        if isinstance(payload, dict) and isinstance(payload.get("text"), str):
-            return payload["text"].strip()
+        parsed_text = extract_transcription_text(payload)
+        if parsed_text:
+            return parsed_text.strip()
     except (TypeError, ValueError):
         pass
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if lines and lines[0].lower().startswith("language ") and len(lines) > 1:
-        return "\n".join(lines[1:]).strip()
-    return text
+        return clean_transcription_text("\n".join(lines[1:])).strip()
+    return clean_transcription_text(text)
 
 
 def transcribe_file(item: BenchmarkItem, args: argparse.Namespace) -> BenchmarkResult:
@@ -258,7 +296,7 @@ def transcribe_file(item: BenchmarkItem, args: argparse.Namespace) -> BenchmarkR
                 wav_bytes,
                 args.timeout,
             )
-            text = payload.get("text", "")
+            text = extract_transcription_text(payload)
         latency_s = time.perf_counter() - start
         return BenchmarkResult(
             audio=str(item.audio),

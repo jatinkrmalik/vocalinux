@@ -470,6 +470,45 @@ class TestOpenAIAPIFormat(unittest.TestCase):
         call_kwargs = mock_post.call_args[1]
         self.assertEqual(call_kwargs["data"]["model"], "custom-asr-model")
 
+    def test_try_openai_api_accepts_funasr_metadata_response(self):
+        """Test OpenAI-compatible FunASR/SenseVoice responses with metadata."""
+        _setup_requests_post_ok(
+            {
+                "text": "hello from sensevoice",
+                "language": "en",
+                "emotion": "neutral",
+                "duration": 1.2,
+            }
+        )
+
+        result = self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        self.assertEqual(result, "hello from sensevoice")
+
+    def test_try_openai_api_strips_sensevoice_inline_labels(self):
+        """Test SenseVoice rich-text labels are not injected into the desktop."""
+        _setup_requests_post_ok({"text": "<|en|><|NEUTRAL|><|Speech|><|withitn|>hello"})
+
+        result = self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        self.assertEqual(result, "hello")
+
+    def test_try_openai_api_accepts_segmented_response(self):
+        """Test OpenAI-compatible responses that include transcript segments."""
+        _setup_requests_post_ok(
+            {
+                "segments": [
+                    {"text": "first part"},
+                    {"text": "second part"},
+                ],
+                "metadata": {"model": "sensevoice"},
+            }
+        )
+
+        result = self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        self.assertEqual(result, "first part\nsecond part")
+
     def test_try_openai_api_server_error(self):
         """Test OpenAI API handles 500 server error via raise_for_status."""
         _setup_requests_post_status(500, Exception("500 Server Error"))
@@ -593,6 +632,18 @@ class TestChatCompletionsAudioAPIFormat(unittest.TestCase):
         )
 
         self.assertEqual(result, "hello")
+
+    def test_try_chat_completions_audio_api_strips_sensevoice_labels(self):
+        """Test chat responses reuse the same transcript cleanup."""
+        _setup_requests_post_ok(
+            {"choices": [{"message": {"content": "<|zh|><|NEUTRAL|><|Speech|>ni hao"}}]}
+        )
+
+        result = self.manager._try_chat_completions_audio_api(
+            b"audio-wav", None, {}, self.manager._http_session
+        )
+
+        self.assertEqual(result, "ni hao")
 
     def test_try_chat_completions_audio_api_404(self):
         """Test chat-completions audio API returns None for 404."""

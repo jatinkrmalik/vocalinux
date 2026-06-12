@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -1603,8 +1604,7 @@ class SpeechRecognitionManager:
             response.raise_for_status()
             result = response.json()
 
-            # OpenAI format returns {"text": "..."}
-            return result.get("text", "")
+            return self._extract_remote_transcription_text(result)
 
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Cannot connect to remote server {url}: {e}")
@@ -1698,8 +1698,9 @@ class SpeechRecognitionManager:
 
         try:
             payload = json.loads(text)
-            if isinstance(payload, dict) and isinstance(payload.get("text"), str):
-                return payload["text"].strip()
+            parsed_text = self._extract_remote_transcription_text(payload)
+            if parsed_text:
+                return parsed_text.strip()
         except (TypeError, ValueError):
             pass
 
@@ -1707,9 +1708,53 @@ class SpeechRecognitionManager:
         # auto-detected. Keep plain outputs untouched.
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if lines and lines[0].lower().startswith("language ") and len(lines) > 1:
-            return "\n".join(lines[1:]).strip()
+            return self._strip_remote_transcription_metadata("\n".join(lines[1:])).strip()
 
-        return text
+        return self._strip_remote_transcription_metadata(text)
+
+    def _extract_remote_transcription_text(self, payload: object) -> str:
+        """Extract transcript text from OpenAI-compatible ASR responses.
+
+        FunASR/SenseVoice wrappers may include extra metadata or segment arrays.
+        Vocalinux only injects the transcript text and ignores the metadata.
+        """
+        if payload is None:
+            return ""
+
+        if isinstance(payload, str):
+            return self._strip_remote_transcription_metadata(payload)
+
+        if isinstance(payload, list):
+            parts = [self._extract_remote_transcription_text(item).strip() for item in payload]
+            return "\n".join(part for part in parts if part)
+
+        if not isinstance(payload, dict):
+            return self._strip_remote_transcription_metadata(str(payload))
+
+        for key in ("text", "transcript", "transcription"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                return self._strip_remote_transcription_metadata(value)
+
+        segments = payload.get("segments")
+        if isinstance(segments, list):
+            text = self._extract_remote_transcription_text(segments)
+            if text:
+                return text
+
+        for key in ("result", "data", "output"):
+            text = self._extract_remote_transcription_text(payload.get(key))
+            if text:
+                return text
+
+        return ""
+
+    def _strip_remote_transcription_metadata(self, text: str) -> str:
+        """Remove inline ASR metadata tags while preserving ordinary text."""
+        if not text.strip():
+            return ""
+
+        return re.sub(r"^\s*(?:<\|[^|>\n]+\|>)+\s*", "", text)
 
     def _try_whispercpp_server_api(self, wav_bytes: bytes, lang, headers: dict, session):
         """Try to transcribe using whisper.cpp server API format.

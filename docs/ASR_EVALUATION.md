@@ -10,7 +10,7 @@ without reproducible desktop tests.
 | Area | What the evidence suggests | Project implication |
 |---|---|---|
 | Whisper / whisper.cpp | OpenAI released Whisper in 2022, trained on 680k hours of multilingual data, and documents a 30-second windowed decoding design. The model is no longer the newest ASR architecture, but it remains robust, portable, and easy to run through whisper.cpp. | Keep whisper.cpp as the default until a newer engine proves better across install size, CPU/GPU support, latency, accuracy, and Linux desktop reliability. |
-| SenseVoice | SenseVoice-Small is a real modern candidate. Its model card reports non-autoregressive inference, more than 50 languages, and much lower latency than Whisper-Large on its benchmarks. | Evaluate through a service wrapper first. A bundled local engine would add FunASR/model dependencies and needs packaging review. |
+| FunASR/SenseVoice | FunASR now documents an OpenAI-compatible `/v1/audio/transcriptions` server, and SenseVoice-Small is a real modern candidate with non-autoregressive inference, multilingual support, punctuation, and speech metadata. | Support it through the Remote API engine first. Users can run the FunASR server locally or on a LAN host while Vocalinux avoids model download/runtime complexity. |
 | Qwen3-ASR | Qwen3-ASR-0.6B and 1.7B are real modern candidates. The model card documents vLLM serving through `/v1/chat/completions` and streaming support through the vLLM backend. | Support chat-completions audio in the Remote API engine so Qwen3-ASR servers can be tested without adding a heavy local dependency stack. |
 | NVIDIA ASR models | NVIDIA Parakeet-TDT-0.6B-v2 is a 600M-parameter ASR model for 16 kHz mono audio. Recent research also points to NVIDIA streaming ASR variants as strong low-latency candidates. | Track as a benchmark candidate, especially on NVIDIA hardware. Avoid making it a default path until the public serving/install story is clear for ordinary Linux users. |
 | Streaming | Whisper-style streaming usually needs chunking, partial result stabilization, and duplicate suppression. Native streaming models may reduce that complexity. | Benchmark true streaming engines separately from end-of-utterance dictation; do not judge them only through the batch Remote API path. |
@@ -19,6 +19,7 @@ Sources worth re-checking when revisiting this:
 
 - [OpenAI Whisper release](https://openai.com/index/whisper/)
 - [OpenAI Whisper model table](https://github.com/openai/whisper#available-models-and-languages)
+- [FunASR repository](https://github.com/modelscope/FunASR)
 - [SenseVoiceSmall model card](https://huggingface.co/FunAudioLLM/SenseVoiceSmall)
 - [SenseVoice repository](https://github.com/FunAudioLLM/SenseVoice)
 - [Qwen3-ASR-0.6B model card](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)
@@ -67,6 +68,16 @@ python scripts/benchmark_remote_asr.py \
     --server-url http://localhost:8000 \
     --endpoint /v1/audio/transcriptions \
     --model whisper-1 \
+    --manifest samples/manifest.jsonl
+```
+
+For FunASR/SenseVoice:
+
+```bash
+python scripts/benchmark_remote_asr.py \
+    --server-url http://localhost:8000 \
+    --endpoint /v1/audio/transcriptions \
+    --model sensevoice \
     --manifest samples/manifest.jsonl
 ```
 
