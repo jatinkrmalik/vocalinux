@@ -1,15 +1,27 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { AlertTriangle, CheckCircle2, ChevronRight, ExternalLink, Lightbulb, Terminal, Wrench } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  ExternalLink,
+  Lightbulb,
+  Terminal,
+  Wrench,
+} from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const troubleshootingItems = [
   {
     title: "Vocalinux won't start",
-    symptoms: ["Command not found", "Module import errors", "Application crashes on launch"],
+    symptoms: [
+      "Command not found",
+      "Module import errors",
+      "Application crashes on launch",
+    ],
     solutions: [
-      "Ensure you ran the installer: curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash",
+      "Ensure you ran the installer from the homepage or install guide",
       "Check if the virtual environment is activated: source ~/.local/share/vocalinux/venv/bin/activate",
       "Verify Python version (3.9+ required): python3 --version",
       "Try reinstalling: ./uninstall.sh && ./install.sh",
@@ -17,7 +29,10 @@ const troubleshootingItems = [
   },
   {
     title: "No audio detected / microphone not working",
-    symptoms: ["Dictation shows no text", "Audio level indicator stays at zero"],
+    symptoms: [
+      "Dictation shows no text",
+      "Audio level indicator stays at zero",
+    ],
     solutions: [
       "Check microphone permissions in your system settings",
       "Verify microphone is detected: arecord -l (Linux)",
@@ -28,7 +43,10 @@ const troubleshootingItems = [
   },
   {
     title: "Text not appearing in applications",
-    symptoms: ["Dictation works but text doesn't appear", "Text injection fails"],
+    symptoms: [
+      "Dictation works but text doesn't appear",
+      "Text injection fails",
+    ],
     solutions: [
       "For Wayland: Ensure IBus is running and Vocalinux IBus is configured",
       "For X11: Verify xdotool is installed: sudo apt install xdotool",
@@ -39,7 +57,11 @@ const troubleshootingItems = [
   },
   {
     title: "High CPU/GPU usage",
-    symptoms: ["System slowdown during dictation", "Fan noise", "Laggy response"],
+    symptoms: [
+      "System slowdown during dictation",
+      "Fan noise",
+      "Laggy response",
+    ],
     solutions: [
       "Use a smaller model (tiny or base instead of medium/large)",
       "Enable GPU acceleration if available (Vulkan for AMD/Intel, CUDA for NVIDIA)",
@@ -60,6 +82,33 @@ const troubleshootingItems = [
     ],
   },
   {
+    title: "Remote API transcription fails",
+    symptoms: [
+      "Connection test fails",
+      "HTTP 401/403 errors",
+      "HTTP 404 on transcription",
+    ],
+    solutions: [
+      "Confirm the server URL is reachable from the Vocalinux machine",
+      "Check whether the server expects /inference or /v1/audio/transcriptions",
+      "Set the API key if your server requires bearer token authentication",
+      "Use HTTPS and a firewall when the server is outside a trusted LAN",
+    ],
+  },
+  {
+    title: "Silero VAD is not active",
+    symptoms: [
+      "Recognition tab shows amplitude VAD",
+      "Silence-only buffers still appear",
+    ],
+    solutions: [
+      'Install neural VAD support: pip install "vocalinux[vad]"',
+      "Restart Vocalinux after installing ONNX Runtime support",
+      "Use the VAD sensitivity setting in Recognition to tune quiet speech detection",
+      "If Silero cannot load, Vocalinux falls back safely to amplitude-based VAD",
+    ],
+  },
+  {
     title: "Installation fails",
     symptoms: ["Dependency errors", "Package not found", "Permission denied"],
     solutions: [
@@ -72,7 +121,10 @@ const troubleshootingItems = [
   },
   {
     title: "Keyboard shortcut not working",
-    symptoms: ["Shortcut mode doesn't start dictation", "Custom shortcuts ignored"],
+    symptoms: [
+      "Shortcut mode doesn't start dictation",
+      "Custom shortcuts ignored",
+    ],
     solutions: [
       "Check if another application is capturing the shortcut",
       "Verify Vocalinux is running (check system tray)",
@@ -134,7 +186,7 @@ export default function TroubleshootingPage() {
     headline: "Vocalinux Troubleshooting Guide",
     description:
       "Complete troubleshooting guide for Vocalinux Linux voice dictation software.",
-    dateModified: "2026-03-30",
+    dateModified: "2026-06-11",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -167,8 +219,8 @@ export default function TroubleshootingPage() {
           Troubleshooting Guide
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Having issues with Vocalinux? Find solutions to common problems below. Can't find your
-          issue? Open a GitHub issue for help.
+          Having issues with Vocalinux? Find solutions to common problems below.
+          Can't find your issue? Open a GitHub issue for help.
         </p>
       </section>
 
@@ -200,7 +252,9 @@ export default function TroubleshootingPage() {
               </p>
               <ul className="ml-6 list-disc text-sm text-amber-600 dark:text-amber-300">
                 {item.symptoms.map((symptom) => (
-                  <li key={symptom}>{symptom}</li>
+                  <li key={symptom} className="break-words">
+                    {symptom}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -212,7 +266,9 @@ export default function TroubleshootingPage() {
               </p>
               <ul className="ml-6 list-disc text-sm text-green-600 dark:text-green-300">
                 {item.solutions.map((solution) => (
-                  <li key={solution}>{solution}</li>
+                  <li key={solution} className="break-words">
+                    {solution}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -226,37 +282,66 @@ export default function TroubleshootingPage() {
           Still having issues?
         </h2>
         <ul className="space-y-3 text-muted-foreground">
-          <li className="flex items-center gap-2">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            Check the{" "}
-            <Link href="/faq/" className="font-semibold text-primary hover:underline">
-              FAQ page
-            </Link>{" "}
-            for common questions
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              Check the{" "}
+              <Link
+                href="/faq/"
+                className="font-semibold text-primary hover:underline"
+              >
+                FAQ page
+              </Link>{" "}
+              for common questions
+            </span>
           </li>
-          <li className="flex items-center gap-2">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            <a
-              href="https://github.com/jatinkrmalik/vocalinux/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
-            >
-              Search existing issues on GitHub
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              Review{" "}
+              <Link
+                href="/remote-api/"
+                className="font-semibold text-primary hover:underline"
+              >
+                Remote API setup
+              </Link>{" "}
+              or{" "}
+              <Link
+                href="/voice-activity-detection/"
+                className="font-semibold text-primary hover:underline"
+              >
+                Silero VAD behavior
+              </Link>{" "}
+              for newer recognition features
+            </span>
           </li>
-          <li className="flex items-center gap-2">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            <a
-              href="https://github.com/jatinkrmalik/vocalinux/issues/new"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
-            >
-              Open a new issue (include debug logs)
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              <a
+                href="https://github.com/jatinkrmalik/vocalinux/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+              >
+                Search existing issues on GitHub
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+            <span>
+              <a
+                href="https://github.com/jatinkrmalik/vocalinux/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+              >
+                Open a new issue (include debug logs)
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </span>
           </li>
         </ul>
       </section>
