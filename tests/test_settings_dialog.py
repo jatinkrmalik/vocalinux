@@ -586,6 +586,110 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
 
         self.assertTrue(callable(_get_recommended_vosk_model))
 
+    def test_whispercpp_settings_use_size_buckets(self):
+        """Test that whisper.cpp settings split size from specialization."""
+        from vocalinux.ui.settings_dialog import ENGINE_MODELS, WHISPERCPP_MODEL_INFO
+
+        self.assertEqual(
+            ENGINE_MODELS["whisper_cpp"],
+            ["tiny", "base", "small", "medium", "large"],
+        )
+        self.assertIn("large-v3-turbo", WHISPERCPP_MODEL_INFO)
+        self.assertIn("large-v3-turbo-q5_0", WHISPERCPP_MODEL_INFO)
+        self.assertNotIn("small.en-tdrz", WHISPERCPP_MODEL_INFO)
+
+    def test_model_display_name_large_v3_turbo(self):
+        """Test display labels for whisper.cpp model variants."""
+        from vocalinux.ui.settings_dialog import _model_display_name
+
+        self.assertEqual(_model_display_name("large"), "Large v3")
+        self.assertEqual(_model_display_name("large-v3-turbo"), "Large v3 Turbo")
+        self.assertEqual(_model_display_name("large-v3-turbo-q5_0"), "Large v3 Turbo Q5_0")
+        self.assertEqual(_model_display_name("tiny.en-q5_1"), "Tiny EN Q5_1")
+
+    def test_model_specialization_display_name(self):
+        """Test concise specialization labels for the second whisper.cpp dropdown."""
+        from vocalinux.ui.settings_dialog import _model_specialization_display_name
+
+        self.assertEqual(_model_specialization_display_name("medium"), "Standard multilingual")
+        self.assertEqual(_model_specialization_display_name("medium.en"), "English-only")
+        self.assertEqual(
+            _model_specialization_display_name("medium.en-q5_0"),
+            "English-only Q5_0",
+        )
+        self.assertEqual(_model_specialization_display_name("large"), "Standard v3")
+        self.assertEqual(_model_specialization_display_name("large-v3-turbo"), "Turbo")
+        self.assertEqual(_model_specialization_display_name("large-v2-q5_0"), "v2 Q5_0")
+        self.assertEqual(_model_specialization_display_name("large-v3-q5_0"), "v3 Q5_0")
+
+    def test_model_picker_tooltips_explain_when_to_choose_variants(self):
+        """Test hover guidance for model picker choices."""
+        from vocalinux.ui.settings_dialog import (
+            LANGUAGE_TOOLTIP,
+            MODEL_SIZE_TOOLTIP,
+            MODEL_SPECIALIZATION_TOOLTIP,
+            _model_specialization_tooltip,
+        )
+
+        self.assertIn("largest model", MODEL_SIZE_TOOLTIP)
+        self.assertIn("Standard multilingual", MODEL_SPECIALIZATION_TOOLTIP)
+        self.assertIn("English-only", LANGUAGE_TOOLTIP)
+        self.assertIn("only in English", _model_specialization_tooltip("medium.en"))
+        self.assertIn("lower-memory systems", _model_specialization_tooltip("medium-q5_0"))
+        self.assertIn("Turbo", _model_specialization_tooltip("large-v3-turbo"))
+        self.assertIn("legacy large model", _model_specialization_tooltip("large-v2"))
+        self.assertIn("most users", _model_specialization_tooltip("small"))
+
+    def test_model_picker_rows_have_hover_tooltips(self):
+        """Test that model picker rows expose the guidance as hover text."""
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("self.model_combo.set_tooltip_text(MODEL_SIZE_TOOLTIP)", source_code)
+        self.assertIn("self.model_row.set_tooltip_text(MODEL_SIZE_TOOLTIP)", source_code)
+        self.assertIn(
+            "self.model_variant_row.set_tooltip_text(specialization_tooltip)",
+            source_code,
+        )
+        self.assertIn("self.language_row.set_tooltip_text(LANGUAGE_TOOLTIP)", source_code)
+
+    def test_whispercpp_recommendation_uses_language_for_specialization(self):
+        """Test that English language nudges recommendations to .en variants."""
+        from vocalinux.ui.settings_dialog import (
+            _default_whispercpp_variant_for_size,
+            _recommended_whispercpp_variant_for_language,
+        )
+
+        self.assertEqual(
+            _recommended_whispercpp_variant_for_language(
+                "medium",
+                "mock hardware reason",
+                "en-us",
+            ),
+            ("medium.en", "mock hardware reason; English language selected"),
+        )
+        self.assertEqual(_default_whispercpp_variant_for_size("medium", "en-us"), "medium.en")
+
+        self.assertEqual(
+            _recommended_whispercpp_variant_for_language(
+                "medium",
+                "mock hardware reason",
+                "auto",
+            ),
+            ("medium", "mock hardware reason"),
+        )
+        self.assertEqual(_default_whispercpp_variant_for_size("medium", "auto"), "medium")
+
 
 if __name__ == "__main__":
     unittest.main()

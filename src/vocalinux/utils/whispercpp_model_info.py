@@ -15,41 +15,103 @@ logger = logging.getLogger(__name__)
 
 # Whisper.cpp model information
 # Models are downloaded from Hugging Face (ggml format)
+_WHISPERCPP_REPO_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+
+
+def _model_url(model_name: str) -> str:
+    """Build the Hugging Face URL for a ggml whisper.cpp model."""
+    file_model_name = "large-v3" if model_name == "large" else model_name
+    return f"{_WHISPERCPP_REPO_URL}/ggml-{file_model_name}.bin"
+
+
+_WHISPERCPP_MODEL_SPECS = [
+    ("tiny", 74, "39M", "Fastest, lowest accuracy"),
+    ("tiny.en", 74, "39M", "English-only tiny model"),
+    ("tiny-q5_1", 15, "39M", "Quantized tiny model, lowest memory"),
+    ("tiny.en-q5_1", 15, "39M", "Quantized English-only tiny model"),
+    ("tiny-q8_0", 32, "39M", "Q8 quantized tiny model"),
+    ("base", 141, "74M", "Fast, good for basic use"),
+    ("base.en", 141, "74M", "English-only base model"),
+    ("base-q5_1", 60, "74M", "Quantized base model, lower memory"),
+    ("base.en-q5_1", 60, "74M", "Quantized English-only base model"),
+    ("base-q8_0", 82, "74M", "Q8 quantized base model"),
+    ("small", 465, "244M", "Balanced speed/accuracy"),
+    ("small.en", 465, "244M", "English-only small model"),
+    ("small-q5_1", 163, "244M", "Quantized small model, lower memory"),
+    ("small.en-q5_1", 163, "244M", "Quantized English-only small model"),
+    ("small-q8_0", 190, "244M", "Q8 quantized small model"),
+    ("medium", 1463, "769M", "High accuracy, slower"),
+    ("medium.en", 1463, "769M", "English-only medium model"),
+    ("medium-q5_0", 568, "769M", "Quantized medium model, lower memory"),
+    ("medium.en-q5_0", 568, "769M", "Quantized English-only medium model"),
+    ("medium-q8_0", 823, "769M", "Q8 quantized medium model"),
+    ("large-v1", 2952, "1550M", "Legacy large v1 model"),
+    ("large-v2", 2952, "1550M", "Legacy large v2 model"),
+    ("large-v2-q5_0", 1170, "1550M", "Quantized large v2 model, lower memory"),
+    ("large-v2-q8_0", 1660, "1550M", "Q8 quantized large v2 model"),
+    ("large", 2952, "1550M", "Highest accuracy, maps to large v3"),
+    ("large-v3-q5_0", 1170, "1550M", "Quantized large v3 model, lower memory"),
+    ("large-v3-turbo", 1620, "809M", "High accuracy, lower memory than large"),
+    ("large-v3-turbo-q5_0", 574, "809M", "Quantized large v3 Turbo model"),
+    ("large-v3-turbo-q8_0", 874, "809M", "Q8 quantized large v3 Turbo model"),
+]
+
 WHISPERCPP_MODEL_INFO = {
-    "tiny": {
-        "size_mb": 74,
-        "params": "39M",
-        "desc": "Fastest, lowest accuracy",
-        "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
-    },
-    "base": {
-        "size_mb": 141,
-        "params": "74M",
-        "desc": "Fast, good for basic use",
-        "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
-    },
-    "small": {
-        "size_mb": 465,
-        "params": "244M",
-        "desc": "Balanced speed/accuracy",
-        "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
-    },
-    "medium": {
-        "size_mb": 1463,
-        "params": "769M",
-        "desc": "High accuracy, slower",
-        "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
-    },
-    "large": {
-        "size_mb": 2952,
-        "params": "1550M",
-        "desc": "Highest accuracy, slowest",
-        "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
-    },
+    spec[0]: {
+        "size_mb": spec[1],
+        "params": spec[2],
+        "desc": spec[3],
+        "url": _model_url(spec[0]),
+    }
+    for spec in _WHISPERCPP_MODEL_SPECS
 }
 
 # Available models list
 AVAILABLE_MODELS = list(WHISPERCPP_MODEL_INFO.keys())
+
+MODEL_SIZES = ["tiny", "base", "small", "medium", "large"]
+
+MODEL_VARIANTS_BY_SIZE = {
+    "tiny": ["tiny", "tiny.en", "tiny-q5_1", "tiny.en-q5_1", "tiny-q8_0"],
+    "base": ["base", "base.en", "base-q5_1", "base.en-q5_1", "base-q8_0"],
+    "small": [
+        "small",
+        "small.en",
+        "small-q5_1",
+        "small.en-q5_1",
+        "small-q8_0",
+    ],
+    "medium": ["medium", "medium.en", "medium-q5_0", "medium.en-q5_0", "medium-q8_0"],
+    "large": [
+        "large",
+        "large-v3-q5_0",
+        "large-v3-turbo",
+        "large-v3-turbo-q5_0",
+        "large-v3-turbo-q8_0",
+        "large-v2",
+        "large-v2-q5_0",
+        "large-v2-q8_0",
+        "large-v1",
+    ],
+}
+
+
+def get_model_size(model_name: str) -> str:
+    """Return the top-level whisper.cpp size bucket for a model variant."""
+    model_name = model_name.lower()
+    if model_name.startswith("large"):
+        return "large"
+    return model_name.split(".", 1)[0].split("-", 1)[0]
+
+
+def get_model_variants(model_size: str) -> list[str]:
+    """Return available whisper.cpp variants for a size bucket."""
+    return list(MODEL_VARIANTS_BY_SIZE.get(model_size.lower(), []))
+
+
+def is_english_only_model(model_name: str) -> bool:
+    """Return whether a whisper.cpp model variant is English-only."""
+    return ".en" in model_name.lower()
 
 
 # Compute backend types
@@ -244,7 +306,7 @@ def get_model_path(model_name: str) -> str:
     Get the path where a model should be stored.
 
     Args:
-        model_name: Name of the model (tiny, base, small, medium, large)
+        model_name: Name of the model (for example tiny, base, small, medium, large)
 
     Returns:
         Path to the model file
@@ -252,11 +314,11 @@ def get_model_path(model_name: str) -> str:
     models_dir = os.path.expanduser("~/.local/share/vocalinux/models/whispercpp")
     os.makedirs(models_dir, exist_ok=True)
 
-    if model_name == "large":
-        # Large model uses v3 variant
-        return os.path.join(models_dir, "ggml-large-v3.bin")
-    else:
-        return os.path.join(models_dir, f"ggml-{model_name}.bin")
+    model_info = WHISPERCPP_MODEL_INFO.get(model_name)
+    if model_info and model_info.get("url"):
+        return os.path.join(models_dir, os.path.basename(model_info["url"]))
+
+    return os.path.join(models_dir, f"ggml-{model_name}.bin")
 
 
 def is_model_downloaded(model_name: str) -> bool:

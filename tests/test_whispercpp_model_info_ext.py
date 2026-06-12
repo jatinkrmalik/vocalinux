@@ -74,6 +74,12 @@ class TestModelInfo(unittest.TestCase):
 
         self.assertIn("large", WHISPERCPP_MODEL_INFO)
 
+    def test_whispercpp_model_info_contains_large_v3_turbo(self):
+        """Test that WHISPERCPP_MODEL_INFO contains large-v3-turbo model."""
+        from vocalinux.utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO
+
+        self.assertIn("large-v3-turbo", WHISPERCPP_MODEL_INFO)
+
     def test_model_info_has_size_mb(self):
         """Test that each model has size_mb field."""
         from vocalinux.utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO
@@ -123,6 +129,80 @@ class TestModelInfo(unittest.TestCase):
         )
 
         self.assertEqual(set(AVAILABLE_MODELS), set(WHISPERCPP_MODEL_INFO.keys()))
+
+    def test_available_models_tracks_upstream_dictation_models(self):
+        """Test that AVAILABLE_MODELS covers upstream dictation models."""
+        from vocalinux.utils.whispercpp_model_info import AVAILABLE_MODELS
+
+        expected_models = [
+            "tiny",
+            "tiny.en",
+            "tiny-q5_1",
+            "tiny.en-q5_1",
+            "tiny-q8_0",
+            "base",
+            "base.en",
+            "base-q5_1",
+            "base.en-q5_1",
+            "base-q8_0",
+            "small",
+            "small.en",
+            "small-q5_1",
+            "small.en-q5_1",
+            "small-q8_0",
+            "medium",
+            "medium.en",
+            "medium-q5_0",
+            "medium.en-q5_0",
+            "medium-q8_0",
+            "large-v1",
+            "large-v2",
+            "large-v2-q5_0",
+            "large-v2-q8_0",
+            "large",  # Vocalinux alias for upstream large-v3
+            "large-v3-q5_0",
+            "large-v3-turbo",
+            "large-v3-turbo-q5_0",
+            "large-v3-turbo-q8_0",
+        ]
+
+        self.assertEqual(AVAILABLE_MODELS, expected_models)
+
+    def test_model_sizes_group_whispercpp_variants_for_ui(self):
+        """Test that whisper.cpp models are grouped into size buckets."""
+        from vocalinux.utils.whispercpp_model_info import (
+            MODEL_SIZES,
+            MODEL_VARIANTS_BY_SIZE,
+            WHISPERCPP_MODEL_INFO,
+        )
+
+        self.assertEqual(MODEL_SIZES, ["tiny", "base", "small", "medium", "large"])
+        self.assertEqual(MODEL_VARIANTS_BY_SIZE["medium"][0], "medium")
+        self.assertIn("medium.en-q5_0", MODEL_VARIANTS_BY_SIZE["medium"])
+        self.assertIn("large-v3-turbo-q8_0", MODEL_VARIANTS_BY_SIZE["large"])
+        self.assertNotIn("small.en-tdrz", MODEL_VARIANTS_BY_SIZE["small"])
+
+        grouped_models = {
+            model_name for variants in MODEL_VARIANTS_BY_SIZE.values() for model_name in variants
+        }
+        self.assertEqual(grouped_models, set(WHISPERCPP_MODEL_INFO.keys()))
+        self.assertFalse(
+            any(model_name.endswith("-tdrz") for model_name in grouped_models),
+            "TinyDiarize needs diarization-specific runtime support, not the base dictation picker",
+        )
+
+    def test_model_variant_helpers_identify_size_and_english_only_variants(self):
+        """Test helpers that drive the split whisper.cpp model selectors."""
+        from vocalinux.utils.whispercpp_model_info import (
+            get_model_size,
+            get_model_variants,
+            is_english_only_model,
+        )
+
+        self.assertEqual(get_model_size("medium.en-q5_0"), "medium")
+        self.assertEqual(get_model_size("large-v3-turbo-q8_0"), "large")
+        self.assertTrue(is_english_only_model("tiny.en-q5_1"))
+        self.assertFalse(is_english_only_model("large-v3-turbo"))
 
 
 class TestDetectVulkanSupport(unittest.TestCase):
@@ -558,6 +638,26 @@ class TestGetModelPath(unittest.TestCase):
 
         path = get_model_path("large")
         self.assertIn("ggml-large-v3.bin", path)
+
+    def test_large_model_url_uses_v3(self):
+        """Test large model metadata points to upstream large-v3."""
+        from vocalinux.utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO
+
+        self.assertIn("ggml-large-v3.bin", WHISPERCPP_MODEL_INFO["large"]["url"])
+
+    def test_get_model_path_large_v3_turbo(self):
+        """Test get_model_path for large-v3-turbo model."""
+        from vocalinux.utils.whispercpp_model_info import get_model_path
+
+        path = get_model_path("large-v3-turbo")
+        self.assertIn("ggml-large-v3-turbo.bin", path)
+
+    def test_get_model_path_quantized_model(self):
+        """Test get_model_path for quantized model."""
+        from vocalinux.utils.whispercpp_model_info import get_model_path
+
+        path = get_model_path("large-v3-turbo-q5_0")
+        self.assertIn("ggml-large-v3-turbo-q5_0.bin", path)
 
 
 class TestIsModelDownloaded(unittest.TestCase):

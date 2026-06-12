@@ -135,7 +135,7 @@ curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /
 The installer will:
 - **Auto-detect your hardware** (GPU, RAM, Vulkan support)
 - **Recommend the best engine** for your system
-- **Download the appropriate model** (~74MB for whisper.cpp tiny)
+- **Download the appropriate model** (~74MB for the default whisper.cpp tiny model)
 - **Install neural VAD support** when ONNX Runtime is available
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
@@ -243,6 +243,8 @@ vocalinux --engine whisper_cpp    # Use whisper.cpp engine (default)
 vocalinux --engine whisper        # Use OpenAI Whisper engine
 vocalinux --engine vosk           # Use VOSK engine
 vocalinux --model medium          # Use medium-sized model
+vocalinux --model medium.en-q5_0  # Use exact whisper.cpp model variant
+vocalinux --model large-v3-turbo  # Use large-v3 Turbo with whisper.cpp
 vocalinux --wayland               # Force Wayland mode
 vocalinux --start-minimized       # Start without first-run modal prompts
 ```
@@ -283,7 +285,10 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 }
 ```
 
-You can also configure settings through the graphical Settings dialog (right-click the tray icon).
+For whisper.cpp, `model_size` may be a size such as `tiny` or an exact ggml model ID
+such as `medium.en-q5_0` or `large-v3-turbo`. You can also configure this through
+the graphical Settings dialog, where whisper.cpp models are split into **Model Size**
+and **Specialization** controls.
 
 ### Neural Voice Activity Detection
 

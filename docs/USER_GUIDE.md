@@ -69,7 +69,9 @@ Vocalinux supports several commands that you can speak to control formatting:
 6. **Use GPU acceleration**: If you have a GPU (AMD, Intel, or NVIDIA), whisper.cpp will automatically use it for faster transcription
 7. **Choose the right model**:
    - For real-time dictation: Use `tiny` or `base` (fastest)
-   - For better accuracy: Use `vocalinux --model medium` or `--model large`
+   - For better accuracy: Use `small`, `medium`, or `large`
+   - For English-only dictation: Choose an `.en` specialization
+   - For lower-memory systems: Choose a quantized specialization such as `q5_0` or `q5_1`
 8. **Check debug logs**: Run `vocalinux --debug` to see which backend is being used (Vulkan, CUDA, or CPU)
 
 ## Customization
@@ -121,6 +123,14 @@ Vocalinux now offers **three speech recognition engines**:
    - **small** (~465MB) - Better accuracy
    - **medium** (~1.5GB) - High accuracy
    - **large** (~3.0GB) - Best accuracy, slower
+5. For whisper.cpp, select a **Specialization**:
+   - **Standard multilingual** - Best default for auto-detect or non-English dictation
+   - **English-only** - Choose when you dictate only in English
+   - **Quantized** - Lower memory and smaller downloads with a possible accuracy tradeoff
+   - **Turbo** - Faster large-v3 option with strong accuracy
+   - **Legacy large** - Use only if you specifically need an older large model version
+
+English-only whisper.cpp specializations limit the language selector to English.
 
 ### When to Use Each Model
 
@@ -129,6 +139,10 @@ Vocalinux now offers **three speech recognition engines**:
 **For transcription:** Use **small** or **medium** - better accuracy for recorded audio.
 
 **For maximum accuracy:** Use **large** - best results but requires more RAM and GPU power.
+
+**For lower-memory systems:** Use a quantized whisper.cpp specialization such as **Q5** or **Q8**.
+
+**For English-only dictation:** Use an **English-only** specialization and keep the language set to English.
 
 ### GPU Acceleration
 

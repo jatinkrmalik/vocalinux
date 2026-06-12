@@ -18,7 +18,7 @@ import logging
 import os
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import gi
 
@@ -30,12 +30,16 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 from ..common_types import RecognitionState  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
+from ..utils.whispercpp_model_info import MODEL_SIZES as WHISPERCPP_MODEL_SIZES
 from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
     detect_compute_backend,
     get_backend_display_name,
 )
+from ..utils.whispercpp_model_info import get_model_size as get_whispercpp_model_size
+from ..utils.whispercpp_model_info import get_model_variants as get_whispercpp_model_variants
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
+from ..utils.whispercpp_model_info import is_english_only_model as is_english_only_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
 from .config_manager import DEFAULT_CONFIG  # noqa: E402
 from .keyboard_backends import (  # noqa: E402
@@ -67,12 +71,8 @@ ENGINE_MODELS = {
         "large",
     ],  # Add more whisper sizes if needed
     "whisper_cpp": [
-        "tiny",
-        "base",
-        "small",
-        "medium",
-        "large",
-    ],  # whisper.cpp models (ggml format)
+        *WHISPERCPP_MODEL_SIZES,
+    ],  # whisper.cpp top-level size buckets; variants are selected separately
     "remote_api": [],  # Remote API does not need local models
 }
 
@@ -96,6 +96,165 @@ def _engine_from_display(display_name: str) -> str:
         if name == display_name:
             return engine_id
     return display_name.lower()
+
+
+def _model_display_name(model_name: str) -> str:
+    """Get a user-friendly model display name."""
+    if model_name == "large":
+        return "Large v3"
+
+    display_parts = []
+    for part in model_name.split("-"):
+        if part.endswith(".en"):
+            display_parts.append(part[:-3].capitalize())
+            display_parts.append("EN")
+        elif part.startswith("q"):
+            display_parts.append(part.upper())
+        elif part == "turbo":
+            display_parts.append("Turbo")
+        elif part.startswith("v") and part[1:].isdigit():
+            display_parts.append(part)
+        else:
+            display_parts.append(part.capitalize())
+
+    return " ".join(display_parts)
+
+
+def _model_specialization_display_name(model_name: str) -> str:
+    """Get a concise label for a whisper.cpp model variant."""
+    if model_name == "large":
+        return "Standard v3"
+
+    quantization = None
+    for part in model_name.split("-"):
+        if part.startswith("q"):
+            quantization = part.upper()
+            break
+
+    if model_name.startswith("large-v") and "turbo" not in model_name:
+        version = next(
+            (part for part in model_name.split("-") if part.startswith("v")),
+            "large",
+        )
+        if quantization:
+            return f"{version} {quantization}"
+        return version
+
+    if is_english_only_whispercpp_model(model_name):
+        return f"English-only {quantization}" if quantization else "English-only"
+
+    if "turbo" in model_name:
+        if quantization:
+            return f"Turbo {quantization}"
+        return "Turbo"
+
+    if quantization:
+        return f"Quantized {quantization}"
+
+    return "Standard multilingual"
+
+
+def _language_is_english(language_id: str) -> bool:
+    """Return whether a language ID maps to English for Whisper."""
+    return SUPPORTED_LANGUAGES.get(language_id, {}).get("whisper") == "en"
+
+
+def _recommended_whispercpp_variant_for_language(
+    recommended_model: str,
+    reason: str,
+    language_id: str,
+) -> tuple[str, str]:
+    """Adjust a hardware recommendation to the selected language."""
+    recommended_size = get_whispercpp_model_size(recommended_model)
+    english_variant = f"{recommended_size}.en"
+
+    if _language_is_english(language_id) and english_variant in WHISPERCPP_MODEL_INFO:
+        return english_variant, f"{reason}; English language selected"
+
+    return recommended_model, reason
+
+
+def _default_whispercpp_variant_for_size(model_size: str, language_id: str) -> Optional[str]:
+    """Return the default specialization for a user-selected size and language."""
+    variants = get_whispercpp_model_variants(model_size)
+    if not variants:
+        return None
+
+    english_variant = f"{model_size}.en"
+    if _language_is_english(language_id) and english_variant in variants:
+        return english_variant
+
+    standard_variant = "large" if model_size == "large" else model_size
+    if standard_variant in variants:
+        return standard_variant
+
+    return variants[0]
+
+
+MODEL_SIZE_TOOLTIP = (
+    "Choose the largest model your computer can run comfortably. Tiny/Base are fastest, "
+    "Small is balanced, and Medium/Large can be more accurate but need more memory."
+)
+MODEL_SPECIALIZATION_TOOLTIP = (
+    "Choose Standard multilingual unless you specifically need English-only accuracy, "
+    "lower-memory quantized models, Turbo speed, or a legacy large model."
+)
+LANGUAGE_TOOLTIP = (
+    "Choose the language you dictate in. English-only model specializations limit this "
+    "list to English."
+)
+
+
+def _model_specialization_tooltip(model_name: str) -> str:
+    """Return hover guidance for a whisper.cpp specialization."""
+    is_english_only = is_english_only_whispercpp_model(model_name)
+    is_quantized = any(part.startswith("q") for part in model_name.split("-"))
+
+    if "turbo" in model_name:
+        if is_quantized:
+            return (
+                "Choose this for a faster large-v3 Turbo model with lower disk and memory use; "
+                "expect a small accuracy tradeoff from quantization."
+            )
+        return (
+            "Choose Turbo when you want high accuracy from a large model with less memory use "
+            "and faster inference than full large v3."
+        )
+
+    if model_name.startswith("large-v") and model_name != "large":
+        return (
+            "Choose this only if you specifically want that legacy large model version; "
+            "Standard v3 or Turbo is the better default for most users."
+        )
+
+    if is_english_only and is_quantized:
+        return (
+            "Choose this for English-only dictation on lower-memory systems; choose "
+            "multilingual if you use auto-detect or any non-English language."
+        )
+
+    if is_english_only:
+        return (
+            "Choose this when you dictate only in English. It can be better for English, "
+            "but it will not work for other languages."
+        )
+
+    if is_quantized:
+        return (
+            "Choose this on lower-memory systems or when download size matters; it uses "
+            "less disk and RAM with a possible accuracy tradeoff."
+        )
+
+    if model_name == "large":
+        return (
+            "Choose Standard v3 when you want the highest default accuracy and have enough "
+            "memory for a large model."
+        )
+
+    return (
+        "Choose Standard multilingual for most users, auto-detect, or any supported "
+        "non-English language."
+    )
 
 
 # Whisper model metadata for display
@@ -635,7 +794,7 @@ class ModelDownloadDialog(Gtk.Dialog):
         language: str = "en-us",
     ):
         super().__init__(
-            title=f"Downloading {model_name.capitalize()} Model",
+            title=f"Downloading {_model_display_name(model_name)} Model",
             transient_for=parent,
             flags=Gtk.DialogFlags.MODAL,
         )
@@ -657,7 +816,10 @@ class ModelDownloadDialog(Gtk.Dialog):
 
         # Info label
         self.info_label = Gtk.Label(
-            label=f"Downloading {engine_display} {model_name} model (~{_format_size(model_size_mb)})...",
+            label=(
+                f"Downloading {engine_display} {_model_display_name(model_name)} model "
+                f"(~{_format_size(model_size_mb)})..."
+            ),
             wrap=True,
             justify=Gtk.Justification.CENTER,
         )
@@ -811,7 +973,7 @@ class SettingsDialog(Gtk.Dialog):
         else:
             screen_height = 1080  # Default fallback
             screen_width = 1920
-        dialog_height = int(screen_height * 0.4)
+        dialog_height = min(600, int(screen_height * 0.4))
         dialog_width = min(700, int(screen_width * 0.8))
         self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
@@ -1120,24 +1282,40 @@ class SettingsDialog(Gtk.Dialog):
         # Model size selection
         self.model_combo = Gtk.ComboBoxText()
         self.model_combo.set_size_request(180, -1)
+        self.model_combo.set_tooltip_text(MODEL_SIZE_TOOLTIP)
         _prevent_scroll_on_hover(self.model_combo)
         self.model_row = PreferenceRow(
             title="Model Size",
             subtitle="Larger models are more accurate but slower",
             widget=self.model_combo,
         )
+        self.model_row.set_tooltip_text(MODEL_SIZE_TOOLTIP)
         group.add_row(self.model_row)
+
+        # whisper.cpp specialization selection
+        self.model_variant_combo = Gtk.ComboBoxText()
+        self.model_variant_combo.set_size_request(220, -1)
+        self.model_variant_combo.set_tooltip_text(MODEL_SPECIALIZATION_TOOLTIP)
+        _prevent_scroll_on_hover(self.model_variant_combo)
+        self.model_variant_row = PreferenceRow(
+            title="Specialization",
+            subtitle="Variant for language, speed, or memory use",
+            widget=self.model_variant_combo,
+        )
+        self.model_variant_row.set_tooltip_text(MODEL_SPECIALIZATION_TOOLTIP)
+        group.add_row(self.model_variant_row)
 
         # Language selection
         self.language_combo = Gtk.ComboBoxText()
         self.language_combo.set_size_request(180, -1)
-        self.language_combo.set_tooltip_text("Primary language for speech recognition")
+        self.language_combo.set_tooltip_text(LANGUAGE_TOOLTIP)
         _prevent_scroll_on_hover(self.language_combo)
         self.language_row = PreferenceRow(
             title="Language",
             subtitle="Primary language for recognition",
             widget=self.language_combo,
         )
+        self.language_row.set_tooltip_text(LANGUAGE_TOOLTIP)
         group.add_row(self.language_row)
 
         self.content_box.pack_start(group, False, False, 0)
@@ -1188,6 +1366,7 @@ class SettingsDialog(Gtk.Dialog):
         # Connect signals
         self.engine_combo.connect("changed", self._on_engine_changed)
         self.model_combo.connect("changed", self._on_model_changed)
+        self.model_variant_combo.connect("changed", self._on_model_variant_changed)
         self.language_combo.connect("changed", self._on_language_changed)
 
     def _on_remote_api_settings_changed(self, widget):
@@ -2063,16 +2242,9 @@ class SettingsDialog(Gtk.Dialog):
                 if self.engine_combo.get_model():
                     self.engine_combo.set_active(0)
 
-        # Populate model options for the selected engine
+        # Populate model and language options for the selected engine
         self._populate_model_options()
-
-        # Populate language options
-        self._populate_language_options()
-        if self.language:
-            if not self.language_combo.set_active_id(self.language):
-                logger.warning(f"Language '{self.language}' not found in options, using auto")
-                self.language_combo.set_active_id("auto")
-                self.language = "auto"
+        self._sync_language_options_for_selected_model(self.language)
 
         # Set spin button values
         self.vad_spin.set_value(self.current_vad)
@@ -2136,11 +2308,110 @@ class SettingsDialog(Gtk.Dialog):
             "silence_timeout": silence_timeout,
         }
 
+    def _get_selected_engine(self) -> str:
+        """Return the currently selected engine ID."""
+        engine_text = self.engine_combo.get_active_text()
+        return _engine_from_display(engine_text) if engine_text else "vosk"
+
+    def _get_selected_whispercpp_model(self) -> str:
+        """Return the selected whisper.cpp model variant."""
+        variant_id = self.model_variant_combo.get_active_id()
+        if variant_id:
+            return variant_id
+
+        size_id = self.model_combo.get_active_id()
+        model_size = size_id.lower() if size_id else "small"
+        variants = get_whispercpp_model_variants(model_size)
+        return variants[0] if variants else "small"
+
+    def _get_recommended_whispercpp_model_for_language(self) -> tuple[str, str]:
+        """Return the recommended whisper.cpp variant for the selected language."""
+        recommended_model, reason = get_recommended_whispercpp_model()
+        language_id = self.language_combo.get_active_id() or self.language
+        return _recommended_whispercpp_variant_for_language(
+            recommended_model,
+            reason,
+            language_id,
+        )
+
+    def _get_default_whispercpp_variant_for_size(self, model_size: str) -> Optional[str]:
+        """Return the default specialization for a user-selected size."""
+        language_id = self.language_combo.get_active_id() or self.language
+        return _default_whispercpp_variant_for_size(model_size, language_id)
+
+    def _is_selected_whispercpp_model_english_only(self) -> bool:
+        """Return whether the selected model is a whisper.cpp English-only variant."""
+        if self._get_selected_engine() != "whisper_cpp":
+            return False
+        return is_english_only_whispercpp_model(self._get_selected_whispercpp_model())
+
+    def _set_combo_active_id_or_first(self, combo, active_id: Optional[str]) -> bool:
+        """Set a combo to an ID, falling back to the first row."""
+        if active_id and combo.set_active_id(active_id):
+            return True
+
+        model = combo.get_model()
+        if model:
+            combo.set_active(0)
+            return True
+        return False
+
+    def _default_language_for_engine(self, engine: str) -> str:
+        """Return a safe default language for the selected engine and model."""
+        if engine == "vosk" or self._is_selected_whispercpp_model_english_only():
+            return "en-us"
+        return "auto"
+
+    def _update_model_picker_tooltips(self):
+        """Refresh model picker hover guidance for the current selection."""
+        self.model_combo.set_tooltip_text(MODEL_SIZE_TOOLTIP)
+        self.model_row.set_tooltip_text(MODEL_SIZE_TOOLTIP)
+        self.language_combo.set_tooltip_text(LANGUAGE_TOOLTIP)
+        self.language_row.set_tooltip_text(LANGUAGE_TOOLTIP)
+
+        if self._get_selected_engine() == "whisper_cpp":
+            specialization_tooltip = _model_specialization_tooltip(
+                self._get_selected_whispercpp_model()
+            )
+        else:
+            specialization_tooltip = MODEL_SPECIALIZATION_TOOLTIP
+
+        self.model_variant_combo.set_tooltip_text(specialization_tooltip)
+        self.model_variant_row.set_tooltip_text(specialization_tooltip)
+
+    def _sync_language_options_for_selected_model(self, preferred_language: Optional[str] = None):
+        """Refresh language options and keep the current model/language pair valid."""
+        engine = self._get_selected_engine()
+        language_to_keep = (
+            preferred_language or self.language_combo.get_active_id() or self.language
+        )
+
+        self._processing_language_change = True
+        try:
+            self._populate_language_options()
+            if not self._set_combo_active_id_or_first(self.language_combo, language_to_keep):
+                return
+
+            active_language = self.language_combo.get_active_id()
+            if active_language != language_to_keep:
+                fallback_language = self._default_language_for_engine(engine)
+                self._set_combo_active_id_or_first(self.language_combo, fallback_language)
+
+            self.language = (
+                self.language_combo.get_active_id() or self._default_language_for_engine(engine)
+            )
+        finally:
+            self._processing_language_change = False
+
+        self._update_language_warning()
+        self._update_model_picker_tooltips()
+
     def _populate_model_options(self):
         """Populate model options based on the current engine selection."""
         self._populating_models = True
         try:
             self.model_combo.remove_all()
+            self.model_variant_combo.remove_all()
 
             engine_text = self.engine_combo.get_active_text()
             if not engine_text:
@@ -2158,12 +2429,14 @@ class SettingsDialog(Gtk.Dialog):
             saved_model_for_engine = self.config_manager.get_model_size_for_engine(engine)
             logger.info(f"Saved model for {engine}: {saved_model_for_engine}")
 
+            if engine == "whisper_cpp":
+                self._populate_whispercpp_model_options(saved_model_for_engine)
+                return
+
             downloaded_models = []
             smallest_model = None
             if engine == "whisper":
                 recommended_model, _ = _get_recommended_whisper_model()
-            elif engine == "whisper_cpp":
-                recommended_model, _ = get_recommended_whispercpp_model()
             else:
                 recommended_model, _ = _get_recommended_vosk_model()
 
@@ -2172,9 +2445,6 @@ class SettingsDialog(Gtk.Dialog):
                     if engine == "whisper" and size in WHISPER_MODEL_INFO:
                         info = WHISPER_MODEL_INFO[size]
                         is_downloaded = _is_whisper_model_downloaded(size)
-                    elif engine == "whisper_cpp" and size in WHISPERCPP_MODEL_INFO:
-                        info = WHISPERCPP_MODEL_INFO[size]
-                        is_downloaded = is_whispercpp_model_downloaded(size)
                     elif engine == "vosk" and size in VOSK_MODEL_INFO:
                         info = VOSK_MODEL_INFO[size]
                         is_downloaded = _is_vosk_model_downloaded(size, self.language)
@@ -2182,9 +2452,13 @@ class SettingsDialog(Gtk.Dialog):
                         is_downloaded = False
                         info = {"size_mb": 0}
 
+                    model_display_name = _model_display_name(size)
                     status = "✓" if is_downloaded else "↓"
                     star = " ★" if size == recommended_model else ""
-                    display_text = f"{size.capitalize()} ({_format_size(info.get('size_mb', 0))}) {status}{star}"
+                    display_text = (
+                        f"{model_display_name} ({_format_size(info.get('size_mb', 0))}) "
+                        f"{status}{star}"
+                    )
 
                     if is_downloaded:
                         downloaded_models.append(size)
@@ -2221,6 +2495,62 @@ class SettingsDialog(Gtk.Dialog):
         finally:
             self._populating_models = False
 
+    def _populate_whispercpp_model_options(self, saved_model_for_engine: str):
+        """Populate whisper.cpp size and specialization selectors."""
+        recommended_model, _ = self._get_recommended_whispercpp_model_for_language()
+        recommended_size = get_whispercpp_model_size(recommended_model)
+
+        saved_model = saved_model_for_engine.lower()
+        if saved_model not in WHISPERCPP_MODEL_INFO:
+            saved_model = (
+                recommended_model if recommended_model in WHISPERCPP_MODEL_INFO else "tiny"
+            )
+
+        saved_size = get_whispercpp_model_size(saved_model)
+
+        for model_size in ENGINE_MODELS["whisper_cpp"]:
+            display_text = _model_display_name(model_size)
+            if model_size == recommended_size:
+                display_text += " ★"
+            self.model_combo.append(model_size, display_text)
+
+        self._set_combo_active_id_or_first(self.model_combo, saved_size)
+        active_size = self.model_combo.get_active_id() or saved_size
+        self._populate_whispercpp_variant_options(active_size, saved_model)
+
+    def _populate_whispercpp_variant_options(
+        self,
+        model_size: str,
+        selected_model: Optional[str] = None,
+    ):
+        """Populate the whisper.cpp specialization selector for a size."""
+        self.model_variant_combo.remove_all()
+
+        variants = get_whispercpp_model_variants(model_size.lower())
+        recommended_model, _ = self._get_recommended_whispercpp_model_for_language()
+
+        for model_name in variants:
+            info = WHISPERCPP_MODEL_INFO[model_name]
+            is_downloaded = is_whispercpp_model_downloaded(model_name)
+            status = "✓" if is_downloaded else "↓"
+            star = " ★" if model_name == recommended_model else ""
+            display_text = (
+                f"{_model_specialization_display_name(model_name)} "
+                f"({_format_size(info['size_mb'])}) {status}{star}"
+            )
+            self.model_variant_combo.append(model_name, display_text)
+
+        model_to_set = selected_model if selected_model in variants else None
+        if not model_to_set and recommended_model in variants:
+            model_to_set = recommended_model
+        if not model_to_set:
+            model_to_set = self._get_default_whispercpp_variant_for_size(model_size.lower())
+        if not model_to_set and variants:
+            model_to_set = variants[0]
+
+        self._set_combo_active_id_or_first(self.model_variant_combo, model_to_set)
+        self._update_model_picker_tooltips()
+
     def _on_engine_changed(self, widget):
         """Handle changes in the selected engine."""
         engine_text = self.engine_combo.get_active_text()
@@ -2239,8 +2569,7 @@ class SettingsDialog(Gtk.Dialog):
                 self.language = "auto"
 
         self._populate_model_options()
-        self._populate_language_options()
-        self.language_combo.set_active_id(self.language)
+        self._sync_language_options_for_selected_model(self.language)
         self._update_engine_specific_ui()
         self._update_model_info()
         self._update_voice_commands_for_engine()
@@ -2261,6 +2590,25 @@ class SettingsDialog(Gtk.Dialog):
         if self._populating_models:
             return
 
+        if self._get_selected_engine() == "whisper_cpp":
+            model_size = self.model_combo.get_active_id()
+            if model_size:
+                self._populating_models = True
+                try:
+                    self._populate_whispercpp_variant_options(model_size)
+                finally:
+                    self._populating_models = False
+                self._sync_language_options_for_selected_model()
+
+        self._update_model_info()
+        self._auto_apply_settings()
+
+    def _on_model_variant_changed(self, widget):
+        """Handle changes in the selected whisper.cpp specialization."""
+        if self._populating_models:
+            return
+
+        self._sync_language_options_for_selected_model()
         self._update_model_info()
         self._auto_apply_settings()
 
@@ -2297,6 +2645,7 @@ class SettingsDialog(Gtk.Dialog):
             return
 
         engine = _engine_from_display(engine)
+        english_only_whispercpp = self._is_selected_whispercpp_model_english_only()
 
         for lang_code, lang_info in SUPPORTED_LANGUAGES.items():
             display_text = lang_info["name"]
@@ -2308,6 +2657,8 @@ class SettingsDialog(Gtk.Dialog):
                 is_downloaded = _is_vosk_model_downloaded("small", lang_code)
                 display_text += " ✓" if is_downloaded else " ↓"
             elif engine in ["whisper", "whisper_cpp", "remote_api"]:
+                if english_only_whispercpp and lang_info.get("whisper") != "en":
+                    continue
                 # Both Whisper and whisper.cpp support auto-detect
                 if lang_code == "auto":
                     display_text += " ⚠"
@@ -2315,6 +2666,26 @@ class SettingsDialog(Gtk.Dialog):
                 continue
 
             self.language_combo.append(lang_code, display_text)
+
+    def _update_language_warning(self):
+        """Update language help text for the selected engine/model/language."""
+        lang_code = self.language_combo.get_active_id()
+        lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
+
+        if self._is_selected_whispercpp_model_english_only():
+            self.language_warning.set_markup(
+                "<span foreground='#e5a50a'>⚠ English-only model selected. "
+                "Language choices are limited to English.</span>"
+            )
+            self.language_warning.show()
+        elif lang_info.get("warning"):
+            self.language_warning.set_markup(
+                f"<span foreground='#e5a50a'>⚠ {lang_info['warning']}</span>"
+            )
+            self.language_warning.show()
+        else:
+            self.language_warning.set_markup("")
+            self.language_warning.hide()
 
     def _on_language_changed(self, widget):
         """Handle language selection change."""
@@ -2331,20 +2702,9 @@ class SettingsDialog(Gtk.Dialog):
 
         self._processing_language_change = True
         try:
-            engine = _engine_from_display(engine)
-            lang_info = SUPPORTED_LANGUAGES.get(lang_code, {})
-
-            if lang_info.get("warning"):
-                self.language_warning.set_markup(
-                    f"<span foreground='#e5a50a'>⚠ {lang_info['warning']}</span>"
-                )
-                self.language_warning.show()
-            else:
-                self.language_warning.set_markup("")
-                self.language_warning.hide()
-
             self.language = lang_code
             self._populate_model_options()
+            self._update_language_warning()
             self._auto_apply_settings()
         finally:
             self._processing_language_change = False
@@ -2357,17 +2717,24 @@ class SettingsDialog(Gtk.Dialog):
 
         if is_remote:
             self.model_row.hide()
+            self.model_variant_row.hide()
             self.model_info_card.hide()
             self.legend_box.hide()
             self.remote_server_group.show_all()
             self.remote_status_label.show()
         else:
             self.model_row.show_all()
+            if engine == "whisper_cpp":
+                self.model_variant_row.show_all()
+            else:
+                self.model_variant_row.hide()
             self.legend_box.show_all()
             self.remote_server_group.hide()
             self.remote_status_label.hide()
 
         self._update_model_info()
+        self._update_language_warning()
+        self._update_model_picker_tooltips()
         self._update_advanced_tab_sensitivity()
 
     def _update_advanced_tab_sensitivity(self):
@@ -2405,12 +2772,14 @@ class SettingsDialog(Gtk.Dialog):
 
         engine = _engine_from_display(engine_text)
 
-        model_id = self.model_combo.get_active_id()
-        if not model_id:
-            self.model_info_card.hide()
-            return
-
-        model_name = model_id.lower()
+        if engine == "whisper_cpp":
+            model_name = self._get_selected_whispercpp_model()
+        else:
+            model_id = self.model_combo.get_active_id()
+            if not model_id:
+                self.model_info_card.hide()
+                return
+            model_name = model_id.lower()
 
         if engine == "whisper":
             if model_name not in WHISPER_MODEL_INFO:
@@ -2426,7 +2795,7 @@ class SettingsDialog(Gtk.Dialog):
                 return
             info = WHISPERCPP_MODEL_INFO[model_name]
             is_downloaded = is_whispercpp_model_downloaded(model_name)
-            recommended, reason = get_recommended_whispercpp_model()
+            recommended, reason = self._get_recommended_whispercpp_model_for_language()
             backend, backend_info = detect_compute_backend()
             extra_info = (
                 f"Parameters: {info['params']} • Backend: {get_backend_display_name(backend)}"
@@ -2443,8 +2812,11 @@ class SettingsDialog(Gtk.Dialog):
             self.model_info_card.hide()
             return
 
+        model_display_name = _model_display_name(model_name)
+        recommended_display_name = _model_display_name(recommended)
+
         # Update title
-        self.model_info_title.set_markup(f"<b>{model_name.capitalize()}</b>: {info['desc']}")
+        self.model_info_title.set_markup(f"<b>{model_display_name}</b>: {info['desc']}")
 
         # Update subtitle with status
         if is_downloaded:
@@ -2460,9 +2832,10 @@ class SettingsDialog(Gtk.Dialog):
             )
         else:
             self.model_recommendation.set_markup(
-                f"Tip: <b>{recommended.capitalize()}</b> is recommended for your system ({reason})"
+                f"Tip: <b>{recommended_display_name}</b> is recommended for your system ({reason})"
             )
 
+        self._update_model_picker_tooltips()
         self.model_info_card.show_all()
 
     def _auto_apply_settings(self):
@@ -2585,8 +2958,11 @@ class SettingsDialog(Gtk.Dialog):
         language_id = self.language_combo.get_active_id()
 
         engine = _engine_from_display(engine_text) if engine_text else "vosk"
-        model_size = model_id.lower() if model_id else "small"
-        language = language_id if language_id else "auto"
+        if engine == "whisper_cpp":
+            model_size = self._get_selected_whispercpp_model()
+        else:
+            model_size = model_id.lower() if model_id else "small"
+        language = language_id if language_id else self._default_language_for_engine(engine)
 
         vad = int(self.vad_spin.get_value())
         silence = self.silence_spin.get_value()
@@ -2770,6 +3146,9 @@ For now, the engine has been reverted to VOSK."""
         if engine == "whisper" and not _is_whisper_model_downloaded(model_name):
             needs_download = True
             model_info = WHISPER_MODEL_INFO.get(model_name, {"size_mb": 500})
+        elif engine == "whisper_cpp" and not is_whispercpp_model_downloaded(model_name):
+            needs_download = True
+            model_info = WHISPERCPP_MODEL_INFO.get(model_name, {"size_mb": 39})
         elif engine == "vosk" and not _is_vosk_model_downloaded(model_name, self.language):
             needs_download = True
             model_info = VOSK_MODEL_INFO.get(model_name, {"size_mb": 50})
