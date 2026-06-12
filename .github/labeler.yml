@@ -1,0 +1,62 @@
+# PR Labeler configuration
+# See https://github.com/actions/labeler for details
+
+# Core Python application (src, packaging, desktop entry)
+app:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**/*"
+          - "pyproject.toml"
+          - "MANIFEST.in"
+          - "vocalinux.desktop"
+
+# Next.js website
+web:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "web/**/*"
+
+# Documentation (docs dir, markdown files, license)
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**/*"
+          - "*.md"
+          - "LICENSE"
+
+# CI/CD, build tooling, scripts, linting config
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**/*"
+          - "Makefile"
+          - "scripts/**/*"
+          - ".flake8"
+          - ".pre-commit-config.yaml"
+
+# Test suite
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**/*"
+
+# Installer / uninstaller scripts
+installer:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "install.sh"
+          - "uninstall.sh"
+
+# Icons, sounds, screenshots, promo assets
+resources:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "resources/**/*"
+
+# Dependency manifests
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "web/package.json"
+          - "web/package-lock.json"
