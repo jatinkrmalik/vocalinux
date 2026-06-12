@@ -614,6 +614,78 @@ class TestChatCompletionsAudioAPIFormat(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    def test_try_chat_completions_audio_api_connection_error(self):
+        """Test chat-completions audio API handles connection errors."""
+        _setup_requests_post_error(ConnectionError("Connection refused"))
+
+        result = self.manager._try_chat_completions_audio_api(
+            b"wav", "en", {}, self.manager._http_session
+        )
+
+        self.assertIsNone(result)
+
+
+class TestParseChatCompletionTranscription(unittest.TestCase):
+    """Test cases for _parse_chat_completion_transcription edge cases."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+        self.manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:8000",
+        )
+
+    def test_parse_none_content(self):
+        """Test parsing None content returns empty string."""
+        result = self.manager._parse_chat_completion_transcription(None)
+        self.assertEqual(result, "")
+
+    def test_parse_list_content_with_dicts(self):
+        """Test parsing list content with dict items containing text."""
+        content = [{"text": "hello"}, {"text": "world"}]
+        result = self.manager._parse_chat_completion_transcription(content)
+        self.assertEqual(result, "hello\nworld")
+
+    def test_parse_list_content_with_non_dict_items(self):
+        """Test parsing list content with non-dict items."""
+        content = ["hello", "world"]
+        result = self.manager._parse_chat_completion_transcription(content)
+        self.assertEqual(result, "hello\nworld")
+
+    def test_parse_list_content_with_mixed_items(self):
+        """Test parsing list content with mixed dict and non-dict items."""
+        content = [{"text": "hello"}, "world", {"other": "skip"}]
+        result = self.manager._parse_chat_completion_transcription(content)
+        self.assertEqual(result, "hello\nworld")
+
+    def test_parse_empty_string_content(self):
+        """Test parsing empty string returns empty string."""
+        result = self.manager._parse_chat_completion_transcription("")
+        self.assertEqual(result, "")
+
+    def test_parse_whitespace_only_content(self):
+        """Test parsing whitespace-only string returns empty string."""
+        result = self.manager._parse_chat_completion_transcription("   \n  ")
+        self.assertEqual(result, "")
+
+    def test_parse_json_without_text_field(self):
+        """Test parsing JSON that doesn't contain a text field falls through."""
+        result = self.manager._parse_chat_completion_transcription('{"status": "ok"}')
+        self.assertEqual(result, '{"status": "ok"}')
+
+    def test_parse_plain_text_no_language_prefix(self):
+        """Test parsing plain text without language metadata returns text as-is."""
+        result = self.manager._parse_chat_completion_transcription("hello world")
+        self.assertEqual(result, "hello world")
+
+    def test_parse_language_prefix_single_line(self):
+        """Test that a single 'language ...' line with no transcript returns text as-is."""
+        result = self.manager._parse_chat_completion_transcription("language English")
+        # Single line starting with "language " but len(lines) == 1, so falls through to return text
+        self.assertEqual(result, "language English")
+
 
 class TestRemoteAPIReconfiguration(unittest.TestCase):
     """Test cases for remote API settings updates."""
