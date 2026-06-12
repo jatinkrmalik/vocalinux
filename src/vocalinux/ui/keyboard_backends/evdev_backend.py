@@ -39,6 +39,7 @@ KEY_LEFTSHIFT = 42
 KEY_RIGHTSHIFT = 54
 KEY_LEFTMETA = 125  # Super/Windows key
 KEY_RIGHTMETA = 126
+DEVICE_RESCAN_SECONDS = 2.0
 
 # Map modifier key names to evdev key codes
 MODIFIER_KEY_CODES: dict[str, set[int]] = {
@@ -151,6 +152,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
         super().__init__(shortcut, mode)
         self.devices: list[InputDevice] = []
         self.device_fds: list[int] = []
+        self.device_paths: set[str] = set()
         self.running = False
         self.monitor_thread: Optional[threading.Thread] = None
 
@@ -161,6 +163,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
         self._devices_lock = threading.Lock()
         self._dropped_devices: set[int] = set()  # fds with SYN_DROPPED pending
+        self._device_paths_by_fd: dict[int, str] = {}
 
         if not EVDEV_AVAILABLE:
             logger.error("python-evdev not available")
@@ -247,18 +250,13 @@ class EvdevKeyboardBackend(KeyboardBackend):
         # Open devices
         self.devices = []
         self.device_fds = []
+        self.device_paths = set()
         self.key_pressed_devices = set()
         self._dropped_devices = set()
+        self._device_paths_by_fd = {}
 
         for device_path in device_paths:
-            try:
-                device = InputDevice(device_path)
-                self.devices.append(device)
-                self.device_fds.append(device.fileno())
-                logger.debug(f"Opened keyboard device: {device_path} ({device.name})")
-            except (OSError, IOError) as e:
-                logger.warning(f"Cannot open {device_path}: {e}")
-                continue
+            self._open_keyboard_device(device_path)
 
         if not self.devices:
             logger.error("Failed to open any keyboard device (permission denied?)")
@@ -282,41 +280,127 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.running = False
         self.active = False
 
+        # Wait for monitor thread to finish before closing fds it may be selecting on.
+        if self.monitor_thread:
+            self.monitor_thread.join(timeout=2.0)
+            self.monitor_thread = None
+
         # Close devices
-        for device in self.devices:
+        with self._devices_lock:
+            devices = list(self.devices)
+            self.devices = []
+            self.device_fds = []
+            self.device_paths = set()
+            self._dropped_devices = set()
+            self._device_paths_by_fd = {}
+
+        for device in devices:
             try:
                 device.close()
             except Exception:
                 pass
 
-        self.devices = []
-        self.device_fds = []
+    def _open_keyboard_device(self, device_path: str) -> bool:
+        """Open a keyboard device if it is not already monitored."""
+        with self._devices_lock:
+            if device_path in self.device_paths:
+                return False
 
-        # Wait for monitor thread to finish
-        if self.monitor_thread:
-            self.monitor_thread.join(timeout=2.0)
-            self.monitor_thread = None
+        try:
+            device = InputDevice(device_path)
+            fd = device.fileno()
+        except (OSError, IOError) as e:
+            logger.warning(f"Cannot open {device_path}: {e}")
+            return False
+
+        with self._devices_lock:
+            if device_path in self.device_paths or fd in self.device_fds:
+                try:
+                    device.close()
+                except Exception:
+                    pass
+                return False
+
+            self.devices.append(device)
+            self.device_fds.append(fd)
+            self.device_paths.add(device_path)
+            self._device_paths_by_fd[fd] = device_path
+
+        logger.debug(f"Opened keyboard device: {device_path} ({device.name})")
+        return True
+
+    def _scan_for_new_devices(self) -> int:
+        """Find and open keyboard devices that appeared after startup."""
+        new_device_count = 0
+
+        try:
+            device_paths = find_keyboard_devices()
+        except Exception as e:
+            logger.error(f"Error rescanning keyboard devices: {e}")
+            return 0
+
+        for device_path in device_paths:
+            if self._open_keyboard_device(device_path):
+                new_device_count += 1
+
+        if new_device_count:
+            logger.info(f"Added {new_device_count} hotplugged keyboard device(s)")
+
+        return new_device_count
+
+    def _remove_keyboard_device(self, fd: int, device) -> None:
+        """Close and forget a disconnected keyboard device."""
+        try:
+            device.close()
+        except Exception:
+            pass
+
+        with self._devices_lock:
+            try:
+                self.devices.remove(device)
+            except ValueError:
+                pass
+            try:
+                self.device_fds.remove(fd)
+            except ValueError:
+                pass
+            device_path = self._device_paths_by_fd.pop(fd, None)
+            if device_path is not None:
+                self.device_paths.discard(device_path)
+            self._dropped_devices.discard(fd)
+            self.key_pressed_devices.discard(id(device))
 
     def _monitor_devices(self) -> None:
         """Monitor keyboard devices for events."""
         logger.debug("Starting device monitor thread")
+        last_scan = time.monotonic()
 
         while self.running:
             try:
-                # Use select to wait for events on any device
-                if not self.device_fds:
-                    break
+                now = time.monotonic()
+                if now - last_scan >= DEVICE_RESCAN_SECONDS:
+                    self._scan_for_new_devices()
+                    last_scan = now
 
-                readable, _, _ = select.select(self.device_fds, [], [], 1.0)  # 1 second timeout
+                # Use select to wait for events on any device
+                with self._devices_lock:
+                    device_fds = list(self.device_fds)
+
+                if not device_fds:
+                    time.sleep(1.0)
+                    continue
+
+                readable, _, _ = select.select(device_fds, [], [], 1.0)  # 1 second timeout
 
                 for fd in readable:
                     try:
                         # Find the device for this fd
-                        device = None
-                        for d in self.devices:
-                            if d.fileno() == fd:
-                                device = d
-                                break
+                        with self._devices_lock:
+                            device = None
+                            for d in self.devices:
+                                if d.fileno() == fd:
+                                    device = d
+                                    break
 
                         if device is None:
                             continue
@@ -349,19 +433,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
                         )
                         logger.info(f"Device disconnected: {device_name} (fd={fd})")
                         if device is not None:
-                            try:
-                                device.close()
-                            except Exception:
-                                pass
-                            try:
-                                with self._devices_lock:
-                                    self.devices.remove(device)
-                            except ValueError:
-                                pass
-                        if fd in self.device_fds:
-                            with self._devices_lock:
-                                self.device_fds.remove(fd)
-                        self._dropped_devices.discard(fd)
+                            self._remove_keyboard_device(fd, device)
                         continue
 
             except (OSError, ValueError) as e:
