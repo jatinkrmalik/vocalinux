@@ -57,6 +57,9 @@ DEFAULT_CONFIG = {
     "text_injection": {
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
     },
+    "post_processing": {
+        "script_path": "",  # Path to executable; empty = disabled
+    },
     "advanced": {
         "power_user_mode": False,
         "debug_logging": False,
