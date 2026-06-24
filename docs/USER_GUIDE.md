@@ -158,6 +158,28 @@ To check which backend is being used, look for these log messages when starting 
 [INFO] whisper.cpp configured with n_threads=16
 ```
 
+### Post-Processing
+
+Vocalinux can pipe each transcription result through a user-defined script before injecting it into your application. This lets you apply custom transformations — for example, grammar correction, abbreviation expansion, or domain-specific formatting.
+
+**To configure:**
+1. Open Settings from the tray icon menu (right-click)
+2. Go to the **Post-Processing** tab
+3. Enter the path to your script, or click **Browse…** to select it
+4. Leave the field empty to disable post-processing
+
+**Script contract:**
+- The script receives the transcription on **stdin**
+- It must write the replacement text to **stdout**
+- A non-zero exit code or a script that times out (10 s) causes the original text to be used unchanged
+
+**Example** — a shell script that uppercases everything:
+```bash
+#!/bin/bash
+tr '[:lower:]' '[:upper:]'
+```
+Make the script executable (`chmod +x`) before setting the path in Vocalinux.
+
 ## Troubleshooting
 
 If you encounter issues, check the [Installation Guide](INSTALL.md) troubleshooting section or run the application with debug logging:
