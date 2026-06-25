@@ -195,6 +195,23 @@ yay -S vocalinux
 
 See [docs/AUR.md](docs/AUR.md).
 
+### Flatpak (any distro)
+
+For a sandboxed, distro-independent install (great for NixOS, Fedora Silverblue,
+Steam Deck, and anywhere else), build the Flatpak from the bundled manifest:
+
+```bash
+flatpak install flathub org.gnome.Platform//50 org.gnome.Sdk//50
+flatpak-builder --user --install --force-clean build-dir \
+  packaging/flatpak/com.vocalinux.Vocalinux.yml
+flatpak run com.vocalinux.Vocalinux
+```
+
+The Flatpak ships the whisper.cpp engine with Vulkan GPU support and runs through
+XWayland on Wayland sessions. See [`packaging/flatpak/README.md`](packaging/flatpak/README.md)
+for build details, permissions, and Flathub submission notes. Flathub publishing
+is in progress.
+
 ### Alternative: Install from Source
 
 ```bash
@@ -412,6 +429,7 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [x] ~~Vulkan GPU support~~ ✅
 - [ ] In-app update mechanism
 - [ ] Application-specific commands
+- [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
 - [ ] Debian/Ubuntu package (.deb)
 - [x] ~~Wayland support via IBus~~ ✅
 - [ ] Voice command customization

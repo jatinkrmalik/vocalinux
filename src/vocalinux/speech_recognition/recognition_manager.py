@@ -20,6 +20,7 @@ from typing import Callable, Optional
 
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
+from ..utils.paths import models_dir
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
@@ -704,7 +705,7 @@ def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
 
 
 # Define constants
-MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
+MODELS_DIR = models_dir()
 
 
 def _get_system_model_paths() -> list:

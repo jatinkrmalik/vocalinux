@@ -83,6 +83,12 @@ out/
 dist/
 build/
 
+# Flatpak build artifacts
+.flatpak-builder/
+build-dir/
+/repo/
+*.flatpak
+
 # Environment variables
 .env
 .env.local

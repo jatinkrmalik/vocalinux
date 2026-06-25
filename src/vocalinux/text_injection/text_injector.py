@@ -15,6 +15,7 @@ import time
 from enum import Enum
 from typing import Optional  # noqa: F401
 
+from ..utils.paths import config_dir
 from .ibus_engine import (
     IBusTextInjector,
     is_ibus_active_input_method,
@@ -156,15 +157,24 @@ class TextInjector:
             The detected desktop environment
         """
         session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        wayland_display = os.environ.get("WAYLAND_DISPLAY")
+        x11_display = os.environ.get("DISPLAY")
+
         if session_type == "wayland":
+            # Inside a Flatpak the sandbox is granted X11 (XWayland) but not the
+            # native Wayland socket, so a Wayland host session is reached through
+            # XWayland. Route text injection through the xdotool fallback.
+            if os.environ.get("FLATPAK_ID") and not wayland_display and x11_display:
+                logger.info("Flatpak has X11/XWayland access only; using xdotool text injection")
+                return DesktopEnvironment.WAYLAND_XDOTOOL
             return DesktopEnvironment.WAYLAND
         elif session_type == "x11":
             return DesktopEnvironment.X11
         else:
             # Try to detect based on other methods
-            if "WAYLAND_DISPLAY" in os.environ:
+            if wayland_display:
                 return DesktopEnvironment.WAYLAND
-            elif "DISPLAY" in os.environ:
+            elif x11_display:
                 return DesktopEnvironment.X11
             else:
                 logger.warning("Could not detect desktop environment, defaulting to X11")
@@ -639,7 +649,7 @@ class TextInjector:
         try:
             import json
 
-            config_path = os.path.expanduser("~/.config/vocalinux/config.json")
+            config_path = os.path.join(config_dir(), "config.json")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = json.load(f)

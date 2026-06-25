@@ -29,6 +29,13 @@ def get_autostart_file() -> Path:
 
 
 def get_exec_command() -> str:
+    # Inside a Flatpak sandbox the wrapped binary lives at /app/bin and is not on
+    # the host PATH, so the session manager cannot launch it directly. Use the
+    # host-side launcher, which is always on PATH.
+    flatpak_id = os.environ.get("FLATPAK_ID")
+    if flatpak_id:
+        return f"flatpak run {flatpak_id} --start-minimized"
+
     installed_command = shutil.which("vocalinux")
     if installed_command:
         return f"{shlex.quote(installed_command)} --start-minimized"

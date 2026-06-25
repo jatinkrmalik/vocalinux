@@ -30,6 +30,7 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
+from ..utils.paths import models_dir  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 from ..utils.whispercpp_model_info import MODEL_SIZES as WHISPERCPP_MODEL_SIZES
 from ..utils.whispercpp_model_info import (
@@ -315,7 +316,7 @@ def get_available_engines():
 
 
 # Models directory
-MODELS_DIR = os.path.expanduser("~/.local/share/vocalinux/models")
+MODELS_DIR = models_dir()
 SYSTEM_MODELS_DIRS = [
     "/usr/local/share/vocalinux/models",
     "/usr/share/vocalinux/models",
@@ -597,7 +598,7 @@ def _prevent_scroll_on_hover(widget: Gtk.Widget):
 
 def _get_whisper_cache_dir() -> str:
     """Get the Whisper model cache directory."""
-    return os.path.expanduser("~/.local/share/vocalinux/models/whisper")
+    return os.path.join(MODELS_DIR, "whisper")
 
 
 def _is_whisper_model_downloaded(model_name: str) -> bool:

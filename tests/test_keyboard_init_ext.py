@@ -48,6 +48,30 @@ class TestDesktopEnvironmentDetect:
             result = DesktopEnvironment.detect()
             assert result == DesktopEnvironment.X11
 
+    def test_detect_flatpak_wayland_without_socket_uses_x11(self):
+        """A Flatpak on Wayland with only X11/XWayland access should pick X11.
+
+        pynput drives global shortcuts over the X server, so X11 is the usable
+        backend when the sandbox lacks a native Wayland socket.
+        """
+        env = {
+            "FLATPAK_ID": "com.vocalinux.Vocalinux",
+            "XDG_SESSION_TYPE": "wayland",
+            "DISPLAY": ":0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            assert DesktopEnvironment.detect() == DesktopEnvironment.X11
+
+    def test_detect_flatpak_wayland_with_socket_stays_wayland(self):
+        """With a Wayland socket exposed, detection still reports Wayland."""
+        env = {
+            "FLATPAK_ID": "com.vocalinux.Vocalinux",
+            "XDG_SESSION_TYPE": "wayland",
+            "WAYLAND_DISPLAY": "wayland-0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            assert DesktopEnvironment.detect() == DesktopEnvironment.WAYLAND
+
     def test_detect_xdg_session_type_case_insensitive(self):
         """Test that XDG_SESSION_TYPE detection is case-insensitive."""
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "WAYLAND"}, clear=False):

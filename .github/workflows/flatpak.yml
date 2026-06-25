@@ -1,0 +1,59 @@
+name: Flatpak
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'packaging/flatpak/**'
+      - 'src/**'
+      - 'pyproject.toml'
+      - '.github/workflows/flatpak.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'packaging/flatpak/**'
+      - 'src/**'
+      - 'pyproject.toml'
+      - '.github/workflows/flatpak.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Flatpak (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: vocalinux-${{ matrix.arch }}.flatpak
+          manifest-path: packaging/flatpak/com.vocalinux.Vocalinux.yml
+          cache-key: flatpak-${{ matrix.arch }}-${{ github.sha }}
+          arch: ${{ matrix.arch }}
+          # Flathub mirrors screenshots at submission time; mirror locally so the
+          # builddir linter does not flag the external screenshot URL.
+          mirror-screenshots-url: https://dl.flathub.org/media
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: vocalinux-flatpak-${{ matrix.arch }}
+          path: vocalinux-${{ matrix.arch }}.flatpak
+          if-no-files-found: error

@@ -1,0 +1,95 @@
+app-id: com.vocalinux.Vocalinux
+runtime: org.gnome.Platform
+runtime-version: "50"
+sdk: org.gnome.Sdk
+command: vocalinux
+
+build-options:
+  env:
+    NO_REPAIR: "1"
+    PYWHISPERCPP_VERSION: "1.4.1"
+
+finish-args:
+  # Download speech-recognition models on first run.
+  - --share=network
+  # Shared memory for X11 / XWayland.
+  - --share=ipc
+  # Vocalinux types into other applications. That requires injecting input into
+  # the X server, so we always need X11 access. On a Wayland host this routes
+  # through XWayland. We intentionally do NOT request --socket=wayland: granting
+  # it would expose a native Wayland display that we cannot inject into, and the
+  # app's XWayland detection keys off the Wayland socket being absent.
+  - --socket=x11
+  # Microphone capture (works against PulseAudio and PipeWire-pulse).
+  - --socket=pulseaudio
+  # GPU render node for the Vulkan-accelerated whisper.cpp build.
+  - --device=dri
+  # IBus Unicode injection backend.
+  - --talk-name=org.freedesktop.IBus
+  # Desktop notifications.
+  - --talk-name=org.freedesktop.Notifications
+  # System tray / status-notifier icon.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.gnome.Shell
+  # Find the bundled AppIndicator typelib under /app (searched before the runtime).
+  - --env=GI_TYPELIB_PATH=/app/lib/girepository-1.0
+
+modules:
+  - name: portaudio
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    cleanup:
+      - /include
+      - /lib/cmake
+      - /lib/pkgconfig
+      - "*.a"
+      - "*.la"
+    sources:
+      - type: archive
+        url: https://github.com/PortAudio/portaudio/archive/refs/tags/v19.7.0.tar.gz
+        sha256: 5af29ba58bbdbb7bbcefaaecc77ec8fc413f0db6f4c4e286c40c3e1b83174fa0
+
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+  - name: xsel
+    buildsystem: simple
+    build-commands:
+      - autoreconf -fi
+      - ./configure --prefix=/app
+      - make
+      - make install
+    cleanup:
+      - /share/man
+    sources:
+      - type: archive
+        url: https://github.com/kfish/xsel/archive/refs/tags/1.2.1.tar.gz
+        sha256: 18487761f5ca626a036d65ef2db8ad9923bf61685e06e7533676c56d7d60eb14
+
+  - name: xdotool
+    buildsystem: simple
+    build-commands:
+      - make
+      - make install PREFIX=/app
+    sources:
+      - type: archive
+        url: https://github.com/jordansissel/xdotool/archive/refs/tags/v3.20211022.1.tar.gz
+        sha256: 82b15a944a5e82fee15e0f6116bd9f642bc3d0bb6989fc0ca5ad9dfe35de0847
+
+  - python3-build-dependencies.yaml
+  - python3-dependencies.yaml
+
+  - name: vocalinux
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-deps --no-build-isolation --prefix=/app .
+      - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.desktop -t /app/share/applications/
+      - install -Dm644 resources/icons/scalable/vocalinux.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux.svg
+      - install -Dm644 resources/icons/scalable/vocalinux-microphone-off.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux-microphone-off.svg
+      - install -Dm644 resources/icons/scalable/vocalinux-microphone.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux-microphone.svg
+      - install -Dm644 resources/icons/scalable/vocalinux-microphone-process.svg /app/share/icons/hicolor/scalable/apps/com.vocalinux.Vocalinux-microphone-process.svg
+      - install -Dm644 packaging/flatpak/com.vocalinux.Vocalinux.metainfo.xml -t /app/share/metainfo/
+    sources:
+      - type: dir
+        path: ../..

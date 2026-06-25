@@ -26,6 +26,8 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from ..utils.paths import xdg_data_home
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,8 +59,8 @@ except (ImportError, ValueError) as e:
     GObject = None
 
 
-# File paths for communication
-VOCALINUX_IBUS_DIR = Path.home() / ".local" / "share" / "vocalinux-ibus"
+# File paths for communication ($XDG_DATA_HOME, defaults to ~/.local/share)
+VOCALINUX_IBUS_DIR = Path(xdg_data_home()) / "vocalinux-ibus"
 SOCKET_PATH = VOCALINUX_IBUS_DIR / "inject.sock"
 PID_FILE = VOCALINUX_IBUS_DIR / "engine.pid"
 
