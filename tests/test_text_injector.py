@@ -1638,3 +1638,101 @@ class TestIBusRuntimeFallback(unittest.TestCase):
 
         self.assertTrue(result)
         self.assertEqual(injector.environment, DesktopEnvironment.X11)
+
+
+class TestCompositorIBusBridging(unittest.TestCase):
+    """Tests for skipping IBus on compositors that don't bridge it to native apps."""
+
+    def _bare_injector(self, environment=DesktopEnvironment.WAYLAND):
+        """Build a TextInjector without running __init__ side effects."""
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = environment
+        return injector
+
+    def test_bridged_desktops_prefer_ibus(self):
+        """GNOME/KDE/Cinnamon and unknown desktops should keep using IBus."""
+        injector = self._bare_injector()
+        for desktop in ("GNOME", "ubuntu:GNOME", "KDE", "X-Cinnamon", ""):
+            with patch.dict(
+                "os.environ",
+                {
+                    "XDG_CURRENT_DESKTOP": desktop,
+                    "XDG_SESSION_DESKTOP": desktop,
+                    "DESKTOP_SESSION": desktop,
+                },
+            ):
+                self.assertTrue(injector._wayland_compositor_bridges_ibus(), desktop)
+
+    def test_unbridged_compositors_skip_ibus(self):
+        """COSMIC and wlroots compositors do not deliver IBus commits to native apps."""
+        injector = self._bare_injector()
+        for desktop in ("COSMIC", "sway", "Hyprland", "wayfire", "niri", "river"):
+            with patch.dict(
+                "os.environ",
+                {
+                    "XDG_CURRENT_DESKTOP": desktop,
+                    "XDG_SESSION_DESKTOP": desktop,
+                    "DESKTOP_SESSION": desktop,
+                },
+            ):
+                self.assertFalse(injector._wayland_compositor_bridges_ibus(), desktop)
+
+    def test_non_wayland_always_bridges(self):
+        """On X11/XWayland IBus works via XIM regardless of desktop."""
+        injector = self._bare_injector(DesktopEnvironment.X11)
+        with patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "COSMIC"}):
+            self.assertTrue(injector._wayland_compositor_bridges_ibus())
+
+    @patch("os.path.exists", return_value=True)
+    def test_is_ydotoold_running_true_when_socket_exists(self, _mock_exists):
+        injector = self._bare_injector()
+        self.assertTrue(injector._is_ydotoold_running())
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("os.path.exists", return_value=False)
+    def test_is_ydotoold_running_true_when_process_found(self, _mock_exists, mock_run):
+        injector = self._bare_injector()
+        mock_run.return_value = MagicMock(returncode=0)
+        self.assertTrue(injector._is_ydotoold_running())
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("os.path.exists", return_value=False)
+    def test_is_ydotoold_running_false_when_absent(self, _mock_exists, mock_run):
+        injector = self._bare_injector()
+        mock_run.return_value = MagicMock(returncode=1)
+        self.assertFalse(injector._is_ydotoold_running())
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_cosmic_skips_ibus_and_uses_wtype(
+        self,
+        mock_which,
+        mock_run,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """On COSMIC, even with IBus active, injection must use wtype, not IBus."""
+        mock_which.side_effect = lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "WAYLAND_DISPLAY": "w-1",
+                "XDG_CURRENT_DESKTOP": "COSMIC",
+                "XDG_SESSION_DESKTOP": "cosmic",
+                "DESKTOP_SESSION": "cosmic",
+            },
+        ):
+            injector = TextInjector()
+
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
+        self.assertEqual(injector.wayland_tool, "wtype")
+        mock_ibus_class.assert_not_called()
