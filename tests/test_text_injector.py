@@ -1736,3 +1736,22 @@ class TestCompositorIBusBridging(unittest.TestCase):
         self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
         self.assertEqual(injector.wayland_tool, "wtype")
         mock_ibus_class.assert_not_called()
+
+    def test_is_ydotoold_running_true_when_socket_env_set(self):
+        """An explicit YDOTOOL_SOCKET pointing at an existing socket counts as running."""
+        injector = self._bare_injector()
+        with patch.dict("os.environ", {"YDOTOOL_SOCKET": "/run/user/1000/.ydotool_socket"}):
+            with patch("os.path.exists", return_value=True):
+                self.assertTrue(injector._is_ydotoold_running())
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ydotool_direct_mode_when_no_daemon_and_no_wtype(self, mock_which, _mock_ibus):
+        """ydotool present without a daemon and no wtype falls back to ydotool direct mode."""
+        mock_which.side_effect = lambda cmd: "/usr/bin/ydotool" if cmd == "ydotool" else None
+        with patch.object(TextInjector, "_is_ydotoold_running", return_value=False):
+            with patch.dict(
+                "os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}
+            ):
+                injector = TextInjector()
+        self.assertEqual(injector.wayland_tool, "ydotool")
