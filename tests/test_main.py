@@ -5,7 +5,7 @@ Tests for the main module functionality.
 import argparse
 import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 # Mock GTK modules before importing vocalinux.main
 sys.modules["gi"] = MagicMock()
@@ -247,7 +247,9 @@ class TestMainModule(unittest.TestCase):
             mock_text.assert_called_once_with(wayland_mode=True)
             mock_action_handler.assert_called_once_with(mock_text_instance)
             mock_tray.assert_called_once_with(
-                speech_engine=mock_speech_instance, text_injector=mock_text_instance
+                speech_engine=mock_speech_instance,
+                text_injector=mock_text_instance,
+                transcription_history=ANY,
             )
 
             # Verify callbacks were registered

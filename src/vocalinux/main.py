@@ -276,6 +276,7 @@ def main():
     from .ui.action_handler import ActionHandler
     from .ui.config_manager import ConfigManager
     from .ui.logging_manager import initialize_logging
+    from .ui.transcription_history import TranscriptionHistory
 
     # Initialize logging manager early
     initialize_logging()
@@ -357,6 +358,10 @@ def main():
 
     advanced_settings = config_manager.get_settings().get("advanced", {})
 
+    history_settings = config_manager.get_settings().get("history", {})
+    history_enabled = history_settings.get("enabled", True)
+    history_max_items = history_settings.get("max_items", 10)
+
     logger.info(f"Final settings: engine={engine}, language={language}, model={model_size}")
     if audio_device_index is not None:
         logger.info(f"Using audio device index={audio_device_index} (from saved config)")
@@ -395,6 +400,16 @@ def main():
         # Initialize action handler
         action_handler = ActionHandler(text_system)
 
+        # Transcription history: an in-memory, newest-first list of recent
+        # dictation snippets surfaced in the tray menu. One snippet == one
+        # dictation session (everything said between start and stop).
+        transcription_history = TranscriptionHistory(
+            max_items=history_max_items, enabled=history_enabled
+        )
+        # Segments dictated during the current session, joined and committed to
+        # history when the session ends (state returns to IDLE).
+        session_segments: list[str] = []
+
         # --- Callback wiring ---------------------------------------------------
         # The speech engine emits three kinds of events, each handled by a
         # dedicated callback registered below:
@@ -430,6 +445,14 @@ def main():
             if not text_to_inject:
                 return
 
+            # Record the recognized segment in history regardless of whether
+            # injection succeeds: recovering text from a failed injection (e.g.
+            # on Wayland compositors where injection can silently no-op) is a
+            # primary reason to keep a history. Stored clean, without the
+            # inter-segment space added below.
+            if transcription_history.enabled:
+                session_segments.append(text_to_inject)
+
             # Add a separating space between consecutive dictation segments,
             # but never for the very first segment (avoids unwanted leading space
             # when starting dictation in an empty text field).
@@ -442,9 +465,16 @@ def main():
                 action_handler.set_last_injected_text(text_to_inject)
 
         def on_state_change(state: RecognitionState) -> None:
-            """Reset the last-injected buffer when a listening session ends."""
+            """Reset the last-injected buffer when a listening session ends.
+
+            Also commits the just-finished dictation session to the
+            transcription history as a single snippet.
+            """
             if state == RecognitionState.IDLE:
                 action_handler.set_last_injected_text("")
+                if session_segments:
+                    transcription_history.add(" ".join(session_segments))
+                    session_segments.clear()
 
         # Connect speech recognition to text injection and action handling
         speech_engine.register_text_callback(text_callback_wrapper)
@@ -455,6 +485,7 @@ def main():
         indicator = tray_indicator.TrayIndicator(
             speech_engine=speech_engine,
             text_injector=text_system,
+            transcription_history=transcription_history,
         )
 
         # Start the GTK main loop
