@@ -229,8 +229,7 @@ class PynputKeyboardBackend(KeyboardBackend):
     def _combo_modifiers_held(self) -> bool:
         """True if at least one variant of every required modifier is held."""
         return all(
-            bool(keys & self._combo_held_keys)
-            for keys in self._combo_required_modifier_keys
+            bool(keys & self._combo_held_keys) for keys in self._combo_required_modifier_keys
         )
 
     def _matches_configured_modifier(self, key) -> bool:

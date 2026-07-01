@@ -1676,9 +1676,7 @@ class SettingsDialog(Gtk.Dialog):
         custom_box.pack_start(self.custom_shortcut_entry, False, False, 0)
 
         self.record_shortcut_button = Gtk.Button(label="Record")
-        self.record_shortcut_button.set_tooltip_text(
-            "Click, then press your desired key combo"
-        )
+        self.record_shortcut_button.set_tooltip_text("Click, then press your desired key combo")
         self.record_shortcut_button.connect("clicked", self._on_record_shortcut_clicked)
         custom_box.pack_start(self.record_shortcut_button, False, False, 0)
 

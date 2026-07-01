@@ -259,9 +259,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
         for modifier in spec.modifiers:
             codes = MODIFIER_KEY_CODES.get(modifier, set())
             if not codes:
-                logger.error(
-                    f"Combo shortcut '{self._shortcut}': unknown modifier '{modifier}'"
-                )
+                logger.error(f"Combo shortcut '{self._shortcut}': unknown modifier '{modifier}'")
                 return
             modifier_sets.append(set(codes))
 
@@ -271,9 +269,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
     def _required_modifiers_held(self) -> bool:
         """True if at least one key code for every required modifier is held."""
-        return all(
-            bool(codes & self._combo_pressed) for codes in self._combo_modifier_sets
-        )
+        return all(bool(codes & self._combo_pressed) for codes in self._combo_modifier_sets)
 
     def is_available(self) -> bool:
         """Check if evdev is available and we can access a keyboard device with the modifier key."""
@@ -595,10 +591,7 @@ class EvdevKeyboardBackend(KeyboardBackend):
         if self._mode == "toggle":
             current_time = time.time()
             # Debounce so a single press can't double-fire.
-            if (
-                self.double_tap_callback is not None
-                and current_time - self.last_trigger_time > 0.5
-            ):
+            if self.double_tap_callback is not None and current_time - self.last_trigger_time > 0.5:
                 logger.debug(f"Combo {self._shortcut} toggled (evdev)")
                 self.last_trigger_time = current_time
                 threading.Thread(target=self.double_tap_callback, daemon=True).start()

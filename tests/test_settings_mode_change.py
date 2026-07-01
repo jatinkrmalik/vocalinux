@@ -26,7 +26,7 @@ def _method_source(name: str) -> str:
 
 def test_mode_change_reads_saved_shortcut_from_config():
     body = _method_source("_on_shortcut_mode_changed")
-    assert 'self.config_manager.get_str(' in body
+    assert "self.config_manager.get_str(" in body
     assert '"toggle_recognition"' in body
 
 
