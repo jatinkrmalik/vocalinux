@@ -365,6 +365,19 @@ def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool
     if not layout:
         return False
 
+    # On Wayland the compositor owns the keyboard layout. setxkbmap only reaches
+    # the XWayland X11 server, so re-applying a layout here (or the historical
+    # "us" default when nothing was captured) silently switches XWayland — and
+    # therefore XWayland/Electron apps — to the wrong layout, while native
+    # Wayland apps and localectl stay correct. Skip it on Wayland and let the
+    # compositor manage the layout. See issue #474.
+    if _is_wayland_session():
+        logger.debug(
+            "Wayland session detected — skipping setxkbmap; the compositor "
+            "manages the keyboard layout (see #474)."
+        )
+        return False
+
     try:
         cmd = ["setxkbmap", "-layout", layout]
         if variant:
@@ -835,7 +848,10 @@ class IBusTextInjector:
 
         ensure_ibus_dir()
         self._previous_engine: Optional[str] = None
-        self._previous_xkb_layout: tuple = ("us", "", "")
+        # Empty until a real X11 layout is captured. A non-empty default (e.g.
+        # "us") would make stop()/restore re-apply a layout that was never
+        # captured, flipping non-US users to us. See issue #474.
+        self._previous_xkb_layout: tuple = ("", "", "")
 
         if auto_activate:
             self._setup_engine()
