@@ -18,9 +18,10 @@ def _bare_injector():
 class TestWaitForModifiersReleased:
     def test_returns_immediately_when_no_modifier_held(self):
         inj = _bare_injector()
-        with patch.object(inj, "_held_modifier_keycodes", return_value=set()) as held, patch(
-            "time.sleep"
-        ) as sleep:
+        with (
+            patch.object(inj, "_held_modifier_keycodes", return_value=set()) as held,
+            patch("time.sleep") as sleep,
+        ):
             inj._wait_for_modifiers_released()
         assert held.call_count == 1  # checked once, cleared, no polling loop
         sleep.assert_not_called()
@@ -29,9 +30,10 @@ class TestWaitForModifiersReleased:
         inj = _bare_injector()
         # Held for the first two checks, then released.
         states = [{56}, {56}, set()]
-        with patch.object(
-            inj, "_held_modifier_keycodes", side_effect=states
-        ) as held, patch("time.sleep"):
+        with (
+            patch.object(inj, "_held_modifier_keycodes", side_effect=states) as held,
+            patch("time.sleep"),
+        ):
             inj._wait_for_modifiers_released()
         assert held.call_count == 3
 
@@ -46,9 +48,7 @@ class TestWaitForModifiersReleased:
         inj = _bare_injector()
         monkeypatch.setenv("VOCALINUX_INJECT_MODIFIER_WAIT", "0.05")
         # Always held -> must still return (best-effort) rather than hang.
-        with patch.object(inj, "_held_modifier_keycodes", return_value={56}), patch(
-            "time.sleep"
-        ):
+        with patch.object(inj, "_held_modifier_keycodes", return_value={56}), patch("time.sleep"):
             inj._wait_for_modifiers_released()  # should return within the timeout
 
 
@@ -57,12 +57,15 @@ class TestWaylandInjectionWaitsFirst:
         inj = _bare_injector()
         inj.wayland_tool = "ydotool"
         calls = []
-        with patch.object(
-            inj, "_wait_for_modifiers_released", side_effect=lambda: calls.append("wait")
-        ), patch.object(
-            inj,
-            "_inject_via_clipboard_paste",
-            side_effect=lambda text: calls.append("paste") or True,
+        with (
+            patch.object(
+                inj, "_wait_for_modifiers_released", side_effect=lambda: calls.append("wait")
+            ),
+            patch.object(
+                inj,
+                "_inject_via_clipboard_paste",
+                side_effect=lambda text: calls.append("paste") or True,
+            ),
         ):
             inj._inject_with_wayland_tool("hello")
         # The modifier wait must happen before the paste chord is sent.
@@ -72,9 +75,12 @@ class TestWaylandInjectionWaitsFirst:
         inj = _bare_injector()
         inj.wayland_tool = "wtype"
         calls = []
-        with patch.object(
-            inj, "_wait_for_modifiers_released", side_effect=lambda: calls.append("wait")
-        ), patch("subprocess.run", side_effect=lambda *a, **k: calls.append("run") or MagicMock()):
+        with (
+            patch.object(
+                inj, "_wait_for_modifiers_released", side_effect=lambda: calls.append("wait")
+            ),
+            patch("subprocess.run", side_effect=lambda *a, **k: calls.append("run") or MagicMock()),
+        ):
             inj._inject_with_wayland_tool("hello")
         assert calls[0] == "wait"
         assert "run" in calls
