@@ -331,11 +331,18 @@ class TextInjector:
         return tools
 
     def _run_clipboard_command(self, tool: str, text: str) -> bool:
+        # NB: wl-copy/xclip/xsel fork a background process that keeps owning the
+        # selection in order to serve it. That child inherits our pipes, so
+        # capturing stderr via subprocess.PIPE makes run() block until the child
+        # exits (i.e. until the clipboard is next overwritten) and then time out
+        # — even though the copy itself succeeded. Redirect to DEVNULL so run()
+        # only waits for the short-lived foreground process.
         if tool == "wl-copy":
             subprocess.run(
                 ["wl-copy", text],
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -346,7 +353,8 @@ class TextInjector:
                 ["xclip", "-selection", "clipboard"],
                 input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -357,7 +365,8 @@ class TextInjector:
                 ["xsel", "--clipboard", "--input"],
                 input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -898,18 +907,19 @@ class TextInjector:
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
-        # ydotool can only handle ASCII characters because it works at the
-        # evdev keycode level. For non-ASCII text, use clipboard paste instead.
-        if self.wayland_tool == "ydotool" and self._has_non_ascii(text):
-            logger.info(
-                "Text contains non-ASCII characters, using clipboard paste "
-                "for ydotool (evdev keycodes are ASCII-only)"
-            )
+        # ydotool emits *positional* evdev keycodes, so `ydotool type` is
+        # re-interpreted through the active keyboard layout, which it assumes is
+        # US QWERTY. On any other layout (AZERTY, QWERTZ, Dvorak, ...) the text
+        # comes out scrambled (e.g. "message" -> ",essqge" on AZERTY), and
+        # non-ASCII characters are dropped entirely. Always paste via the
+        # clipboard instead: Ctrl+V is layout-independent and Unicode-safe.
+        if self.wayland_tool == "ydotool":
+            logger.info("Using clipboard paste for ydotool (layout-independent, Unicode-safe)")
             if self._inject_via_clipboard_paste(text):
                 return
             logger.warning(
                 "Clipboard paste failed, falling back to ydotool type "
-                "(non-ASCII characters may be dropped)"
+                "(text may be scrambled on non-US layouts)"
             )
 
         if self.wayland_tool == "wtype":

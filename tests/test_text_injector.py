@@ -540,10 +540,16 @@ class TestTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
     @patch("vocalinux.text_injection.text_injector.shutil.which")
     @patch("vocalinux.text_injection.text_injector.subprocess.run")
-    def test_ydotool_ascii_uses_type_directly(
+    def test_ydotool_ascii_also_uses_clipboard_paste(
         self, mock_run, mock_which, mock_ibus_avail, mock_ibus_active
     ):
-        """Test that ydotool still uses type for plain ASCII text."""
+        """ydotool always pastes via the clipboard, even for plain ASCII.
+
+        `ydotool type` emits positional evdev keycodes that get re-interpreted
+        through the active keyboard layout (assumed US QWERTY), so typing ASCII
+        is scrambled on non-US layouts (e.g. AZERTY). Clipboard paste (Ctrl+V)
+        is layout-independent, so it is used unconditionally for ydotool.
+        """
         mock_which.side_effect = lambda x: x in ("ydotool", "wl-copy")
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
@@ -557,12 +563,16 @@ class TestTextInjector(unittest.TestCase):
 
             calls = [c.args[0] for c in mock_run.call_args_list if c.args]
             self.assertTrue(
-                any(c[:2] == ["ydotool", "type"] for c in calls),
-                "Should use ydotool type for ASCII text",
+                any(c[0] == "wl-copy" for c in calls),
+                "Should copy ASCII text to the clipboard",
+            )
+            self.assertTrue(
+                any(c[:2] == ["ydotool", "key"] for c in calls),
+                "Should paste with ydotool key (Ctrl+V)",
             )
             self.assertFalse(
-                any(c[0] == "wl-copy" for c in calls),
-                "Should NOT invoke clipboard for ASCII text",
+                any(c[:2] == ["ydotool", "type"] for c in calls),
+                "Should NOT use layout-dependent ydotool type",
             )
 
     @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
@@ -626,6 +636,27 @@ class TestTextInjector(unittest.TestCase):
             calls = [c.args[0] for c in mock_run.call_args_list if c.args]
             has_xsel = any(c[0] == "xsel" for c in calls)
             self.assertTrue(has_xsel, "Should use xsel as fallback")
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_command_does_not_capture_pipe(self, mock_run):
+        """_run_clipboard_command must not capture the tool's stderr via a pipe.
+
+        wl-copy/xclip/xsel fork a background process that keeps owning the
+        selection; if stderr is captured with subprocess.PIPE the call blocks on
+        the surviving child and times out even though the copy succeeded.
+        Redirecting to DEVNULL avoids that hang (regression guard).
+        """
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        injector = TextInjector.__new__(TextInjector)
+        injector._clipboard_timeout = 0.35
+
+        for tool in ("wl-copy", "xclip", "xsel"):
+            mock_run.reset_mock()
+            self.assertTrue(injector._run_clipboard_command(tool, "café"))
+            _, kwargs = mock_run.call_args
+            self.assertEqual(kwargs.get("stdout"), subprocess.DEVNULL)
+            self.assertEqual(kwargs.get("stderr"), subprocess.DEVNULL)
+            self.assertNotEqual(kwargs.get("stderr"), subprocess.PIPE)
 
     @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
     @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
