@@ -915,7 +915,13 @@ class TextInjector:
         if self.wayland_tool == "wtype":
             cmd = ["wtype", text]
         else:  # ydotool
-            cmd = ["ydotool", "type", text]
+            # Pass explicit timing parameters to speed up injection.
+            # ydotool defaults to --key-delay 12 (or 20 in older versions).
+            # We use a faster default configurable via environment variable.
+            # IMPORTANT: key-delay must stay > 0 to avoid Shift-leak bug where
+            # capital letters corrupt following characters (e.g. "Can you" -> "CAN YOu").
+            key_delay = os.environ.get("VOCALINUX_YDOTOOL_KEY_DELAY", "8")
+            cmd = ["ydotool", "type", "--key-delay", key_delay, text]
 
         try:
             subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
