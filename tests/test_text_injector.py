@@ -205,9 +205,9 @@ class TestTextInjector(unittest.TestCase):
             # Inject text
             injector.inject_text("Hello world")
 
-            # Verify ydotool was called correctly
+            # Verify ydotool was called correctly with timing parameters
             self.mock_subprocess.assert_any_call(
-                ["ydotool", "type", "Hello world"],
+                ["ydotool", "type", "--key-delay", "8", "Hello world"],
                 check=True,
                 stderr=subprocess.PIPE,
                 text=True,
