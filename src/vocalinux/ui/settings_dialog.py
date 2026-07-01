@@ -1857,9 +1857,15 @@ class SettingsDialog(Gtk.Dialog):
         # Update UI to reflect new mode
         self._update_shortcut_ui_for_mode(mode_id)
 
-        # Try to apply the mode change live
+        # Try to apply the mode change live. Read the active shortcut from the
+        # saved config rather than the preset combo: a custom shortcut (e.g.
+        # "alt+r") is stored in config but leaves the preset combo pointing at a
+        # default/previous preset, so using the combo here would restart the
+        # listener on the wrong shortcut.
         if self.shortcut_update_callback:
-            shortcut_id = self.shortcut_combo.get_active_id()
+            shortcut_id = self.config_manager.get_str(
+                "shortcuts", "toggle_recognition", "ctrl+ctrl"
+            )
             success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(
