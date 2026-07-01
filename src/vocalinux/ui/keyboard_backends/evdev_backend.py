@@ -8,6 +8,7 @@ input devices, which works on both X11 and Wayland (with proper permissions).
 import errno
 import logging
 import os
+import re
 import select
 import threading
 import time
@@ -54,6 +55,55 @@ MODIFIER_KEY_CODES: dict[str, set[int]] = {
     "right_alt": {KEY_RIGHTALT},
     "right_shift": {KEY_RIGHTSHIFT},
 }
+
+# Named main-key tokens -> evdev ecodes attribute name. Single letters/digits
+# and function keys are resolved by rule (KEY_<UPPER>), so only irregular names
+# are listed here.
+_NAMED_EVDEV_KEYS = {
+    "space": "KEY_SPACE",
+    "tab": "KEY_TAB",
+    "enter": "KEY_ENTER",
+    "return": "KEY_ENTER",
+    "esc": "KEY_ESC",
+    "escape": "KEY_ESC",
+    "backspace": "KEY_BACKSPACE",
+    "delete": "KEY_DELETE",
+    "insert": "KEY_INSERT",
+    "home": "KEY_HOME",
+    "end": "KEY_END",
+    "pageup": "KEY_PAGEUP",
+    "pagedown": "KEY_PAGEDOWN",
+    "up": "KEY_UP",
+    "down": "KEY_DOWN",
+    "left": "KEY_LEFT",
+    "right": "KEY_RIGHT",
+    "comma": "KEY_COMMA",
+    "period": "KEY_DOT",
+    "slash": "KEY_SLASH",
+    "semicolon": "KEY_SEMICOLON",
+    "apostrophe": "KEY_APOSTROPHE",
+    "grave": "KEY_GRAVE",
+    "minus": "KEY_MINUS",
+    "equal": "KEY_EQUAL",
+    "leftbracket": "KEY_LEFTBRACE",
+    "rightbracket": "KEY_RIGHTBRACE",
+    "backslash": "KEY_BACKSLASH",
+}
+
+
+def evdev_code_for_key(token: str) -> Optional[int]:
+    """Resolve a canonical main-key token (e.g. "r", "f5", "space") to an evdev code."""
+    if not EVDEV_AVAILABLE or not token:
+        return None
+    name = _NAMED_EVDEV_KEYS.get(token)
+    if name is None:
+        if len(token) == 1 and token.isalnum():
+            name = f"KEY_{token.upper()}"
+        elif re.fullmatch(r"f\d+", token):
+            name = f"KEY_{token.upper()}"
+    if name is None:
+        return None
+    return getattr(ecodes, name, None)
 
 
 def find_keyboard_devices() -> list[str]:
@@ -161,6 +211,14 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.double_tap_threshold = 0.3  # seconds
         self.key_pressed_devices: set[int] = set()
 
+        # Combo (modifier+key) state. Populated by _resolve_combo_targets().
+        self._combo_main_code: Optional[int] = None
+        self._combo_modifier_sets: list[set[int]] = []
+        self._combo_all_codes: set[int] = set()
+        self._combo_pressed: set[int] = set()  # currently-held combo-relevant codes
+        self._combo_active = False  # True while a push-to-talk combo hold is live
+        self._resolve_combo_targets()
+
         self._devices_lock = threading.Lock()
         self._dropped_devices: set[int] = set()  # fds with SYN_DROPPED pending
         self._device_paths_by_fd: dict[int, str] = {}
@@ -171,6 +229,51 @@ class EvdevKeyboardBackend(KeyboardBackend):
     def _get_target_key_codes(self) -> set[int]:
         """Get the evdev key codes for the configured modifier."""
         return MODIFIER_KEY_CODES.get(self._modifier_key, set())
+
+    def set_shortcut(self, shortcut: str) -> None:
+        """Update the shortcut and recompute combo key targets."""
+        super().set_shortcut(shortcut)
+        self._resolve_combo_targets()
+
+    def _resolve_combo_targets(self) -> None:
+        """Resolve the spec's combo modifiers and main key to evdev codes."""
+        self._combo_main_code = None
+        self._combo_modifier_sets = []
+        self._combo_all_codes = set()
+        self._combo_pressed = set()
+        self._combo_active = False
+
+        spec = getattr(self, "_spec", None)
+        if spec is None or not spec.is_combo:
+            return
+
+        main_code = evdev_code_for_key(spec.key)
+        if main_code is None:
+            logger.error(
+                f"Combo shortcut '{self._shortcut}': cannot resolve key '{spec.key}' "
+                "to an evdev code; combo will not trigger"
+            )
+            return
+
+        modifier_sets = []
+        for modifier in spec.modifiers:
+            codes = MODIFIER_KEY_CODES.get(modifier, set())
+            if not codes:
+                logger.error(
+                    f"Combo shortcut '{self._shortcut}': unknown modifier '{modifier}'"
+                )
+                return
+            modifier_sets.append(set(codes))
+
+        self._combo_main_code = main_code
+        self._combo_modifier_sets = modifier_sets
+        self._combo_all_codes = set().union(*modifier_sets) | {main_code}
+
+    def _required_modifiers_held(self) -> bool:
+        """True if at least one key code for every required modifier is held."""
+        return all(
+            bool(codes & self._combo_pressed) for codes in self._combo_modifier_sets
+        )
 
     def is_available(self) -> bool:
         """Check if evdev is available and we can access a keyboard device with the modifier key."""
@@ -254,6 +357,9 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self.key_pressed_devices = set()
         self._dropped_devices = set()
         self._device_paths_by_fd = {}
+
+        # Refresh combo targets and clear any stale held-key state.
+        self._resolve_combo_targets()
 
         for device_path in device_paths:
             self._open_keyboard_device(device_path)
@@ -445,6 +551,73 @@ class EvdevKeyboardBackend(KeyboardBackend):
 
     def _handle_key_event(self, event, device) -> None:
         """Handle a key event from evdev."""
+        if getattr(self, "_spec", None) is not None and self._spec.is_combo:
+            self._handle_combo_key_event(event)
+            return
+        self._handle_modifier_key_event(event, device)
+
+    def _handle_combo_key_event(self, event) -> None:
+        """Handle a key event for a modifier+key combo (e.g. Alt+R).
+
+        Combo state is tracked globally across all keyboard devices, which is
+        required for split keyboards where the modifier and the main key can
+        live on different physical halves (separate evdev devices).
+        """
+        try:
+            code = event.code
+            value = event.value  # 0 = release, 1 = press, 2 = autorepeat
+
+            if self._combo_main_code is None:
+                return
+            if value == 2:  # ignore autorepeat; press/release drive the gesture
+                return
+
+            if code in self._combo_all_codes:
+                if value == 1:
+                    self._combo_pressed.add(code)
+                elif value == 0:
+                    self._combo_pressed.discard(code)
+
+            if code == self._combo_main_code:
+                if value == 1 and self._required_modifiers_held():
+                    self._combo_triggered()
+                elif value == 0:
+                    self._combo_released()
+            elif value == 0 and code in self._combo_all_codes:
+                # A required modifier was released: end an active push-to-talk hold.
+                if not self._required_modifiers_held():
+                    self._combo_released()
+        except Exception as e:
+            logger.error(f"Error handling combo key event: {e}")
+
+    def _combo_triggered(self) -> None:
+        """Fire the appropriate callback when a combo is engaged."""
+        if self._mode == "toggle":
+            current_time = time.time()
+            # Debounce so a single press can't double-fire.
+            if (
+                self.double_tap_callback is not None
+                and current_time - self.last_trigger_time > 0.5
+            ):
+                logger.debug(f"Combo {self._shortcut} toggled (evdev)")
+                self.last_trigger_time = current_time
+                threading.Thread(target=self.double_tap_callback, daemon=True).start()
+        elif self._mode == "push_to_talk":
+            if not self._combo_active and self.key_press_callback is not None:
+                self._combo_active = True
+                logger.debug(f"Combo {self._shortcut} pressed (evdev)")
+                threading.Thread(target=self.key_press_callback, daemon=True).start()
+
+    def _combo_released(self) -> None:
+        """Fire the release callback when a live push-to-talk combo ends."""
+        if self._mode == "push_to_talk" and self._combo_active:
+            self._combo_active = False
+            if self.key_release_callback is not None:
+                logger.debug(f"Combo {self._shortcut} released (evdev)")
+                threading.Thread(target=self.key_release_callback, daemon=True).start()
+
+    def _handle_modifier_key_event(self, event, device) -> None:
+        """Handle a key event for a single-modifier gesture (double-tap / hold)."""
         try:
             code = event.code
             value = event.value  # 0 = release, 1 = press, 2 = repeat

@@ -5,8 +5,10 @@ All keyboard backends must inherit from this class and implement
 the required methods.
 """
 
+import re
 from abc import ABC, abstractmethod
-from typing import Callable, Optional
+from dataclasses import dataclass
+from typing import Callable, Optional, Tuple
 
 Callback = Callable[[], None]
 
@@ -99,6 +101,232 @@ SHORTCUT_MODES = {
 DEFAULT_SHORTCUT_MODE = "toggle"
 
 
+# ---------------------------------------------------------------------------
+# Generalized shortcut parsing (modifier-only gestures AND modifier+key combos)
+#
+# The legacy model only allowed a single modifier ("ctrl+ctrl") used as a
+# double-tap / hold gesture. The parser below additionally accepts combos such
+# as "alt+r" or "ctrl+alt+r": one or more modifiers plus exactly one ordinary
+# key. Backends resolve the canonical key tokens below to their own key codes.
+# ---------------------------------------------------------------------------
+
+# Canonical modifier tokens accepted in a shortcut string.
+MODIFIER_NAMES = {
+    "ctrl",
+    "alt",
+    "shift",
+    "super",
+    "left_ctrl",
+    "left_alt",
+    "left_shift",
+    "right_ctrl",
+    "right_alt",
+    "right_shift",
+}
+
+# Named (non-alphanumeric) main keys accepted in a combo. Single letters/digits
+# and function keys (f1-f24) are accepted by rule and need not be listed here.
+_NAMED_MAIN_KEYS = {
+    "space",
+    "tab",
+    "enter",
+    "return",
+    "esc",
+    "escape",
+    "backspace",
+    "delete",
+    "insert",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "up",
+    "down",
+    "left",
+    "right",
+    "comma",
+    "period",
+    "slash",
+    "semicolon",
+    "apostrophe",
+    "grave",
+    "minus",
+    "equal",
+    "leftbracket",
+    "rightbracket",
+    "backslash",
+}
+
+_FUNCTION_KEY_RE = re.compile(r"f([1-9]|1[0-9]|2[0-4])$")
+
+_MODIFIER_LABELS = {
+    "ctrl": "Ctrl",
+    "alt": "Alt",
+    "shift": "Shift",
+    "super": "Super",
+    "left_ctrl": "Left Ctrl",
+    "left_alt": "Left Alt",
+    "left_shift": "Left Shift",
+    "right_ctrl": "Right Ctrl",
+    "right_alt": "Right Alt",
+    "right_shift": "Right Shift",
+}
+
+_NAMED_KEY_LABELS = {
+    "space": "Space",
+    "tab": "Tab",
+    "enter": "Enter",
+    "return": "Enter",
+    "esc": "Esc",
+    "escape": "Esc",
+    "backspace": "Backspace",
+    "delete": "Delete",
+    "insert": "Insert",
+    "home": "Home",
+    "end": "End",
+    "pageup": "PageUp",
+    "pagedown": "PageDown",
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "comma": ",",
+    "period": ".",
+    "slash": "/",
+    "semicolon": ";",
+    "apostrophe": "'",
+    "grave": "`",
+    "minus": "-",
+    "equal": "=",
+    "leftbracket": "[",
+    "rightbracket": "]",
+    "backslash": "\\",
+}
+
+
+def is_modifier_token(token: str) -> bool:
+    """Return True if a token names a modifier key."""
+    return token in MODIFIER_NAMES
+
+
+def is_main_key_token(token: str) -> bool:
+    """Return True if a token names a valid non-modifier (main) key."""
+    if len(token) == 1 and token.isalnum():
+        return True
+    if _FUNCTION_KEY_RE.fullmatch(token):
+        return True
+    return token in _NAMED_MAIN_KEYS
+
+
+@dataclass(frozen=True)
+class ShortcutSpec:
+    """Structured representation of a parsed shortcut.
+
+    - Pure-modifier gesture (legacy): ``modifiers=("ctrl",), key=None`` parsed
+      from "ctrl+ctrl". The double-tap / hold gesture applies to that modifier.
+    - Combo: ``modifiers=("alt",), key="r"`` parsed from "alt+r"; may carry
+      several modifiers, e.g. ``modifiers=("ctrl", "alt"), key="r"``.
+    """
+
+    modifiers: Tuple[str, ...]
+    key: Optional[str] = None
+
+    @property
+    def is_combo(self) -> bool:
+        """True if this shortcut is a modifier+key combo (not a bare modifier)."""
+        return self.key is not None
+
+    @property
+    def primary_modifier(self) -> str:
+        """The first modifier, used for backward-compatible single-modifier APIs."""
+        return self.modifiers[0] if self.modifiers else ""
+
+    def canonical(self) -> str:
+        """Canonical shortcut string (round-trips through parse_shortcut_spec)."""
+        if self.key is None:
+            return f"{self.modifiers[0]}+{self.modifiers[0]}"
+        return "+".join((*self.modifiers, self.key))
+
+
+def parse_shortcut_spec(shortcut_string: str) -> ShortcutSpec:
+    """Parse a shortcut string into a :class:`ShortcutSpec`.
+
+    Accepts legacy pure-modifier forms ("ctrl+ctrl", "left_shift+left_shift")
+    and modifier+key combos ("alt+r", "ctrl+alt+r").
+
+    Raises:
+        ValueError: if the string is empty, malformed, contains an unknown key,
+            has more than one non-modifier key, or is a bare single modifier
+            (a pure-modifier gesture must use the doubled form, e.g. "ctrl+ctrl").
+    """
+    if not shortcut_string or not shortcut_string.strip():
+        raise ValueError("Empty shortcut string")
+
+    tokens = [t.strip() for t in shortcut_string.lower().strip().split("+")]
+    if any(t == "" for t in tokens):
+        raise ValueError(f"Malformed shortcut: {shortcut_string}")
+
+    modifiers = []
+    main_key = None
+    for token in tokens:
+        if is_modifier_token(token):
+            modifiers.append(token)
+        elif is_main_key_token(token):
+            if main_key is not None:
+                raise ValueError(
+                    f"Shortcut may contain only one non-modifier key: {shortcut_string}"
+                )
+            main_key = token
+        else:
+            raise ValueError(f"Unknown key in shortcut: {token!r}")
+
+    if not modifiers:
+        raise ValueError(f"Shortcut needs at least one modifier: {shortcut_string}")
+
+    # Deduplicate modifiers while preserving order ("ctrl+ctrl" -> ("ctrl",)).
+    unique_modifiers = tuple(dict.fromkeys(modifiers))
+
+    if main_key is None:
+        # Pure-modifier gesture. Require the legacy doubled form (two identical
+        # modifier tokens) so a bare "ctrl" stays invalid and "ctrl+alt" (an
+        # ambiguous gesture target) is rejected.
+        if len(modifiers) < 2 or len(unique_modifiers) != 1:
+            raise ValueError(
+                f"Modifier-only shortcut must double a single modifier: {shortcut_string}"
+            )
+        return ShortcutSpec(modifiers=unique_modifiers, key=None)
+
+    return ShortcutSpec(modifiers=unique_modifiers, key=main_key)
+
+
+def is_valid_shortcut(shortcut_string: str) -> bool:
+    """Return True if the string parses as a valid shortcut."""
+    try:
+        parse_shortcut_spec(shortcut_string)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
+def _main_key_label(token: str) -> str:
+    """Human-readable label for a main-key token (e.g. 'r' -> 'R')."""
+    if token in _NAMED_KEY_LABELS:
+        return _NAMED_KEY_LABELS[token]
+    return token.upper()
+
+
+def format_shortcut_label(spec: ShortcutSpec) -> str:
+    """Human-readable label for a spec, e.g. 'Alt+R' or 'Ctrl (either side)'."""
+    if not spec.is_combo:
+        legacy_id = spec.canonical()
+        if legacy_id in SHORTCUT_DISPLAY_NAMES:
+            return SHORTCUT_DISPLAY_NAMES[legacy_id]
+        return _MODIFIER_LABELS.get(spec.primary_modifier, spec.primary_modifier)
+    parts = [_MODIFIER_LABELS.get(m, m) for m in spec.modifiers]
+    parts.append(_main_key_label(spec.key))
+    return "+".join(parts)
+
+
 def get_shortcut_display_name(shortcut: str, mode: Optional[str] = None) -> str:
     """
     Get a human-readable display name for a shortcut.
@@ -110,33 +338,52 @@ def get_shortcut_display_name(shortcut: str, mode: Optional[str] = None) -> str:
     Returns:
         A human-readable display name for the shortcut
     """
+    # Legacy shortcuts keep their exact curated wording.
     if mode and shortcut in SHORTCUT_MODE_DISPLAY_NAMES:
         return SHORTCUT_MODE_DISPLAY_NAMES[shortcut].get(
             mode, SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
         )
-    return SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
+    if shortcut in SHORTCUT_DISPLAY_NAMES:
+        return SHORTCUT_DISPLAY_NAMES[shortcut]
+
+    # Generated names for combos (and any non-legacy shortcut).
+    try:
+        spec = parse_shortcut_spec(shortcut)
+    except ValueError:
+        return shortcut
+    label = format_shortcut_label(spec)
+    if mode == "toggle":
+        return f"Press {label}" if spec.is_combo else f"Double-tap {label}"
+    if mode == "push_to_talk":
+        return f"Hold {label}"
+    return label
 
 
 def parse_shortcut(shortcut_string: str) -> str:
     """
-    Parse a shortcut string and return the modifier key name.
+    Parse a shortcut string and return its primary modifier key name.
+
+    Retained for backward compatibility. Accepts both legacy pure-modifier
+    shortcuts ("ctrl+ctrl") and modifier+key combos ("alt+r"); for a combo the
+    first (primary) modifier is returned.
 
     Args:
-        shortcut_string: The shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+        shortcut_string: The shortcut string (e.g., "ctrl+ctrl", "alt+r")
 
     Returns:
-        The modifier key name (e.g., "ctrl", "alt")
+        The primary modifier key name (e.g., "ctrl", "alt")
 
     Raises:
         ValueError: If the shortcut string is not recognized
     """
-    shortcut_lower = shortcut_string.lower().strip()
-    if shortcut_lower not in SUPPORTED_SHORTCUTS:
+    try:
+        spec = parse_shortcut_spec(shortcut_string)
+    except ValueError:
         raise ValueError(
             f"Unsupported shortcut: {shortcut_string}. "
             f"Supported shortcuts: {', '.join(SUPPORTED_SHORTCUTS.keys())}"
         )
-    return SUPPORTED_SHORTCUTS[shortcut_lower]
+    return spec.primary_modifier
 
 
 class KeyboardBackend(ABC):
@@ -161,7 +408,13 @@ class KeyboardBackend(ABC):
         self.key_release_callback: Optional[Callback] = None
         self._shortcut = shortcut
         self._mode = mode
-        self._modifier_key = parse_shortcut(shortcut)
+        self._spec = parse_shortcut_spec(shortcut)
+        self._modifier_key = self._spec.primary_modifier
+
+    @property
+    def spec(self) -> ShortcutSpec:
+        """Get the parsed shortcut specification."""
+        return self._spec
 
     @property
     def shortcut(self) -> str:
@@ -194,9 +447,10 @@ class KeyboardBackend(ABC):
         Update the shortcut to listen for.
 
         Args:
-            shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+alt")
+            shortcut: The new shortcut string (e.g., "ctrl+ctrl", "alt+r")
         """
-        self._modifier_key = parse_shortcut(shortcut)
+        self._spec = parse_shortcut_spec(shortcut)
+        self._modifier_key = self._spec.primary_modifier
         self._shortcut = shortcut
 
     @abstractmethod
