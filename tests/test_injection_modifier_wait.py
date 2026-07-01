@@ -185,3 +185,37 @@ class TestHeldModifierKeycodes:
         with patch("time.sleep"):
             inj._wait_for_modifiers_released()
         assert calls["n"] >= 2
+
+
+class TestHeldModifierKeycodesErrorPaths:
+    def test_list_devices_failure_returns_empty(self):
+        inj = _bare_injector()
+        mod = types.ModuleType("evdev")
+        mod.ecodes = types.SimpleNamespace(EV_KEY=1)
+
+        def boom():
+            raise RuntimeError("enumeration failed")
+
+        mod.list_devices = boom
+        with patch.dict("sys.modules", {"evdev": mod}):
+            assert inj._held_modifier_keycodes() == set()
+
+    def test_device_read_oserror_is_skipped(self):
+        inj = _bare_injector()
+        mod = types.ModuleType("evdev")
+        mod.ecodes = types.SimpleNamespace(EV_KEY=1)
+
+        class RaisingDevice:
+            def capabilities(self):
+                return {1: []}
+
+            def active_keys(self):
+                raise OSError("device went away mid-read")
+
+            def close(self):
+                pass
+
+        mod.list_devices = lambda: ["/dev/input/event0"]
+        mod.InputDevice = lambda path: RaisingDevice()
+        with patch.dict("sys.modules", {"evdev": mod}):
+            assert inj._held_modifier_keycodes() == set()
