@@ -169,6 +169,72 @@ class TextInjector:
                 logger.warning("Could not detect desktop environment, defaulting to X11")
                 return DesktopEnvironment.X11
 
+    # Wayland compositors that do NOT bridge IBus commits to native Wayland
+    # clients. On these, an IBus engine's commit_text() reaches only XWayland and
+    # GTK/Qt apps that load the IBus IM module, while native apps (e.g.
+    # cosmic-term) receive nothing -- the injection appears to succeed but the
+    # text is silently dropped. These are the smithay/wlroots-based compositors
+    # that implement input handling without IBus text-input integration.
+    _IBUS_UNBRIDGED_COMPOSITORS = (
+        "cosmic",
+        "sway",
+        "hyprland",
+        "wayfire",
+        "river",
+        "niri",
+        "labwc",
+        "weston",
+    )
+
+    def _wayland_compositor_bridges_ibus(self) -> bool:
+        """Whether native Wayland clients receive IBus commits on this compositor.
+
+        GNOME (mutter), KDE (kwin) and most full desktops bridge IBus to native
+        Wayland clients, so an engine's commit_text() reaches the focused app. A
+        handful of compositors (see ``_IBUS_UNBRIDGED_COMPOSITORS``) do not, so on
+        those we must use a virtual-keyboard tool (wtype/ydotool) instead. We use
+        a denylist rather than an allowlist so that unrecognised desktops keep the
+        previous IBus-preferred behaviour.
+        """
+        if self.environment != DesktopEnvironment.WAYLAND:
+            # X11 / XWayland: IBus reaches apps through XIM regardless of DE.
+            return True
+        desktop = " ".join(
+            os.environ.get(var, "")
+            for var in ("XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION")
+        ).lower()
+        return not any(name in desktop for name in self._IBUS_UNBRIDGED_COMPOSITORS)
+
+    def _is_ydotoold_running(self) -> bool:
+        """Return True if the ydotoold daemon appears to be running.
+
+        ``ydotool type ""`` exits 0 even with no daemon (it prints a notice and
+        silently does nothing), so the exit code alone is not a reliable probe.
+        Check for the daemon's socket first, then fall back to scanning for the
+        process itself.
+        """
+        socket_candidates = []
+        env_socket = os.environ.get("YDOTOOL_SOCKET")
+        if env_socket:
+            socket_candidates.append(env_socket)
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+        if runtime_dir:
+            socket_candidates.append(os.path.join(runtime_dir, ".ydotool_socket"))
+        socket_candidates.append("/tmp/.ydotool_socket")
+        if any(os.path.exists(path) for path in socket_candidates):
+            return True
+        try:
+            result = subprocess.run(
+                ["pgrep", "-x", "ydotoold"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            return result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            # pgrep missing, timed out, or otherwise unavailable -> assume not running
+            return False
+
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
         ibus_requested = False
@@ -198,6 +264,15 @@ class TextInjector:
                     "(e.g., KDE Plasma). Using alternative text injection method. "
                     "For IBus setup, see: https://github.com/jatinkrmalik/vocalinux/wiki/IBus-Setup"
                 )
+            # Some Wayland compositors (COSMIC, Sway, Hyprland, ...) do not deliver
+            # IBus commits to native Wayland apps, so IBus would silently drop the
+            # text even though commit_text() reports success.
+            elif not self._wayland_compositor_bridges_ibus():
+                logger.info(
+                    "Compositor '%s' does not bridge IBus to native Wayland apps; "
+                    "using virtual-keyboard injection (wtype/ydotool) instead.",
+                    os.environ.get("XDG_CURRENT_DESKTOP", "unknown"),
+                )
             else:
                 try:
                     self._ibus_injector = IBusTextInjector(auto_activate=False)
@@ -218,31 +293,18 @@ class TextInjector:
             ydotool_available = shutil.which("ydotool") is not None
             xdotool_available = shutil.which("xdotool") is not None
 
-            if ydotool_available:
-                # Verify ydotoold daemon is running before selecting ydotool
-                try:
-                    subprocess.run(
-                        ["ydotool", "type", ""],
-                        check=True,
-                        stderr=subprocess.PIPE,
-                        timeout=2,
-                    )
-                    self.wayland_tool = "ydotool"
-                    logger.info(f"Using {self.wayland_tool} for Wayland text injection")
-                except (
-                    subprocess.CalledProcessError,
-                    subprocess.TimeoutExpired,
-                    FileNotFoundError,
-                ):
-                    if wtype_available:
-                        self.wayland_tool = "wtype"
-                        logger.info(
-                            "Using "
-                            f"{self.wayland_tool} for Wayland text injection "
-                            "(ydotoold not running)"
-                        )
-                    else:
-                        logger.warning("ydotool found but ydotoold daemon not running")
+            if ydotool_available and self._is_ydotoold_running():
+                # ydotoold is running; ydotool can inject via the daemon.
+                self.wayland_tool = "ydotool"
+                logger.info(f"Using {self.wayland_tool} for Wayland text injection")
+            elif ydotool_available and not wtype_available:
+                # ydotool present but no daemon and no wtype: try ydotool anyway
+                # (direct uinput mode, requires access to /dev/uinput).
+                self.wayland_tool = "ydotool"
+                logger.warning(
+                    "ydotoold daemon not running; using ydotool in direct mode "
+                    "(may have latency/permission issues)"
+                )
             elif wtype_available:
                 self.wayland_tool = "wtype"
                 logger.info(f"Using {self.wayland_tool} for Wayland text injection")
