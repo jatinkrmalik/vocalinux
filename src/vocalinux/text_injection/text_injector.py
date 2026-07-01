@@ -954,6 +954,72 @@ class TextInjector:
             logger.warning(f"Paste simulation failed: {e}")
             return False
 
+    # evdev keycodes for modifier keys. If any of these is still physically held
+    # when a Wayland injection fires, the injected keystrokes are modified: a
+    # held Alt turns the Ctrl+V paste into Ctrl+Alt+V (nothing pastes), and a
+    # held modifier turns typed letters into shortcuts. Because toggle/PTT
+    # shortcuts are themselves modifiers (e.g. Alt+R) and transcription can
+    # finish in tens of milliseconds, the user is often still holding the key
+    # when injection starts, causing intermittent "nothing pasted" failures.
+    _MODIFIER_KEYCODES = frozenset({29, 97, 56, 100, 42, 54, 125, 126})
+
+    def _held_modifier_keycodes(self) -> set:
+        """Return modifier keycodes currently held on any physical keyboard."""
+        try:
+            import evdev
+            from evdev import ecodes
+        except ImportError:
+            return set()
+
+        held: set = set()
+        try:
+            for path in evdev.list_devices():
+                try:
+                    device = evdev.InputDevice(path)
+                except (OSError, PermissionError):
+                    continue
+                try:
+                    if ecodes.EV_KEY not in device.capabilities():
+                        continue
+                    held |= set(device.active_keys()) & self._MODIFIER_KEYCODES
+                except OSError:
+                    continue
+                finally:
+                    device.close()
+        except Exception as e:
+            logger.debug(f"Could not read modifier key state: {e}")
+        return held
+
+    def _wait_for_modifiers_released(self) -> None:
+        """Wait briefly for shortcut modifier keys to be released before injecting.
+
+        Returns immediately if no modifier is held (the common case), so this
+        adds no latency unless the user is still holding their toggle/PTT
+        shortcut. Bounded by VOCALINUX_INJECT_MODIFIER_WAIT seconds (default 1.0;
+        set to 0 to disable). Best-effort: if evdev/permissions are unavailable
+        it simply proceeds.
+        """
+        try:
+            max_wait = float(os.environ.get("VOCALINUX_INJECT_MODIFIER_WAIT", "1.0"))
+        except ValueError:
+            max_wait = 1.0
+        if max_wait <= 0:
+            return
+
+        deadline = time.monotonic() + max_wait
+        waited = False
+        while time.monotonic() < deadline:
+            if not self._held_modifier_keycodes():
+                if waited:
+                    logger.debug("Modifier keys released; proceeding with injection")
+                return
+            waited = True
+            time.sleep(0.015)
+        logger.debug(
+            f"Modifier keys still held after {max_wait:.2f}s; injecting anyway "
+            "(paste/typing may be affected)"
+        )
+
     def _inject_with_wayland_tool(self, text: str):
         """
         Inject text using a Wayland-compatible tool (wtype or ydotool).
@@ -969,6 +1035,11 @@ class TextInjector:
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
+        # Wait for the shortcut modifier(s) to be released first, so a held Alt
+        # doesn't turn the Ctrl+V paste into Ctrl+Alt+V (nothing pastes) or
+        # modify typed keys.
+        self._wait_for_modifiers_released()
+
         # ydotool emits *positional* evdev keycodes, so `ydotool type` is
         # re-interpreted through the active keyboard layout, which it assumes is
         # US QWERTY. On any other layout (AZERTY, QWERTZ, Dvorak, ...) the text
