@@ -32,41 +32,39 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.12.0-beta
+## 📚 What's New in v0.13.0-beta
 
-> 🎉 **Release: Remote API recognition, Silero VAD, and reliability hardening across threading, IBus, settings, installer, and model metadata.**
+> 🎉 **Release: Guided whisper.cpp model selection, plus Wayland text-injection reliability, hotplug keyboard support, dictation spacing fixes, and refreshed website docs.**
 
 ### 🚀 Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **🌐 Remote API Engine** | New speech recognition backend for self-hosted or compatible remote transcription services |
-| **🎙️ Silero VAD** | Neural voice activity detection drops silence-only buffers for cleaner, faster dictation |
-| **🧵 Thread Safety** | Hardened Remote API, IBus, and text injection threading behavior |
-| **🔌 IBus Reliability** | Preserves user engines for dead keys and captures scoped engines during activation |
-| **⚙️ Settings Polish** | Remote Server section now respects the Advanced toggle and the dialog fits lower-resolution screens |
-| **📦 Installer & Models** | CUDA diagnostics include auto-remediation and model download sizes are corrected |
+| **🎙️ Guided Whisper Models** | Pick a whisper.cpp **size** and **specialization** (English-only, quantized, Turbo) through split dropdowns with in-app guidance |
+| **🔌 Hotplug Keyboard Support** | Shortcuts keep working on keyboards connected after startup, with automatic recovery from disconnects |
+| **✍️ Dictation Spacing** | Spacing is preserved between speech segments separated by a pause in the same session |
+| **🖥️ Wayland Reliability** | Fixes silent text drops on wlroots/COSMIC compositors and garbled output on non-US keyboard layouts |
 
 ### ✨ New Features
 
-- **Remote API speech recognition engine** — Configure Vocalinux to use compatible remote transcription services while keeping existing local engines available (#335)
-- **Silero VAD** — Neural voice activity detection filters silence-only buffers for cleaner recognition when ONNX Runtime support is installed (#447)
+- **Guided whisper.cpp model variants** — The Settings dialog now splits whisper.cpp selection into **Model Size** and **Specialization**, exposing English-only, quantized (Q5/Q8), Large v3 Turbo, and legacy large models with language-aware recommendations and hover guidance. Exact model IDs (e.g. `medium.en-q5_0`, `large-v3-turbo`) can also be passed to `--model` (#465)
 
 ### 🐛 Bug Fixes
 
-- **Threading**: Harden Remote API, IBus, and text injection thread safety (#452)
-- **IBus**: Preserve user engines for dead keys and capture the current engine during scoped activation (#457, #458)
-- **UI**: Keep the Remote Server section behind the Advanced toggle and reduce settings dialog height for lower-resolution screens (#454, #456)
-- **Installer**: Harden CUDA diagnostics with auto-remediation and behavioral tests (#451)
-- **Models**: Correct whisper.cpp and VOSK download size metadata (#453)
-- **Startup**: Allow launch without the pynput backend (#448)
-- **Website**: Clarify speech demo browser support (#449)
+- **Dictation**: Preserve spacing between speech segments separated by a pause, so words no longer run together after a silence within the same session (#464)
+- **Shortcuts**: The evdev keyboard backend rescans for hotplugged keyboards, so shortcuts work on devices connected after startup and disconnected devices can be replugged (#467)
+- **KDE Plasma Wayland**: Detect KDE Plasma Wayland sessions and guide you to enable IBus Wayland (System Settings → Keyboard → Virtual Keyboard) when `wtype` injection fails, with matching hints during install and in logs (#466)
+- **Wayland**: Fix garbled output on non-US keyboard layouts (AZERTY/QWERTZ/Dvorak) and a clipboard-copy hang; ydotool now pastes through the clipboard for layout-independent injection (#480)
+- **Wayland/IBus**: Use wtype/ydotool instead of IBus on compositors that don't bridge IBus to native apps (COSMIC, Sway, Hyprland, and similar), fixing silent text drops (#486)
+- **Wayland/IBus**: Require a real IM engine before using IBus on Wayland, so a bare `xkb` layout no longer causes silent text drops on GNOME/Mutter and other compositors (#478)
+- **Wayland**: Preserve the keyboard layout on Wayland by not running `setxkbmap`, which was flipping XWayland/Electron apps to `us` after dictation (#474)
+- **UI**: Cap the settings dialog height on high-resolution displays (#465)
 
 ### 🔧 Improvements
 
-- **Developer docs** — Remote API test server instructions for easier backend testing (#455)
-- **Community** — GitHub Sponsors funding configuration added
-- **Behavioral coverage** — CUDA diagnostics and release-facing reliability fixes include targeted tests
+- **Performance** — Faster ydotool text injection via an explicit `--key-delay` (#488)
+- **Website** — New documentation pages for Remote API, Silero VAD, advanced whisper.cpp settings, and desktop reliability, plus responsive layout polish (#470)
+- **CI** — Automatic pull-request labeling by changed files (#473)
 
 ---
 
@@ -388,7 +386,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.12.0 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.13.0 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 
