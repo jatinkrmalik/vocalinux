@@ -84,6 +84,18 @@ system_packages:
     void: ["xdotool"]
     solus: ["xdotool"]
 
+  # Clipboard tools used for layout-independent Wayland paste fallback
+  clipboard_tools:
+    ubuntu: ["wl-clipboard", "xclip", "xsel"]
+    debian: ["wl-clipboard", "xclip", "xsel"]
+    fedora: ["wl-clipboard", "xclip", "xsel"]
+    arch: ["wl-clipboard", "xclip", "xsel"]
+    opensuse: ["wl-clipboard", "xclip", "xsel"]
+    gentoo: ["gui-apps/wl-clipboard", "x11-misc/xclip", "x11-misc/xsel"]
+    alpine: ["wl-clipboard", "xclip", "xsel"]
+    void: ["wl-clipboard", "xclip", "xsel"]
+    solus: ["wl-clipboard", "xclip", "xsel"]
+
   wtype:
     ubuntu: ["wtype"]
     debian: ["wtype"]

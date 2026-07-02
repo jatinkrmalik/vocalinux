@@ -112,6 +112,27 @@ PY
         echo "  ydotool not found (Wayland)"
     fi
 
+    echo ""
+    echo "Clipboard tools (recommended for Wayland layout-independent paste fallback):"
+
+    if command -v wl-copy >/dev/null 2>&1; then
+        echo "✓ wl-copy (Wayland clipboard)"
+    else
+        echo "  wl-copy not found (Wayland clipboard)"
+    fi
+
+    if command -v xclip >/dev/null 2>&1; then
+        echo "✓ xclip (X11/XWayland clipboard)"
+    else
+        echo "  xclip not found (X11/XWayland clipboard)"
+    fi
+
+    if command -v xsel >/dev/null 2>&1; then
+        echo "✓ xsel (X11/XWayland clipboard fallback)"
+    else
+        echo "  xsel not found (X11/XWayland clipboard fallback)"
+    fi
+
     # Detect distribution for install hints
     echo ""
     DETECTED_DISTRO="unknown"
@@ -137,17 +158,17 @@ PY
         if [[ "$DETECTED_DISTRO" == "ubuntu" || "$DETECTED_DISTRO_LIKE" == *"ubuntu"* || "$DETECTED_DISTRO" == "pop" || "$DETECTED_DISTRO" == "linuxmint" || "$DETECTED_DISTRO" == "elementary" || "$DETECTED_DISTRO" == "zorin" ]]; then
             echo "Ubuntu/Debian-based:"
             echo "  sudo apt update"
-            echo "  sudo apt install -y python3-gi gir1.2-gtk-3.0 gir1.2-gdkpixbuf-2.0 portaudio19-dev python3-dev python3-venv pkg-config xdotool wtype"
+            echo "  sudo apt install -y python3-gi gir1.2-gtk-3.0 gir1.2-gdkpixbuf-2.0 portaudio19-dev python3-dev python3-venv pkg-config xdotool wtype wl-clipboard xclip xsel"
         elif [[ "$DETECTED_DISTRO" == "fedora" || "$DETECTED_DISTRO_LIKE" == *"fedora"* || "$DETECTED_DISTRO" == "rhel" || "$DETECTED_DISTRO" == "centos" || "$DETECTED_DISTRO" == "rocky" || "$DETECTED_DISTRO" == "almalinux" ]]; then
             echo "Fedora/RHEL-based:"
-            echo "  sudo dnf install -y python3-gobject gtk3-devel gobject-introspection-devel portaudio-devel python3-devel python3-virtualenv pkg-config xdotool wtype"
+            echo "  sudo dnf install -y python3-gobject gtk3-devel gobject-introspection-devel portaudio-devel python3-devel python3-virtualenv pkg-config xdotool wtype wl-clipboard xclip xsel"
         elif [[ "$DETECTED_DISTRO" == "arch" || "$DETECTED_DISTRO_LIKE" == *"arch"* || "$DETECTED_DISTRO" == "manjaro" || "$DETECTED_DISTRO" == "endeavouros" ]]; then
             echo "Arch Linux-based:"
-            echo "  sudo pacman -S --needed python-gobject gtk3 gobject-introspection portaudio python pkg-config xdotool wtype"
+            echo "  sudo pacman -S --needed python-gobject gtk3 gobject-introspection portaudio python pkg-config xdotool wtype wl-clipboard xclip xsel"
         elif [[ "$DETECTED_DISTRO" == "opensuse" || "$DETECTED_DISTRO_LIKE" == *"suse"* ]]; then
             echo "openSUSE:"
             echo "  PYVER=\$(python3 -c 'import sys; print(f\"python{sys.version_info.major}{sys.version_info.minor}\")')"
-            echo "  sudo zypper install -y \"\${PYVER}-gobject\" \"\${PYVER}-gobject-cairo\" gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 typelib-1_0-Notify-0_7 libnotify4 gobject-introspection-devel portaudio-devel \"\${PYVER}-devel\" \"\${PYVER}-virtualenv\" pkg-config xdotool wtype"
+            echo "  sudo zypper install -y \"\${PYVER}-gobject\" \"\${PYVER}-gobject-cairo\" gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 typelib-1_0-Notify-0_7 libnotify4 gobject-introspection-devel portaudio-devel \"\${PYVER}-devel\" \"\${PYVER}-virtualenv\" pkg-config xdotool wtype wl-clipboard xclip xsel"
             echo "  If \"\${PYVER}-virtualenv\" is unavailable, try \"\${PYVER}-venv\"."
         elif [[ "$DETECTED_DISTRO" == "gentoo" ]]; then
             echo "Gentoo:"
@@ -157,26 +178,26 @@ PY
             echo "  sudo apk add py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf xdotool wtype"
         elif [[ "$DETECTED_DISTRO" == "void" ]]; then
             echo "Void Linux:"
-            echo "  sudo xbps-install -Sy python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel pkg-config xdotool wtype"
+            echo "  sudo xbps-install -Sy python3-pip python3-gobject gtk+3 libappindicator gobject-introspection portaudio-devel python3-devel pkg-config xdotool wtype wl-clipboard xclip xsel"
         elif [[ "$DETECTED_DISTRO" == "solus" ]]; then
             echo "Solus:"
-            echo "  sudo eopkg install python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config xdotool wtype"
+            echo "  sudo eopkg install python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config xdotool wtype wl-clipboard xclip xsel"
         elif [[ "$DETECTED_DISTRO" == "mageia" ]]; then
             echo "Mageia:"
             if command -v dnf >/dev/null 2>&1; then
-                echo "  sudo dnf install -y python3-gobject gtk3-devel gobject-introspection-devel portaudio-devel python3-devel python3-virtualenv pkg-config xdotool wtype"
+                echo "  sudo dnf install -y python3-gobject gtk3-devel gobject-introspection-devel portaudio-devel python3-devel python3-virtualenv pkg-config xdotool wtype wl-clipboard xclip xsel"
             else
-                echo "  sudo urpmi -y python3-gobject gtk3-devel gobject-introspection-devel portaudio-devel python3-devel python3-virtualenv pkg-config xdotool wtype"
+                echo "  sudo urpmi -y python3-gobject gtk3-devel gobject-introspection-devel portaudio-devel python3-devel python3-virtualenv pkg-config xdotool wtype wl-clipboard xclip xsel"
             fi
         else
             echo "Ubuntu/Debian-based:"
-            echo "  sudo apt install -y python3-gi gir1.2-gtk-3.0 portaudio19-dev python3-dev pkg-config xdotool wtype"
+            echo "  sudo apt install -y python3-gi gir1.2-gtk-3.0 portaudio19-dev python3-dev pkg-config xdotool wtype wl-clipboard xclip xsel"
             echo ""
             echo "Fedora/RHEL-based:"
-            echo "  sudo dnf install -y python3-gobject gtk3-devel portaudio-devel python3-devel pkg-config xdotool wtype"
+            echo "  sudo dnf install -y python3-gobject gtk3-devel portaudio-devel python3-devel pkg-config xdotool wtype wl-clipboard xclip xsel"
             echo ""
             echo "Arch Linux:"
-            echo "  sudo pacman -S python-gobject gtk3 portaudio python pkg-config xdotool wtype"
+            echo "  sudo pacman -S python-gobject gtk3 portaudio python pkg-config xdotool wtype wl-clipboard xclip xsel"
         fi
 
         echo ""
