@@ -68,6 +68,28 @@ class InstallerCudaDiagnosticsTests(unittest.TestCase):
         self.assertIn("--replace-needed", source)
         self.assertIn("readelf not found", source)
 
+    def test_installer_includes_xsel_for_wayland_clipboard_fallback(self) -> None:
+        """Fresh installs should include xsel for ydotool's layout-safe paste path."""
+        source = _installer_source()
+
+        required_lines = [
+            "local APT_PACKAGES_UBUNTU=",
+            "local APT_PACKAGES_DEBIAN_BASE=",
+            "local DNF_PACKAGES=",
+            "local PACMAN_PACKAGES=",
+            "local ZYPPER_PACKAGES=",
+            "local EMERGE_PACKAGES=",
+            "local APK_PACKAGES=",
+            "local XBPS_PACKAGES=",
+            "local EOPKG_PACKAGES=",
+        ]
+
+        for name in required_lines:
+            line = next(line for line in source.splitlines() if name in line)
+            self.assertIn("xclip", line)
+            self.assertIn("xsel", line)
+            self.assertIn("wl-clipboard", line)
+
 
 if __name__ == "__main__":
     unittest.main()
