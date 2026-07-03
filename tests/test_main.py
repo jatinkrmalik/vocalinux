@@ -12,6 +12,7 @@ sys.modules["gi"] = MagicMock()
 sys.modules["gi.repository"] = MagicMock()
 
 # Update import to use the new package structure
+from vocalinux.common_types import RecognitionState
 from vocalinux.main import check_dependencies, main, parse_arguments
 
 
@@ -98,8 +99,8 @@ class TestMainModule(unittest.TestCase):
         self.assertEqual(result, 1)
         mock_print.assert_called_once_with("No GPUs detected.")
 
-    def test_parse_arguments_model_choices(self):
-        """Test that model only accepts valid choices."""
+    def test_parse_arguments_model_values(self):
+        """Test model parsing for base and exact whisper.cpp model IDs."""
         with patch("sys.argv", ["vocalinux", "--model", "small"]):
             args = parse_arguments()
             self.assertEqual(args.model, "small")
@@ -111,6 +112,14 @@ class TestMainModule(unittest.TestCase):
         with patch("sys.argv", ["vocalinux", "--model", "large"]):
             args = parse_arguments()
             self.assertEqual(args.model, "large")
+
+        with patch("sys.argv", ["vocalinux", "--model", "medium.en-q5_0"]):
+            args = parse_arguments()
+            self.assertEqual(args.model, "medium.en-q5_0")
+
+        with patch("sys.argv", ["vocalinux", "--model", "large-v3-turbo"]):
+            args = parse_arguments()
+            self.assertEqual(args.model, "large-v3-turbo")
 
     def test_parse_arguments_engine_choices(self):
         """Test that engine only accepts valid choices."""
@@ -252,6 +261,10 @@ class TestMainModule(unittest.TestCase):
             mock_args.language = "en-us"
             mock_args.gpus = False
             mock_args.wayland = True
+            mock_args.text_injection = "auto"
+            mock_args.clipboard_timeout = 2.0
+            mock_args.paste_delay = 0.25
+            mock_args.paste_method = "ydotool-key"
             mock_parse.return_value = mock_args
 
             # Call main function
@@ -277,8 +290,18 @@ class TestMainModule(unittest.TestCase):
                 whispercpp_no_speech_thold=0.6,
                 gpu_name=None,
                 gpu_backend=None,
+                whispercpp_n_threads=0,
+                remote_api_url="",
+                remote_api_key="",
+                remote_api_endpoint="/inference",
             )
-            mock_text.assert_called_once_with(wayland_mode=True)
+            mock_text.assert_called_once_with(
+                wayland_mode=True,
+                preferred_backend="auto",
+                clipboard_timeout=2.0,
+                paste_delay=0.25,
+                paste_method="ydotool-key",
+            )
             mock_action_handler.assert_called_once_with(mock_text_instance)
             mock_tray.assert_called_once_with(
                 speech_engine=mock_speech_instance, text_injector=mock_text_instance
@@ -293,6 +316,68 @@ class TestMainModule(unittest.TestCase):
 
             # Verify the tray indicator was started
             mock_tray_instance.run.assert_called_once()
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_registered_callbacks_keep_spacing_across_processing_to_listening(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Test main callback wiring preserves spacing between in-session segments."""
+        mock_check_deps.return_value = True
+
+        mock_config_instance = MagicMock()
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
+        mock_config_manager.return_value = mock_config_instance
+
+        mock_speech_instance = MagicMock()
+        mock_text_instance = MagicMock()
+        mock_text_instance.inject_text.return_value = True
+        mock_tray_instance = MagicMock()
+
+        mock_speech.return_value = mock_speech_instance
+        mock_text.return_value = mock_text_instance
+        mock_tray.return_value = mock_tray_instance
+
+        with patch("vocalinux.main.parse_arguments") as mock_parse:
+            mock_args = MagicMock()
+            mock_args.debug = False
+            mock_args.model = "medium"
+            mock_args.engine = "vosk"
+            mock_args.language = "en-us"
+            mock_args.wayland = False
+            mock_args.start_minimized = False
+            mock_parse.return_value = mock_args
+
+            main()
+
+        text_callback = mock_speech_instance.register_text_callback.call_args.args[0]
+        state_callback = mock_speech_instance.register_state_callback.call_args.args[0]
+
+        text_callback("Hello.")
+        state_callback(RecognitionState.PROCESSING)
+        state_callback(RecognitionState.LISTENING)
+        text_callback("World")
+
+        calls = [call.args[0] for call in mock_text_instance.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello.", " World"])
+
+        state_callback(RecognitionState.IDLE)
+        mock_text_instance.inject_text.reset_mock()
+        text_callback("Next session")
+        mock_text_instance.inject_text.assert_called_once_with("Next session")
 
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.ui.action_handler.ActionHandler")
@@ -490,6 +575,25 @@ class TestCheckDependencies(unittest.TestCase):
                 "gi": mock_gi,
                 "gi.repository": MagicMock(Gtk=mock_gtk, AppIndicator3=mock_appindicator),
                 "pynput": mock_pynput,
+                "requests": mock_requests,
+            },
+        ):
+            result = check_dependencies()
+            self.assertTrue(result)
+
+    def test_check_dependencies_does_not_require_pynput(self):
+        """Test startup is allowed when the optional pynput backend is unavailable."""
+        mock_gi = MagicMock()
+        mock_gi.require_version = MagicMock()
+        mock_gtk = MagicMock()
+        mock_appindicator = MagicMock()
+        mock_requests = MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "gi": mock_gi,
+                "gi.repository": MagicMock(Gtk=mock_gtk, AppIndicator3=mock_appindicator),
                 "requests": mock_requests,
             },
         ):
@@ -748,42 +852,46 @@ class TestTextCallbackSpacing(unittest.TestCase):
                 text_to_inject = " " + text_to_inject
             success = text_system.inject_text(text_to_inject)
             if success:
-                action_handler.set_last_injected_text(text)
+                action_handler.set_last_injected_text(text_to_inject)
 
-        return text_callback_wrapper, text_system, action_handler
+        def on_state_change(state: RecognitionState):
+            if state == RecognitionState.IDLE:
+                action_handler.set_last_injected_text("")
+
+        return text_callback_wrapper, on_state_change, text_system, action_handler
 
     def test_first_segment_has_no_leading_space(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("Hello world")
         text_system.inject_text.assert_called_once_with("Hello world")
 
     def test_subsequent_segment_gets_space_separator(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("Hello")
         cb("world")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
         self.assertEqual(calls, ["Hello", " world"])
 
     def test_reset_clears_leading_space(self):
-        cb, text_system, ah = self._make_callback()
+        cb, on_state_change, text_system, _ = self._make_callback()
         cb("first session")
-        ah.set_last_injected_text("")
+        on_state_change(RecognitionState.IDLE)
         text_system.inject_text.reset_mock()
         cb("second session")
         text_system.inject_text.assert_called_once_with("second session")
 
     def test_whitespace_only_input_is_skipped(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("   ")
         text_system.inject_text.assert_not_called()
 
     def test_input_with_leading_space_is_stripped(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb(" Hello world")
         text_system.inject_text.assert_called_once_with("Hello world")
 
     def test_multiple_segments_all_get_separators(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("one")
         cb("two")
         cb("three")
@@ -791,8 +899,17 @@ class TestTextCallbackSpacing(unittest.TestCase):
         self.assertEqual(calls, ["one", " two", " three"])
 
     def test_space_after_punctuation_segment(self):
-        cb, text_system, _ = self._make_callback()
+        cb, _, text_system, _ = self._make_callback()
         cb("Hello.")
+        cb("World")
+        calls = [c.args[0] for c in text_system.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello.", " World"])
+
+    def test_processing_to_listening_keeps_segment_spacing(self):
+        cb, on_state_change, text_system, _ = self._make_callback()
+        cb("Hello.")
+        on_state_change(RecognitionState.PROCESSING)
+        on_state_change(RecognitionState.LISTENING)
         cb("World")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
         self.assertEqual(calls, ["Hello.", " World"])

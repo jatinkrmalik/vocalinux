@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, Mock, mock_open, patch
 import pytest
 
 from vocalinux.ui.keyboard_backends.evdev_backend import (
+    DEVICE_RESCAN_SECONDS,
     EVDEV_AVAILABLE,
     MODIFIER_KEY_CODES,
     EvdevKeyboardBackend,
@@ -412,6 +413,22 @@ class TestEvdevKeyboardBackendStart:
         # Clean up
         backend.stop()
 
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.EVDEV_AVAILABLE", True)
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.find_keyboard_devices")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_start_fails_when_devices_cannot_be_opened(self, mock_input_device, mock_find_devices):
+        """Test start fails when discovery finds devices but none can be opened."""
+        mock_find_devices.return_value = ["/dev/input/event0"]
+        mock_input_device.side_effect = OSError("permission denied")
+
+        backend = EvdevKeyboardBackend()
+        result = backend.start()
+
+        assert result is False
+        assert backend.active is False
+        assert backend.devices == []
+        assert backend.device_fds == []
+
 
 class TestEvdevKeyboardBackendStop:
     """Test stop() method."""
@@ -443,6 +460,398 @@ class TestEvdevKeyboardBackendStop:
         assert backend.running is False
         assert backend.devices == []
         assert backend.device_fds == []
+
+    def test_stop_active_without_thread_handles_close_failure(self):
+        """Test active stop without a monitor thread still clears device state."""
+        backend = EvdevKeyboardBackend()
+        mock_device = MagicMock()
+        mock_device.close.side_effect = RuntimeError("already closed")
+        backend.active = True
+        backend.running = True
+        backend.devices = [mock_device]
+        backend.device_fds = [10]
+        backend.device_paths = {"/dev/input/event0"}
+        backend._dropped_devices = {10}
+        backend._device_paths_by_fd = {10: "/dev/input/event0"}
+
+        backend.stop()
+
+        assert backend.active is False
+        assert backend.running is False
+        assert backend.devices == []
+        assert backend.device_fds == []
+        assert backend.device_paths == set()
+        assert backend._dropped_devices == set()
+        assert backend._device_paths_by_fd == {}
+
+
+class TestEvdevKeyboardBackendHotplug:
+    """Test hotplug discovery for evdev keyboard devices."""
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.find_keyboard_devices")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_scan_for_new_devices_opens_hotplugged_keyboard(
+        self, mock_input_device, mock_find_devices
+    ):
+        """Test that rescanning opens keyboard devices that appear after startup."""
+        existing_device = MagicMock()
+        existing_device.fileno.return_value = 10
+        new_device = MagicMock()
+        new_device.fileno.return_value = 11
+        new_device.name = "External Keyboard"
+        mock_input_device.return_value = new_device
+        mock_find_devices.return_value = ["/dev/input/event0", "/dev/input/event1"]
+
+        backend = EvdevKeyboardBackend()
+        backend.devices = [existing_device]
+        backend.device_fds = [10]
+        backend.device_paths = {"/dev/input/event0"}
+        backend._device_paths_by_fd = {10: "/dev/input/event0"}
+
+        added = backend._scan_for_new_devices()
+
+        assert added == 1
+        mock_input_device.assert_called_once_with("/dev/input/event1")
+        assert new_device in backend.devices
+        assert 11 in backend.device_fds
+        assert "/dev/input/event1" in backend.device_paths
+        assert backend._device_paths_by_fd[11] == "/dev/input/event1"
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_keyboard_device_skips_known_path(self, mock_input_device):
+        """Test opening a device already tracked by path is a no-op."""
+        backend = EvdevKeyboardBackend()
+        backend.device_paths = {"/dev/input/event0"}
+
+        opened = backend._open_keyboard_device("/dev/input/event0")
+
+        assert opened is False
+        mock_input_device.assert_not_called()
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_keyboard_device_handles_open_failure(self, mock_input_device):
+        """Test open failures leave backend device state unchanged."""
+        mock_input_device.side_effect = OSError("permission denied")
+        backend = EvdevKeyboardBackend()
+
+        opened = backend._open_keyboard_device("/dev/input/event7")
+
+        assert opened is False
+        assert backend.devices == []
+        assert backend.device_fds == []
+        assert backend.device_paths == set()
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_keyboard_device_closes_duplicate_fd(self, mock_input_device):
+        """Test a duplicate fd opened through a new path is discarded."""
+        duplicate_device = MagicMock()
+        duplicate_device.fileno.return_value = 10
+        duplicate_device.close.side_effect = RuntimeError("close failed")
+        mock_input_device.return_value = duplicate_device
+        backend = EvdevKeyboardBackend()
+        backend.device_fds = [10]
+
+        opened = backend._open_keyboard_device("/dev/input/event9")
+
+        assert opened is False
+        assert backend.devices == []
+        assert backend.device_paths == set()
+        duplicate_device.close.assert_called_once()
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.find_keyboard_devices")
+    def test_scan_for_new_devices_handles_discovery_failure(self, mock_find_devices):
+        """Test rescan failures do not stop the monitor loop."""
+        mock_find_devices.side_effect = RuntimeError("proc read failed")
+        backend = EvdevKeyboardBackend()
+
+        added = backend._scan_for_new_devices()
+
+        assert added == 0
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.find_keyboard_devices")
+    def test_scan_for_new_devices_no_new_devices(self, mock_find_devices):
+        """Test rescanning with only already-tracked paths returns zero."""
+        mock_find_devices.return_value = ["/dev/input/event0"]
+        backend = EvdevKeyboardBackend()
+        backend.device_paths = {"/dev/input/event0"}
+
+        added = backend._scan_for_new_devices()
+
+        assert added == 0
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_removed_device_path_can_be_reopened(self, mock_input_device):
+        """Test that disconnected device paths are forgotten for later replug."""
+        old_device = MagicMock()
+        old_device.fileno.return_value = 10
+        old_device.name = "External Keyboard"
+        new_device = MagicMock()
+        new_device.fileno.return_value = 12
+        new_device.name = "External Keyboard"
+        mock_input_device.return_value = new_device
+
+        backend = EvdevKeyboardBackend()
+        backend.devices = [old_device]
+        backend.device_fds = [10]
+        backend.device_paths = {"/dev/input/event4"}
+        backend._device_paths_by_fd = {10: "/dev/input/event4"}
+        backend.key_pressed_devices = {id(old_device)}
+
+        backend._remove_keyboard_device(10, old_device)
+
+        assert backend.devices == []
+        assert backend.device_fds == []
+        assert backend.device_paths == set()
+        assert backend.key_pressed_devices == set()
+        old_device.close.assert_called_once()
+
+        reopened = backend._open_keyboard_device("/dev/input/event4")
+
+        assert reopened is True
+        mock_input_device.assert_called_once_with("/dev/input/event4")
+        assert new_device in backend.devices
+        assert backend._device_paths_by_fd[12] == "/dev/input/event4"
+
+    def test_remove_keyboard_device_handles_stale_state(self):
+        """Test removing a device tolerates already-pruned backend state."""
+        stale_device = MagicMock()
+        stale_device.close.side_effect = RuntimeError("already closed")
+        backend = EvdevKeyboardBackend()
+        backend.devices = []
+        backend.device_fds = []
+        backend.device_paths = {"/dev/input/event8"}
+        backend._device_paths_by_fd = {}
+        backend._dropped_devices = {12}
+        backend.key_pressed_devices = {id(stale_device)}
+
+        backend._remove_keyboard_device(12, stale_device)
+
+        assert backend.device_paths == {"/dev/input/event8"}
+        assert backend._dropped_devices == set()
+        assert backend.key_pressed_devices == set()
+
+    def test_monitor_scans_when_all_devices_are_disconnected(self):
+        """Test that the monitor keeps rescanning after the last fd is removed."""
+        backend = EvdevKeyboardBackend()
+        backend.running = True
+        backend.device_fds = []
+        backend._scan_for_new_devices = MagicMock(return_value=0)
+
+        def stop_after_sleep(seconds):
+            backend.running = False
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, DEVICE_RESCAN_SECONDS + 0.1],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.sleep",
+                side_effect=stop_after_sleep,
+            ),
+        ):
+            backend._monitor_devices()
+
+        backend._scan_for_new_devices.assert_called_once()
+
+    def test_monitor_dispatches_events_from_readable_device(self):
+        """Test readable fds are resolved to devices and dispatched."""
+        backend = EvdevKeyboardBackend()
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.read.return_value = [MagicMock(type=1, code=29, value=1)]
+        backend.running = True
+        backend.devices = [device]
+        backend.device_fds = [10]
+        backend._handle_key_event = MagicMock(
+            side_effect=lambda event, device: setattr(backend, "running", False)
+        )
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.select.select",
+                return_value=([10], [], []),
+            ),
+            patch("vocalinux.ui.keyboard_backends.evdev_backend.ecodes") as mock_ecodes,
+        ):
+            mock_ecodes.EV_SYN = 0
+            mock_ecodes.EV_KEY = 1
+            backend._monitor_devices()
+
+        backend._handle_key_event.assert_called_once()
+
+    def test_monitor_ignores_readable_fd_without_device(self):
+        """Test readable fds that no longer map to a device are ignored."""
+        backend = EvdevKeyboardBackend()
+        backend.running = True
+        backend.devices = []
+        backend.device_fds = [10]
+
+        def select_unknown_fd(read_fds, write_fds, error_fds, timeout):
+            backend.running = False
+            return [10], [], []
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.select.select",
+                side_effect=select_unknown_fd,
+            ),
+        ):
+            backend._monitor_devices()
+
+    def test_monitor_handles_syn_dropped_recovery(self):
+        """Test SYN_DROPPED state is cleared on the following SYN_REPORT."""
+        backend = EvdevKeyboardBackend()
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.name = "External Keyboard"
+        dropped_event = MagicMock(type=0, code=3)
+        report_event = MagicMock(type=0, code=0)
+
+        def read_events():
+            backend.running = False
+            return [dropped_event, report_event]
+
+        device.read.side_effect = read_events
+        backend.running = True
+        backend.devices = [device]
+        backend.device_fds = [10]
+        backend.key_pressed_devices = {id(device)}
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.select.select",
+                return_value=([10], [], []),
+            ),
+            patch("vocalinux.ui.keyboard_backends.evdev_backend.ecodes") as mock_ecodes,
+        ):
+            mock_ecodes.EV_SYN = 0
+            mock_ecodes.SYN_DROPPED = 3
+            mock_ecodes.SYN_REPORT = 0
+            backend._monitor_devices()
+
+        assert backend._dropped_devices == set()
+        assert backend.key_pressed_devices == set()
+
+    def test_monitor_skips_events_while_device_is_dropped(self):
+        """Test key events are ignored while a device is in SYN_DROPPED state."""
+        backend = EvdevKeyboardBackend()
+        device = MagicMock()
+        device.fileno.return_value = 10
+        key_event = MagicMock(type=1, code=29, value=1)
+
+        def read_events():
+            backend.running = False
+            return [key_event]
+
+        device.read.side_effect = read_events
+        backend.running = True
+        backend.devices = [device]
+        backend.device_fds = [10]
+        backend._dropped_devices = {10}
+        backend._handle_key_event = MagicMock()
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.select.select",
+                return_value=([10], [], []),
+            ),
+            patch("vocalinux.ui.keyboard_backends.evdev_backend.ecodes") as mock_ecodes,
+        ):
+            mock_ecodes.EV_SYN = 0
+            backend._monitor_devices()
+
+        backend._handle_key_event.assert_not_called()
+
+    def test_monitor_removes_device_on_read_error(self):
+        """Test disconnected devices are removed from the monitor loop."""
+        backend = EvdevKeyboardBackend()
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.name = "External Keyboard"
+        device.read.side_effect = OSError("device removed")
+        backend.running = True
+        backend.devices = [device]
+        backend.device_fds = [10]
+        backend._remove_keyboard_device = MagicMock(
+            side_effect=lambda fd, device: setattr(backend, "running", False)
+        )
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.select.select",
+                return_value=([10], [], []),
+            ),
+        ):
+            backend._monitor_devices()
+
+        backend._remove_keyboard_device.assert_called_once_with(10, device)
+
+    def test_monitor_handles_fd_lookup_error(self):
+        """Test fd lookup errors do not try to remove an unknown device."""
+        backend = EvdevKeyboardBackend()
+        device = MagicMock()
+        device.fileno.side_effect = OSError("bad fd")
+        backend.running = True
+        backend.devices = [device]
+        backend.device_fds = [10]
+        backend._remove_keyboard_device = MagicMock()
+
+        def select_bad_fd(read_fds, write_fds, error_fds, timeout):
+            backend.running = False
+            return [10], [], []
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.select.select",
+                side_effect=select_bad_fd,
+            ),
+        ):
+            backend._monitor_devices()
+
+        backend._remove_keyboard_device.assert_not_called()
+
+    def test_monitor_stops_on_select_error(self):
+        """Test select errors stop the monitor loop."""
+        backend = EvdevKeyboardBackend()
+        backend.running = True
+        backend.device_fds = [10]
+
+        with (
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.time.monotonic",
+                side_effect=[0.0, 0.0],
+            ),
+            patch(
+                "vocalinux.ui.keyboard_backends.evdev_backend.select.select",
+                side_effect=OSError("select failed"),
+            ),
+        ):
+            backend._monitor_devices()
 
 
 class TestEvdevKeyboardBackendHandleKeyEvent:

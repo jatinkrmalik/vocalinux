@@ -169,7 +169,7 @@ export default function LanguagesPage() {
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           Dictate in your native language. Vocalinux supports 9+ languages with full offline
-          processing—no cloud required, no data leaves your machine.
+          processing - no cloud required, no data leaves your machine.
         </p>
       </section>
 

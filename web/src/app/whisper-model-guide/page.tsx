@@ -15,7 +15,7 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 const modelComparison = [
   {
     model: "Tiny",
-    size: "~39MB",
+    size: "~74MB",
     ramCpu: "~0.8-1.2GB",
     ramGpu: "~0.5-0.8GB VRAM",
     accuracy: "Good",
@@ -24,7 +24,7 @@ const modelComparison = [
   },
   {
     model: "Base",
-    size: "~74MB",
+    size: "~141MB",
     ramCpu: "~1.2-1.8GB",
     ramGpu: "~0.8-1.2GB VRAM",
     accuracy: "Good+",
@@ -33,7 +33,7 @@ const modelComparison = [
   },
   {
     model: "Small",
-    size: "~244MB",
+    size: "~465MB",
     ramCpu: "~2-3GB",
     ramGpu: "~1.5-2.5GB VRAM",
     accuracy: "High",
@@ -42,7 +42,7 @@ const modelComparison = [
   },
   {
     model: "Medium",
-    size: "~769MB",
+    size: "~1.5GB",
     ramCpu: "~4-6GB",
     ramGpu: "~3-5GB VRAM",
     accuracy: "Very high",
@@ -51,7 +51,7 @@ const modelComparison = [
   },
   {
     model: "Large",
-    size: "~1.5GB",
+    size: "~3.0GB",
     ramCpu: "~8GB+",
     ramGpu: "~6-10GB VRAM",
     accuracy: "Best",

@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s | Vocalinux",
   },
   description:
-    "Free and open-source voice dictation for Linux. Convert speech to text offline with whisper.cpp and VOSK on Ubuntu, Fedora, Arch, X11, and Wayland.",
+    "Free and open-source voice dictation for Linux. Convert speech to text with whisper.cpp, VOSK, Remote API servers, Silero VAD, X11, and Wayland.",
   applicationName: SITE_NAME,
   keywords: [
     "voice dictation linux",
@@ -39,6 +39,10 @@ export const metadata: Metadata = {
     "linux voice typing",
     "whisper.cpp linux",
     "vosk linux",
+    "remote api speech recognition",
+    "silero vad linux",
+    "whisper.cpp advanced settings",
+    "ibus voice dictation",
     "wayland voice dictation",
     "x11 speech recognition",
     "open source dictation software",
@@ -56,7 +60,9 @@ export const metadata: Metadata = {
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
       { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
     shortcut: "/vocalinux.png",
   },
   manifest: "/site.webmanifest",
@@ -149,7 +155,8 @@ const webSiteJsonLd = {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate: "https://github.com/jatinkrmalik/vocalinux/issues?q={search_term_string}",
+      urlTemplate:
+        "https://github.com/jatinkrmalik/vocalinux/issues?q={search_term_string}",
     },
     "query-input": {
       "@type": "PropertyValueSpecification",
@@ -167,7 +174,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} scroll-smooth`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${GeistSans.variable} scroll-smooth`}
+      suppressHydrationWarning
+    >
       <head>
         <link rel="preconnect" href="https://api.github.com" />
         <script

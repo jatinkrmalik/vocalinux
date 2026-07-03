@@ -24,6 +24,28 @@ from .ibus_engine import (
 logger = logging.getLogger(__name__)
 
 
+def _is_kde_plasma_session() -> bool:
+    """Return True when the current desktop session appears to be KDE Plasma."""
+    if os.environ.get("KDE_FULL_SESSION", "").lower() == "true":
+        return True
+
+    desktop_values = [
+        os.environ.get("XDG_CURRENT_DESKTOP", ""),
+        os.environ.get("DESKTOP_SESSION", ""),
+        os.environ.get("GDMSESSION", ""),
+    ]
+    desktop = " ".join(value for value in desktop_values if value).lower()
+    return "kde" in desktop or "plasma" in desktop
+
+
+def _kde_wayland_ibus_hint() -> str:
+    """Return the KDE Plasma Wayland IBus setup hint."""
+    return (
+        "Open System Settings -> Keyboard -> Virtual Keyboard, select "
+        "'IBus Wayland', then restart Vocalinux or log out and back in."
+    )
+
+
 class DesktopEnvironment(Enum):
     """Enum representing the desktop environment."""
 
@@ -120,6 +142,11 @@ class TextInjector:
                         "Wayland compositor does not support virtual "
                         f"keyboard protocol: {error_output}"
                     )
+                    if _is_kde_plasma_session():
+                        logger.warning(
+                            "KDE Plasma Wayland detected. wtype is not a reliable "
+                            f"text injection path on this compositor. {_kde_wayland_ibus_hint()}"
+                        )
                     if shutil.which("xdotool"):
                         logger.info("Automatically switching to XWayland fallback with xdotool")
                         self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
@@ -145,10 +172,11 @@ class TextInjector:
 
         Call this when shutting down Vocalinux.
         """
-        if self._ibus_injector:
-            logger.info("Stopping IBus text injector")
-            self._ibus_injector.stop()
-            self._ibus_injector = None
+        with self._state_lock:
+            if self._ibus_injector:
+                logger.info("Stopping IBus text injector")
+                self._ibus_injector.stop()
+                self._ibus_injector = None
             self._ibus_ready = False
 
     def _detect_environment(self) -> DesktopEnvironment:
@@ -173,6 +201,72 @@ class TextInjector:
                 logger.warning("Could not detect desktop environment, defaulting to X11")
                 return DesktopEnvironment.X11
 
+    # Wayland compositors that do NOT bridge IBus commits to native Wayland
+    # clients. On these, an IBus engine's commit_text() reaches only XWayland and
+    # GTK/Qt apps that load the IBus IM module, while native apps (e.g.
+    # cosmic-term) receive nothing -- the injection appears to succeed but the
+    # text is silently dropped. These are the smithay/wlroots-based compositors
+    # that implement input handling without IBus text-input integration.
+    _IBUS_UNBRIDGED_COMPOSITORS = (
+        "cosmic",
+        "sway",
+        "hyprland",
+        "wayfire",
+        "river",
+        "niri",
+        "labwc",
+        "weston",
+    )
+
+    def _wayland_compositor_bridges_ibus(self) -> bool:
+        """Whether native Wayland clients receive IBus commits on this compositor.
+
+        GNOME (mutter), KDE (kwin) and most full desktops bridge IBus to native
+        Wayland clients, so an engine's commit_text() reaches the focused app. A
+        handful of compositors (see ``_IBUS_UNBRIDGED_COMPOSITORS``) do not, so on
+        those we must use a virtual-keyboard tool (wtype/ydotool) instead. We use
+        a denylist rather than an allowlist so that unrecognised desktops keep the
+        previous IBus-preferred behaviour.
+        """
+        if self.environment != DesktopEnvironment.WAYLAND:
+            # X11 / XWayland: IBus reaches apps through XIM regardless of DE.
+            return True
+        desktop = " ".join(
+            os.environ.get(var, "")
+            for var in ("XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION")
+        ).lower()
+        return not any(name in desktop for name in self._IBUS_UNBRIDGED_COMPOSITORS)
+
+    def _is_ydotoold_running(self) -> bool:
+        """Return True if the ydotoold daemon appears to be running.
+
+        ``ydotool type ""`` exits 0 even with no daemon (it prints a notice and
+        silently does nothing), so the exit code alone is not a reliable probe.
+        Check for the daemon's socket first, then fall back to scanning for the
+        process itself.
+        """
+        socket_candidates = []
+        env_socket = os.environ.get("YDOTOOL_SOCKET")
+        if env_socket:
+            socket_candidates.append(env_socket)
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+        if runtime_dir:
+            socket_candidates.append(os.path.join(runtime_dir, ".ydotool_socket"))
+        socket_candidates.append("/tmp/.ydotool_socket")
+        if any(os.path.exists(path) for path in socket_candidates):
+            return True
+        try:
+            result = subprocess.run(
+                ["pgrep", "-x", "ydotoold"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            return result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            # pgrep missing, timed out, or otherwise unavailable -> assume not running
+            return False
+
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
         ibus_requested = False
@@ -189,16 +283,32 @@ class TextInjector:
             # This is important because IBus may be installed but not being used,
             # e.g., when the user has configured ydotool or Fcitx instead
             if not is_ibus_active_input_method():
-                logger.info(
-                    "IBus is installed but not the active input method. "
-                    "Falling back to alternative text injection method."
-                )
+                if self.environment == DesktopEnvironment.WAYLAND and _is_kde_plasma_session():
+                    logger.warning(
+                        "IBus is installed but is not active for KDE Plasma Wayland. "
+                        f"{_kde_wayland_ibus_hint()} Falling back to alternative "
+                        "text injection method."
+                    )
+                else:
+                    logger.info(
+                        "IBus is installed but not the active input method. "
+                        "Falling back to alternative text injection method."
+                    )
             # Check if ibus-daemon is running before attempting setup
             elif not is_ibus_daemon_running():
                 logger.info(
                     "IBus daemon not running. This is normal on some desktop environments "
                     "(e.g., KDE Plasma). Using alternative text injection method. "
                     "For IBus setup, see: https://github.com/jatinkrmalik/vocalinux/wiki/IBus-Setup"
+                )
+            # Some Wayland compositors (COSMIC, Sway, Hyprland, ...) do not deliver
+            # IBus commits to native Wayland apps, so IBus would silently drop the
+            # text even though commit_text() reports success.
+            elif not self._wayland_compositor_bridges_ibus():
+                logger.info(
+                    "Compositor '%s' does not bridge IBus to native Wayland apps; "
+                    "using virtual-keyboard injection (wtype/ydotool) instead.",
+                    os.environ.get("XDG_CURRENT_DESKTOP", "unknown"),
                 )
             else:
                 try:
@@ -220,31 +330,18 @@ class TextInjector:
             ydotool_available = shutil.which("ydotool") is not None
             xdotool_available = shutil.which("xdotool") is not None
 
-            if ydotool_available:
-                # Verify ydotoold daemon is running before selecting ydotool
-                try:
-                    subprocess.run(
-                        ["ydotool", "type", ""],
-                        check=True,
-                        stderr=subprocess.PIPE,
-                        timeout=2,
-                    )
-                    self.wayland_tool = "ydotool"
-                    logger.info(f"Using {self.wayland_tool} for Wayland text injection")
-                except (
-                    subprocess.CalledProcessError,
-                    subprocess.TimeoutExpired,
-                    FileNotFoundError,
-                ):
-                    if wtype_available:
-                        self.wayland_tool = "wtype"
-                        logger.info(
-                            "Using "
-                            f"{self.wayland_tool} for Wayland text injection "
-                            "(ydotoold not running)"
-                        )
-                    else:
-                        logger.warning("ydotool found but ydotoold daemon not running")
+            if ydotool_available and self._is_ydotoold_running():
+                # ydotoold is running; ydotool can inject via the daemon.
+                self.wayland_tool = "ydotool"
+                logger.info(f"Using {self.wayland_tool} for Wayland text injection")
+            elif ydotool_available and not wtype_available:
+                # ydotool present but no daemon and no wtype: try ydotool anyway
+                # (direct uinput mode, requires access to /dev/uinput).
+                self.wayland_tool = "ydotool"
+                logger.warning(
+                    "ydotoold daemon not running; using ydotool in direct mode "
+                    "(may have latency/permission issues)"
+                )
             elif wtype_available:
                 self.wayland_tool = "wtype"
                 logger.info(f"Using {self.wayland_tool} for Wayland text injection")
@@ -266,7 +363,8 @@ class TextInjector:
                     "- xdotool: sudo apt install xdotool (X11/XWayland only)\n"
                     "\n"
                     "For KDE Plasma Wayland users: wtype is not supported. "
-                    "Install ydotool or wl-copy for clipboard fallback:\n"
+                    f"{_kde_wayland_ibus_hint()}\n"
+                    "Or install ydotool/wl-copy for fallback:\n"
                     "  sudo apt install ydotool\n"
                     "  sudo systemctl enable --now ydotoold\n"
                     "Or for clipboard fallback: sudo apt install wl-copy"
@@ -333,7 +431,10 @@ class TextInjector:
             return
 
         try:
-            self._ibus_injector._setup_engine()
+            # Keep the Vocalinux IBus process warm without selecting it as the
+            # user's active keyboard engine. Activation is scoped to each text
+            # commit so normal typing keeps layout-specific compose/dead keys.
+            self._ibus_injector.prepare_engine()
             with self._state_lock:
                 self._ibus_ready = True
                 self._ibus_init_failed = False
@@ -363,12 +464,19 @@ class TextInjector:
         return tools
 
     def _run_clipboard_command(self, tool: str, text: str) -> bool:
+        # NB: wl-copy/xclip/xsel fork a background process that keeps owning the
+        # selection in order to serve it. That child inherits our pipes, so
+        # capturing stderr via subprocess.PIPE makes run() block until the child
+        # exits (i.e. until the clipboard is next overwritten) and then time out
+        # — even though the copy itself succeeded. Redirect to DEVNULL so run()
+        # only waits for the short-lived foreground process.
         if tool == "wl-copy":
             subprocess.run(
                 ["wl-copy"],
                 input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -379,7 +487,8 @@ class TextInjector:
                 ["xclip", "-selection", "clipboard"],
                 input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -390,7 +499,8 @@ class TextInjector:
                 ["xsel", "--clipboard", "--input"],
                 input=text,
                 check=True,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 timeout=self._clipboard_timeout,
             )
@@ -402,7 +512,8 @@ class TextInjector:
         """Switch from IBus mode to a non-IBus backend for runtime fallback."""
         if self.environment == DesktopEnvironment.X11_IBUS:
             if shutil.which("xdotool"):
-                self.environment = DesktopEnvironment.X11
+                with self._state_lock:
+                    self.environment = DesktopEnvironment.X11
                 logger.warning("IBus injection failed, switching to X11 xdotool fallback")
                 return True
 
@@ -422,8 +533,9 @@ class TextInjector:
                         stderr=subprocess.PIPE,
                         timeout=2,
                     )
-                    self.wayland_tool = "ydotool"
-                    self.environment = DesktopEnvironment.WAYLAND
+                    with self._state_lock:
+                        self.wayland_tool = "ydotool"
+                        self.environment = DesktopEnvironment.WAYLAND
                     logger.warning("IBus injection failed, switching to Wayland ydotool fallback")
                     return True
                 except (
@@ -434,13 +546,15 @@ class TextInjector:
                     logger.debug("ydotool fallback unavailable (daemon not running)")
 
             if wtype_available:
-                self.wayland_tool = "wtype"
-                self.environment = DesktopEnvironment.WAYLAND
+                with self._state_lock:
+                    self.wayland_tool = "wtype"
+                    self.environment = DesktopEnvironment.WAYLAND
                 logger.warning("IBus injection failed, switching to Wayland wtype fallback")
                 return True
 
             if xdotool_available:
-                self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                with self._state_lock:
+                    self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                 logger.warning("IBus injection failed, switching to XWayland xdotool fallback")
                 return True
 
@@ -637,12 +751,16 @@ class TextInjector:
             self._try_recover_from_fallback()
 
         try:
+            with self._state_lock:
+                current_env = self.environment
+                ibus_injector = self._ibus_injector
+
             if (
-                self.environment == DesktopEnvironment.WAYLAND_IBUS
-                or self.environment == DesktopEnvironment.X11_IBUS
+                current_env == DesktopEnvironment.WAYLAND_IBUS
+                or current_env == DesktopEnvironment.X11_IBUS
             ):
-                if self._ibus_injector is not None:
-                    result = self._ibus_injector.inject_text(text)
+                if ibus_injector is not None:
+                    result = ibus_injector.inject_text(text)
                     if result:
                         logger.info("Text injection completed successfully")
                         if self._should_copy_to_clipboard():
@@ -667,9 +785,12 @@ class TextInjector:
                             "IBus injector not initialized and no non-IBus fallback is available"
                         )
 
+            with self._state_lock:
+                current_env = self.environment
+
             if (
-                self.environment == DesktopEnvironment.X11
-                or self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
+                current_env == DesktopEnvironment.X11
+                or current_env == DesktopEnvironment.WAYLAND_XDOTOOL
             ):
                 self._inject_with_xdotool(text)
             else:
@@ -677,16 +798,28 @@ class TextInjector:
                     self._inject_with_wayland_tool(text)
                 except subprocess.CalledProcessError as e:
                     stderr_msg = e.stderr.strip() if e.stderr else "No stderr output"
+                    unsupported_wayland = (
+                        "compositor does not support" in str(e).lower()
+                        or "compositor does not support" in stderr_msg.lower()
+                    )
                     logger.warning(
                         f"Wayland tool failed: {e}. stderr: {stderr_msg}. Falling back to xdotool"
                     )
-                    if "compositor does not support" in str(
-                        e
-                    ).lower() + " " + stderr_msg.lower() and shutil.which("xdotool"):
+                    if (
+                        unsupported_wayland
+                        and current_env == DesktopEnvironment.WAYLAND
+                        and _is_kde_plasma_session()
+                    ):
+                        logger.warning(
+                            "KDE Plasma Wayland rejected virtual keyboard injection. "
+                            f"{_kde_wayland_ibus_hint()}"
+                        )
+                    if unsupported_wayland and shutil.which("xdotool"):
                         logger.info(
                             "Switching to XWayland fallback - will re-check for better tools"
                         )
-                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                        with self._state_lock:
+                            self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
                         self._inject_with_xdotool(text)
                     else:
                         raise
@@ -965,10 +1098,9 @@ class TextInjector:
         """
         Inject text using a Wayland-compatible tool (wtype or ydotool).
 
-        For ydotool: if the text contains non-ASCII characters (accented
-        letters like á, é, ú, CJK characters, etc.), uses clipboard-based
-        injection instead, because ydotool simulates evdev key events which
-        only cover US ASCII keycodes. See issue #362.
+        For ydotool, clipboard paste is preferred because ydotool emits
+        positional evdev keycodes that are interpreted through the active
+        keyboard layout. Ctrl+V is layout-independent and Unicode-safe.
 
         Args:
             text: The text to inject
@@ -976,19 +1108,12 @@ class TextInjector:
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
-        use_ydotool_paste = self.wayland_tool == "ydotool" and (
-            getattr(self, "_force_ydotool_paste", False) or self._has_non_ascii(text)
-        )
-
-        # ydotool can only handle ASCII characters because it works at the
-        # evdev keycode level. For non-ASCII text, use clipboard paste instead.
-        if use_ydotool_paste:
+        if self.wayland_tool == "ydotool":
             if getattr(self, "_force_ydotool_paste", False):
                 logger.info("Using forced ydotool clipboard-paste injection")
             else:
                 logger.info(
-                    "Text contains non-ASCII characters, using clipboard paste "
-                    "for ydotool (evdev keycodes are ASCII-only)"
+                    "Using clipboard paste for ydotool " "(layout-independent, Unicode-safe)"
                 )
             if self._inject_via_clipboard_paste(text):
                 return
@@ -996,13 +1121,19 @@ class TextInjector:
                 raise RuntimeError("Forced ydotool clipboard-paste injection failed")
             logger.warning(
                 "Clipboard paste failed, falling back to ydotool type "
-                "(non-ASCII characters may be dropped)"
+                "(text may be scrambled on non-US layouts)"
             )
 
         if self.wayland_tool == "wtype":
             cmd = ["wtype", text]
         else:  # ydotool
-            cmd = ["ydotool", "type", text]
+            # Pass explicit timing parameters to speed up injection.
+            # ydotool defaults to --key-delay 12 (or 20 in older versions).
+            # We use a faster default configurable via environment variable.
+            # IMPORTANT: key-delay must stay > 0 to avoid Shift-leak bug where
+            # capital letters corrupt following characters (e.g. "Can you" -> "CAN YOu").
+            key_delay = os.environ.get("VOCALINUX_YDOTOOL_KEY_DELAY", "8")
+            cmd = ["ydotool", "type", "--key-delay", key_delay, text]
 
         try:
             subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)

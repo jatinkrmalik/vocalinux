@@ -14,7 +14,9 @@ describe("SEO Assets", () => {
   });
 
   it("contains sitemap reference in robots.txt", () => {
-    expect(robotsContent).toContain("Sitemap: https://vocalinux.com/sitemap.xml");
+    expect(robotsContent).toContain(
+      "Sitemap: https://vocalinux.com/sitemap.xml",
+    );
   });
 
   it("blocks crawler access to technical paths", () => {
@@ -31,6 +33,10 @@ describe("SEO Assets", () => {
       "https://vocalinux.com/install/fedora/",
       "https://vocalinux.com/install/arch/",
       "https://vocalinux.com/compare/",
+      "https://vocalinux.com/remote-api/",
+      "https://vocalinux.com/voice-activity-detection/",
+      "https://vocalinux.com/advanced-settings/",
+      "https://vocalinux.com/desktop-reliability/",
     ];
 
     expectedUrls.forEach((url) => {

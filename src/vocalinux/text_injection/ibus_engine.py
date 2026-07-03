@@ -152,39 +152,51 @@ def is_ibus_daemon_running() -> bool:
         return False
 
 
+def _is_real_ibus_engine(engine: Optional[str]) -> bool:
+    """Return True only for a real IBus IM engine, not a bare XKB layout.
+
+    IBus reports a bare ``xkb:*`` engine (e.g. ``xkb:us::eng``) when it is doing
+    keyboard-layout passthrough with no input-method client attached. In that
+    state ``commit_text()`` succeeds at the IBus layer but never reaches the
+    focused application, so treating it as active causes a silent no-op on
+    Wayland (see issue #478). Real IM engines (anthy, libpinyin, hangul, ...) do
+    not use the ``xkb:`` prefix.
+    """
+    if not engine:
+        return False
+    engine = engine.strip()
+    if not engine or engine.lower() == "no global engine":
+        return False
+    return not engine.startswith("xkb:")
+
+
 def is_ibus_active_input_method() -> bool:
     """
     Check if IBus is the currently active input method.
 
-    This checks environment variables and, on Wayland where env vars may not
-    be set, also checks if the IBus daemon is running and actively managing
-    an engine. On some desktop environments (e.g., KDE Plasma Wayland), IBus
-    is configured via the DE's Virtual Keyboard setting and IBus itself
-    recommends unsetting the legacy env vars.
+    Checks environment variables and, where they are not set (common on
+    Wayland), whether the IBus daemon is running with an engine.
+
+    On Wayland there is an extra requirement: IBus can only deliver
+    ``commit_text()`` to applications through a *real* IM engine. A bare
+    ``xkb:*`` engine is a layout passthrough, so on compositors that don't fully
+    bridge IBus to native clients (niri, sway, and even GNOME/Mutter with only
+    an ``xkb`` engine) injection silently reaches nothing. We therefore require a
+    real engine on Wayland regardless of how IBus was detected (issue #478). On
+    X11/XWayland IBus reaches apps through XIM, so that check is not applied
+    there.
 
     Returns:
         True if IBus appears to be the active input method, False otherwise
     """
-    # Check GTK_IM_MODULE for GTK applications
     gtk_im = os.environ.get("GTK_IM_MODULE", "").lower()
-    if gtk_im and "ibus" in gtk_im:
-        logger.debug(f"IBus detected as active input method via GTK_IM_MODULE={gtk_im}")
-        return True
-
-    # Check QT_IM_MODULE for Qt applications
     qt_im = os.environ.get("QT_IM_MODULE", "").lower()
-    if qt_im and "ibus" in qt_im:
-        logger.debug(f"IBus detected as active input method via QT_IM_MODULE={qt_im}")
-        return True
-
-    # On X11/XWayland, check XMODIFIERS for XIM compatibility
     xmodifiers = os.environ.get("XMODIFIERS", "").lower()
-    if "@im=ibus" in xmodifiers:
-        logger.debug(f"IBus detected as active input method via XMODIFIERS={xmodifiers}")
-        return True
 
-    # If another input method is explicitly configured, respect that
-    if gtk_im or qt_im or (xmodifiers and "@im=" in xmodifiers):
+    ibus_via_env = ("ibus" in gtk_im) or ("ibus" in qt_im) or ("@im=ibus" in xmodifiers)
+
+    # If another (non-IBus) input method is explicitly configured, respect it.
+    if not ibus_via_env and (gtk_im or qt_im or (xmodifiers and "@im=" in xmodifiers)):
         logger.debug(
             "Another input method is explicitly configured "
             f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
@@ -193,26 +205,48 @@ def is_ibus_active_input_method() -> bool:
         )
         return False
 
-    # No env vars set at all — common on Wayland (KDE Plasma, etc.) where
-    # IBus is configured via the DE's Virtual Keyboard setting and IBus
-    # recommends unsetting GTK_IM_MODULE / QT_IM_MODULE.
-    # Check if ibus-daemon is running and has an active engine.
-    if is_ibus_daemon_running():
-        engine = get_current_engine()
-        if engine:
-            logger.debug(
-                f"IBus detected as active input method via running daemon "
-                f"(no env vars set, current engine: {engine})"
-            )
-            return True
+    daemon_running = is_ibus_daemon_running()
 
-    logger.debug(
-        "IBus does not appear to be the active input method "
-        f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
-        f"QT_IM_MODULE={qt_im or 'not set'}, "
-        f"XMODIFIERS={xmodifiers or 'not set'}, "
-        f"daemon running: {is_ibus_daemon_running()})"
-    )
+    # Neither an IBus env-var signal nor a running daemon -> IBus is not active.
+    if not ibus_via_env and not daemon_running:
+        logger.debug(
+            "IBus does not appear to be the active input method "
+            f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
+            f"QT_IM_MODULE={qt_im or 'not set'}, "
+            f"XMODIFIERS={xmodifiers or 'not set'}, daemon running: False)"
+        )
+        return False
+
+    if _is_wayland_session():
+        # On Wayland a bare xkb:* engine can't deliver commits to apps, so
+        # require a real IM engine regardless of how IBus was detected (#478).
+        engine = get_current_engine() if daemon_running else None
+        if not _is_real_ibus_engine(engine):
+            logger.debug(
+                "IBus is present on Wayland but the current engine "
+                f"({engine or 'none'}) is a bare XKB layout or unset; "
+                "commit_text() would not reach applications, so treating IBus "
+                "as inactive (see #478)."
+            )
+            return False
+        logger.debug(f"IBus detected as active input method on Wayland (engine: {engine})")
+        return True
+
+    # X11 / XWayland: IBus reaches apps via XIM. An env-var signal, or a running
+    # daemon with any engine (KDE Plasma with legacy env vars unset), counts.
+    if ibus_via_env:
+        logger.debug("IBus detected as active input method via environment variables")
+        return True
+
+    engine = get_current_engine()
+    if engine:
+        logger.debug(
+            "IBus detected as active input method via running daemon "
+            f"(no env vars set, current engine: {engine})"
+        )
+        return True
+
+    logger.debug("IBus does not appear to be the active input method (daemon has no engine)")
     return False
 
 
@@ -287,7 +321,8 @@ def get_current_engine() -> Optional[str]:
             timeout=5,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
+            engine = result.stdout.strip()
+            return engine if engine else None
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return None
@@ -362,6 +397,19 @@ def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool
         True if successful, False otherwise
     """
     if not layout:
+        return False
+
+    # On Wayland the compositor owns the keyboard layout. setxkbmap only reaches
+    # the XWayland X11 server, so re-applying a layout here (or the historical
+    # "us" default when nothing was captured) silently switches XWayland — and
+    # therefore XWayland/Electron apps — to the wrong layout, while native
+    # Wayland apps and localectl stay correct. Skip it on Wayland and let the
+    # compositor manage the layout. See issue #474.
+    if _is_wayland_session():
+        logger.debug(
+            "Wayland session detected — skipping setxkbmap; the compositor "
+            "manages the keyboard layout (see #474)."
+        )
         return False
 
     try:
@@ -646,7 +694,7 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
 
         cls._server_running = True
 
-        def server_thread():
+        def server_thread():  # pragma: no cover
             try:
                 cls._server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 cls._server_socket.bind(str(SOCKET_PATH))
@@ -674,15 +722,25 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
                                     continue
 
                                 text = data.decode("utf-8")
-                                # Schedule injection on main thread
-                                if cls._active_instance:
+                                # Snapshot active instance to avoid TOCTOU race with do_destroy
+                                instance = cls._active_instance
+                                if instance:
+                                    done = threading.Event()
+                                    injection_result = {"ok": False}
 
-                                    def do_inject(t):
-                                        cls._active_instance.inject_text(t)
+                                    def do_inject(t, inst=instance):
+                                        try:
+                                            injection_result["ok"] = inst.inject_text(t)
+                                        finally:
+                                            done.set()
                                         return False  # Run only once
 
                                     GLib.idle_add(do_inject, text)
-                                    conn.sendall(b"OK")
+                                    if done.wait(timeout=3.0):
+                                        conn.sendall(b"OK" if injection_result["ok"] else b"ERROR")
+                                    else:
+                                        logger.error("Timed out waiting for IBus text commit")
+                                        conn.sendall(b"TIMEOUT")
                                 else:
                                     logger.warning("No active engine instance")
                                     conn.sendall(b"NO_ENGINE")
@@ -803,13 +861,13 @@ class IBusTextInjector:
     Text injector that uses IBus for text injection.
 
     This class connects to the Vocalinux IBus engine via Unix socket
-    and sends text to be injected. On initialization, it automatically:
-    1. Starts the engine process (registers via D-Bus register_component)
-    2. Saves the current engine and XKB layout
-    3. Switches to the Vocalinux engine
-    4. Restores the XKB layout
+    and sends text to be injected. The normal TextInjector warmup path starts
+    the engine process without selecting it as the user's active IBus engine.
+    Each injection temporarily switches to the Vocalinux engine, commits the
+    text, and restores the user's previous engine.
 
-    On cleanup (stop), it restores the previous engine and layout.
+    The auto_activate=True path still performs the older eager activation flow
+    for compatibility with direct callers and setup tests.
     """
 
     def __init__(self, auto_activate: bool = True):
@@ -824,10 +882,33 @@ class IBusTextInjector:
 
         ensure_ibus_dir()
         self._previous_engine: Optional[str] = None
-        self._previous_xkb_layout: tuple = ("us", "", "")
+        # Empty until a real X11 layout is captured. A non-empty default (e.g.
+        # "us") would make stop()/restore re-apply a layout that was never
+        # captured, flipping non-US users to us. See issue #474.
+        self._previous_xkb_layout: tuple = ("", "", "")
 
         if auto_activate:
             self._setup_engine()
+
+    def prepare_engine(self) -> None:
+        """
+        Start the IBus engine process without selecting it as the active engine.
+
+        The Vocalinux engine is only needed while committing dictated text. Keeping
+        the user's normal IBus/XKB engine active preserves dead-key composition and
+        layout-specific behavior during ordinary typing.
+        """
+        # Capture the current engine before starting the Vocalinux process
+        # so inject_text() can restore it after committing text
+        if not is_engine_active():
+            self._previous_engine = get_current_engine()
+            if self._previous_engine:
+                logger.debug(f"Captured current engine for later restore: {self._previous_engine}")
+
+        if not start_engine_process():
+            raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
+
+        self._wait_for_engine_ready(require_active=False)
 
     def _setup_engine(self) -> None:
         """Install and activate the IBus engine."""
@@ -875,7 +956,7 @@ class IBusTextInjector:
             layout, variant, option = self._previous_xkb_layout
             restore_xkb_layout(layout, variant, option)
 
-    def _wait_for_engine_ready(self, max_attempts: int = 8) -> None:
+    def _wait_for_engine_ready(self, max_attempts: int = 8, require_active: bool = True) -> None:
         delay = 0.25
 
         for attempt in range(max_attempts):
@@ -891,6 +972,10 @@ class IBusTextInjector:
 
                 if response == "OK":
                     logger.debug(f"IBus engine readiness probe succeeded on attempt {attempt + 1}")
+                    return
+
+                if response == "NO_ENGINE" and not require_active:
+                    logger.debug("IBus engine socket is ready; active engine instance not required")
                     return
 
                 if response != "NO_ENGINE":
@@ -946,10 +1031,23 @@ class IBusTextInjector:
 
         logger.info(f"Starting IBus text injection: '{text[:20]}...' (length: {len(text)})")
 
-        # Ensure vocalinux engine is active (user may have switched keyboard)
+        restore_engine: Optional[str] = None
         if not is_engine_active():
-            logger.debug("Vocalinux engine not active, re-activating...")
-            switch_engine(ENGINE_NAME)
+            current_engine = get_current_engine() or self._previous_engine
+            if current_engine:
+                restore_engine = current_engine
+                logger.debug(
+                    "Temporarily activating Vocalinux IBus engine "
+                    f"(will restore {current_engine})"
+                )
+            else:
+                logger.debug(
+                    "Could not determine current IBus engine; "
+                    "activating Vocalinux engine without restore"
+                )
+            if not switch_engine(ENGINE_NAME):
+                logger.error("Failed to activate Vocalinux IBus engine for injection")
+                return False
 
         # Try injection with bounded retries for transient socket/engine races.
         # This can happen if IBus re-created the engine instance or if the
@@ -964,85 +1062,90 @@ class IBusTextInjector:
             time.sleep(0.3)
             return True
 
-        for attempt in range(max_attempts):
-            try:
-                if not SOCKET_PATH.exists():
-                    if not is_engine_process_running() and not restart_engine_process():
+        try:
+            for attempt in range(max_attempts):
+                try:
+                    if not SOCKET_PATH.exists():
+                        if not is_engine_process_running() and not restart_engine_process():
+                            return False
+
+                        if attempt < max_attempts - 1:
+                            logger.warning(
+                                "IBus engine socket not found on attempt "
+                                f"{attempt + 1}/{max_attempts}; retrying..."
+                            )
+                            time.sleep(0.2 * (attempt + 1))
+                            continue
+
+                        logger.error(
+                            "IBus engine socket not found. "
+                            "Make sure Vocalinux IBus engine is running."
+                        )
                         return False
 
+                    # Connect to engine socket and send text
+                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                        sock.settimeout(5.0)
+                        sock.connect(str(SOCKET_PATH))
+                        sock.sendall(text.encode("utf-8"))
+
+                        # Wait for response
+                        response = sock.recv(64).decode("utf-8")
+                        if response == "OK":
+                            logger.debug("Text injection successful")
+                            return True
+                        elif response == "NO_ENGINE" and attempt < max_attempts - 1:
+                            # Engine instance was destroyed (layout switch).
+                            # Re-activate to create a new instance and retry.
+                            logger.info("Engine instance not active, re-activating and retrying...")
+                            switch_engine(ENGINE_NAME)
+                            time.sleep(0.3)
+                            continue
+                        else:
+                            logger.error(f"Text injection failed: {response}")
+                            return False
+
+                except socket.timeout:
                     if attempt < max_attempts - 1:
                         logger.warning(
-                            "IBus engine socket not found on attempt "
+                            "Timeout connecting to IBus engine on attempt "
                             f"{attempt + 1}/{max_attempts}; retrying..."
                         )
                         time.sleep(0.2 * (attempt + 1))
                         continue
-
-                    logger.error(
-                        "IBus engine socket not found. "
-                        "Make sure Vocalinux IBus engine is running."
-                    )
+                    logger.error("Timeout connecting to IBus engine")
                     return False
-
-                # Connect to engine socket and send text
-                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(5.0)
-                    sock.connect(str(SOCKET_PATH))
-                    sock.sendall(text.encode("utf-8"))
-
-                    # Wait for response
-                    response = sock.recv(64).decode("utf-8")
-                    if response == "OK":
-                        logger.debug("Text injection successful")
-                        return True
-                    elif response == "NO_ENGINE" and attempt < max_attempts - 1:
-                        # Engine instance was destroyed (layout switch).
-                        # Re-activate to create a new instance and retry.
-                        logger.info("Engine instance not active, re-activating and retrying...")
-                        switch_engine(ENGINE_NAME)
-                        time.sleep(0.3)
+                except ConnectionRefusedError as e:
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            "IBus engine refused connection on attempt "
+                            f"{attempt + 1}/{max_attempts}: {e}. Retrying..."
+                        )
+                        if not is_engine_process_running() and not restart_engine_process():
+                            return False
+                        time.sleep(0.2 * (attempt + 1))
                         continue
-                    else:
-                        logger.error(f"Text injection failed: {response}")
-                        return False
-
-            except socket.timeout:
-                if attempt < max_attempts - 1:
-                    logger.warning(
-                        "Timeout connecting to IBus engine on attempt "
-                        f"{attempt + 1}/{max_attempts}; retrying..."
-                    )
-                    time.sleep(0.2 * (attempt + 1))
-                    continue
-                logger.error("Timeout connecting to IBus engine")
-                return False
-            except ConnectionRefusedError as e:
-                if attempt < max_attempts - 1:
-                    logger.warning(
-                        "IBus engine refused connection on attempt "
-                        f"{attempt + 1}/{max_attempts}: {e}. Retrying..."
-                    )
-                    if not is_engine_process_running() and not restart_engine_process():
-                        return False
-                    time.sleep(0.2 * (attempt + 1))
-                    continue
-                logger.error(f"Failed to inject text via IBus: {e}")
-                return False
-            except FileNotFoundError:
-                if attempt < max_attempts - 1:
-                    logger.warning(
-                        "IBus engine socket disappeared on attempt "
-                        f"{attempt + 1}/{max_attempts}; retrying..."
-                    )
-                    if not is_engine_process_running() and not restart_engine_process():
-                        return False
-                    time.sleep(0.2 * (attempt + 1))
-                    continue
-                logger.error("IBus engine socket not found")
-                return False
-            except Exception as e:
-                logger.error(f"Failed to inject text via IBus: {e}")
-                return False
+                    logger.error(f"Failed to inject text via IBus: {e}")
+                    return False
+                except FileNotFoundError:
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            "IBus engine socket disappeared on attempt "
+                            f"{attempt + 1}/{max_attempts}; retrying..."
+                        )
+                        if not is_engine_process_running() and not restart_engine_process():
+                            return False
+                        time.sleep(0.2 * (attempt + 1))
+                        continue
+                    logger.error("IBus engine socket not found")
+                    return False
+                except Exception as e:
+                    logger.error(f"Failed to inject text via IBus: {e}")
+                    return False
+        finally:
+            if restore_engine:
+                logger.debug(f"Restoring IBus engine after injection: {restore_engine}")
+                switch_engine(restore_engine)
 
         return False
 

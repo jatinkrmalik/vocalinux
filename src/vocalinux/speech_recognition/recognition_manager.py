@@ -22,6 +22,7 @@ from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_so
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from .command_processor import CommandProcessor
+from .silero_vad import SILERO_CHUNK_SIZE, load_silero_vad
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -113,15 +114,17 @@ def _find_pywhispercpp_shared_library_dirs() -> list[str]:
     for candidate_dir in candidate_dirs:
         try:
             resolved_dir = str(candidate_dir.resolve())
-        except OSError:
+            if resolved_dir in seen or not candidate_dir.is_dir():
+                continue
+
+            has_native_lib = any(candidate_dir.glob("libwhisper*.so*")) or any(
+                candidate_dir.glob("libggml*.so*")
+            )
+        except (OSError, TypeError, ValueError):
+            # TypeError/ValueError can surface when tests monkey-patch os.stat or
+            # when pathlib internals receive unexpected types from mocks.
             continue
 
-        if resolved_dir in seen or not candidate_dir.is_dir():
-            continue
-
-        has_native_lib = any(candidate_dir.glob("libwhisper*.so*")) or any(
-            candidate_dir.glob("libggml*.so*")
-        )
         if has_native_lib:
             seen.add(resolved_dir)
             library_dirs.append(resolved_dir)
@@ -215,6 +218,78 @@ def get_audio_input_devices() -> list:
         logger.error(f"Error enumerating audio devices: {e}")
 
     return devices
+
+
+def _resolve_valid_input_device(audio, preferred_index: Optional[int] = None) -> Optional[int]:
+    """Resolve a valid audio input device, skipping output-only devices (e.g. HDMI).
+
+    Checks that the device has maxInputChannels > 0. Falls back from
+    preferred_index → system default → first available input device.
+
+    Args:
+        audio: PyAudio instance
+        preferred_index: User-configured device index (or None for system default)
+
+    Returns:
+        A valid device index with input channels, or None if none found.
+    """
+    input_device_indices = []
+    default_input_index = None
+
+    try:
+        default_info = audio.get_default_input_device_info()
+        default_input_index = default_info.get("index")
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        pass
+
+    try:
+        device_count = int(audio.get_device_count())
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        # MagicMock-based tests or misbehaving drivers can yield non-int counts.
+        return preferred_index
+
+    if device_count <= 0:
+        # No enumeration available; let PyAudio fall back to system default.
+        return preferred_index
+
+    for i in range(device_count):
+        try:
+            info = audio.get_device_info_by_index(i)
+        except (IOError, OSError, TypeError, ValueError, AttributeError):
+            continue
+
+        if not isinstance(info, dict):
+            # Non-dict result (e.g. MagicMock in tests) — can't filter by channels,
+            # so include the device rather than excluding all of them.
+            input_device_indices.append(i)
+            continue
+
+        channels = info.get("maxInputChannels", 0)
+        if isinstance(channels, (int, float)) and channels > 0:
+            input_device_indices.append(i)
+
+    if not input_device_indices:
+        return None
+
+    if preferred_index is not None and preferred_index in input_device_indices:
+        return preferred_index
+
+    if preferred_index is not None:
+        try:
+            device_name = audio.get_device_info_by_index(preferred_index).get("name", "unknown")
+        except (IOError, OSError):
+            device_name = "unknown"
+        logger.warning(
+            "Configured audio device [%s] (%s) has no input channels. "
+            "Falling back to a valid input device.",
+            preferred_index,
+            device_name,
+        )
+
+    if default_input_index is not None and default_input_index in input_device_indices:
+        return default_input_index
+
+    return input_device_indices[0]
 
 
 def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
@@ -494,6 +569,14 @@ def _filter_non_speech(text: str) -> str:
     [BLANK_AUDIO], music notes, or other non-speech artifacts when
     transcribing silent or ambiguous audio.
 
+    A trailing newline returned by the upstream transcription service is
+    preserved in the output. Some pipelines (post-processing proxies,
+    fixup layers) emit a meaningful trailing '\\n' to signal that the
+    typed text should be submitted (Enter key); stripping it silently
+    discards that signal. Pattern matching still runs against a
+    whitespace-stripped probe so the existing non-speech checks are
+    unaffected.
+
     Args:
         text: The transcribed text to filter
 
@@ -505,7 +588,8 @@ def _filter_non_speech(text: str) -> str:
     if not text or not text.strip():
         return ""
 
-    text = text.strip()
+    # Probe is used for non-speech-pattern matching only.
+    probe = text.strip()
 
     # Non-speech patterns to filter out
     non_speech_patterns = [
@@ -521,20 +605,24 @@ def _filter_non_speech(text: str) -> str:
     ]
 
     for pattern in non_speech_patterns:
-        if re.match(pattern, text, re.IGNORECASE):
-            logger.debug(f"Filtered non-speech token: '{text}'")
+        if re.match(pattern, probe, re.IGNORECASE):
+            logger.debug(f"Filtered non-speech token: '{probe}'")
             return ""
 
     # Check if text has enough actual speech content
     # At least 30% of characters should be alphanumeric or common speech punctuation
-    speech_chars = sum(1 for c in text if c.isalnum() or c in ".,!?-'\"")
-    total_chars = len(text)
+    speech_chars = sum(1 for c in probe if c.isalnum() or c in ".,!?-'\"")
+    total_chars = len(probe)
 
     if total_chars > 0 and speech_chars / total_chars < 0.3:
-        logger.debug(f"Filtered low-speech-content text: '{text}'")
+        logger.debug(f"Filtered low-speech-content text: '{probe}'")
         return ""
 
-    return text
+    # Strip whitespace as before, but preserve a trailing newline if the
+    # upstream API sent one — it carries an explicit submit/Enter signal
+    # from post-processing proxies.
+    trailing_newline = text.endswith(("\n", "\r"))
+    return probe + "\n" if trailing_newline else probe
 
 
 def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
@@ -668,6 +756,13 @@ class SpeechRecognitionManager:
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
         self.silence_timeout = kwargs.get("silence_timeout", 2.0)
 
+        # Silero VAD (neural-network-based, falls back to amplitude if unavailable)
+        self._silero_vad = load_silero_vad()
+        if self._silero_vad is not None:
+            logger.info("Using Silero neural VAD")
+        else:
+            logger.info("Using amplitude-based VAD (install vocalinux[vad] for neural VAD)")
+
         # Audio device selection (None means use system default)
         self.audio_device_index = kwargs.get("audio_device_index", None)
 
@@ -680,6 +775,13 @@ class SpeechRecognitionManager:
         self.whispercpp_entropy_thold = kwargs.get("whispercpp_entropy_thold", 2.4)
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
+        self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
+
+        # Remote API settings
+        self.remote_api_url = kwargs.get("remote_api_url", "")
+        self.remote_api_key = kwargs.get("remote_api_key", "")
+        self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+        self._http_session = None
 
         # GPU selection is stored by name and re-resolved to the current index
         # at startup so it survives changing device enumeration.
@@ -699,6 +801,7 @@ class SpeechRecognitionManager:
         self.should_record = False
         self._recognition_mode = "toggle"  # "toggle" or "push_to_talk"
         self.audio_buffer = []
+        self._recording_segment_has_speech = False
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue = queue.Queue(maxsize=32)
@@ -727,6 +830,8 @@ class SpeechRecognitionManager:
             self._init_whisper()
         elif engine == "whisper_cpp":
             self._init_whispercpp()
+        elif engine == "remote_api":
+            self._init_remote_api()
         else:
             raise ValueError(f"Unsupported speech recognition engine: {engine}")
 
@@ -878,6 +983,8 @@ class SpeechRecognitionManager:
                 warnings.simplefilter("ignore")
                 import torch
 
+            from ..utils.whispercpp_model_info import ComputeBackend
+
             self._restore_managed_gpu_environment()
 
             # Validate model size for Whisper
@@ -910,7 +1017,7 @@ class SpeechRecognitionManager:
                 logger.info(f"Downloading Whisper '{self.model_size}' model...")
                 self._download_whisper_model(whisper_cache_dir)
 
-            requested_gpu = self._resolve_requested_gpu(["cuda"])
+            requested_gpu = self._resolve_requested_gpu([ComputeBackend.CUDA])
             if requested_gpu:
                 if not torch.cuda.is_available():
                     raise RuntimeError(
@@ -929,7 +1036,7 @@ class SpeechRecognitionManager:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 if device == "cuda":
                     current_index = torch.cuda.current_device()
-                    self.selected_gpu_backend = "cuda"
+                    self.selected_gpu_backend = ComputeBackend.CUDA
                     self.selected_gpu_index = current_index
                     self.selected_gpu_name = torch.cuda.get_device_name(current_index)
                 else:
@@ -1059,7 +1166,20 @@ class SpeechRecognitionManager:
                     logger.info(f"Downloading whisper.cpp '{self.model_size}' model...")
                     self._download_whispercpp_model()
 
-            self._load_whispercpp_model(model_path)
+            try:
+                self._load_whispercpp_model(model_path)
+            except RuntimeError as e:
+                if self._is_unsupported_requested_whispercpp_gpu_error(e):
+                    logger.warning(
+                        "Requested whisper.cpp GPU backend is unavailable; "
+                        "clearing the saved GPU selection and falling back to CPU: %s",
+                        e,
+                    )
+                    self._clear_requested_gpu_preference()
+                    self._restore_managed_gpu_environment()
+                    self._load_whispercpp_model(model_path)
+                else:
+                    raise
 
         except ImportError as e:
             logger.error(f"Failed to import pywhispercpp: {e}")
@@ -1071,6 +1191,17 @@ class SpeechRecognitionManager:
             logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
             self.state = RecognitionState.ERROR
             raise
+
+    @staticmethod
+    def _is_unsupported_requested_whispercpp_gpu_error(error: RuntimeError) -> bool:
+        """Return whether pywhispercpp lacks the requested persisted GPU backend."""
+        return "does not support the requested" in str(error).lower()
+
+    def _clear_requested_gpu_preference(self):
+        """Clear a persisted requested GPU selection in memory after CPU fallback."""
+        self.requested_gpu_name = None
+        self.preferred_gpu_backend = None
+        self._clear_selected_gpu()
 
     def _build_whispercpp_model_kwargs(self, n_threads: int) -> dict:
         model_kwargs = {
@@ -1145,6 +1276,21 @@ class SpeechRecognitionManager:
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
         return Model(model_path, **compatible_kwargs)
 
+    def _detect_pywhispercpp_gpu_backend(self) -> str:
+        """Detect whether pywhispercpp's native library actually has GPU support."""
+        _preload_pywhispercpp_shared_libraries()
+        for library_dir in _find_pywhispercpp_shared_library_dirs():
+            root = Path(library_dir)
+            for pattern in ("libggml-vulkan*.so*", "libggml-cuda*.so*"):
+                matches = list(root.glob(pattern))
+                if matches:
+                    lib_name = matches[0].name.lower()
+                    if "vulkan" in lib_name:
+                        return "vulkan"
+                    if "cuda" in lib_name:
+                        return "cuda"
+        return "cpu"
+
     def _load_whispercpp_model(self, model_path: str):
         """Load the whisper.cpp model file and configure the compute backend.
 
@@ -1217,7 +1363,16 @@ class SpeechRecognitionManager:
         logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
         self.model = None  # Release previous model if re-initializing
 
-        n_threads = multiprocessing.cpu_count()
+        actual_gpu_backend = self._detect_pywhispercpp_gpu_backend()
+        has_gpu_libs = actual_gpu_backend in ("vulkan", "cuda")
+
+        if self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0:
+            n_threads = self.whispercpp_n_threads
+        elif has_gpu_libs:
+            n_threads = max(1, multiprocessing.cpu_count() // 4)
+        else:
+            n_threads = min(multiprocessing.cpu_count(), 8)
+
         load_start_time = time.time()
         loaded_backend = backend
 
@@ -1232,10 +1387,16 @@ class SpeechRecognitionManager:
             )
 
         load_duration = time.time() - load_start_time
-        logger.info(
-            f"whisper.cpp configured with n_threads={n_threads} "
-            f"(detected {multiprocessing.cpu_count()} CPUs)"
-        )
+        if has_gpu_libs:
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} "
+                f"(GPU backend: {actual_gpu_backend})"
+            )
+        else:
+            logger.info(
+                f"whisper.cpp configured with n_threads={n_threads} "
+                f"(CPU-only; pywhispercpp lacks GPU libraries)"
+            )
         logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
 
         self._model_initialized = True
@@ -1370,6 +1531,228 @@ class SpeechRecognitionManager:
             )
             logger.error(f"Error in whisper.cpp transcription: {e} ({audio_info})", exc_info=True)
             return ""
+
+    def _init_remote_api(self):
+        """Initialize remote API speech recognition engine.
+
+        Verify URL settings and try connection test. No need to load local model.
+        """
+        if not self.remote_api_url:
+            logger.warning("Remote API URL not set. Please enter the server URL in settings.")
+            self._model_initialized = False
+            return
+
+        if not self.remote_api_url.startswith(("http://", "https://")):
+            logger.error(
+                f"Remote API URL must start with http:// or https://, "
+                f"got: '{self.remote_api_url}'"
+            )
+            self._model_initialized = False
+            return
+
+        # Clean trailing slash from URL
+        self.remote_api_url = self.remote_api_url.rstrip("/")
+
+        logger.info(f"Initialize remote API engine, server: {self.remote_api_url}")
+
+        # Replace any existing session (prevents leak on back-to-back inits)
+        import requests
+
+        if self._http_session:
+            self._http_session.close()
+        self._http_session = requests.Session()
+
+        # Remote API does not need local models, directly mark as ready
+        self._model_initialized = True
+        logger.info("Remote API engine setup complete.")
+
+    def _transcribe_with_remote_api(self, audio_buffer: list[bytes], session) -> str:
+        """Transcribe audio via remote API.
+
+        Package audio buffer into WAV format and send to remote server via HTTP POST.
+        Supports OpenAI compatible format (/v1/audio/transcriptions) and
+        whisper.cpp server format (/inference).
+
+        Args:
+            audio_buffer: Audio data chunk list (16-bit PCM at 16kHz)
+            session: A requests.Session snapshot (obtained under _model_lock)
+
+        Returns:
+            Transcribed text
+        """
+        import io
+        import time
+        import wave
+
+        try:
+            if not audio_buffer:
+                return ""
+
+            if not self.remote_api_url:
+                logger.error("Remote API URL not set")
+                return ""
+
+            # Convert audio buffer to WAV format
+            audio_data = b"".join(audio_buffer)
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, "wb") as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(16000)  # 16kHz
+                wav_file.writeframes(audio_data)
+
+            wav_buffer.seek(0)
+            wav_bytes = wav_buffer.read()
+
+            duration = len(audio_data) / (2 * 16000)  # 16-bit = 2 bytes/sample
+            logger.debug(
+                f"Remote API transcription: {duration:.2f} seconds audio, "
+                f"{len(wav_bytes)} bytes WAV"
+            )
+
+            # Prepare language parameters
+            lang = self.language
+            if lang == "en-us":
+                lang = "en"
+            elif lang == "auto":
+                lang = None
+
+            # Prepare HTTP request headers
+            headers = {}
+            if self.remote_api_key:
+                headers["Authorization"] = f"Bearer {self.remote_api_key}"
+
+            transcribe_start = time.time()
+
+            text = None
+            if self.remote_api_endpoint == "/inference":
+                text = self._try_whispercpp_server_api(wav_bytes, lang, headers, session)
+            else:
+                text = self._try_openai_api(wav_bytes, lang, headers, session)
+
+            # If both formats fail
+            if text is None:
+                logger.error(
+                    "Remote API transcription failed: Cannot connect to server or API format not supported"
+                )
+                return ""
+
+            transcribe_duration = time.time() - transcribe_start
+            rtf = transcribe_duration / duration if duration > 0 else 0
+
+            # Filter non-speech content. Do NOT pre-strip — _filter_non_speech
+            # preserves a trailing '\n' from the upstream API (used by
+            # post-processing proxies to signal Enter), and a pre-strip here
+            # would silently discard it.
+            text = _filter_non_speech(text) if text else ""
+
+            if text:
+                logger.info(f"Remote API transcription result: '{text}'")
+                logger.info(
+                    f"Remote API transcription took {transcribe_duration:.3f}s "
+                    f"({duration:.2f}s audio, RTF: {rtf:.2f}x)"
+                )
+            else:
+                logger.debug(
+                    f"Remote API returned blank transcription result ({transcribe_duration:.3f}s)"
+                )
+
+            return text
+
+        except Exception as e:
+            audio_info = (
+                f"audio buffer: {len(audio_buffer)} chunks"
+                if audio_buffer
+                else "empty audio buffer"
+            )
+            logger.error(f"Remote API transcription error: {e} ({audio_info})", exc_info=True)
+            return ""
+
+    def _try_openai_api(self, wav_bytes: bytes, lang, headers: dict, session):
+        """Try to transcribe using OpenAI compatible API format.
+
+        Args:
+            wav_bytes: Audio data in WAV format
+            lang: Language core (e.g. "en", None for auto detect)
+            headers: HTTP request headers
+            session: A requests.Session snapshot (obtained under _model_lock)
+
+        Returns:
+            Transcribed text, or None if format is not supported
+        """
+        import requests
+
+        url = f"{self.remote_api_url}{self.remote_api_endpoint}"
+
+        files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+        data = {"model": "whisper-1"}
+        if lang:
+            data["language"] = lang
+
+        try:
+            response = session.post(url, headers=headers, files=files, data=data, timeout=30)
+
+            if response.status_code == 404:
+                logger.debug("OpenAI API endpoint does not exist, try other formats")
+                return None
+
+            response.raise_for_status()
+            result = response.json()
+
+            # OpenAI format returns {"text": "..."}
+            return result.get("text", "")
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Cannot connect to remote server {url}: {e}")
+            return None
+        except Exception as e:
+            logger.debug(f"OpenAI API format attempt failed: {e}")
+            return None
+
+    def _try_whispercpp_server_api(self, wav_bytes: bytes, lang, headers: dict, session):
+        """Try to transcribe using whisper.cpp server API format.
+
+        Args:
+            wav_bytes: Audio data in WAV format
+            lang: Language core (e.g. "en", None for auto detect)
+            headers: HTTP request headers
+            session: A requests.Session snapshot (obtained under _model_lock)
+
+        Returns:
+            Transcribed text, or None if format is not supported
+        """
+        import requests
+
+        url = f"{self.remote_api_url}{self.remote_api_endpoint}"
+
+        files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+        data = {
+            "temperature": "0.0",
+            "temperature_inc": "0.2",
+            "response_format": "json",
+        }
+        if lang:
+            data["language"] = lang
+
+        try:
+            response = session.post(url, headers=headers, files=files, data=data, timeout=30)
+
+            if response.status_code == 404:
+                logger.debug("whisper.cpp server endpoint does not exist")
+                return None
+
+            response.raise_for_status()
+            result = response.json()
+
+            # whisper.cpp server format returns {"text": "..."}
+            return result.get("text", "")
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Cannot connect to remote server {url}: {e}")
+            return None
+        except Exception as e:
+            logger.debug(f"whisper.cpp server API format attempt failed: {e}")
+            return None
 
     def _download_whispercpp_model(self):
         """Download a whisper.cpp model with progress tracking."""
@@ -1848,6 +2231,9 @@ class SpeechRecognitionManager:
     @property
     def model_ready(self) -> bool:
         """Check if the model is initialized and ready for recognition."""
+        # Remote API does not need local models
+        if self.engine == "remote_api":
+            return self._model_initialized
         return self._model_initialized and self.model is not None
 
     def _get_stop_sound_guard_chunks(self) -> int:
@@ -1936,10 +2322,17 @@ class SpeechRecognitionManager:
                     self.stop_sound_guard_ms,
                 )
 
-            if self.audio_buffer:
-                logger.debug(f"Enqueuing final buffer with {len(self.audio_buffer)} chunks")
+            if self.audio_buffer and self._recording_segment_has_speech:
+                logger.debug(f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks")
                 self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
+            elif self.audio_buffer:
+                logger.debug(
+                    "Dropping final audio buffer with no detected speech "
+                    f"({len(self.audio_buffer)} chunks)"
+                )
+                self.audio_buffer = []
+            self._recording_segment_has_speech = False
 
         # Wake up recognition thread so it can drain queued segments and stop
         self._signal_recognition_stop()
@@ -1978,6 +2371,18 @@ class SpeechRecognitionManager:
             self._pyaudio_instance = pyaudio.PyAudio()
             audio = self._pyaudio_instance
 
+            # Resolve a valid input device — skip output-only devices (e.g. HDMI)
+            resolved_device_index = _resolve_valid_input_device(audio, self.audio_device_index)
+            if resolved_device_index is None:
+                logger.error("No audio input devices found with input channels.")
+                logger.error(
+                    "Please connect a microphone and ensure it is recognized by the system."
+                )
+                play_error_sound()
+                audio.terminate()
+                self._update_state(RecognitionState.ERROR)
+                return
+
             # Log available devices for debugging
             logger.debug("Available audio input devices:")
             for i in range(audio.get_device_count()):
@@ -1991,11 +2396,11 @@ class SpeechRecognitionManager:
                     continue
 
             # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio, self.audio_device_index)
+            CHANNELS = _get_supported_channels(audio, resolved_device_index)
             logger.info(f"Using {CHANNELS} channel(s) for recording")
 
             # Detect supported sample rate for the selected device
-            RATE = _get_supported_sample_rate(audio, self.audio_device_index, CHANNELS)
+            RATE = _get_supported_sample_rate(audio, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.info(f"Using sample rate: {RATE}Hz")
 
@@ -2008,24 +2413,21 @@ class SpeechRecognitionManager:
                 "frames_per_buffer": CHUNK,
             }
 
-            # Use specified device if set, otherwise use system default
-            if self.audio_device_index is not None:
-                stream_kwargs["input_device_index"] = self.audio_device_index
-                try:
-                    device_info = audio.get_device_info_by_index(self.audio_device_index)
-                    logger.info(
-                        f"Using audio device [{self.audio_device_index}]: {device_info.get('name')}"
-                    )
-                except (IOError, OSError):
-                    logger.warning(f"Could not get info for device index {self.audio_device_index}")
-            else:
-                try:
-                    default_device = audio.get_default_input_device_info()
-                    logger.info(
-                        f"Using default audio device [{default_device.get('index')}]: {default_device.get('name')}"
-                    )
-                except (IOError, OSError):
-                    logger.warning("Could not get default input device info")
+            # Use the resolved device (skip if already system default)
+            try:
+                default_idx = audio.get_default_input_device_info().get("index")
+            except (IOError, OSError):
+                default_idx = None
+            if resolved_device_index != default_idx:
+                stream_kwargs["input_device_index"] = resolved_device_index
+
+            try:
+                device_info = audio.get_device_info_by_index(resolved_device_index)
+                logger.info(
+                    f"Using audio device [{resolved_device_index}]: {device_info.get('name')}"
+                )
+            except (IOError, OSError):
+                logger.warning(f"Could not get info for device index {resolved_device_index}")
 
             try:
                 self._audio_stream = audio.open(**stream_kwargs)
@@ -2048,8 +2450,20 @@ class SpeechRecognitionManager:
             # Record audio while should_record is True
             silence_counter = 0
             speech_detected_in_session = False
+            self._recording_segment_has_speech = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
+            # Accumulator for 512-sample Silero chunks.  When the capture rate
+            # is higher than 16 kHz (e.g. 48 kHz), resampling produces fewer
+            # than 1024 samples per read (~341 at 48 kHz), so the buffer may
+            # need several reads to fill a full 512-sample chunk.  This is
+            # expected -- VAD decisions simply arrive less frequently (every
+            # ~128 ms instead of ~64 ms) with no impact on accuracy.
+            silero_chunk_buf = np.array([], dtype=np.int16)
+
+            # Reset Silero VAD state for this recording session
+            if self._silero_vad is not None:
+                self._silero_vad.reset()
 
             while self.should_record:
                 try:
@@ -2089,7 +2503,7 @@ class SpeechRecognitionManager:
 
                         self.audio_buffer.append(data)
 
-                    # Simple Voice Activity Detection (VAD)
+                    # Voice Activity Detection (VAD)
                     audio_data = np.frombuffer(data, dtype=np.int16)
                     volume = np.abs(audio_data).mean()
 
@@ -2114,22 +2528,54 @@ class SpeechRecognitionManager:
                         )
                         log_level_interval = 0
 
-                    # Threshold based on sensitivity (1-5)
-                    # Ensure vad_sensitivity is treated as integer for calculation
-                    try:
-                        vad_sens = int(self.vad_sensitivity)
-                        threshold = 500 / max(1, min(5, vad_sens))  # Use self.vad_sensitivity
-                    except ValueError:
-                        logger.warning(
-                            f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
-                        )
-                        threshold = 500 / 3
+                    # Determine if current chunk contains speech
+                    is_speech = False
+                    if self._silero_vad is not None:
+                        # Silero VAD: accumulate samples into 512-sample chunks
+                        speech_prob = 0.0
+                        chunk_processed = False
+                        silero_chunk_buf = np.concatenate([silero_chunk_buf, audio_data])
+                        while len(silero_chunk_buf) >= SILERO_CHUNK_SIZE:
+                            chunk_512 = silero_chunk_buf[:SILERO_CHUNK_SIZE]
+                            silero_chunk_buf = silero_chunk_buf[SILERO_CHUNK_SIZE:]
+                            speech_prob = max(speech_prob, self._silero_vad.process(chunk_512))
+                            chunk_processed = True
 
-                    if volume < threshold:  # Silence
+                        # Map vad_sensitivity (1-5) to threshold:
+                        # 1 (least sensitive) -> 0.8, 5 (most sensitive) -> 0.3
+                        try:
+                            vad_sens = int(self.vad_sensitivity)
+                            vad_sens = max(1, min(5, vad_sens))
+                        except ValueError:
+                            vad_sens = 3
+                        silero_threshold = 0.8 - (vad_sens - 1) * 0.125
+
+                        # Skip speech decision until at least one full chunk
+                        # has been processed to avoid false silence detection
+                        if chunk_processed:
+                            is_speech = speech_prob >= silero_threshold
+                    else:
+                        # Amplitude fallback when Silero is unavailable
+                        try:
+                            vad_sens = int(self.vad_sensitivity)
+                            threshold = 500 / max(1, min(5, vad_sens))
+                        except ValueError:
+                            logger.warning(
+                                f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
+                            )
+                            threshold = 500 / 3
+                        is_speech = volume >= threshold
+
+                    if not is_speech:  # Silence
                         silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if silence_counter > self.silence_timeout:  # Use self.silence_timeout
+                        if silence_counter > self.silence_timeout:
                             if len(self.audio_buffer) > 0:
-                                if self._recognition_mode == "push_to_talk":
+                                if not self._recording_segment_has_speech:
+                                    logger.debug(
+                                        "Silence detected with no speech, dropping audio buffer"
+                                    )
+                                    self.audio_buffer = []
+                                elif self._recognition_mode == "push_to_talk":
                                     logger.debug(
                                         "Silence detected in push-to-talk mode, "
                                         "deferring transcription until key release"
@@ -2138,13 +2584,21 @@ class SpeechRecognitionManager:
                                     logger.debug("Silence detected, queueing audio segment")
                                     self._enqueue_audio_segment(self.audio_buffer)
                                     self.audio_buffer = []
+                                    self._recording_segment_has_speech = False
                             silence_counter = 0
                     else:  # Speech
+                        self._recording_segment_has_speech = True
                         if not speech_detected_in_session:
-                            logger.debug(
-                                f"Speech detected (level={normalized_level:.1f}%, "
-                                f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
-                            )
+                            if self._silero_vad is not None:
+                                logger.debug(
+                                    f"Speech detected (silero_prob={speech_prob:.2f}, "
+                                    f"threshold={silero_threshold:.3f})"
+                                )
+                            else:
+                                logger.debug(
+                                    f"Speech detected (level={normalized_level:.1f}%, "
+                                    f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
+                                )
                             speech_detected_in_session = True
                         silence_counter = 0
                 except (IOError, OSError) as e:
@@ -2242,6 +2696,20 @@ class SpeechRecognitionManager:
 
         elif self.engine == "whisper_cpp":
             text = self._transcribe_with_whispercpp(audio_buffer)
+
+        elif self.engine == "remote_api":
+            # Snapshot the HTTP session under lock to prevent race with
+            # reconfigure() / reinitialize_after_resume() which close/recreate
+            # the session under _model_lock.  The snapshot (a local reference)
+            # remains valid even if another thread closes the old session —
+            # urllib3's PoolManager keeps existing connections alive until the
+            # in-flight request completes.
+            with self._model_lock:
+                session = self._http_session
+            if session is None:
+                logger.error("Remote API HTTP session not initialized")
+                return
+            text = self._transcribe_with_remote_api(audio_buffer, session)
 
         else:
             logger.error(f"Unknown engine: {self.engine}")
@@ -2382,6 +2850,7 @@ class SpeechRecognitionManager:
         )
 
         restart_needed = False
+        old_engine = self.engine
         if engine is not None and engine != self.engine:
             self.engine = engine
             restart_needed = True
@@ -2425,6 +2894,7 @@ class SpeechRecognitionManager:
             "whispercpp_entropy_thold",
             "whispercpp_logprob_thold",
             "whispercpp_no_speech_thold",
+            "whispercpp_n_threads",
         ):
             if param_name in kwargs:
                 setattr(self, param_name, kwargs[param_name])
@@ -2440,6 +2910,18 @@ class SpeechRecognitionManager:
                 self.requested_gpu_name = new_gpu_name
                 self.preferred_gpu_backend = new_gpu_backend
                 restart_needed = True
+
+        # Handle Remote API settings
+        if "remote_api_url" in kwargs:
+            new_url = kwargs.get("remote_api_url", "")
+            if new_url != self.remote_api_url:
+                self.remote_api_url = new_url
+                if self.engine == "remote_api":
+                    restart_needed = True
+        if "remote_api_key" in kwargs:
+            self.remote_api_key = kwargs.get("remote_api_key", "")
+        if "remote_api_endpoint" in kwargs:
+            self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
 
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 
@@ -2464,6 +2946,10 @@ class SpeechRecognitionManager:
                 # Release old resources explicitly if necessary (Python's GC might handle it)
                 self.model = None
                 self.recognizer = None
+                if old_engine == "remote_api" and self.engine != "remote_api":
+                    if self._http_session is not None:
+                        self._http_session.close()
+                    self._http_session = None
                 try:
                     if self.engine == "vosk":
                         self._init_vosk()
@@ -2471,6 +2957,8 @@ class SpeechRecognitionManager:
                         self._init_whisper()
                     elif self.engine == "whisper_cpp":
                         self._init_whispercpp()
+                    elif self.engine == "remote_api":
+                        self._init_remote_api()
                     else:
                         raise ValueError(f"Unsupported engine during reconfigure: {self.engine}")
                     logger.info("Speech engine re-initialized successfully.")
@@ -2523,16 +3011,24 @@ class SpeechRecognitionManager:
                 except Exception as e:
                     logger.debug(f"Error closing old audio stream: {e}")
 
+            # Resolve a valid input device — skip output-only devices (e.g. HDMI)
+            resolved_device_index = _resolve_valid_input_device(
+                audio_instance, self.audio_device_index
+            )
+            if resolved_device_index is None:
+                logger.error("Reconnection failed: no input devices available.")
+                return False
+
             # Stream configuration
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
 
             # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio_instance, self.audio_device_index)
+            CHANNELS = _get_supported_channels(audio_instance, resolved_device_index)
             logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
 
             # Detect supported sample rate for the device
-            RATE = _get_supported_sample_rate(audio_instance, self.audio_device_index, CHANNELS)
+            RATE = _get_supported_sample_rate(audio_instance, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
@@ -2544,9 +3040,13 @@ class SpeechRecognitionManager:
                 "frames_per_buffer": CHUNK,
             }
 
-            # Use specified device if set
-            if self.audio_device_index is not None:
-                stream_kwargs["input_device_index"] = self.audio_device_index
+            # Use resolved device (skip if already system default)
+            try:
+                default_idx = audio_instance.get_default_input_device_info().get("index")
+            except (IOError, OSError):
+                default_idx = None
+            if resolved_device_index != default_idx:
+                stream_kwargs["input_device_index"] = resolved_device_index
 
             # Attempt to open new stream
             new_stream = audio_instance.open(**stream_kwargs)
@@ -2590,6 +3090,9 @@ class SpeechRecognitionManager:
         with self._model_lock:
             self.model = None
             self.recognizer = None
+            if self._http_session is not None:
+                self._http_session.close()
+            self._http_session = None
             self._model_initialized = False
 
             try:
@@ -2599,6 +3102,8 @@ class SpeechRecognitionManager:
                     self._init_whisper()
                 elif self.engine == "whisper_cpp":
                     self._init_whispercpp()
+                elif self.engine == "remote_api":
+                    self._init_remote_api()
                 else:
                     logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
                     return

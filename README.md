@@ -32,40 +32,39 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.10.2-beta
+## 📚 What's New in v0.13.0-beta
 
-> 🎉 **Release: non-ASCII text injection, IBus Wayland detection fixes, Pop!_OS dependency support, and code quality improvements.**
+> 🎉 **Release: Guided whisper.cpp model selection, plus Wayland text-injection reliability, hotplug keyboard support, dictation spacing fixes, and refreshed website docs.**
 
-### 🚀 Highlights (v0.10.1 → v0.10.2)
+### 🚀 Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **🌍 Non-ASCII Text Injection** | ydotool now falls back to clipboard paste for non-ASCII characters (á, é, ñ, etc.) |
-| **🔌 IBus on Wayland** | IBus now detected and started correctly on Wayland without legacy env vars |
-| **🚀 IBus Engine Startup** | Engine process now starts before registration check — fixes startup on some systems |
-| **📦 Pop!\_OS / Ubuntu 24.04+** | Added missing system dependencies (cmake, libcairo2-dev, libgirepository1.0-dev) |
-| **⚡ Code Quality** | Systematic refactor across 20 quality dimensions |
-| **🖼️ Website OG Image** | Redesigned Open Graph image — cleaner and more professional |
+| **🎙️ Guided Whisper Models** | Pick a whisper.cpp **size** and **specialization** (English-only, quantized, Turbo) through split dropdowns with in-app guidance |
+| **🔌 Hotplug Keyboard Support** | Shortcuts keep working on keyboards connected after startup, with automatic recovery from disconnects |
+| **✍️ Dictation Spacing** | Spacing is preserved between speech segments separated by a pause in the same session |
+| **🖥️ Wayland Reliability** | Fixes silent text drops on wlroots/COSMIC compositors and garbled output on non-US keyboard layouts |
 
-### ✨ Scope
+### ✨ New Features
 
-- **Patch release focused on compatibility** - IBus/Wayland improvements, non-ASCII text injection, and distro support
-- **Broader platform coverage** - Pop!_OS, Ubuntu 24.04+, Wayland IBus users
-- **Code quality** - Systematic refactor across 20 dimensions for long-term maintainability
+- **Guided whisper.cpp model variants** — The Settings dialog now splits whisper.cpp selection into **Model Size** and **Specialization**, exposing English-only, quantized (Q5/Q8), Large v3 Turbo, and legacy large models with language-aware recommendations and hover guidance. Exact model IDs (e.g. `medium.en-q5_0`, `large-v3-turbo`) can also be passed to `--model` (#465)
 
-### 🐛 Bug Fixes (v0.10.2)
+### 🐛 Bug Fixes
 
-- **#362 / #376**: Handle non-ASCII characters with ydotool via clipboard paste fallback
-- **#360 / #361**: Start IBus engine process before checking registration
-- **#381**: Detect IBus on Wayland without legacy env vars and fix text injection
-- **#379**: Add missing dependencies for Pop!_OS and Ubuntu 24.04+
+- **Dictation**: Preserve spacing between speech segments separated by a pause, so words no longer run together after a silence within the same session (#464)
+- **Shortcuts**: The evdev keyboard backend rescans for hotplugged keyboards, so shortcuts work on devices connected after startup and disconnected devices can be replugged (#467)
+- **KDE Plasma Wayland**: Detect KDE Plasma Wayland sessions and guide you to enable IBus Wayland (System Settings → Keyboard → Virtual Keyboard) when `wtype` injection fails, with matching hints during install and in logs (#466)
+- **Wayland**: Fix garbled output on non-US keyboard layouts (AZERTY/QWERTZ/Dvorak) and a clipboard-copy hang; ydotool now pastes through the clipboard for layout-independent injection (#480)
+- **Wayland/IBus**: Use wtype/ydotool instead of IBus on compositors that don't bridge IBus to native apps (COSMIC, Sway, Hyprland, and similar), fixing silent text drops (#486)
+- **Wayland/IBus**: Require a real IM engine before using IBus on Wayland, so a bare `xkb` layout no longer causes silent text drops on GNOME/Mutter and other compositors (#478)
+- **Wayland**: Preserve the keyboard layout on Wayland by not running `setxkbmap`, which was flipping XWayland/Electron apps to `us` after dictation (#474)
+- **UI**: Cap the settings dialog height on high-resolution displays (#465)
 
 ### 🔧 Improvements
 
-- **Code quality** - Systematic refactor across 20 quality dimensions (#377)
-- **Debian support** - Clarify missing GNOME AppIndicator support messaging (#385)
-- **Website** - Redesigned OG image for vocalinux.com (#392)
-- **Tests** - Additional coverage for tray, IBus, and notification edge cases
+- **Performance** — Faster ydotool text injection via an explicit `--key-delay` (#488)
+- **Website** — New documentation pages for Remote API, Silero VAD, advanced whisper.cpp settings, and desktop reliability, plus responsive layout polish (#470)
+- **CI** — Automatic pull-request labeling by changed files (#473)
 
 ---
 
@@ -134,7 +133,8 @@ curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /
 The installer will:
 - **Auto-detect your hardware** (GPU, RAM, Vulkan support)
 - **Recommend the best engine** for your system
-- **Download the appropriate model** (~39MB for whisper.cpp tiny)
+- **Download the appropriate model** (~74MB for the default whisper.cpp tiny model)
+- **Install neural VAD support** when ONNX Runtime is available
 - **Install in ~1-2 minutes** (vs 5-10 min with old Whisper)
 
 > **Note**: Always installs the latest release. For a specific version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
@@ -241,6 +241,8 @@ vocalinux --engine whisper_cpp    # Use whisper.cpp engine (default)
 vocalinux --engine whisper        # Use OpenAI Whisper engine
 vocalinux --engine vosk           # Use VOSK engine
 vocalinux --model medium          # Use medium-sized model
+vocalinux --model medium.en-q5_0  # Use exact whisper.cpp model variant
+vocalinux --model large-v3-turbo  # Use large-v3 Turbo with whisper.cpp
 vocalinux --gpus                  # List detected Vulkan and CUDA GPUs
 vocalinux --gpu "Tesla P40"       # Persist GPU selection by device name
 vocalinux --gpu auto              # Clear saved GPU preference
@@ -292,13 +294,29 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 }
 ```
 
-You can also configure settings through the graphical Settings dialog (right-click the tray icon).
+For whisper.cpp, `model_size` may be a size such as `tiny` or an exact ggml model ID
+such as `medium.en-q5_0` or `large-v3-turbo`. You can also configure this through
+the graphical Settings dialog, where whisper.cpp models are split into **Model Size**
+and **Specialization** controls.
+
+### Neural Voice Activity Detection
+
+Vocalinux ships with a Silero VAD model and uses it automatically when `onnxruntime` is available. The official installer attempts to install this support automatically. Without it, recording falls back to the simpler amplitude-threshold VAD.
+
+For manual or PyPI installs, enable neural VAD with:
+
+```bash
+pip install "vocalinux[vad]"
+```
+
+Restart Vocalinux after install. The Recognition tab in Settings shows which backend is active. The same `vad_sensitivity` (1-5) works for both -- it's mapped to a Silero probability threshold internally (1 = 0.8, 5 = 0.3).
 
 GPU selection notes:
 
 - Use `vocalinux --gpus` to list currently detected GPUs.
 - Use `vocalinux --gpu "GPU NAME"` to persist a GPU selection by name instead of relying on unstable device indices.
 - Use `vocalinux --gpu auto` to return to automatic GPU selection.
+- whisper.cpp GPU selection requires a pywhispercpp build with the matching `GGML_CUDA=1` or `GGML_VULKAN=1` backend; the default PyPI wheel may be CPU-only.
 
 ## 🔧 Development Setup
 
@@ -386,7 +404,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.10.2 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.13.0 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 

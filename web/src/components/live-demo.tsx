@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, AlertCircle, Chrome, Globe, Volume2, Sparkles, Keyboard } from "lucide-react";
+import { Mic, MicOff, AlertCircle, Volume2, Sparkles, Keyboard } from "lucide-react";
 
 // Define types for Web Speech API
 interface SpeechRecognitionEvent {
@@ -306,28 +306,41 @@ export function LiveDemo() {
     if (isSupported === false) {
         return (
             <div className="bg-zinc-900 rounded-2xl p-6 sm:p-8 border border-zinc-800">
-                <div className="text-center">
+                <div className="text-center max-w-3xl mx-auto">
                     <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-yellow-500/10 mb-4">
                         <AlertCircle className="h-8 w-8 text-yellow-500" />
                     </div>
                     <h3 className="text-xl font-semibold text-white mb-2">
-                        Browser Demo Not Available
+                        Browser Speech Demo Not Available
                     </h3>
-                    <p className="text-zinc-400 mb-6 max-w-md mx-auto">
-                        Your browser doesn&apos;t support the Web Speech API. Try opening this page in:
+                    <p className="text-zinc-400 mb-4 max-w-2xl mx-auto leading-relaxed">
+                        Your browser does not support the SpeechRecognition API used by this
+                        live demo. Firefox supports parts of Web Speech, but speech recognition
+                        is still disabled for regular pages.
                     </p>
-                    <div className="flex justify-center gap-4 mb-6">
-                        <div className="flex items-center gap-2 text-zinc-300">
-                            <Chrome className="h-5 w-5" />
-                            <span>Chrome</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-zinc-300">
-                            <Globe className="h-5 w-5" />
-                            <span>Edge</span>
-                        </div>
+                    <p className="text-sm text-zinc-500 mb-3">
+                        Try a browser listed by MDN with SpeechRecognition support:
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2 mb-4 text-sm max-w-2xl mx-auto">
+                        {["Chrome", "Edge", "Safari", "Chrome Android", "Safari iOS", "Samsung Internet"].map((browser) => (
+                            <span key={browser} className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
+                                {browser}
+                            </span>
+                        ))}
                     </div>
+                    <p className="text-sm text-zinc-500 mb-6">
+                        Check compatibility on{" "}
+                        <a
+                            href="https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition"
+                            className="text-primary hover:underline"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            MDN
+                        </a>.
+                    </p>
                     <p className="text-sm text-zinc-500">
-                        Or better yet — <a href="#install" className="text-primary hover:underline">install Vocalinux</a> for
+                        You can still <a href="#install" className="text-primary hover:underline">install Vocalinux</a> for
                         the full offline experience with Whisper AI!
                     </p>
                 </div>
@@ -360,7 +373,7 @@ export function LiveDemo() {
                         Live Browser Demo
                     </span>
                     <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
-                        Web Speech API
+                        SpeechRecognition API
                     </span>
                     {(() => {
                         const langInfo = getLanguageInfo(detectedLanguage);
@@ -514,10 +527,11 @@ export function LiveDemo() {
                     <Sparkles className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                     <div className="text-sm">
                         <p className="text-zinc-300">
-                            <strong>This is just a preview!</strong> The browser demo uses Web Speech API (cloud-based).
+                            <strong>This is just a preview!</strong> The browser demo uses browser
+                            SpeechRecognition, which is cloud-based in many browsers.
                         </p>
                         <p className="text-zinc-500 mt-1">
-                            Vocalinux runs <strong>100% offline</strong> using Whisper AI — no cloud, no data sharing,
+                            Vocalinux runs <strong>100% offline</strong> using Whisper AI - no cloud, no data sharing,
                             complete privacy. <a href="#install" className="text-primary hover:underline">Install it</a> to
                             experience the real deal!
                         </p>

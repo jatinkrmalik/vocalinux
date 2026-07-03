@@ -27,7 +27,7 @@ const useCases = [
   {
     title: "Git Commit Messages",
     description:
-      "Speak your commit messages naturally—no more brief, unhelpful commits because typing is slow.",
+      "Speak your commit messages naturally - no more brief, unhelpful commits because typing is slow.",
     example: "fix authentication timeout when server is under heavy load",
     icon: Terminal,
     iconColor: "text-orange-500",
@@ -63,7 +63,7 @@ const useCases = [
   {
     title: "Pair Programming Notes",
     description:
-      "Dictate notes while pairing—keep your hands on the keyboard for code, use voice for meta.",
+      "Dictate notes while pairing - keep your hands on the keyboard for code, use voice for meta.",
     example: "Remember to add unit tests for the edge case we just discussed",
     icon: Zap,
     iconColor: "text-amber-500",
@@ -99,7 +99,7 @@ const benefits = [
   },
   {
     title: "Maintain Flow State",
-    description: "Speak your thoughts as they come—no context switching to the keyboard for comments and docs.",
+    description: "Speak your thoughts as they come - no context switching to the keyboard for comments and docs.",
   },
   {
     title: "Better Documentation",
@@ -107,14 +107,14 @@ const benefits = [
   },
   {
     title: "Universal Compatibility",
-    description: "Works in VS Code, JetBrains IDEs, Vim, terminal, browser—every Linux application.",
+    description: "Works in VS Code, JetBrains IDEs, Vim, terminal, browser - every Linux application.",
   },
 ];
 
 export const metadata: Metadata = buildPageMetadata({
   title: "Voice Dictation for Developers & Coders | Vocalinux",
   description:
-    "Dictate code comments, documentation, and commit messages hands-free. Voice dictation for Linux developers—works in VS Code, JetBrains, terminal, and all apps.",
+    "Dictate code comments, documentation, and commit messages hands-free. Voice dictation for Linux developers - works in VS Code, JetBrains, terminal, and all apps.",
   path: "/for-developers",
   keywords: [
     "voice dictation for developers",
@@ -168,7 +168,7 @@ export default function ForDevelopersPage() {
           Voice Dictation for Developers
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Write code comments, documentation, commit messages, and more—hands-free. Keep your hands
+          Write code comments, documentation, commit messages, and more - hands-free. Keep your hands
           on the keyboard for code, use your voice for everything else.
         </p>
       </section>
@@ -236,12 +236,12 @@ export default function ForDevelopersPage() {
 
       <section className="mb-12 rounded-2xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900/20">
         <h2 className="mb-3 text-xl font-bold text-blue-800 dark:text-blue-300">
-          Not Voice Coding—Voice Documentation
+          Not Voice Coding - Voice Documentation
         </h2>
         <p className="text-sm text-blue-700 dark:text-blue-400">
           Vocalinux is designed for <strong>dictating text</strong>, not writing code syntax. For
           actual code, your keyboard is still faster. But for comments, docs, messages, and
-          notes—voice is a game-changer. Use both together for maximum productivity.
+          notes - voice is a game-changer. Use both together for maximum productivity.
         </p>
       </section>
 

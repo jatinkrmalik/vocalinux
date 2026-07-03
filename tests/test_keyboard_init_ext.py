@@ -22,10 +22,19 @@ from vocalinux.ui.keyboard_backends import (
     DesktopEnvironment,
     create_backend,
 )
+from vocalinux.ui.keyboard_backends.evdev_backend import EVDEV_AVAILABLE as EVDEV_BACKEND_AVAILABLE
+from vocalinux.ui.keyboard_backends.pynput_backend import (
+    PYNPUT_AVAILABLE as PYNPUT_BACKEND_AVAILABLE,
+)
 
 
 class TestDesktopEnvironmentDetect:
     """Test DesktopEnvironment.detect() method."""
+
+    def test_package_availability_flags_match_backend_modules(self):
+        """Test package-level availability flags mirror backend import checks."""
+        assert EVDEV_AVAILABLE == EVDEV_BACKEND_AVAILABLE
+        assert PYNPUT_AVAILABLE == PYNPUT_BACKEND_AVAILABLE
 
     def test_detect_xdg_session_type_wayland(self):
         """Test detection of Wayland via XDG_SESSION_TYPE."""

@@ -40,6 +40,32 @@ class TestDesktopEnvironmentEnum(unittest.TestCase):
         self.assertEqual(DesktopEnvironment.UNKNOWN.value, "unknown")
 
 
+class TestKdePlasmaDetection(unittest.TestCase):
+    def test_detects_xdg_current_desktop_kde(self):
+        from vocalinux.text_injection.text_injector import _is_kde_plasma_session
+
+        with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE"}, clear=True):
+            self.assertTrue(_is_kde_plasma_session())
+
+    def test_detects_kde_full_session(self):
+        from vocalinux.text_injection.text_injector import _is_kde_plasma_session
+
+        with patch.dict(os.environ, {"KDE_FULL_SESSION": "true"}, clear=True):
+            self.assertTrue(_is_kde_plasma_session())
+
+    def test_detects_desktop_session_plasma(self):
+        from vocalinux.text_injection.text_injector import _is_kde_plasma_session
+
+        with patch.dict(os.environ, {"DESKTOP_SESSION": "plasma"}, clear=True):
+            self.assertTrue(_is_kde_plasma_session())
+
+    def test_ignores_non_kde_session(self):
+        from vocalinux.text_injection.text_injector import _is_kde_plasma_session
+
+        with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "GNOME"}, clear=True):
+            self.assertFalse(_is_kde_plasma_session())
+
+
 def _make_injector(env) -> Any:
     from vocalinux.text_injection.text_injector import TextInjector
 
@@ -124,6 +150,75 @@ class TestCheckDependencies(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     obj._check_dependencies()
 
+    def test_kde_wayland_inactive_ibus_logs_virtual_keyboard_hint(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with patch.dict(
+            os.environ,
+            {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE"},
+            clear=True,
+        ):
+            with patch(
+                "vocalinux.text_injection.text_injector.is_ibus_available",
+                return_value=True,
+            ):
+                with patch(
+                    "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                    return_value=False,
+                ):
+                    with patch(
+                        "shutil.which",
+                        side_effect=lambda cmd: "/usr/bin/ydotool" if cmd == "ydotool" else None,
+                    ):
+                        with patch("subprocess.run") as mock_run:
+                            mock_run.return_value = MagicMock(returncode=0, stderr="")
+                            with self.assertLogs(
+                                "vocalinux.text_injection.text_injector",
+                                level="WARNING",
+                            ) as logs:
+                                obj._check_dependencies()
+
+        log_output = "\n".join(logs.output)
+        self.assertIn("KDE Plasma Wayland", log_output)
+        self.assertIn("Virtual Keyboard", log_output)
+
+    def test_kde_wayland_wtype_probe_logs_ibus_hint(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+
+        def which(cmd):
+            if cmd in {"wtype", "xdotool"}:
+                return f"/usr/bin/{cmd}"
+            return None
+
+        with patch.dict(
+            os.environ,
+            {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE"},
+            clear=True,
+        ):
+            with patch(
+                "vocalinux.text_injection.text_injector.is_ibus_available",
+                return_value=False,
+            ):
+                with patch("shutil.which", side_effect=which):
+                    with patch("subprocess.run") as mock_run:
+                        mock_run.return_value = MagicMock(
+                            returncode=1,
+                            stderr="compositor does not support virtual keyboard",
+                        )
+                        with patch.object(TextInjector, "_test_xdotool_fallback"):
+                            with self.assertLogs(
+                                "vocalinux.text_injection.text_injector",
+                                level="WARNING",
+                            ) as logs:
+                                injector = TextInjector()
+
+        log_output = "\n".join(logs.output)
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_XDOTOOL)
+        self.assertIn("KDE Plasma Wayland detected", log_output)
+        self.assertIn("IBus Wayland", log_output)
+
 
 class TestInjectText(unittest.TestCase):
     def test_inject_x11(self):
@@ -146,6 +241,34 @@ class TestInjectText(unittest.TestCase):
             # Verify that subprocess.run was called (by _inject_with_wayland_tool)
             self.assertTrue(mock_run.called)
             self.assertTrue(result)
+
+    def test_kde_wayland_wtype_failure_logs_ibus_hint_and_uses_xdotool(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        obj.wayland_tool = "wtype"
+        error = subprocess.CalledProcessError(
+            1,
+            ["wtype", "hello"],
+            stderr="compositor does not support virtual keyboard",
+        )
+
+        with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE"}, clear=True):
+            with patch.object(obj, "_inject_with_wayland_tool", side_effect=error):
+                with patch.object(obj, "_inject_with_xdotool") as mock_xdotool:
+                    with patch("shutil.which", return_value="/usr/bin/xdotool"):
+                        with self.assertLogs(
+                            "vocalinux.text_injection.text_injector",
+                            level="WARNING",
+                        ) as logs:
+                            result = obj.inject_text("hello")
+
+        self.assertTrue(result)
+        self.assertEqual(obj.environment, DesktopEnvironment.WAYLAND_XDOTOOL)
+        mock_xdotool.assert_called_once_with("hello")
+        log_output = "\n".join(logs.output)
+        self.assertIn("KDE Plasma Wayland rejected virtual keyboard injection", log_output)
+        self.assertIn("IBus Wayland", log_output)
 
     def test_inject_ibus(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
@@ -415,7 +538,7 @@ class TestBackgroundIBusInitialization(unittest.TestCase):
 
         obj = _make_injector(DesktopEnvironment.WAYLAND)
         obj._ibus_injector = MagicMock()
-        obj._ibus_injector._setup_engine.side_effect = RuntimeError("not ready")
+        obj._ibus_injector.prepare_engine.side_effect = RuntimeError("not ready")
 
         obj._initialize_ibus_in_background()
 

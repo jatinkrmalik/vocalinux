@@ -461,6 +461,46 @@ class TestSpeechRecognitionManagerInit:
             with pytest.raises(RuntimeError, match="does not support the requested CUDA backend"):
                 manager._load_whispercpp_model("/tmp/mock.bin")
 
+    def test_init_whispercpp_clears_requested_gpu_when_build_lacks_backend(self):
+        manager = _make_manager(engine="whisper_cpp", gpu_name="Tesla P40", gpu_backend="cuda")
+        mock_pywhispercpp = MagicMock()
+        mock_pywhispercpp_model = MagicMock(Model=MagicMock())
+        gpu_error = RuntimeError(
+            "The installed pywhispercpp build does not support the requested CUDA backend."
+        )
+
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "pywhispercpp": mock_pywhispercpp,
+                    "pywhispercpp.model": mock_pywhispercpp_model,
+                },
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager."
+                "_preload_pywhispercpp_shared_libraries"
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value="/tmp/mock.bin",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch.object(
+                manager, "_load_whispercpp_model", side_effect=[gpu_error, None]
+            ) as mock_load,
+            patch.object(manager, "_restore_managed_gpu_environment") as mock_restore,
+        ):
+            manager._init_whispercpp()
+
+        assert mock_load.call_count == 2
+        assert manager.requested_gpu_name is None
+        assert manager.preferred_gpu_backend is None
+        assert manager.selected_gpu_name is None
+        assert manager.selected_gpu_backend is None
+        assert manager.selected_gpu_index is None
+        mock_restore.assert_called_once()
+
     def test_handle_gpu_fallback_reraises_unrelated_runtime_error(self):
         manager = _make_manager(engine="whisper_cpp")
 

@@ -31,6 +31,9 @@ DEFAULT_CONFIG = {
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "stop_sound_guard_ms": 200,  # Small tail trim to avoid the stop sound without clipping speech
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
+        "remote_api_url": "",  # Remote speech recognition server URL (e.g. http://192.168.1.100:8080)
+        "remote_api_key": "",  # Remote server API key (optional)
+        "remote_api_endpoint": "/inference",  # Remote server API endpoint format (/v1/audio/transcriptions or /inference)
     },
     "audio": {
         "device_index": None,  # Audio input device index (None for system default)
@@ -68,6 +71,7 @@ DEFAULT_CONFIG = {
         "whispercpp_entropy_thold": 2.4,
         "whispercpp_logprob_thold": -1.0,
         "whispercpp_no_speech_thold": 0.6,
+        "whispercpp_n_threads": 0,  # 0 = auto-detect optimal thread count; set to override
     },
 }
 

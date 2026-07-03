@@ -143,7 +143,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           # Install PyGObject from pip (with build deps installed above)
           pip install PyGObject
-          pip install -e ".[dev]"
+          pip install -e ".[dev,vad]"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
 

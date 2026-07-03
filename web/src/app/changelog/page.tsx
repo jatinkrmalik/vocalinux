@@ -1,10 +1,79 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { BookOpen, CheckCircle2, ChevronRight, Clock, Download, Sparkles, Tag, Zap } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Download,
+  Sparkles,
+  Tag,
+  Zap,
+} from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
+  {
+    version: "v0.13.0-beta",
+    date: "2026-06-30",
+    type: "beta",
+    highlights: [
+      "Guided whisper.cpp model selection: pick a size plus a specialization (English-only, quantized Q5/Q8, or Large v3 Turbo) through split Model Size and Specialization dropdowns with in-app guidance; the --model flag also accepts exact IDs like medium.en-q5_0 and large-v3-turbo (PR #465)",
+      "Dictation now keeps a space between segments spoken with a pause in between, so words no longer run together after a silence (PR #464)",
+      "Keyboard shortcuts now work on keyboards hotplugged after Vocalinux starts, with the evdev backend rescanning for new devices and recovering from disconnects (PR #467)",
+      "Vocalinux now detects KDE Plasma Wayland sessions and points you to enable IBus Wayland for reliable text injection, surfaced during install and when wtype injection fails (PR #466)",
+      "Wayland: fixed garbled text on non-US keyboard layouts (AZERTY/QWERTZ/Dvorak) and a clipboard-copy hang; ydotool now pastes through the clipboard, which is layout-independent (PR #480)",
+      "Wayland: use wtype/ydotool instead of IBus on compositors that don't bridge it to native apps like COSMIC, Sway, and Hyprland, fixing silent text drops (PR #486)",
+      "Wayland/IBus: require a real IM engine before using IBus, so a bare xkb layout no longer causes silent text drops on GNOME/Mutter and other compositors (#478)",
+      "Wayland: keep the keyboard layout intact by not running setxkbmap, which was flipping XWayland apps to us after dictation (#474)",
+      "Faster ydotool text injection via an explicit --key-delay (PR #488)",
+      "Settings dialog height capped on high-resolution displays (PR #465)",
+      "Refreshed website docs with new feature pages for Remote API, Silero VAD, advanced whisper.cpp settings, and desktop reliability, plus responsive layout polish (PR #470)",
+    ],
+  },
+  {
+    version: "v0.12.0-beta",
+    date: "2026-06-07",
+    type: "beta",
+    highlights: [
+      "Remote API speech recognition engine with installation and configuration support (PR #335)",
+      "Silero VAD drops silence-only buffers for cleaner dictation when ONNX Runtime support is available (PR #447)",
+      "Thread safety hardening for Remote API, IBus, and text injection paths (PR #452)",
+      "IBus preserves user engines for dead keys and captures the current engine during scoped activation (PR #457, #458)",
+      "Remote Server settings now respect the Advanced toggle and the settings dialog fits lower-resolution screens (PR #454, #456)",
+      "CUDA diagnostics now include auto-remediation and behavioral tests (PR #451)",
+      "Corrected whisper.cpp and VOSK model download size metadata (PR #453)",
+      "Startup now works without the pynput backend (PR #448)",
+      "Remote API developer test server documentation (PR #455)",
+      "Website speech demo browser support clarification (PR #449) and GitHub Sponsors funding configuration",
+    ],
+  },
+  {
+    version: "v0.11.0-beta",
+    date: "2026-05-30",
+    type: "beta",
+    highlights: [
+      "New Advanced Settings tab with whisper.cpp anti-hallucination parameters - temperature, no_speech_threshold, max segment length, and more (PR #415)",
+      "IBus engine readiness probe at startup with hardened retries (PR #391)",
+      "IBus runtime failure recovery without app restart (PR #411)",
+      "IBus engine instance destruction handled on keyboard layout switch (fixes #388, closes #389)",
+      "Preserve final speech on stop - no more truncated transcriptions (fixes #401)",
+      "Play stop sound immediately on release and after audio thread joins (PR #426, #436)",
+      "Repair pywhispercpp library loading in installer (PR #433)",
+      "Reduce whisper.cpp CPU threads and ensure GPU backend builds in dev mode (PR #439)",
+      "Correct openSUSE Tumbleweed dependencies with fallback handling (PR #418, #420)",
+      "Harden Debian compatibility layer in installer (PR #437)",
+      "Add Python 3.14 support and bump lxml>=6.1.0 (fixes #404)",
+      "Validate pyproject.toml/setup.py content before entering local repo mode (fixes #396)",
+      "Reuse existing whispercpp builds during install (PR #421)",
+      "Refresh ldconfig after openSUSE typelib install, clarify python3XY placeholder convention (PR #438)",
+      "Clean up runtime log noise and cache hardware detection",
+      "Test coverage: recognition internals, IBus edge cases, CI notification suppression (PR #410, #414)",
+      "Clarify PyPI installation requirements (PR #423)",
+      "Dependency bumps: Next.js security updates (PR #399, #429), PostCSS",
+    ],
+  },
   {
     version: "v0.10.2-beta",
     date: "2026-04-08",
@@ -16,7 +85,7 @@ const releases = [
       "Add missing dependencies for Pop!_OS and Ubuntu 24.04+ including cmake, libcairo2-dev, libgirepository (PR #379)",
       "Systematic code quality refactor across 20 dimensions (PR #377)",
       "Clarify missing GNOME AppIndicator support on Debian (PR #385)",
-      "Redesigned OG image for vocalinux.com — cleaner, professional, text-based layout (PR #392)",
+      "Redesigned OG image for vocalinux.com - cleaner, professional, text-based layout (PR #392)",
       "Test coverage improvements: mock Notify module, tray degraded-startup, IBus socket-readiness branches (PR #384, #386, #390)",
     ],
   },
@@ -57,14 +126,14 @@ const releases = [
     date: "2026-03-14",
     type: "beta",
     highlights: [
-      "Left/right modifier key distinction — choose Left Ctrl vs Right Ctrl for your shortcut",
-      "Sound effects toggle — enable or disable audio feedback from Settings",
-      "Wayland clipboard fallback — auto-copies text when virtual keyboard injection isn't available",
-      "Display availability check — graceful error when running in headless environments",
+      "Left/right modifier key distinction - choose Left Ctrl vs Right Ctrl for your shortcut",
+      "Sound effects toggle - enable or disable audio feedback from Settings",
+      "Wayland clipboard fallback - auto-copies text when virtual keyboard injection isn't available",
+      "Display availability check - graceful error when running in headless environments",
       "Fixed unwanted leading space at the start of each new transcription session",
       "Fixed shortcut mode (toggle/push-to-talk) not applying on startup",
       "Improved Debian/pipx installation guidance and cross-distro error messages",
-      "Grouped shortcut selector UI — shortcuts organised by Either/Left/Right side",
+      "Grouped shortcut selector UI - shortcuts organised by Either/Left/Right side",
     ],
   },
   {
@@ -181,17 +250,20 @@ const getTypeStyles = (type: string) => {
   switch (type) {
     case "stable":
       return {
-        badge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+        badge:
+          "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
         label: "Stable",
       };
     case "beta":
       return {
-        badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        badge:
+          "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
         label: "Beta",
       };
     case "alpha":
       return {
-        badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+        badge:
+          "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
         label: "Alpha",
       };
     default:
@@ -222,7 +294,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-03-30",
+    dateModified: "2026-06-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -247,7 +319,7 @@ export default function ChangelogPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <Clock className="h-4 w-4" />
           Release History
         </p>
@@ -255,8 +327,8 @@ export default function ChangelogPage() {
           Vocalinux Changelog
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Track every release and see how Vocalinux has evolved. From initial alpha to stable
-          releases, follow the journey of Linux voice dictation.
+          Track every release and see how Vocalinux has evolved. From initial
+          alpha to stable releases, follow the journey of Linux voice dictation.
         </p>
       </section>
 
@@ -279,23 +351,54 @@ export default function ChangelogPage() {
                   {styles.label}
                 </span>
                 {index === 0 && (
-                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                  <span className="bg-primary/10 rounded-full px-3 py-1 text-xs font-semibold text-primary">
                     Latest
                   </span>
                 )}
-                <span className="text-sm text-muted-foreground">{release.date}</span>
+                <span className="text-sm text-muted-foreground">
+                  {release.date}
+                </span>
               </div>
 
               <ul className="space-y-2">
                 {release.highlights.map((highlight) => (
-                  <li key={highlight} className="flex items-start gap-2 text-muted-foreground">
+                  <li
+                    key={highlight}
+                    className="flex items-start gap-2 text-muted-foreground"
+                  >
                     <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
                     {highlight}
                   </li>
                 ))}
               </ul>
 
-              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+              {index === 0 && (
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {[
+                    { href: "/remote-api/", label: "Remote API guide" },
+                    {
+                      href: "/voice-activity-detection/",
+                      label: "Silero VAD guide",
+                    },
+                    { href: "/advanced-settings/", label: "Advanced settings" },
+                    {
+                      href: "/desktop-reliability/",
+                      label: "Reliability overview",
+                    },
+                  ].map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="border-primary/30 bg-primary/10 hover:bg-primary/15 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold text-primary"
+                    >
+                      {link.label}
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-700">
                 <a
                   href={`https://github.com/jatinkrmalik/vocalinux/releases/tag/${release.version}`}
                   target="_blank"
@@ -326,7 +429,10 @@ export default function ChangelogPage() {
           <li className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-primary" />
             Check the{" "}
-            <Link href="/install/" className="font-semibold text-primary hover:underline">
+            <Link
+              href="/install/"
+              className="font-semibold text-primary hover:underline"
+            >
               install guide
             </Link>{" "}
             for update instructions

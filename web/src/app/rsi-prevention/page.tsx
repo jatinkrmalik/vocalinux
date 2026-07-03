@@ -24,7 +24,7 @@ const benefits = [
   {
     title: "Privacy for Health",
     description:
-      "Your health data stays private. All voice processing happens locally—no cloud uploads, no third parties.",
+      "Your health data stays private. All voice processing happens locally - no cloud uploads, no third parties.",
     icon: Shield,
     iconColor: "text-blue-500",
     iconBg: "bg-blue-100 dark:bg-blue-900/30",
@@ -222,7 +222,7 @@ export default function RsiPreventionPage() {
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
-                Take breaks—voice dictation is still work, and vocal rest matters too
+                Take breaks - voice dictation is still work, and vocal rest matters too
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
@@ -235,7 +235,7 @@ export default function RsiPreventionPage() {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
-                Toggle mode or push-to-talk control—no mouse required
+                Toggle mode or push-to-talk control - no mouse required
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
@@ -247,7 +247,7 @@ export default function RsiPreventionPage() {
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
-                Works in ALL Linux applications—universal compatibility
+                Works in ALL Linux applications - universal compatibility
               </li>
             </ul>
           </div>

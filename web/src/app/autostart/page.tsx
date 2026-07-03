@@ -151,7 +151,7 @@ export default function AutostartPage() {
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           Have Vocalinux ready to go the moment you log in. Uses the Linux-standard XDG autostart
-          mechanism—works with GNOME, KDE, Xfce, and all major desktop environments.
+          mechanism - works with GNOME, KDE, Xfce, and all major desktop environments.
         </p>
       </section>
 
@@ -224,7 +224,7 @@ export default function AutostartPage() {
                         Yes
                       </span>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground"> - </span>
                     )}
                   </td>
                   <td className="py-3 text-muted-foreground">{de.notes}</td>
@@ -241,7 +241,7 @@ export default function AutostartPage() {
         </h2>
         <p className="text-sm text-blue-700 dark:text-blue-400">
           Vocalinux autostart uses <strong>XDG desktop entries</strong>, not systemd services. This
-          means it starts as a regular desktop application in your graphical session—which is the
+          means it starts as a regular desktop application in your graphical session - which is the
           correct way to launch GUI apps. No background services, no root required.
         </p>
       </section>

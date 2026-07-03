@@ -26,17 +26,13 @@ logger = logging.getLogger(__name__)
 
 # Import available backends
 try:
-    from .evdev_backend import EvdevKeyboardBackend
-
-    EVDEV_AVAILABLE = True
+    from .evdev_backend import EVDEV_AVAILABLE, EvdevKeyboardBackend
 except ImportError:
     EvdevKeyboardBackend = None  # type: ignore
     EVDEV_AVAILABLE = False
 
 try:
-    from .pynput_backend import PynputKeyboardBackend
-
-    PYNPUT_AVAILABLE = True
+    from .pynput_backend import PYNPUT_AVAILABLE, PynputKeyboardBackend
 except ImportError:
     PynputKeyboardBackend = None  # type: ignore
     PYNPUT_AVAILABLE = False

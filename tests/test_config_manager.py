@@ -574,15 +574,27 @@ class TestTypedAccessors(unittest.TestCase):
         self.assertEqual(advanced["whispercpp_entropy_thold"], 2.4)
         self.assertEqual(advanced["whispercpp_logprob_thold"], -1.0)
         self.assertEqual(advanced["whispercpp_no_speech_thold"], 0.6)
+        self.assertEqual(advanced["whispercpp_n_threads"], 0)
 
     def test_whispercpp_advanced_persistence(self):
-        self.config_manager.set("advanced", "whispercpp_temperature", 0.5)
-        self.config_manager.set("advanced", "whispercpp_no_timestamps", False)
-        self.config_manager.set("advanced", "whispercpp_initial_prompt", "Meeting notes")
-        self.config_manager.save_config()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_config_dir = os.path.join(temp_dir, ".config/vocalinux")
+            _ensure_test_config_dir(temp_config_dir)
+            temp_config_file = os.path.join(temp_config_dir, "config.json")
 
-        new_manager = ConfigManager()
-        advanced = new_manager.get_settings().get("advanced", {})
+            with (
+                patch("vocalinux.ui.config_manager.CONFIG_DIR", temp_config_dir),
+                patch("vocalinux.ui.config_manager.CONFIG_FILE", temp_config_file),
+            ):
+                config_manager = ConfigManager()
+                config_manager.set("advanced", "whispercpp_temperature", 0.5)
+                config_manager.set("advanced", "whispercpp_no_timestamps", False)
+                config_manager.set("advanced", "whispercpp_initial_prompt", "Meeting notes")
+                config_manager.save_config()
+
+                new_manager = ConfigManager()
+                advanced = new_manager.get_settings().get("advanced", {})
+
         self.assertEqual(advanced["whispercpp_temperature"], 0.5)
         self.assertFalse(advanced["whispercpp_no_timestamps"])
         self.assertEqual(advanced["whispercpp_initial_prompt"], "Meeting notes")

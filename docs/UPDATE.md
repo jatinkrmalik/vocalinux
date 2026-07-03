@@ -2,6 +2,80 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.13.0-beta
+
+### 🚀 Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **🎙️ Guided Whisper Models** | Pick a whisper.cpp size and specialization (English-only, quantized, Turbo) with in-app guidance |
+| **🔌 Hotplug Keyboard Support** | Shortcuts keep working on keyboards connected after startup |
+| **✍️ Dictation Spacing** | Spacing preserved between speech segments separated by a pause in the same session |
+| **🖥️ Wayland Reliability** | Fixes silent text drops on wlroots/COSMIC compositors and garbled non-US-layout output |
+
+### ✨ New Features
+
+- **Guided whisper.cpp model variants** — The Settings dialog now splits whisper.cpp selection into **Model Size** and **Specialization**, exposing English-only, quantized (Q5/Q8), Large v3 Turbo, and legacy large models with language-aware recommendations and hover guidance. Exact model IDs (e.g. `medium.en-q5_0`, `large-v3-turbo`) can also be passed to `--model` (#465)
+
+### 🐛 Bug Fixes
+
+- **Dictation**: Preserve spacing between speech segments separated by a pause (#464)
+- **Shortcuts**: Rescan for hotplugged keyboards so shortcuts work on devices connected after startup (#467)
+- **KDE Plasma Wayland**: Detect KDE Plasma Wayland sessions and guide you to enable IBus Wayland when `wtype` injection fails (#466)
+- **Wayland**: Fix garbled output on non-US keyboard layouts and a clipboard-copy hang; ydotool now pastes through the clipboard (#480)
+- **Wayland/IBus**: Use wtype/ydotool instead of IBus on compositors that don't bridge IBus to native apps like COSMIC, Sway, and Hyprland (#486)
+- **Wayland/IBus**: Require a real IM engine on Wayland so a bare `xkb` layout no longer causes silent text drops on GNOME/Mutter and similar (#478)
+- **Wayland**: Preserve the keyboard layout on Wayland by not running `setxkbmap` (was flipping XWayland apps to `us`) (#474)
+- **UI**: Cap the settings dialog height on high-resolution displays (#465)
+
+### 🔧 Improvements
+
+- **Performance**: Faster ydotool text injection via an explicit `--key-delay` (#488)
+- **Website**: New documentation pages for Remote API, Silero VAD, advanced whisper.cpp settings, and desktop reliability (#470)
+- **CI**: Automatic pull-request labeling by changed files (#473)
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.13.0-beta).
+
+---
+
+## What's New in v0.12.0-beta
+
+### 🚀 Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **🌐 Remote API Engine** | New backend for compatible remote transcription services |
+| **🎙️ Silero VAD** | Neural VAD drops silence-only buffers for cleaner dictation |
+| **🧵 Thread Safety** | Hardened Remote API, IBus, and text injection threading behavior |
+| **🔌 IBus Reliability** | Preserves user engines for dead keys and scoped activation |
+| **⚙️ Settings Polish** | Advanced-only Remote Server controls and lower dialog height |
+| **📦 Installer & Models** | CUDA auto-remediation and corrected model download metadata |
+
+### ✨ New Features
+
+- **Remote API speech recognition engine** — Configure compatible remote transcription services alongside local engines (#335)
+- **Silero VAD** — Neural voice activity detection filters silence-only buffers when ONNX Runtime support is installed (#447)
+
+### 🐛 Bug Fixes
+
+- **Threading**: Harden Remote API, IBus, and text injection thread safety (#452)
+- **IBus**: Preserve user engines for dead keys and capture the current engine during scoped activation (#457, #458)
+- **UI**: Keep the Remote Server section behind the Advanced toggle and reduce settings dialog height (#454, #456)
+- **Installer**: Harden CUDA diagnostics with auto-remediation and behavioral tests (#451)
+- **Models**: Correct whisper.cpp and VOSK download size metadata (#453)
+- **Startup**: Allow launch without the pynput backend (#448)
+- **Website**: Clarify speech demo browser support (#449)
+
+### 🔧 Improvements
+
+- **Developer docs** — Remote API test server instructions for backend testing (#455)
+- **Community** — GitHub Sponsors funding configuration added
+- **Behavioral coverage** — CUDA diagnostics and release-facing reliability fixes include targeted tests
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.12.0-beta).
+
+---
+
 ## What's New in v0.10.2-beta
 
 ### 🚀 Highlights
@@ -157,13 +231,14 @@ The installer will:
 - ✅ Update your existing installation
 - ✅ Preserve your configuration and models
 - ✅ Install any new dependencies
+- ✅ Attempt to install neural VAD support, falling back safely if ONNX Runtime is unavailable
 
 ### If You Installed from Source
 
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.10.1-beta
+git checkout v0.13.0-beta
 ./install.sh
 ```
 

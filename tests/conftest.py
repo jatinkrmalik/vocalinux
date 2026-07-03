@@ -14,6 +14,16 @@ import pytest
 # Set PYTEST_RUNNING early so audio_feedback module can detect it
 os.environ["PYTEST_RUNNING"] = "1"
 
+# Several legacy tests replace sys.modules["numpy"] with MagicMock at module
+# import time. Preserve the real module once so newer tests can restore it
+# without unloading/re-importing NumPy's compiled extensions.
+try:
+    import numpy as _real_numpy
+except ImportError:
+    _real_numpy = None
+else:
+    sys._vocalinux_real_numpy = _real_numpy
+
 # Prevent specific known-blocking daemon threads from starting during tests.
 # Source code in ibus_engine.py and evdev_backend.py spawns daemon threads
 # (socket server, device monitor) that block on socket.accept() or

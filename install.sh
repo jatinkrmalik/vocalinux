@@ -4,6 +4,10 @@
 
 set -e  # Exit on error
 
+# Keep the venv isolated from ~/.local site packages while still allowing
+# --system-site-packages to expose distro-provided GTK/PyGObject bindings.
+export PYTHONNOUSERSITE=1
+
 # Function to display colored output
 print_info() {
     echo -e "\e[1;34m[INFO]\e[0m $1"
@@ -23,6 +27,21 @@ print_warning() {
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+is_kde_plasma_session() {
+    local desktop="${XDG_CURRENT_DESKTOP:-} ${DESKTOP_SESSION:-} ${GDMSESSION:-}"
+    local kde_session="${KDE_FULL_SESSION:-}"
+    local desktop_lower="${desktop,,}"
+    local kde_session_lower="${kde_session,,}"
+
+    [[ "$desktop_lower" == *kde* || "$desktop_lower" == *plasma* || "$kde_session_lower" == "true" ]]
+}
+
+print_kde_wayland_ibus_hint() {
+    print_warning "KDE Plasma Wayland detected."
+    print_info "For direct dictation into apps, open System Settings -> Keyboard -> Virtual Keyboard and select 'IBus Wayland'."
+    print_info "After changing it, restart Vocalinux or log out and back in."
 }
 
 get_vocalinux_pids() {
@@ -195,7 +214,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --interactive, -i  Force interactive mode (default)"
             echo "  --auto           Non-interactive automatic installation"
-            echo "  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk"
+            echo "  --engine=NAME    Speech engine: whisper_cpp (default), whisper, vosk, remote_api"
             echo "  --dev            Install in development mode with all dev dependencies"
             echo "  --test           Run tests after installation"
             echo "  --venv-dir=PATH  Specify custom virtual environment directory"
@@ -516,6 +535,141 @@ detect_nvidia_gpu() {
     fi
 }
 
+cuda_toolkit_root_has_runtime_library() {
+    local CUDA_ROOT="$1"
+
+    compgen -G "$CUDA_ROOT/lib64/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/lib/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/lib/x86_64-linux-gnu/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/targets/x86_64-linux/lib/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/targets/aarch64-linux/lib/libcudart.so*" >/dev/null && return 0
+    compgen -G "$CUDA_ROOT/targets/sbsa-linux/lib/libcudart.so*" >/dev/null && return 0
+    return 1
+}
+
+validate_cuda_toolkit_root() {
+    local CUDA_ROOT="$1"
+
+    [ -n "$CUDA_ROOT" ] || return 1
+    [ -x "$CUDA_ROOT/bin/nvcc" ] || return 1
+    [ -f "$CUDA_ROOT/include/cuda_runtime.h" ] || return 1
+    cuda_toolkit_root_has_runtime_library "$CUDA_ROOT" || return 1
+}
+
+candidate_cuda_toolkit_roots() {
+    local CUDA_VAR
+    for CUDA_VAR in CUDAToolkit_ROOT CUDA_HOME CUDA_PATH; do
+        local CUDA_ROOT="${!CUDA_VAR:-}"
+        [ -n "$CUDA_ROOT" ] && printf '%s\n' "$CUDA_ROOT"
+    done
+
+    if command -v nvcc >/dev/null 2>&1; then
+        local NVCC_PATH
+        local NVCC_ROOT
+        NVCC_PATH=$(readlink -f "$(command -v nvcc)" 2>/dev/null || command -v nvcc)
+        NVCC_ROOT=$(cd "$(dirname "$NVCC_PATH")/.." 2>/dev/null && pwd -P)
+        [ -n "$NVCC_ROOT" ] && printf '%s\n' "$NVCC_ROOT"
+    fi
+
+    local CUDA_ROOT
+    for CUDA_ROOT in /usr/local/cuda /usr/local/cuda-* /opt/cuda; do
+        [ -d "$CUDA_ROOT" ] && printf '%s\n' "$CUDA_ROOT"
+    done
+}
+
+find_valid_cuda_toolkit_root() {
+    local QUIET="${1:-no}"
+    local SEEN_ROOTS=""
+    local CUDA_ROOT
+
+    while IFS= read -r CUDA_ROOT; do
+        [ -n "$CUDA_ROOT" ] || continue
+
+        local NORMALIZED_ROOT
+        NORMALIZED_ROOT=$(cd "$CUDA_ROOT" 2>/dev/null && pwd -P) || NORMALIZED_ROOT="$CUDA_ROOT"
+
+        if [[ ":$SEEN_ROOTS:" == *":$NORMALIZED_ROOT:"* ]]; then
+            continue
+        fi
+        SEEN_ROOTS="${SEEN_ROOTS:+$SEEN_ROOTS:}$NORMALIZED_ROOT"
+
+        if validate_cuda_toolkit_root "$NORMALIZED_ROOT"; then
+            printf '%s\n' "$NORMALIZED_ROOT"
+            return 0
+        fi
+
+        if [[ "$QUIET" != "quiet" ]]; then
+            print_warning "Ignoring incomplete CUDA toolkit root: $NORMALIZED_ROOT" >&2
+            print_warning "  Required: bin/nvcc, include/cuda_runtime.h, and libcudart.so*" >&2
+        fi
+    done < <(candidate_cuda_toolkit_roots)
+
+    return 1
+}
+
+detect_nvidia_compute_architectures() {
+    command -v nvidia-smi >/dev/null 2>&1 || return 1
+
+    local COMPUTE_CAPS
+    COMPUTE_CAPS=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null || true)
+    [ -n "$COMPUTE_CAPS" ] || return 1
+
+    printf '%s\n' "$COMPUTE_CAPS" | awk '
+        {
+            gsub(/[[:space:]]/, "", $1)
+            if ($1 ~ /^[0-9]+(\.[0-9]+)?$/) {
+                split($1, parts, ".")
+                minor = parts[2]
+                if (minor == "") {
+                    minor = "0"
+                }
+                print parts[1] minor "-real"
+            }
+        }
+    ' | sort -u | paste -sd ';' -
+}
+
+cuda_toolkit_supports_architectures() {
+    local CUDA_ROOT="$1"
+    local CUDA_ARCHS="$2"
+    [ -n "$CUDA_ARCHS" ] || return 0
+
+    local NVCC_ARCHS
+    NVCC_ARCHS=$("$CUDA_ROOT/bin/nvcc" --list-gpu-arch 2>/dev/null || true)
+    if [ -z "$NVCC_ARCHS" ]; then
+        print_warning "Could not query supported CUDA architectures from $CUDA_ROOT/bin/nvcc" >&2
+        print_warning "Continuing with detected CMAKE_CUDA_ARCHITECTURES=$CUDA_ARCHS" >&2
+        return 0
+    fi
+
+    local IFS=';'
+    local CUDA_ARCH
+    for CUDA_ARCH in $CUDA_ARCHS; do
+        local ARCH_DIGITS="${CUDA_ARCH%%-*}"
+        if ! printf '%s\n' "$NVCC_ARCHS" | grep -q "compute_$ARCH_DIGITS"; then
+            print_warning "CUDA toolkit at $CUDA_ROOT cannot target compute capability $ARCH_DIGITS." >&2
+            print_warning "Install a newer CUDA toolkit, such as CUDA 11.8+ for RTX 40/Ada GPUs." >&2
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+get_cuda_cmake_args() {
+    local CUDA_ROOT="$1"
+    local CUDA_ARGS="-DCUDAToolkit_ROOT=$CUDA_ROOT -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc"
+    local CUDA_ARCHS
+
+    CUDA_ARCHS=$(detect_nvidia_compute_architectures || true)
+    if [ -n "$CUDA_ARCHS" ]; then
+        cuda_toolkit_supports_architectures "$CUDA_ROOT" "$CUDA_ARCHS" || return 1
+        CUDA_ARGS="$CUDA_ARGS -DCMAKE_CUDA_ARCHITECTURES=$CUDA_ARCHS"
+    fi
+
+    printf '%s\n' "$CUDA_ARGS"
+}
+
 # Detect Vulkan support for whisper.cpp
 detect_vulkan() {
     # Check for vulkaninfo command
@@ -696,7 +850,7 @@ detect_whispercpp_backends() {
 
     # Check for CUDA
     local HAS_CUDA_DEV=false
-    if command -v nvcc >/dev/null 2>&1; then
+    if find_valid_cuda_toolkit_root quiet >/dev/null 2>&1; then
         HAS_CUDA_DEV=true
     fi
 
@@ -866,7 +1020,7 @@ EOF
     print_header "Step 2: Choose Speech Recognition Engine"
     echo ""
     echo "  ┌─────────────────────────────────────────────────────────────┐"
-    echo "  │  1. WHISPER.CPP  ★ RECOMMENDED                              │"
+    echo "  │  1. WHISPER.CPP  * RECOMMENDED                              │"
     echo "  │     • Fastest, most accurate, works with any GPU            │"
     echo "  │     • Supports NVIDIA (CUDA), AMD, Intel (Vulkan)           │"
     echo "  │     • CPU-only mode available for older systems             │"
@@ -890,6 +1044,15 @@ EOF
     echo "  │     • Good for basic dictation needs                        │"
     echo "  └─────────────────────────────────────────────────────────────┘"
     echo ""
+    echo "  ┌───────────────────────────────────────────────────────────────┐"
+    echo "  │  4. REMOTE API (ADVANCED)                                     │"
+    echo "  │     • Offload processing to a GPU server on your network      │"
+    echo "  │     • Ideal for laptops without GPU                           │"
+    echo "  │     • Supports whisper.cpp server & OpenAI-compatible APIs    │"
+    echo "  │     • Minimal local resources needed                          │"
+    echo "  │     • Requires a remote server to be running                  │"
+    echo "  └───────────────────────────────────────────────────────────────┘"
+    echo ""
 
     # Show recommendation
     case "$RECOMMENDED_ENGINE" in
@@ -908,7 +1071,7 @@ EOF
     esac
     echo ""
 
-    read -p "Choose engine [1-3] (default: $DEFAULT_CHOICE): " ENGINE_CHOICE
+    read -p "Choose engine [1-4] (default: $DEFAULT_CHOICE): " ENGINE_CHOICE
     ENGINE_CHOICE=${ENGINE_CHOICE:-$DEFAULT_CHOICE}
 
     case "$ENGINE_CHOICE" in
@@ -923,6 +1086,10 @@ EOF
         3)
             SELECTED_ENGINE="vosk"
             ENGINE_DISPLAY="VOSK (Lightweight)"
+            ;;
+        4)
+            SELECTED_ENGINE="remote_api"
+            ENGINE_DISPLAY="Remote API"
             ;;
         *)
             SELECTED_ENGINE="whisper_cpp"
@@ -970,7 +1137,7 @@ EOF
 
         if [[ "$CAN_BUILD_GPU" == "true" ]]; then
             echo "  ┌─────────────────────────────────────────────────────────────┐"
-            echo "  │  1. GPU (Vulkan/CUDA)  ★ RECOMMENDED                        │"
+            echo "  │  1. GPU (Vulkan/CUDA)  * RECOMMENDED                        │"
             echo "  │     • Fastest performance with GPU acceleration             │"
             echo "  │     • $RECOMMENDED_REASON                                   │"
             echo "  │     • Requires building from source (takes ~2-5 min)        │"
@@ -994,7 +1161,7 @@ EOF
             echo "  └─────────────────────────────────────────────────────────────┘"
             echo ""
             echo "  ┌─────────────────────────────────────────────────────────────┐"
-            echo "  │  2. CPU (Pre-built)  ★ RECOMMENDED                          │"
+            echo "  │  2. CPU (Pre-built)  * RECOMMENDED                          │"
             echo "  │     • Works on all systems                                  │"
             echo "  │     • Fast installation (no compilation)                    │"
             echo "  │     • Good performance on modern CPUs                       │"
@@ -1029,7 +1196,31 @@ EOF
         echo ""
     fi
 
-    # Step 4: Model download preference
+    # Step 3 for Remote API: Configure server URL
+    if [[ "$SELECTED_ENGINE" == "remote_api" ]]; then
+        print_header "Step 3: Configure Remote Server"
+        echo ""
+        print_info "You need a speech recognition server running on your local network."
+        echo ""
+        echo "  Supported servers:"
+        echo "    • whisper.cpp server:  ./server -m model.bin --host 0.0.0.0 --port 8080"
+        echo "    • LocalAI:            docker run -p 8080:8080 localai/localai"
+        echo "    • Faster Whisper:      faster-whisper-server --host 0.0.0.0 --port 8080"
+        echo "    • Any OpenAI-compatible speech API"
+        echo ""
+        read -p "Enter remote server URL (or leave blank to set later): " REMOTE_API_URL_INPUT
+        if [ -n "$REMOTE_API_URL_INPUT" ]; then
+            REMOTE_API_URL="$REMOTE_API_URL_INPUT"
+            REMOTE_DISPLAY="$REMOTE_API_URL"
+        else
+            REMOTE_API_URL=""
+            REMOTE_DISPLAY="(configure later in Settings)"
+        fi
+        echo ""
+    fi
+
+    # Step 4: Model download preference (skip for remote_api)
+    if [[ "$SELECTED_ENGINE" != "remote_api" ]]; then
     print_header "Step 4: Model Download"
     echo ""
     echo "Speech recognition models can be downloaded now or later."
@@ -1052,6 +1243,11 @@ EOF
     else
         MODELS_DISPLAY="Download now (recommended)"
     fi
+    else
+        # Remote API: No need to download model
+        SKIP_MODELS="yes"
+        MODELS_DISPLAY="Not needed (remote processing)"
+    fi
 
     # Summary
     print_header "Installation Summary"
@@ -1062,6 +1258,9 @@ EOF
         if [[ "${WHISPERCPP_BACKEND}" == "gpu" ]]; then
             echo "  Note: GPU build will compile from source (2-5 minutes)"
         fi
+    fi
+    if [[ "$SELECTED_ENGINE" == "remote_api" ]]; then
+        echo "  Remote Server: $REMOTE_DISPLAY"
     fi
     echo "  Models: $MODELS_DISPLAY"
     echo "  Install Location: ${INSTALL_DIR:-\$HOME/.local/share/vocalinux}"
@@ -1144,7 +1343,7 @@ if [[ "$NON_INTERACTIVE" == "yes" ]] && [[ -z "$SELECTED_ENGINE" ]]; then
     # Default to whisper.cpp for best performance
     SELECTED_ENGINE="whisper_cpp"
     print_info "Automatic mode: Installing with whisper.cpp (default engine)"
-    print_info "For other engines, use: --engine=whisper or --engine=vosk"
+    print_info "For other engines, use: --engine=whisper or --engine=vosk or --engine=remote_api"
     echo ""
 fi
 
@@ -1295,21 +1494,21 @@ install_system_dependencies() {
     # Debian install they are absent and cause CMake's bootstrap to fail (Hurdle 2 from
     # https://medium.com/@cslev/talking-to-my-linux-box-without-talking-to-the-cloud-vocalinux-on-debian-without-the-tears-10bf053ea21b).
     local PYWHISPERCPP_BUILD_DEPS="libssl-dev autoconf automake libtool patchelf"
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
-    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
+    local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
-    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip wl-clipboard"
-    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config cmake wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip wl-clipboard"
-    local ZYPPER_PACKAGES="gtk3 ibus-devel gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip xclip wl-clipboard typelib-1_0-Notify-0_7 libnotify4"
+    local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip xsel wl-clipboard"
+    local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config cmake wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip xsel wl-clipboard"
+    local ZYPPER_PACKAGES="gtk3 ibus-devel gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip xclip xsel wl-clipboard typelib-1_0-Notify-0_7 libnotify4"
     # Gentoo uses Portage and different package naming convention
-    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf cmake dev-util/glslang x11-misc/xclip gui-apps/wl-clipboard"
+    local EMERGE_PACKAGES="dev-python/pygobject:3 x11-libs/gtk+:3 dev-libs/libayatana-appindicator media-libs/portaudio dev-lang/python:3.9 pkgconf cmake dev-util/glslang x11-misc/xclip x11-misc/xsel gui-apps/wl-clipboard"
     # Alpine Linux uses apk and has musl libc
-    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf cmake wget curl unzip glslang vulkan-tools xclip wl-clipboard"
+    local APK_PACKAGES="py3-gobject3 py3-pip gtk+3.0 py3-cairo portaudio-dev py3-virtualenv pkgconf cmake wget curl unzip glslang vulkan-tools xclip xsel wl-clipboard"
     # Void Linux uses xbps
-    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator-gtk3 gobject-introspection portaudio-devel python3-devel pkg-config cmake wget curl unzip glslang Vulkan-Tools xclip wl-clipboard"
+    local XBPS_PACKAGES="python3-pip python3-gobject gtk+3 libappindicator-gtk3 gobject-introspection portaudio-devel python3-devel pkg-config cmake wget curl unzip glslang Vulkan-Tools xclip xsel wl-clipboard"
     # Solus uses eopkg
-    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip glslang vulkan-tools xclip wl-clipboard"
+    local EOPKG_PACKAGES="python3-pip python3-gobject gtk3 libappindicator gobject-introspection-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip glslang vulkan-tools xclip xsel wl-clipboard"
 
     local MISSING_PACKAGES=""
     local INSTALL_CMD=""
@@ -1659,7 +1858,7 @@ install_system_dependencies() {
             print_info "4. Or install from source in a virtual environment:"
             print_info "   python3 -m venv venv"
             print_info "   source venv/bin/activate"
-            print_info "   pip install -e .[whisper]"
+            print_info "   pip install -e .[whisper,vad]"
             print_info ""
             print_info "For more information, see the project wiki:"
             print_info "  https://github.com/jatinkrmalik/vocalinux/wiki"
@@ -1716,6 +1915,9 @@ install_text_input_tools() {
     fi
 
     print_info "Detected session type: $SESSION_TYPE"
+    if [[ "$SESSION_TYPE" == "wayland" ]] && is_kde_plasma_session; then
+        print_kde_wayland_ibus_hint
+    fi
 
     # Install appropriate tools based on session type and distribution
     case "$SESSION_TYPE" in
@@ -2063,6 +2265,7 @@ ACTIVATION_SCRIPT="$ACTIVATION_SCRIPT_DIR/activate-vocalinux.sh"
 cat > "$ACTIVATION_SCRIPT" << EOF
 #!/bin/bash
 # This script activates the Vocalinux virtual environment
+export PYTHONNOUSERSITE=1
 source "$VENV_DIR/bin/activate"
 echo "Vocalinux virtual environment activated."
 echo "To start the application, run: vocalinux"
@@ -2089,7 +2292,7 @@ for attr in ("getsitepackages",):
         pass
 
 user_site = getattr(site, "getusersitepackages", lambda: None)()
-if user_site:
+if user_site and getattr(site, "ENABLE_USER_SITE", False):
     roots.append(user_site)
 
 for key in ("platlib", "purelib"):
@@ -2124,6 +2327,138 @@ print(":".join(dirs))
 PY
 }
 
+is_pywhispercpp_gpu_capable() {
+    local LIB_DIRS
+    LIB_DIRS=$(get_pywhispercpp_library_path || true)
+    [ -n "$LIB_DIRS" ] || return 1
+
+    local IFS=:
+    for dir in $LIB_DIRS; do
+        if [ -f "$dir/libggml-vulkan.so" ] || [ -f "$dir/libggml-cuda.so" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+is_pywhispercpp_backend_capable() {
+    local BACKEND
+    BACKEND=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+
+    local LIB_DIRS
+    LIB_DIRS=$(get_pywhispercpp_library_path || true)
+    [ -n "$LIB_DIRS" ] || return 1
+
+    local EXPECTED_LIB=""
+    case "$BACKEND" in
+        cuda)
+            EXPECTED_LIB="libggml-cuda.so"
+            ;;
+        vulkan)
+            EXPECTED_LIB="libggml-vulkan.so"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    local IFS=:
+    local LIB_DIR
+    for LIB_DIR in $LIB_DIRS; do
+        if compgen -G "$LIB_DIR/$EXPECTED_LIB*" >/dev/null; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+is_pywhispercpp_cuda_linkage_usable() {
+    if ! command -v readelf >/dev/null 2>&1; then
+        print_warning "readelf not found; skipping CUDA linkage verification." >&2
+        return 0
+    fi
+
+    local LIB_DIRS
+    LIB_DIRS=$(get_pywhispercpp_library_path || true)
+    [ -n "$LIB_DIRS" ] || return 1
+
+    local HAS_PATCHELF=false
+    if command -v patchelf >/dev/null 2>&1; then
+        HAS_PATCHELF=true
+    fi
+
+    local IFS=:
+    local LIB_DIR
+    for LIB_DIR in $LIB_DIRS; do
+        local CUDA_LIB
+        for CUDA_LIB in "$LIB_DIR"/libggml-cuda.so*; do
+            [ -f "$CUDA_LIB" ] || continue
+            local BUNDLED_LIBS
+            BUNDLED_LIBS=$(readelf -d "$CUDA_LIB" 2>/dev/null | sed -En 's/.*Shared library: \[(libcuda-[^]]+\.so).*/\1/p')
+            if [ -z "$BUNDLED_LIBS" ]; then
+                continue
+            fi
+
+            local BUNDLED_LIB
+            while IFS= read -r BUNDLED_LIB; do
+                [ -n "$BUNDLED_LIB" ] || continue
+                print_warning "CUDA backend links against bundled $BUNDLED_LIB instead of libcuda.so.1:"
+                print_warning "  $CUDA_LIB"
+
+                if [[ "$HAS_PATCHELF" == "true" ]]; then
+                    print_info "Attempting to relink with patchelf ($BUNDLED_LIB → libcuda.so.1)..."
+                    if patchelf --replace-needed "$BUNDLED_LIB" libcuda.so.1 "$CUDA_LIB" 2>/dev/null; then
+                        print_success "Successfully relinked $CUDA_LIB to libcuda.so.1"
+                    else
+                        print_warning "patchelf relink failed for $CUDA_LIB"
+                        print_warning "Treating CUDA verification as failed so the installer does not report broken GPU support."
+                        return 1
+                    fi
+                else
+                    print_warning "Install patchelf to attempt automatic relinking: sudo apt install patchelf"
+                    print_warning "Treating CUDA verification as failed so the installer does not report broken GPU support."
+                    return 1
+                fi
+            done <<< "$BUNDLED_LIBS"
+        done
+    done
+
+    return 0
+}
+
+verify_pywhispercpp_backend_install() {
+    local BACKEND="$1"
+
+    if ! is_pywhispercpp_installed; then
+        print_warning "pywhispercpp installed but import verification failed for $BACKEND backend."
+        return 1
+    fi
+
+    if ! is_pywhispercpp_backend_capable "$BACKEND"; then
+        print_warning "pywhispercpp installed but $BACKEND backend libraries were not found."
+        return 1
+    fi
+
+    if [[ "$BACKEND" == "CUDA" ]] && ! is_pywhispercpp_cuda_linkage_usable; then
+        return 1
+    fi
+
+    return 0
+}
+
+print_pip_log_tail() {
+    local PIP_LOG_FILE="$1"
+    local LINE_COUNT="${2:-80}"
+
+    if [ -s "$PIP_LOG_FILE" ]; then
+        print_warning "Last $LINE_COUNT lines from pip build log ($PIP_LOG_FILE):"
+        tail -n "$LINE_COUNT" "$PIP_LOG_FILE" | sed 's/^/    /'
+    else
+        print_warning "Pip build log is empty or missing: $PIP_LOG_FILE"
+    fi
+}
+
 with_pywhispercpp_library_path() {
     local PYWHISPERCPP_LIBRARY_PATH
     PYWHISPERCPP_LIBRARY_PATH=$(get_pywhispercpp_library_path || true)
@@ -2145,7 +2480,7 @@ install_cpu_pywhispercpp() {
     PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
 
     CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" \
-        pip install --force-reinstall --no-cache-dir pywhispercpp --log "$PIP_LOG_FILE"
+        pip install --verbose --force-reinstall --no-cache-dir pywhispercpp --log "$PIP_LOG_FILE"
 }
 
 is_pywhispercpp_installed() {
@@ -2183,9 +2518,18 @@ should_rebuild_whispercpp() {
     esac
 
     if [[ "$NON_INTERACTIVE" == "yes" ]]; then
+        if [[ "$HAS_NVIDIA_GPU" == "yes" || "$HAS_VULKAN" == "yes" ]] && ! is_pywhispercpp_gpu_capable; then
+            print_info "Non-interactive mode: GPU detected but pywhispercpp lacks GPU support. Rebuilding..."
+            return 0
+        fi
         print_info "Non-interactive mode: reusing existing pywhispercpp installation."
         print_info "Use --rebuild-whispercpp to force a rebuild."
         return 1
+    fi
+
+    if [[ "$HAS_NVIDIA_GPU" == "yes" || "$HAS_VULKAN" == "yes" ]] && ! is_pywhispercpp_gpu_capable; then
+        print_info "GPU detected but pywhispercpp lacks GPU support. Rebuilding..."
+        return 0
     fi
 
     read -p "Rebuild/reinstall pywhispercpp? This can take several minutes. (y/N) " -n 1 -r
@@ -2196,6 +2540,193 @@ should_rebuild_whispercpp() {
 
     print_info "Reusing existing pywhispercpp installation."
     return 1
+}
+
+install_whispercpp_with_gpu_support() {
+    local PIP_LOG_FILE="$1"
+
+    print_info ""
+    print_info "╔════════════════════════════════════════════════════════╗"
+    print_info "║  Installing WHISPER.CPP (Recommended)                  ║"
+    print_info "╠════════════════════════════════════════════════════════╣"
+    print_info "║  • Fastest speech recognition                          ║"
+    print_info "║  • Works with any GPU: NVIDIA, AMD, Intel              ║"
+    print_info "║  • Uses Vulkan for GPU acceleration                    ║"
+    print_info "║  • CPU-only mode available                             ║"
+    print_info "╚════════════════════════════════════════════════════════╝"
+    print_info ""
+
+    # Detect GPU and install pywhispercpp with appropriate GPU support
+    detect_nvidia_gpu || true
+    detect_vulkan || true
+
+    local GPU_BACKEND="CPU"
+    local GPU_INSTALL_SUCCESS=false
+    local SKIP_WHISPERCPP_INSTALL=false
+    local PYWHISPERCPP_CMAKE_ARGS
+    PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
+
+    if [[ "$WHISPERCPP_ALREADY_INSTALLED" == "true" ]]; then
+        GPU_BACKEND="existing"
+        if should_rebuild_whispercpp; then
+            print_info "Existing pywhispercpp will be replaced."
+        else
+            SKIP_WHISPERCPP_INSTALL=true
+        fi
+    fi
+
+    # Check if user explicitly chose CPU backend in interactive mode
+    if [[ "$SKIP_WHISPERCPP_INSTALL" == "true" ]]; then
+        print_info "Skipping pywhispercpp reinstall; existing compiled bindings remain in place."
+    elif [[ "${WHISPERCPP_BACKEND}" == "cpu" ]]; then
+        print_info "ℹ Installing CPU-only version (as requested)..."
+        GPU_BACKEND="CPU"
+    else
+        # Try Vulkan first (works with all GPUs: NVIDIA, AMD, Intel)
+        if [[ "$HAS_VULKAN" == "yes" ]]; then
+            print_info "✓ Vulkan detected: $VULKAN_DEVICE"
+            print_info "  Installing pywhispercpp with Vulkan support..."
+            GPU_BACKEND="Vulkan"
+            print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
+            if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" \
+                GGML_VULKAN=1 \
+                pip install --verbose --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                if verify_pywhispercpp_backend_install "$GPU_BACKEND"; then
+                    GPU_INSTALL_SUCCESS=true
+                else
+                    print_pip_log_tail "$PIP_LOG_FILE"
+                fi
+            else
+                print_warning "Vulkan build failed; checking for NVIDIA GPU to try CUDA..."
+                print_pip_log_tail "$PIP_LOG_FILE"
+            fi
+        fi
+
+        # If Vulkan failed or not available, try CUDA for NVIDIA GPUs
+        if [[ "$GPU_INSTALL_SUCCESS" != "true" && "$HAS_NVIDIA_GPU" == "yes" ]]; then
+            print_info "✓ NVIDIA GPU detected: $GPU_NAME"
+            print_info "  Installing pywhispercpp with CUDA support..."
+            GPU_BACKEND="CUDA"
+
+            local CUDA_TOOLKIT_ROOT=""
+            local CUDA_CMAKE_ARGS=""
+            if CUDA_TOOLKIT_ROOT=$(find_valid_cuda_toolkit_root); then
+                if CUDA_CMAKE_ARGS=$(get_cuda_cmake_args "$CUDA_TOOLKIT_ROOT"); then
+                    print_info "Using CUDA toolkit: $CUDA_TOOLKIT_ROOT"
+                    print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
+                    if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS $CUDA_CMAKE_ARGS" \
+                        GGML_CUDA=1 \
+                        pip install --verbose --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
+                        if verify_pywhispercpp_backend_install "$GPU_BACKEND"; then
+                            GPU_INSTALL_SUCCESS=true
+                        else
+                            print_pip_log_tail "$PIP_LOG_FILE"
+                        fi
+                    else
+                        print_warning "CUDA build failed."
+                        print_pip_log_tail "$PIP_LOG_FILE"
+                    fi
+                else
+                    print_warning "Skipping CUDA build because the detected toolkit cannot target this NVIDIA GPU."
+                fi
+            else
+                print_warning "No complete CUDA toolkit root found; skipping CUDA build."
+                print_info "  Required CUDA files: bin/nvcc, include/cuda_runtime.h, and libcudart.so*"
+            fi
+        fi
+    fi
+
+    # Fall back to CPU version if GPU install failed or no GPU detected
+    if [[ "$SKIP_WHISPERCPP_INSTALL" != "true" && "$GPU_INSTALL_SUCCESS" != "true" ]]; then
+        if [[ "$GPU_BACKEND" != "CPU" ]]; then
+            print_warning "Failed to install pywhispercpp with $GPU_BACKEND support, falling back to CPU version..."
+
+            # Provide helpful error messages for common issues
+            if [[ "$GPU_BACKEND" == "Vulkan" ]]; then
+                print_info "  To use Vulkan GPU acceleration, please install Vulkan development libraries:"
+                print_info "    Ubuntu/Debian: sudo apt install libvulkan-dev vulkan-tools glslc || glslang-tools"
+                print_info "    Fedora: sudo dnf install vulkan-loader-devel vulkan-tools glslang"
+                print_info "    Arch: sudo pacman -S vulkan-headers vulkan-tools glslang"
+                print_info "    openSUSE: sudo zypper install vulkan-devel vulkan-tools shaderc"
+            elif [[ "$GPU_BACKEND" == "CUDA" ]]; then
+                print_info "  To use CUDA GPU acceleration, please install CUDA toolkit:"
+                print_info "    Visit: https://developer.nvidia.com/cuda-downloads"
+            fi
+        elif [[ "${WHISPERCPP_BACKEND}" != "cpu" ]]; then
+            print_info "ℹ No GPU detected - installing CPU-only version"
+            print_info "  CPU mode is still very fast!"
+        fi
+        if [[ "$GPU_BACKEND" != "CPU" ]]; then
+            print_warning "Continuing with CPU-only pywhispercpp; GPU acceleration is not active."
+        fi
+        GPU_BACKEND="CPU"
+        print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
+        install_cpu_pywhispercpp "$PIP_LOG_FILE" || {
+            print_error "Failed to install pywhispercpp"
+            return 1
+        }
+    fi
+
+    if [[ "$SKIP_WHISPERCPP_INSTALL" == "true" ]]; then
+        print_success "pywhispercpp reused from existing installation"
+    else
+        print_success "pywhispercpp installed with $GPU_BACKEND backend"
+    fi
+
+    if ! is_pywhispercpp_installed; then
+        print_warning "pywhispercpp installed but import verification failed."
+        print_warning "This can happen when libwhisper.so is installed beside the Python extension without a runtime library path."
+
+        if [[ "$SKIP_WHISPERCPP_INSTALL" != "true" ]]; then
+            print_warning "Trying RPATH-aware CPU pywhispercpp fallback..."
+            GPU_BACKEND="CPU"
+            if install_cpu_pywhispercpp "$PIP_LOG_FILE"; then
+                print_success "CPU pywhispercpp fallback installed"
+            else
+                print_warning "CPU pywhispercpp fallback installation failed"
+            fi
+        fi
+    fi
+
+    if ! is_pywhispercpp_installed; then
+        print_warning "pywhispercpp is still unavailable; setting VOSK as the default engine so Vocalinux can start."
+        print_warning "You can switch back to whisper.cpp from Settings after reinstalling pywhispercpp."
+        SELECTED_ENGINE="vosk"
+
+        local FALLBACK_VOSK_CONFIG="$CONFIG_DIR/config.json"
+        if [ ! -f "$FALLBACK_VOSK_CONFIG" ]; then
+            mkdir -p "$CONFIG_DIR"
+            cat > "$FALLBACK_VOSK_CONFIG" << 'FALLBACK_VOSK_CONFIG'
+{
+    "speech_recognition": {
+        "engine": "vosk",
+        "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+FALLBACK_VOSK_CONFIG
+        fi
+    fi
+    echo ""
 }
 
 # Function to install Python package with error handling and verification
@@ -2224,6 +2755,40 @@ install_python_package() {
         return $?
     }
 
+    # Silero/ONNX Runtime gives much better speech/silence decisions, but
+    # onnxruntime wheels are not guaranteed for every Python/platform combo.
+    # Install it opportunistically so fresh installs and rerun-updates get the
+    # neural VAD when available without blocking the amplitude fallback path.
+    install_vad_support() {
+        local PIP_LOG_FILE="$1"
+        local EDITABLE_MODE="${2:-no}"
+
+        print_info "Installing neural VAD support (Silero / ONNX Runtime)..."
+        local VAD_INSTALL_SUCCESS=false
+        if [[ "$EDITABLE_MODE" == "yes" ]]; then
+            pip install -e ".[vad]" --log "$PIP_LOG_FILE" && VAD_INSTALL_SUCCESS=true
+        else
+            pip install ".[vad]" --log "$PIP_LOG_FILE" && VAD_INSTALL_SUCCESS=true
+        fi
+
+        if [[ "$VAD_INSTALL_SUCCESS" == "true" ]]; then
+            if "$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+from vocalinux.speech_recognition.silero_vad import is_silero_available
+raise SystemExit(0 if is_silero_available() else 1)
+PY
+            then
+                print_success "Neural VAD support installed and verified successfully."
+            else
+                print_warning "Neural VAD dependencies installed, but Silero VAD could not be verified."
+                print_warning "Vocalinux will use amplitude-based VAD until this is resolved."
+            fi
+        else
+            print_warning "Failed to install neural VAD support."
+            print_warning "Vocalinux will still work using amplitude-based VAD."
+            print_warning "Check the pip log for details: $PIP_LOG_FILE"
+        fi
+    }
+
     if [[ "$DEV_MODE" == "yes" ]]; then
         print_info "Installing Vocalinux in development mode..."
 
@@ -2242,10 +2807,16 @@ install_python_package() {
 
         # Install all optional dependencies for development
         print_info "Installing all optional dependencies for development..."
-        pip install ".[whisper,dev]" --log "$PIP_LOG_FILE" || {
+        pip install -e ".[whisper,dev]" --log "$PIP_LOG_FILE" || {
             print_warning "Failed to install some optional dependencies."
             print_warning "Some features may not work correctly."
         }
+
+        install_vad_support "$PIP_LOG_FILE" yes
+
+        if [[ "${SELECTED_ENGINE:-whisper_cpp}" == "whisper_cpp" ]]; then
+            install_whispercpp_with_gpu_support "$PIP_LOG_FILE"
+        fi
     else
         print_info "Installing Vocalinux..."
 
@@ -2256,162 +2827,15 @@ install_python_package() {
             return 1
         }
 
+        install_vad_support "$PIP_LOG_FILE"
+
         # Engine installation logic:
         # - SELECTED_ENGINE is set by interactive mode or --engine flag
         # - WHISPERCPP_BACKEND is set by interactive mode ("gpu" or "cpu")
         # - Default is whisper_cpp for best performance
         case "${SELECTED_ENGINE:-whisper_cpp}" in
             whisper_cpp)
-                print_info ""
-                print_info "╔════════════════════════════════════════════════════════╗"
-                print_info "║  Installing WHISPER.CPP (Recommended)                  ║"
-                print_info "╠════════════════════════════════════════════════════════╣"
-                print_info "║  • Fastest speech recognition                          ║"
-                print_info "║  • Works with any GPU: NVIDIA, AMD, Intel              ║"
-                print_info "║  • Uses Vulkan for GPU acceleration                    ║"
-                print_info "║  • CPU-only mode available                             ║"
-                print_info "╚════════════════════════════════════════════════════════╝"
-                print_info ""
-
-                # Detect GPU and install pywhispercpp with appropriate GPU support
-                detect_nvidia_gpu || true
-                detect_vulkan || true
-
-                local GPU_BACKEND="CPU"
-                local GPU_INSTALL_SUCCESS=false
-                local SKIP_WHISPERCPP_INSTALL=false
-                local PYWHISPERCPP_CMAKE_ARGS
-                PYWHISPERCPP_CMAKE_ARGS=$(get_pywhispercpp_cmake_args)
-
-                if [[ "$WHISPERCPP_ALREADY_INSTALLED" == "true" ]]; then
-                    GPU_BACKEND="existing"
-                    if should_rebuild_whispercpp; then
-                        print_info "Existing pywhispercpp will be replaced."
-                    else
-                        SKIP_WHISPERCPP_INSTALL=true
-                    fi
-                fi
-
-                # Check if user explicitly chose CPU backend in interactive mode
-                if [[ "$SKIP_WHISPERCPP_INSTALL" == "true" ]]; then
-                    print_info "Skipping pywhispercpp reinstall; existing compiled bindings remain in place."
-                elif [[ "${WHISPERCPP_BACKEND}" == "cpu" ]]; then
-                    print_info "ℹ Installing CPU-only version (as requested)..."
-                    GPU_BACKEND="CPU"
-                else
-                    # Try Vulkan first (works with all GPUs: NVIDIA, AMD, Intel)
-                    if [[ "$HAS_VULKAN" == "yes" ]]; then
-                        print_info "✓ Vulkan detected: $VULKAN_DEVICE"
-                        print_info "  Installing pywhispercpp with Vulkan support..."
-                        GPU_BACKEND="Vulkan"
-                        print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                        if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_VULKAN=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
-                            GPU_INSTALL_SUCCESS=true
-                        else
-                            print_warning "Vulkan build failed - checking for NVIDIA GPU to try CUDA..."
-                        fi
-                    fi
-
-                    # If Vulkan failed or not available, try CUDA for NVIDIA GPUs
-                    if [[ "$GPU_INSTALL_SUCCESS" != "true" && "$HAS_NVIDIA_GPU" == "yes" ]]; then
-                        print_info "✓ NVIDIA GPU detected: $GPU_NAME"
-                        print_info "  Installing pywhispercpp with CUDA support..."
-                        GPU_BACKEND="CUDA"
-                        print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                        if CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$PYWHISPERCPP_CMAKE_ARGS" GGML_CUDA=1 pip install --force-reinstall --no-cache-dir git+https://github.com/absadiki/pywhispercpp --log "$PIP_LOG_FILE" 2>&1; then
-                            GPU_INSTALL_SUCCESS=true
-                        fi
-                    fi
-                fi
-
-                # Fall back to CPU version if GPU install failed or no GPU detected
-                if [[ "$SKIP_WHISPERCPP_INSTALL" != "true" && "$GPU_INSTALL_SUCCESS" != "true" ]]; then
-                    if [[ "$GPU_BACKEND" != "CPU" ]]; then
-                        print_warning "Failed to install pywhispercpp with $GPU_BACKEND support, falling back to CPU version..."
-
-                        # Provide helpful error messages for common issues
-                        if [[ "$GPU_BACKEND" == "Vulkan" ]]; then
-                            print_info "  To use Vulkan GPU acceleration, please install Vulkan development libraries:"
-                            print_info "    Ubuntu/Debian: sudo apt install libvulkan-dev vulkan-tools glslc || glslang-tools"
-                            print_info "    Fedora: sudo dnf install vulkan-loader-devel vulkan-tools glslang"
-                            print_info "    Arch: sudo pacman -S vulkan-headers vulkan-tools glslang"
-                            print_info "    openSUSE: sudo zypper install vulkan-devel vulkan-tools shaderc"
-                        elif [[ "$GPU_BACKEND" == "CUDA" ]]; then
-                            print_info "  To use CUDA GPU acceleration, please install CUDA toolkit:"
-                            print_info "    Visit: https://developer.nvidia.com/cuda-downloads"
-                        fi
-                    elif [[ "${WHISPERCPP_BACKEND}" != "cpu" ]]; then
-                        print_info "ℹ No GPU detected - installing CPU-only version"
-                        print_info "  CPU mode is still very fast!"
-                    fi
-                    GPU_BACKEND="CPU"
-                    print_info "Installing pywhispercpp ($GPU_BACKEND backend)..."
-                    install_cpu_pywhispercpp "$PIP_LOG_FILE" || {
-                        print_error "Failed to install pywhispercpp"
-                        return 1
-                    }
-                fi
-
-                if [[ "$SKIP_WHISPERCPP_INSTALL" == "true" ]]; then
-                    print_success "pywhispercpp reused from existing installation"
-                else
-                    print_success "pywhispercpp installed with $GPU_BACKEND backend"
-                fi
-
-                if ! is_pywhispercpp_installed; then
-                    print_warning "pywhispercpp installed but import verification failed."
-                    print_warning "This can happen when libwhisper.so is installed beside the Python extension without a runtime library path."
-
-                    if [[ "$SKIP_WHISPERCPP_INSTALL" != "true" ]]; then
-                        print_warning "Trying RPATH-aware CPU pywhispercpp fallback..."
-                        GPU_BACKEND="CPU"
-                        if install_cpu_pywhispercpp "$PIP_LOG_FILE"; then
-                            print_success "CPU pywhispercpp fallback installed"
-                        else
-                            print_warning "CPU pywhispercpp fallback installation failed"
-                        fi
-                    fi
-                fi
-
-                if ! is_pywhispercpp_installed; then
-                    print_warning "pywhispercpp is still unavailable; setting VOSK as the default engine so Vocalinux can start."
-                    print_warning "You can switch back to whisper.cpp from Settings after reinstalling pywhispercpp."
-                    SELECTED_ENGINE="vosk"
-
-                    local FALLBACK_VOSK_CONFIG="$CONFIG_DIR/config.json"
-                    if [ ! -f "$FALLBACK_VOSK_CONFIG" ]; then
-                        mkdir -p "$CONFIG_DIR"
-                        cat > "$FALLBACK_VOSK_CONFIG" << 'FALLBACK_VOSK_CONFIG'
-{
-    "speech_recognition": {
-        "engine": "vosk",
-        "model_size": "small",
-        "vosk_model_size": "small",
-        "whisper_model_size": "tiny",
-        "whisper_cpp_model_size": "tiny",
-        "vad_sensitivity": 3,
-        "silence_timeout": 2.0
-    },
-    "audio": {
-        "device_index": null,
-        "device_name": null
-    },
-    "shortcuts": {
-        "toggle_recognition": "ctrl+ctrl"
-    },
-    "ui": {
-        "start_minimized": false,
-        "show_notifications": true
-    },
-    "advanced": {
-        "debug_logging": false,
-        "wayland_mode": false
-    }
-}
-FALLBACK_VOSK_CONFIG
-                    fi
-                fi
-                echo ""
+                install_whispercpp_with_gpu_support "$PIP_LOG_FILE"
                 ;;
 
             whisper)
@@ -2569,6 +2993,74 @@ FALLBACK_CONFIG
 VOSK_CONFIG
                 fi
                 ;;
+
+            remote_api)
+                print_info "Setting up Remote API engine..."
+                print_info ""
+                print_info "╔════════════════════════════════════════════════════════╗"
+                print_info "║  Setting up REMOTE API Engine                          ║"
+                print_info "╠════════════════════════════════════════════════════════╣"
+                print_info "║  • Offloads speech recognition to a remote server      ║"
+                print_info "║  • Ideal for laptops without GPU                       ║"
+                print_info "║  • Supports whisper.cpp server & OpenAI APIs           ║"
+                print_info "║  • Requires: a server running on your network          ║"
+                print_info "╚════════════════════════════════════════════════════════╝"
+                print_info ""
+
+                # Ensure requests library is installed
+                print_info "Installing requests library..."
+                pip install requests --log "$PIP_LOG_FILE" || {
+                    print_error "Failed to install requests library"
+                    return 1
+                }
+                print_success "requests library installed"
+
+                # URL was collected upfront by run_interactive_install
+                # (or left blank in auto/non-interactive mode).
+                local REMOTE_API_URL="${REMOTE_API_URL:-}"
+
+                # Create configuration file
+                local REMOTE_CONFIG_FILE="$CONFIG_DIR/config.json"
+                if [ ! -f "$REMOTE_CONFIG_FILE" ]; then
+                    mkdir -p "$CONFIG_DIR"
+                    cat > "$REMOTE_CONFIG_FILE" << REMOTE_CONFIG
+{
+    "speech_recognition": {
+        "engine": "remote_api",
+        "model_size": "small",
+        "vosk_model_size": "small",
+        "whisper_model_size": "tiny",
+        "whisper_cpp_model_size": "tiny",
+        "remote_api_url": "${REMOTE_API_URL}",
+        "remote_api_key": "",
+        "vad_sensitivity": 3,
+        "silence_timeout": 2.0
+    },
+    "audio": {
+        "device_index": null,
+        "device_name": null
+    },
+    "shortcuts": {
+        "toggle_recognition": "ctrl+ctrl"
+    },
+    "ui": {
+        "start_minimized": false,
+        "show_notifications": true
+    },
+    "advanced": {
+        "debug_logging": false,
+        "wayland_mode": false
+    }
+}
+REMOTE_CONFIG
+                fi
+
+                if [ -n "$REMOTE_API_URL" ]; then
+                    print_success "Remote API configured with server: $REMOTE_API_URL"
+                else
+                    print_warning "No server URL configured. You can set it later in Settings."
+                fi
+                ;;
         esac
     fi
 
@@ -2590,14 +3082,22 @@ VOSK_CONFIG
 #!/bin/bash
 # Wrapper script for Vocalinux that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
+export PYTHONNOUSERSITE=1
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 PYWHISPERCPP_LIBRARY_PATH=""
 PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import site
 import sysconfig
 
 paths = []
 for key in ("platlib", "purelib"):
     path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+user_site = getattr(site, "getusersitepackages", lambda: None)()
+if user_site and user_site not in paths:
+    paths.append(user_site)
+for path in getattr(site, "getsitepackages", lambda: [])():
     if path and path not in paths:
         paths.append(path)
 print(" ".join(paths))
@@ -2634,14 +3134,22 @@ WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux GUI that sets required environment variables
 # and applies the 'input' group for keyboard shortcuts on Wayland
+export PYTHONNOUSERSITE=1
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 PYWHISPERCPP_LIBRARY_PATH=""
 PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import site
 import sysconfig
 
 paths = []
 for key in ("platlib", "purelib"):
     path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+user_site = getattr(site, "getusersitepackages", lambda: None)()
+if user_site and user_site not in paths:
+    paths.append(user_site)
+for path in getattr(site, "getsitepackages", lambda: [])():
     if path and path not in paths:
         paths.append(path)
 print(" ".join(paths))
@@ -3304,6 +3812,10 @@ EOF
         vosk)
             ENGINE_DISPLAY_NAME="VOSK"
             BACKEND_INFO="Lightweight"
+            ;;
+        remote_api)
+            ENGINE_DISPLAY_NAME="Remote API"
+            BACKEND_INFO="Network (offloaded to remote server)"
             ;;
     esac
 

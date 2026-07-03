@@ -15,7 +15,8 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install
 That's it! The installer handles everything automatically:
 - ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
 - ✅ Auto-detects your GPU (AMD, Intel, NVIDIA all supported)
-- ✅ Downloads the tiny model (~39MB)
+- ✅ Installs neural VAD support when ONNX Runtime is available
+- ✅ Downloads the default whisper.cpp tiny model (~74MB)
 - ✅ Configures everything automatically
 
 > ⏱️ **Installation Time**: ~1-2 minutes (vs 5-10 minutes with old Whisper AI)
@@ -40,7 +41,7 @@ sudo apt install -y \
     python3-venv python3-dev python3-gi python3-gi-cairo \
     gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
     libgirepository1.0-dev libcairo2-dev portaudio19-dev \
-    pkg-config xdotool wtype
+    pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -55,7 +56,7 @@ vocalinux
 sudo dnf install -y \
     python3-virtualenv python3-devel python3-gobject gtk3 gtk3-devel \
     libappindicator-gtk3 gobject-introspection-devel portaudio-devel \
-    pkg-config xdotool wtype
+    pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -69,7 +70,7 @@ vocalinux
 ```bash
 sudo pacman -S --needed \
     python python-virtualenv python-gobject gtk3 libappindicator-gtk3 \
-    gobject-introspection python-cairo portaudio pkg-config xdotool wtype
+    gobject-introspection python-cairo portaudio pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -88,7 +89,7 @@ sudo zypper install -y \
     typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
     typelib-1_0-Notify-0_7 libnotify4 \
     gobject-introspection-devel portaudio-devel "${PYVER}-devel" \
-    "${PYVER}-virtualenv" pkg-config xdotool wtype
+    "${PYVER}-virtualenv" pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -202,18 +203,19 @@ Examples:
    - **whisper.cpp** (default): High-performance C++ engine with Vulkan GPU support
    - **Whisper**: OpenAI's PyTorch-based engine (NVIDIA GPU only)
    - **VOSK**: Lightweight engine for older systems
-5. **Downloads speech recognition models**:
-   - whisper.cpp: ~39MB tiny model (or larger if selected)
+5. **Installs neural VAD support** when ONNX Runtime is available, with a safe amplitude-VAD fallback otherwise
+6. **Downloads speech recognition models**:
+   - whisper.cpp: default ~74MB tiny model; selectable variants range from smaller quantized models to large models
    - Whisper: ~75MB tiny model + PyTorch dependencies (~2.3GB with CUDA)
    - VOSK: ~40MB small model
-6. **Installs desktop integration** (icons, .desktop file)
-7. **Creates activation script** for easy environment activation
+7. **Installs desktop integration** (icons, .desktop file)
+8. **Creates activation script** for easy environment activation
 
 ### Installation Time Comparison
 
 | Engine | Download Size | Install Time | GPU Support |
 |--------|---------------|--------------|-------------|
-| **whisper.cpp** (default) | ~39-500MB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
+| **whisper.cpp** (default) | ~74MB default; variants from ~15MB-3GB | ~1-2 min | AMD, Intel, NVIDIA (Vulkan) |
 | Whisper (OpenAI) | ~2.3GB+ | ~5-10 min | NVIDIA only (CUDA) |
 | VOSK | ~40MB | ~30 sec | CPU only |
 
@@ -245,6 +247,8 @@ vocalinux --model tiny            # Use tiny model (default, fastest)
 vocalinux --model small           # Use small model
 vocalinux --model medium          # Use medium model
 vocalinux --model large           # Use large model
+vocalinux --model medium.en-q5_0  # Use exact whisper.cpp model variant
+vocalinux --model large-v3-turbo  # Use large-v3 Turbo with whisper.cpp
 vocalinux --gpus                  # List detected Vulkan and CUDA GPUs
 vocalinux --gpu "Tesla P40"       # Persist GPU selection by device name
 vocalinux --gpu auto              # Clear saved GPU preference
@@ -301,7 +305,7 @@ sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 sudo apt install -y xdotool
 
 # For Wayland
-sudo apt install -y wtype
+sudo apt install -y wtype wl-clipboard xclip xsel
 ```
 
 **Debian 11/12:**
@@ -321,7 +325,7 @@ sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 sudo apt install -y xdotool
 
 # For Wayland
-sudo apt install -y wtype
+sudo apt install -y wtype wl-clipboard xclip xsel
 ```
 
 **Debian 13+:**
@@ -341,7 +345,7 @@ sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 sudo apt install -y xdotool
 
 # For Wayland
-sudo apt install -y wtype
+sudo apt install -y wtype wl-clipboard xclip xsel
 ```
 
 **Fedora:**
@@ -350,7 +354,7 @@ sudo dnf install -y \
     python3-pip python3-devel python3-virtualenv \
     python3-gobject gtk3 libappindicator-gtk3 \
     gobject-introspection-devel portaudio-devel \
-    wget curl unzip xdotool
+    wget curl unzip xdotool wtype wl-clipboard xclip xsel
 ```
 
 **Arch Linux:**
@@ -359,7 +363,7 @@ sudo pacman -S --noconfirm \
     python-pip python-gobject gtk3 \
     libappindicator-gtk3 gobject-introspection \
     python-cairo portaudio python-virtualenv \
-    wget curl unzip xdotool
+    wget curl unzip xdotool wtype wl-clipboard xclip xsel
 ```
 
 **openSUSE Tumbleweed:**
@@ -372,7 +376,7 @@ sudo zypper install -y \
     gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
     typelib-1_0-Notify-0_7 libnotify4 \
     gobject-introspection-devel portaudio-devel pkg-config cmake \
-    wget curl unzip xdotool wtype
+    wget curl unzip xdotool wtype wl-clipboard xclip xsel
 
 # Optional: only needed for whisper.cpp Vulkan GPU builds
 sudo zypper install -y vulkan-tools vulkan-devel shaderc
@@ -400,8 +404,11 @@ pip install .
 # With Whisper support
 pip install ".[whisper]"
 
+# With neural VAD support
+pip install ".[vad]"
+
 # Development mode
-pip install -e ".[dev]"
+pip install -e ".[dev,vad]"
 ```
 
 For PyPI instead of a local checkout, use `pip install vocalinux` after installing
@@ -436,7 +443,7 @@ gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 **whisper.cpp** is a high-performance C++ port of OpenAI's Whisper speech recognition model. It's now the **default engine** in Vocalinux because it offers significant advantages:
 
 **Performance Benefits:**
-- **10x faster installation** - No 2.3GB PyTorch download (just ~39MB model)
+- **10x faster installation** - No 2.3GB PyTorch download (just ~74MB model)
 - **C++ optimized inference** - Faster than Python-based Whisper
 - **True multi-threading** - Uses all CPU cores (no Python GIL limitations)
 - **Lower memory usage** - More efficient than PyTorch
@@ -447,12 +454,24 @@ gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 - **No special drivers** - Just needs standard Vulkan support
 
 **Models:**
-whisper.cpp uses the same models as OpenAI Whisper, converted to `ggml` format:
-- **tiny** (~39MB) - Fastest, good for real-time dictation
-- **base** (~74MB) - Good balance of speed and accuracy
-- **small** (~244MB) - Better accuracy, still fast
-- **medium** (~769MB) - High accuracy
-- **large** (~1.5GB) - Best accuracy, slower
+whisper.cpp uses OpenAI Whisper models converted to `ggml` format. Vocalinux lets you
+pick a top-level size and, for whisper.cpp, a specialization:
+
+- **tiny** (~74MB) - Fastest, good for real-time dictation
+- **base** (~141MB) - Good balance of speed and accuracy
+- **small** (~465MB) - Better accuracy, still fast
+- **medium** (~1.5GB) - High accuracy
+- **large** (~3.0GB) - Best accuracy, slower
+
+Available whisper.cpp specializations include:
+- **Standard multilingual** - Best default for auto-detect or non-English dictation
+- **English-only** - Choose when you dictate only in English
+- **Quantized** - Lower memory and smaller downloads with a possible accuracy tradeoff
+- **Turbo** - Faster large-v3 option with strong accuracy
+- **Legacy large** - Use only if you specifically need an older large model version
+
+Examples of exact whisper.cpp model IDs are `tiny.en`, `small.en-q5_1`,
+`medium-q5_0`, `medium.en-q5_0`, `large-v3-turbo`, and `large-v3-turbo-q8_0`.
 
 ### Checking GPU Support
 
@@ -498,7 +517,7 @@ Change the `engine` field:
 {
   "speech_recognition": {
     "engine": "whisper_cpp",  // Options: whisper_cpp, whisper, vosk
-    "model_size": "tiny",
+    "model_size": "tiny",     // Or an exact whisper.cpp ID like medium.en-q5_0
     "gpu_name": null,
     "gpu_backend": null
   }
@@ -510,8 +529,10 @@ The GPU fields behave as follows:
 - `gpu_name: null` and `gpu_backend: null` mean automatic GPU selection
 - set `gpu_name` via `vocalinux --gpu "GPU NAME"` to persist a named GPU
 - use `vocalinux --gpu auto` to clear the saved GPU preference
+- whisper.cpp GPU selection requires a pywhispercpp build with the matching `GGML_CUDA=1` or `GGML_VULKAN=1` backend; the default PyPI wheel may be CPU-only.
 
-Or use the GUI: Right-click tray icon → Settings → Speech Engine
+Or use the GUI: Right-click tray icon → Settings → Speech Engine. For whisper.cpp,
+the GUI splits this into **Model Size** and **Specialization**.
 
 ## Troubleshooting
 
@@ -571,11 +592,33 @@ sudo apt install xdotool
 # Test: xdotool type "hello"
 ```
 
+For KDE Plasma Wayland:
+
+1. Install IBus if it is missing:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt install ibus
+
+   # Fedora
+   sudo dnf install ibus
+
+   # Arch
+   sudo pacman -S ibus
+   ```
+2. Open **System Settings -> Keyboard -> Virtual Keyboard**.
+3. Select **IBus Wayland**.
+4. Restart Vocalinux, or log out and back in if text still does not appear.
+
 For Wayland:
 ```bash
-sudo apt install wtype
+sudo apt install wtype wl-clipboard xclip xsel
 # Test: wtype "hello"
+# Clipboard fallback test: printf "bonjour" | xsel --clipboard --input
 ```
+
+On KDE Plasma Wayland, `wtype` may fail because the compositor does not expose
+the required virtual keyboard protocol to regular clients. Use **IBus Wayland**
+from KDE System Settings for the most reliable direct text injection.
 
 ### Model Download Fails
 

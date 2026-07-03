@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { CheckCircle2, ChevronRight, Keyboard, Monitor, Terminal, Zap } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronRight,
+  Keyboard,
+  Monitor,
+  ShieldCheck,
+  Terminal,
+  Zap,
+} from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
@@ -8,7 +16,7 @@ const waylandFeatures = [
   {
     title: "Native IBus Integration",
     description:
-      "Text injection via IBus engine works seamlessly on Wayland compositors like GNOME, KDE, Sway, and Hyprland.",
+      "Text injection via IBus includes readiness checks, scoped activation, and runtime recovery for modern Wayland sessions.",
     icon: Terminal,
   },
   {
@@ -28,6 +36,12 @@ const waylandFeatures = [
     description:
       "Works with GNOME, KDE Plasma, Sway, Hyprland, river, and other Wayland compositors.",
     icon: Zap,
+  },
+  {
+    title: "Reliability Hardening",
+    description:
+      "Recent betas improve IBus startup, keyboard layout preservation, non-ASCII fallback, and suspend/resume behavior.",
+    icon: ShieldCheck,
   },
 ];
 
@@ -115,7 +129,7 @@ export default function WaylandPage() {
     headline: "Wayland Voice Dictation Support for Linux",
     description:
       "Complete guide to Vocalinux Wayland support. Voice dictation for GNOME, KDE, Sway, Hyprland, and other Wayland compositors.",
-    dateModified: "2026-03-30",
+    dateModified: "2026-06-11",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -140,7 +154,7 @@ export default function WaylandPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <Monitor className="h-4 w-4" />
           Wayland Support
         </p>
@@ -148,12 +162,12 @@ export default function WaylandPage() {
           Voice Dictation on Wayland
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Full voice dictation support for modern Wayland compositors. Works with GNOME, KDE Plasma,
-          Sway, Hyprland, and more. No X11 required.
+          Full voice dictation support for modern Wayland compositors. Works
+          with GNOME, KDE Plasma, Sway, Hyprland, and more. No X11 required.
         </p>
       </section>
 
-      <section className="mb-12 grid gap-6 sm:grid-cols-3">
+      <section className="mb-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {waylandFeatures.map((feature) => {
           const Icon = feature.icon;
           return (
@@ -163,14 +177,18 @@ export default function WaylandPage() {
             >
               <Icon className="mb-3 h-8 w-8 text-primary" />
               <h3 className="mb-2 font-semibold">{feature.title}</h3>
-              <p className="text-sm text-muted-foreground">{feature.description}</p>
+              <p className="text-sm text-muted-foreground">
+                {feature.description}
+              </p>
             </div>
           );
         })}
       </section>
 
       <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-6 text-2xl font-bold">Supported Wayland Compositors</h2>
+        <h2 className="mb-6 text-2xl font-bold">
+          Supported Wayland Compositors
+        </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -188,7 +206,9 @@ export default function WaylandPage() {
                   className="border-b border-zinc-100 dark:border-zinc-700/70"
                 >
                   <td className="py-3 pr-4 font-medium">{item.name}</td>
-                  <td className="py-3 pr-4 text-muted-foreground">{item.method}</td>
+                  <td className="py-3 pr-4 text-muted-foreground">
+                    {item.method}
+                  </td>
                   <td className="py-3 pr-4">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                       <CheckCircle2 className="h-3 w-3" />
@@ -217,7 +237,9 @@ export default function WaylandPage() {
                 </span>
                 <h3 className="font-semibold">{step.title}</h3>
               </div>
-              <p className="mb-3 ml-10 text-sm text-muted-foreground">{step.description}</p>
+              <p className="mb-3 ml-10 text-sm text-muted-foreground">
+                {step.description}
+              </p>
               <div className="ml-10 rounded-lg bg-zinc-950 p-3">
                 <code className="text-sm text-green-400">{step.command}</code>
               </div>
@@ -225,8 +247,8 @@ export default function WaylandPage() {
           ))}
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
-          If text doesn&apos;t appear, ensure IBus is your active input method (System Settings →
-          Keyboard → Input Methods).
+          If text doesn&apos;t appear, ensure IBus is your active input method
+          (System Settings → Keyboard → Input Methods).
         </p>
       </section>
 
@@ -235,42 +257,49 @@ export default function WaylandPage() {
           How Wayland Text Injection Works
         </h2>
         <p className="mb-4 text-sm text-blue-700 dark:text-blue-400">
-          Unlike X11 where applications can simulate keyboard input globally, Wayland&apos;s security
-          model requires a different approach. Vocalinux uses:
+          Unlike X11 where applications can simulate keyboard input globally,
+          Wayland&apos;s security model requires a different approach. Vocalinux
+          uses:
         </p>
         <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-400">
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>IBus Engine</strong> — A custom IBus input method that receives text from
-            Vocalinux and types it into the focused application
+            <strong>IBus Engine</strong> - A custom IBus input method that
+            receives text from Vocalinux and types it into the focused
+            application
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>wtype</strong> — Native Wayland typing tool for compositors that support the
-            virtual keyboard protocol
+            <strong>wtype</strong> - Native Wayland typing tool for compositors
+            that support the virtual keyboard protocol
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <strong>X11 Fallback</strong> — xdotool for XWayland applications
+            <strong>X11 Fallback</strong> - xdotool for XWayland applications
           </li>
         </ul>
         <p className="mt-4 text-sm text-blue-700 dark:text-blue-400">
-          v0.9.0+ includes clipboard fallback for Wayland compositors without virtual keyboard
-          support. Copy-to-clipboard is now disabled by default for privacy - enable in Settings
-          if needed.
+          v0.9.0+ includes clipboard fallback for Wayland compositors without
+          virtual keyboard support. Copy-to-clipboard is now disabled by default
+          for privacy - enable in Settings if needed.
+        </p>
+        <p className="mt-3 text-sm text-blue-700 dark:text-blue-400">
+          v0.10.2+ also improves IBus detection without legacy environment
+          variables and handles non-ASCII ydotool paths with clipboard paste
+          fallback.
         </p>
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
         <h2 className="mb-4 text-2xl font-bold">Start Dictating on Wayland</h2>
         <p className="mb-6 text-muted-foreground">
-          Vocalinux automatically detects your display server and configures the appropriate text
-          injection method. Just install and run.
+          Vocalinux automatically detects your display server and configures the
+          appropriate text injection method. Just install and run.
         </p>
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="hover:bg-primary/90 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
@@ -280,6 +309,12 @@ export default function WaylandPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
           >
             Troubleshooting Guide
+          </Link>
+          <Link
+            href="/desktop-reliability/"
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          >
+            Reliability Improvements
           </Link>
         </div>
       </section>

@@ -643,6 +643,7 @@ class TestStartStopRecognition(unittest.TestCase):
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
         manager.audio_buffer = [b"\x00\x00" for _ in range(20)]
+        manager._recording_segment_has_speech = True
 
         # Create dummy threads
         manager.audio_thread = MagicMock()
@@ -656,6 +657,27 @@ class TestStartStopRecognition(unittest.TestCase):
                     manager.stop_recognition()
                     assert manager.should_record is False
                     assert len(enqueue_mock.call_args.args[0]) == 17
+                    assert manager._recording_segment_has_speech is False
+
+    def test_stop_recognition_drops_final_buffer_without_speech(self):
+        """Final silence-only buffers should not be queued for transcription."""
+        manager = _make_manager()
+        manager.state = RecognitionState.LISTENING
+        manager.should_record = True
+        manager.audio_buffer = [b"\x00\x00" for _ in range(20)]
+        manager._recording_segment_has_speech = False
+
+        manager.audio_thread = MagicMock()
+        manager.audio_thread.is_alive.return_value = False
+        manager.recognition_thread = MagicMock()
+        manager.recognition_thread.is_alive.return_value = False
+
+        with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
+            with patch.object(manager, "_signal_recognition_stop"):
+                with patch.object(manager, "_enqueue_audio_segment") as enqueue_mock:
+                    manager.stop_recognition()
+                    enqueue_mock.assert_not_called()
+                    assert manager.audio_buffer == []
 
 
 class TestDownloads(unittest.TestCase):

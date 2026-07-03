@@ -28,8 +28,10 @@ def parse_arguments():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["small", "medium", "large"],
-        help="Speech recognition model size (small, medium, large)",
+        help=(
+            "Speech recognition model ID. Examples: small, medium, large, "
+            "medium.en-q5_0, large-v3-turbo"
+        ),
     )
     parser.add_argument(
         "--language",
@@ -58,7 +60,7 @@ def parse_arguments():
     parser.add_argument(
         "--engine",
         type=str,
-        choices=["vosk", "whisper", "whisper_cpp"],
+        choices=["vosk", "whisper", "whisper_cpp", "remote_api"],
         help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
     )
     parser.add_argument(
@@ -167,14 +169,9 @@ def check_dependencies():
                 "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
             )
 
-    # pynput is used for keyboard detection but we check at module startup
-    # requests is used by various components
-    # These are intentional checks to provide user-friendly error messages
-    try:
-        import pynput  # noqa: F401
-    except ImportError:
-        missing_python_deps.append("pynput (install with: pip install pynput)")
-
+    # Keyboard backends are optional and checked lazily by the shortcut manager.
+    # Importing pynput can fail on Wayland/X-less sessions even when installed.
+    # requests is used by various components and should remain a required check.
     try:
         import requests  # noqa: F401
     except ImportError:
@@ -351,9 +348,22 @@ def main():
     initialize_logging()
     logger.info("Logging system initialized")
 
+    text_injection_backend = getattr(args, "text_injection", "auto")
+    if not isinstance(text_injection_backend, str):
+        text_injection_backend = "auto"
+    clipboard_timeout = getattr(args, "clipboard_timeout", 2.0)
+    if not isinstance(clipboard_timeout, (int, float)):
+        clipboard_timeout = 2.0
+    paste_delay = getattr(args, "paste_delay", 0.25)
+    if not isinstance(paste_delay, (int, float)):
+        paste_delay = 0.25
+    paste_method = getattr(args, "paste_method", "ydotool-key")
+    if not isinstance(paste_method, str):
+        paste_method = "ydotool-key"
+
     # Try to start IBus daemon if not running (for text injection).
     # Skip this when the user explicitly requested a non-IBus backend.
-    if args.text_injection == "auto":
+    if text_injection_backend == "auto":
         try:
             from .text_injection import start_ibus_daemon
 
@@ -476,6 +486,10 @@ def main():
             whispercpp_no_speech_thold=advanced_settings.get("whispercpp_no_speech_thold", 0.6),
             gpu_name=gpu_name,
             gpu_backend=gpu_backend,
+            whispercpp_n_threads=advanced_settings.get("whispercpp_n_threads", 0),
+            remote_api_url=saved_settings.get("remote_api_url", ""),
+            remote_api_key=saved_settings.get("remote_api_key", ""),
+            remote_api_endpoint=saved_settings.get("remote_api_endpoint", "/inference"),
         )
 
         should_persist_gpu_preference = cli_gpu_set or saved_settings.get("gpu_name") is not None
@@ -496,10 +510,10 @@ def main():
         # Initialize text injection system
         text_system = text_injector.TextInjector(
             wayland_mode=args.wayland,
-            preferred_backend=args.text_injection,
-            clipboard_timeout=args.clipboard_timeout,
-            paste_delay=args.paste_delay,
-            paste_method=args.paste_method,
+            preferred_backend=text_injection_backend,
+            clipboard_timeout=clipboard_timeout,
+            paste_delay=paste_delay,
+            paste_method=paste_method,
         )
 
         # Initialize action handler
@@ -521,8 +535,8 @@ def main():
         #
         #   state_callback(state: RecognitionState)
         #       Called whenever the engine transitions state (IDLE → LISTENING,
-        #       etc.).  Used here to clear the "last injected" buffer when a
-        #       new listening session starts.
+        #       etc.).  Used here to clear the "last injected" buffer after a
+        #       listening session ends.
         # ------------------------------------------------------------------
 
         def text_callback_wrapper(text: str) -> None:
@@ -549,11 +563,11 @@ def main():
 
             success = text_system.inject_text(text_to_inject)
             if success:
-                action_handler.set_last_injected_text(text)
+                action_handler.set_last_injected_text(text_to_inject)
 
         def on_state_change(state: RecognitionState) -> None:
-            """Reset the last-injected buffer when a new listening session starts."""
-            if state == RecognitionState.LISTENING:
+            """Reset the last-injected buffer when a listening session ends."""
+            if state == RecognitionState.IDLE:
                 action_handler.set_last_injected_text("")
 
         # Connect speech recognition to text injection and action handling

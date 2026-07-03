@@ -106,8 +106,9 @@ The installer now installs these automatically, but if you hit a CMake error lik
 `Could not find OpenSSL` during a manual reinstall, add the above first.
 
 **ydotool** — `ydotool` is not packaged in Debian's standard repos. The installer falls back
-gracefully to `wtype` for most Wayland compositors. If you specifically need `ydotool`
-(e.g. for KDE Plasma Wayland), compile it from source:
+gracefully to IBus or `wtype` for most Wayland compositors. KDE Plasma Wayland users should
+first select **IBus Wayland** in **System Settings -> Keyboard -> Virtual Keyboard**. If you
+specifically need `ydotool` as a fallback, compile it from source:
 
 ```bash
 sudo apt install -y git cmake libevdev-dev
@@ -230,7 +231,7 @@ install the required system packages:
 ```bash
 sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
   libgirepository1.0-dev libcairo2-dev portaudio19-dev python3-dev \
-  python3-venv pkg-config xdotool wtype
+  python3-venv pkg-config xdotool wtype wl-clipboard xclip xsel
 ```
 
 On Ubuntu 24.04+ or Pop!_OS, install `libgirepository-2.0-dev` if
@@ -240,13 +241,13 @@ On Ubuntu 24.04+ or Pop!_OS, install `libgirepository-2.0-dev` if
 ```bash
 sudo dnf install python3-gobject gtk3 gtk3-devel libappindicator-gtk3 \
   gobject-introspection-devel portaudio-devel python3-devel \
-  python3-virtualenv pkg-config xdotool wtype
+  python3-virtualenv pkg-config xdotool wtype wl-clipboard xclip xsel
 ```
 
 #### Arch Linux
 ```bash
 sudo pacman -S python-gobject gtk3 libappindicator gobject-introspection \
-  python-cairo portaudio python-virtualenv pkg-config xdotool wtype
+  python-cairo portaudio python-virtualenv pkg-config xdotool wtype wl-clipboard xclip xsel
 ```
 
 #### openSUSE
@@ -256,7 +257,7 @@ PYVER=$(python3 -c 'import sys; print(f"python{sys.version_info.major}{sys.versi
 sudo zypper install "${PYVER}-gobject" "${PYVER}-gobject-cairo" gtk3 \
   typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
   typelib-1_0-Notify-0_7 libnotify4 \
-  portaudio-devel "${PYVER}-devel" "${PYVER}-virtualenv" pkg-config xdotool wtype
+  portaudio-devel "${PYVER}-devel" "${PYVER}-virtualenv" pkg-config xdotool wtype wl-clipboard xclip xsel
 ```
 
 ### pip Installation Steps
@@ -316,8 +317,8 @@ sudo zypper install "${PYVER}-gobject" "${PYVER}-gobject-cairo" gtk3 \
 ### Why System Packages Are Required
 
 Vocalinux uses GTK3 for its GUI, AppIndicator/Ayatana for the system tray icon,
-PortAudio for microphone capture, and tools such as `xdotool` or `wtype` for
-text injection. These are system libraries and desktop tools that must be
+PortAudio for microphone capture, and tools such as `xdotool`, `wtype`, and clipboard utilities (`wl-clipboard`, `xclip`, `xsel`) for
+text injection and layout-independent Wayland paste fallback. These are system libraries and desktop tools that must be
 installed with your distribution's package manager. Python packages from PyPI
 can provide Python bindings, but they do not provide the underlying GTK
 typelibs, tray support, audio development libraries, or text injection binaries.
@@ -358,17 +359,18 @@ Vocalinux requires text injection tools to work with X11 or Wayland:
 - **xdotool**: Required for X11 sessions
 
 ### For Wayland
-- **wtype**: Recommended for Wayland native sessions
-- **ydotool**: Universal alternative that works with both X11 and Wayland
+- **IBus**: Recommended for KDE Plasma Wayland and generally the most reliable direct text input path
+- **wtype**: Recommended for wlroots-style Wayland compositors such as sway
+- **ydotool**: Universal alternative that works with both X11 and Wayland, but requires `ydotoold`; Vocalinux uses clipboard paste with `wl-clipboard`, `xclip`, or `xsel` to avoid non-US layout scrambling
 - **xdotool**: May work via XWayland fallback
 
 ### Installation by Distribution
 ```bash
 # Ubuntu/Debian/Fedora/Arch/openSUSE
-sudo apt install xdotool wtype     # Ubuntu/Debian
-sudo dnf install xdotool wtype     # Fedora
-sudo pacman -S xdotool wtype       # Arch
-sudo zypper install xdotool wtype  # openSUSE
+sudo apt install xdotool wtype wl-clipboard xclip xsel     # Ubuntu/Debian
+sudo dnf install xdotool wtype wl-clipboard xclip xsel     # Fedora
+sudo pacman -S xdotool wtype wl-clipboard xclip xsel       # Arch
+sudo zypper install xdotool wtype wl-clipboard xclip xsel  # openSUSE
 ```
 
 ## Manual Installation
@@ -399,7 +401,7 @@ For unsupported or experimental distributions:
 | Desktop Environment | Status | Notes |
 |---------------------|--------|-------|
 | GNOME | ✅ Full Support | Primary target, uses AppIndicator |
-| KDE Plasma | ✅ Full Support | Works with AppIndicator |
+| KDE Plasma | ✅ Full Support | On Wayland, select IBus Wayland in System Settings -> Keyboard -> Virtual Keyboard |
 | Xfce | ✅ Full Support | Works with AppIndicator |
 | Cinnamon | ✅ Full Support | Works with AppIndicator |
 | MATE | ✅ Full Support | Works with AppIndicator |
@@ -428,7 +430,7 @@ Practical caveat:
 | Display Server | Status | Notes |
 |----------------|--------|-------|
 | X11 | ✅ Full Support | Uses xdotool for text injection |
-| Wayland | ✅ Full Support | Uses wtype (native) or xdotool (XWayland) |
+| Wayland | ✅ Full Support | Uses IBus, wtype, ydotool, or xdotool fallback depending on compositor |
 | XWayland | ✅ Full Support | Automatically detected, falls back to xdotool if needed |
 
 ## Architecture Support
