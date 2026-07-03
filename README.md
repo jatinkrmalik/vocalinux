@@ -248,6 +248,7 @@ vocalinux --wayland               # Force Wayland mode
 vocalinux --text-injection ydotool-paste  # Use clipboard paste via ydotool
 vocalinux --clipboard-timeout 5   # Wait longer for slow remote clipboards
 vocalinux --paste-delay 1         # Wait before sending Ctrl+V after copying
+vocalinux --paste-method ydotool-type  # Alternative paste trigger for remote clients
 vocalinux --start-minimized       # Start without first-run modal prompts
 ```
 

@@ -131,6 +131,16 @@ class TestTextInjector(unittest.TestCase):
         with self.assertRaises(ValueError):
             TextInjector(paste_delay=-0.1)
 
+    def test_paste_method_can_be_configured(self):
+        """Test configuring paste shortcut simulation method."""
+        injector = TextInjector(paste_method="ydotool-type")
+        self.assertEqual(injector._paste_method, "ydotool-type")
+
+    def test_paste_method_must_be_valid(self):
+        """Test rejecting invalid paste shortcut simulation methods."""
+        with self.assertRaises(ValueError):
+            TextInjector(paste_method="invalid")
+
     def test_wayland_fallback_to_xdotool(self):
         """Test fallback to XWayland with xdotool when wtype fails."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
@@ -736,6 +746,45 @@ class TestTextInjector(unittest.TestCase):
                     ["ydotool", "key", "29:0"],
                 ],
             )
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_can_send_via_ydotool_type(self, mock_run, mock_which):
+        """Alternative paste method should send V via ydotool type while Ctrl is held."""
+        mock_which.side_effect = lambda x: x in ("wl-copy", "ydotool")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector(paste_delay=0, paste_method="ydotool-type")
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+            injector._paste_key_delay = 0
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertTrue(result)
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            self.assertIn(["ydotool", "key", "29:1"], calls)
+            self.assertIn(["ydotool", "type", "v"], calls)
+            self.assertIn(["ydotool", "key", "29:0"], calls)
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_clipboard_paste_can_send_via_xdotool(self, mock_run, mock_which):
+        """Alternative paste method should support xdotool for XWayland clients."""
+        mock_which.side_effect = lambda x: x in ("wl-copy", "xdotool", "ydotool")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector(paste_delay=0, paste_method="xdotool")
+            injector.wayland_tool = "ydotool"
+            injector.environment = DesktopEnvironment.WAYLAND
+
+            result = injector._inject_via_clipboard_paste("café")
+
+            self.assertTrue(result)
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            self.assertTrue(any(c[:3] == ["xdotool", "key", "--clearmodifiers"] for c in calls))
 
     @patch("vocalinux.text_injection.text_injector.shutil.which")
     @patch("vocalinux.text_injection.text_injector.subprocess.run")

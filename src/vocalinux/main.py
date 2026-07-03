@@ -97,6 +97,12 @@ def parse_arguments():
         help="Seconds to wait after copying text before simulating Ctrl+V.",
     )
     parser.add_argument(
+        "--paste-method",
+        choices=["ydotool-key", "ydotool-type", "xdotool"],
+        default="ydotool-key",
+        help="Method used to simulate Ctrl+V after clipboard copy.",
+    )
+    parser.add_argument(
         "--start-minimized",
         action="store_true",
         help="Start minimized to system tray",
@@ -493,6 +499,7 @@ def main():
             preferred_backend=args.text_injection,
             clipboard_timeout=args.clipboard_timeout,
             paste_delay=args.paste_delay,
+            paste_method=args.paste_method,
         )
 
         # Initialize action handler
