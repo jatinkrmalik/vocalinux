@@ -273,6 +273,14 @@ class TestConfigManager(unittest.TestCase):
         # Verify migration added per-engine model sizes
         self.assertEqual(config_manager.config["speech_recognition"]["vosk_model_size"], "medium")
         self.assertEqual(config_manager.config["speech_recognition"]["whisper_model_size"], "tiny")
+        self.assertIn("gpu_name", config_manager.config["speech_recognition"])
+        self.assertIn("gpu_backend", config_manager.config["speech_recognition"])
+
+        with open(self.temp_config_file, "r") as f:
+            saved_config = json.load(f)
+
+        self.assertIn("gpu_name", saved_config["speech_recognition"])
+        self.assertIn("gpu_backend", saved_config["speech_recognition"])
 
     def test_update_speech_recognition_settings_per_engine(self):
         """Test that update_speech_recognition_settings saves per-engine model sizes."""
@@ -380,6 +388,29 @@ class TestConfigManager(unittest.TestCase):
 
         self.assertEqual(config_manager.get_model_size_for_engine("vosk"), "large")
         self.assertEqual(config_manager.get_model_size_for_engine("whisper"), "large")
+
+    def test_gpu_selection_defaults_to_automatic(self):
+        """Test that GPU selection defaults to automatic mode."""
+        config_manager = ConfigManager()
+        self.assertIsNone(config_manager.config["speech_recognition"]["gpu_name"])
+        self.assertIsNone(config_manager.config["speech_recognition"]["gpu_backend"])
+
+    def test_gpu_selection_is_loaded_from_config(self):
+        """Test loading persisted GPU selection from config."""
+        test_config = {
+            "speech_recognition": {
+                "gpu_name": "NVIDIA RTX 4090",
+                "gpu_backend": "cuda",
+            }
+        }
+
+        with open(self.temp_config_file, "w") as f:
+            json.dump(test_config, f)
+
+        config_manager = ConfigManager()
+
+        self.assertEqual(config_manager.get("speech_recognition", "gpu_name"), "NVIDIA RTX 4090")
+        self.assertEqual(config_manager.get("speech_recognition", "gpu_backend"), "cuda")
 
     def test_update_speech_recognition_settings_new_section(self):
         """Test update_speech_recognition_settings when section doesn't exist."""
@@ -546,13 +577,24 @@ class TestTypedAccessors(unittest.TestCase):
         self.assertEqual(advanced["whispercpp_n_threads"], 0)
 
     def test_whispercpp_advanced_persistence(self):
-        self.config_manager.set("advanced", "whispercpp_temperature", 0.5)
-        self.config_manager.set("advanced", "whispercpp_no_timestamps", False)
-        self.config_manager.set("advanced", "whispercpp_initial_prompt", "Meeting notes")
-        self.config_manager.save_config()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_config_dir = os.path.join(temp_dir, ".config/vocalinux")
+            _ensure_test_config_dir(temp_config_dir)
+            temp_config_file = os.path.join(temp_config_dir, "config.json")
 
-        new_manager = ConfigManager()
-        advanced = new_manager.get_settings().get("advanced", {})
+            with (
+                patch("vocalinux.ui.config_manager.CONFIG_DIR", temp_config_dir),
+                patch("vocalinux.ui.config_manager.CONFIG_FILE", temp_config_file),
+            ):
+                config_manager = ConfigManager()
+                config_manager.set("advanced", "whispercpp_temperature", 0.5)
+                config_manager.set("advanced", "whispercpp_no_timestamps", False)
+                config_manager.set("advanced", "whispercpp_initial_prompt", "Meeting notes")
+                config_manager.save_config()
+
+                new_manager = ConfigManager()
+                advanced = new_manager.get_settings().get("advanced", {})
+
         self.assertEqual(advanced["whispercpp_temperature"], 0.5)
         self.assertFalse(advanced["whispercpp_no_timestamps"])
         self.assertEqual(advanced["whispercpp_initial_prompt"], "Meeting notes")

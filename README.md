@@ -243,7 +243,14 @@ vocalinux --engine vosk           # Use VOSK engine
 vocalinux --model medium          # Use medium-sized model
 vocalinux --model medium.en-q5_0  # Use exact whisper.cpp model variant
 vocalinux --model large-v3-turbo  # Use large-v3 Turbo with whisper.cpp
+vocalinux --gpus                  # List detected Vulkan and CUDA GPUs
+vocalinux --gpu "Tesla P40"       # Persist GPU selection by device name
+vocalinux --gpu auto              # Clear saved GPU preference
 vocalinux --wayland               # Force Wayland mode
+vocalinux --text-injection ydotool-paste  # Use clipboard paste via ydotool
+vocalinux --clipboard-timeout 5   # Wait longer for slow remote clipboards
+vocalinux --paste-delay 1         # Wait before sending Ctrl+V after copying
+vocalinux --paste-method ydotool-type  # Alternative paste trigger for remote clients
 vocalinux --start-minimized       # Start without first-run modal prompts
 ```
 
@@ -276,9 +283,13 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
 {
   "speech_recognition": {
     "engine": "whisper_cpp",
+    "language": "auto",
     "model_size": "tiny",
+    "gpu_name": null,
+    "gpu_backend": null,
     "vad_sensitivity": 3,
-    "silence_timeout": 2.0
+    "silence_timeout": 2.0,
+    "voice_commands_enabled": null
   }
 }
 ```
@@ -299,6 +310,13 @@ pip install "vocalinux[vad]"
 ```
 
 Restart Vocalinux after install. The Recognition tab in Settings shows which backend is active. The same `vad_sensitivity` (1-5) works for both -- it's mapped to a Silero probability threshold internally (1 = 0.8, 5 = 0.3).
+
+GPU selection notes:
+
+- Use `vocalinux --gpus` to list currently detected GPUs.
+- Use `vocalinux --gpu "GPU NAME"` to persist a GPU selection by name instead of relying on unstable device indices.
+- Use `vocalinux --gpu auto` to return to automatic GPU selection.
+- whisper.cpp GPU selection requires a pywhispercpp build with the matching `GGML_CUDA=1` or `GGML_VULKAN=1` backend; the default PyPI wheel may be CPU-only.
 
 ## 🔧 Development Setup
 

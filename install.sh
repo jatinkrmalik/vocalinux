@@ -3086,11 +3086,18 @@ export PYTHONNOUSERSITE=1
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 PYWHISPERCPP_LIBRARY_PATH=""
 PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import site
 import sysconfig
 
 paths = []
 for key in ("platlib", "purelib"):
     path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+user_site = getattr(site, "getusersitepackages", lambda: None)()
+if user_site and user_site not in paths:
+    paths.append(user_site)
+for path in getattr(site, "getsitepackages", lambda: [])():
     if path and path not in paths:
         paths.append(path)
 print(" ".join(paths))
@@ -3131,11 +3138,18 @@ export PYTHONNOUSERSITE=1
 export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
 PYWHISPERCPP_LIBRARY_PATH=""
 PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import site
 import sysconfig
 
 paths = []
 for key in ("platlib", "purelib"):
     path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+user_site = getattr(site, "getusersitepackages", lambda: None)()
+if user_site and user_site not in paths:
+    paths.append(user_site)
+for path in getattr(site, "getsitepackages", lambda: [])():
     if path and path not in paths:
         paths.append(path)
 print(" ".join(paths))

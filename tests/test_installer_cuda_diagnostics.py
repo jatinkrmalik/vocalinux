@@ -18,6 +18,19 @@ class InstallerCudaDiagnosticsTests(unittest.TestCase):
         self.assertGreaterEqual(source.count("export PYTHONNOUSERSITE=1"), 4)
         self.assertIn('getattr(site, "ENABLE_USER_SITE", False)', source)
 
+    def test_wrappers_scan_user_and_system_site_for_pywhispercpp_libs(self) -> None:
+        """Wrapper LD_LIBRARY_PATH discovery should include user and system site packages."""
+        source = _installer_source()
+
+        self.assertGreaterEqual(
+            source.count('getattr(site, "getusersitepackages", lambda: None)()'),
+            3,
+        )
+        self.assertGreaterEqual(
+            source.count('getattr(site, "getsitepackages", lambda: [])()'),
+            2,
+        )
+
     def test_cuda_toolkit_validation_requires_complete_root(self) -> None:
         """CUDA roots must not be accepted when only a stale /usr/local/cuda exists."""
         source = _installer_source()

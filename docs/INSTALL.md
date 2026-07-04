@@ -249,6 +249,9 @@ vocalinux --model medium          # Use medium model
 vocalinux --model large           # Use large model
 vocalinux --model medium.en-q5_0  # Use exact whisper.cpp model variant
 vocalinux --model large-v3-turbo  # Use large-v3 Turbo with whisper.cpp
+vocalinux --gpus                  # List detected Vulkan and CUDA GPUs
+vocalinux --gpu "Tesla P40"       # Persist GPU selection by device name
+vocalinux --gpu auto              # Clear saved GPU preference
 vocalinux --wayland               # Force Wayland compatibility mode
 vocalinux --start-minimized       # Start without first-run modal prompts
 ```
@@ -478,6 +481,12 @@ To verify your GPU is detected:
 # Check Vulkan support (for AMD, Intel, NVIDIA)
 vulkaninfo --summary | grep -i "deviceName"
 
+# List GPUs the Vocalinux CLI can currently detect
+vocalinux --gpus
+
+# Persist a specific GPU by name
+vocalinux --gpu "Tesla P40"
+
 # In Vocalinux, look for these log messages:
 # [INFO] whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU
 # [INFO] whisper.cpp using Vulkan GPU backend: AMD Radeon RX 6800
@@ -508,10 +517,19 @@ Change the `engine` field:
 {
   "speech_recognition": {
     "engine": "whisper_cpp",  // Options: whisper_cpp, whisper, vosk
-    "model_size": "tiny"      // Or an exact whisper.cpp ID like medium.en-q5_0
+    "model_size": "tiny",     // Or an exact whisper.cpp ID like medium.en-q5_0
+    "gpu_name": null,
+    "gpu_backend": null
   }
 }
 ```
+
+The GPU fields behave as follows:
+
+- `gpu_name: null` and `gpu_backend: null` mean automatic GPU selection
+- set `gpu_name` via `vocalinux --gpu "GPU NAME"` to persist a named GPU
+- use `vocalinux --gpu auto` to clear the saved GPU preference
+- whisper.cpp GPU selection requires a pywhispercpp build with the matching `GGML_CUDA=1` or `GGML_VULKAN=1` backend; the default PyPI wheel may be CPU-only.
 
 Or use the GUI: Right-click tray icon → Settings → Speech Engine. For whisper.cpp,
 the GUI splits this into **Model Size** and **Specialization**.

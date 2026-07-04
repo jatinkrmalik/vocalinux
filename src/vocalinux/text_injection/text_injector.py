@@ -65,13 +65,43 @@ class TextInjector:
     application window, supporting both X11 and Wayland environments.
     """
 
-    def __init__(self, wayland_mode: bool = False):
+    def __init__(
+        self,
+        wayland_mode: bool = False,
+        preferred_backend: Optional[str] = None,
+        clipboard_timeout: float = 2.0,
+        paste_delay: float = 0.25,
+        paste_method: str = "ydotool-key",
+    ):
         """
         Initialize the text injector.
 
         Args:
             wayland_mode: Force Wayland compatibility mode
+            preferred_backend: Optional text injection backend override
+            clipboard_timeout: Seconds to wait for clipboard tools to complete
+            paste_delay: Seconds to wait after copying before simulating Ctrl+V
+            paste_method: Method for simulating paste after copying
         """
+        if clipboard_timeout <= 0:
+            raise ValueError("clipboard_timeout must be greater than 0")
+        if paste_delay < 0:
+            raise ValueError("paste_delay must be greater than or equal to 0")
+        self._paste_method = paste_method.strip().lower().replace("_", "-")
+        valid_paste_methods = {"ydotool-key", "ydotool-type", "xdotool"}
+        if self._paste_method not in valid_paste_methods:
+            raise ValueError(
+                f"Unknown paste method '{paste_method}'. "
+                f"Expected one of: {', '.join(sorted(valid_paste_methods))}"
+            )
+        self.preferred_backend = (preferred_backend or "auto").strip().lower().replace("_", "-")
+        valid_backends = {"auto", "ydotool", "ydotool-paste"}
+        if self.preferred_backend not in valid_backends:
+            raise ValueError(
+                f"Unknown text injection backend '{preferred_backend}'. "
+                f"Expected one of: {', '.join(sorted(valid_backends))}"
+            )
+        self._force_ydotool_paste = self.preferred_backend == "ydotool-paste"
         self._ibus_injector: Optional[IBusTextInjector] = None
         self.environment = self._detect_environment()
         self._session_environment = self.environment
@@ -80,7 +110,9 @@ class TextInjector:
         self._ibus_init_thread: Optional[threading.Thread] = None
         self._state_lock = threading.Lock()
         self._clipboard_tool_health = {}
-        self._clipboard_timeout = 0.35
+        self._clipboard_timeout = clipboard_timeout
+        self._paste_delay = paste_delay
+        self._paste_key_delay = 0.05
 
         # Force Wayland mode if requested
         if wayland_mode and self.environment == DesktopEnvironment.X11:
@@ -238,6 +270,11 @@ class TextInjector:
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
         ibus_requested = False
+        preferred_backend = getattr(self, "preferred_backend", "auto")
+
+        if preferred_backend in {"ydotool", "ydotool-paste"}:
+            self._select_ydotool_backend(required=True)
+            return
 
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
@@ -337,6 +374,40 @@ class TextInjector:
         if ibus_requested:
             self._start_ibus_initialization()
 
+    def _select_ydotool_backend(self, required: bool = False) -> bool:
+        """Select ydotool after verifying the daemon is reachable."""
+        if not shutil.which("ydotool"):
+            if required:
+                raise RuntimeError("ydotool backend requested, but ydotool is not installed")
+            return False
+
+        try:
+            subprocess.run(
+                ["ydotool", "type", ""],
+                check=True,
+                stderr=subprocess.PIPE,
+                timeout=2,
+            )
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+        ) as e:
+            if required:
+                raise RuntimeError(
+                    "ydotool backend requested, but ydotoold is not responding"
+                ) from e
+            return False
+
+        self.wayland_tool = "ydotool"
+        self.environment = DesktopEnvironment.WAYLAND
+        logger.info("Using ydotool for text injection")
+        if self._force_ydotool_paste:
+            logger.info(
+                "Using ydotool clipboard-paste mode " "(copies text, then simulates Ctrl+V)"
+            )
+        return True
+
     def _start_ibus_initialization(self) -> None:
         if self._ibus_injector is None or self._ibus_init_thread is not None:
             return
@@ -401,7 +472,8 @@ class TextInjector:
         # only waits for the short-lived foreground process.
         if tool == "wl-copy":
             subprocess.run(
-                ["wl-copy", text],
+                ["wl-copy"],
+                input=text,
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -576,7 +648,7 @@ class TextInjector:
         logger.debug("No better tools available, continuing with xdotool fallback")
         return False
 
-    def _copy_to_clipboard(self, text: str) -> bool:
+    def _copy_to_clipboard(self, text: str, retry_unhealthy: bool = False) -> bool:
         """
         Copy text to clipboard.
 
@@ -586,6 +658,7 @@ class TextInjector:
 
         Args:
             text: The text to copy to clipboard
+            retry_unhealthy: Retry tools that failed earlier in this process
 
         Returns:
             True if clipboard copy was successful, False otherwise
@@ -593,7 +666,7 @@ class TextInjector:
         logger.info("Copying text to clipboard")
 
         for tool in self._get_clipboard_tools():
-            if self._clipboard_tool_health.get(tool) is False:
+            if self._clipboard_tool_health.get(tool) is False and not retry_unhealthy:
                 continue
 
             try:
@@ -931,37 +1004,103 @@ class TextInjector:
             "(user clipboard will be temporarily overwritten)"
         )
 
-        if not self._copy_to_clipboard(text):
+        if not self._copy_to_clipboard(text, retry_unhealthy=True):
             logger.warning("Could not copy text to clipboard for paste injection")
             return False
 
-        # Simulate Ctrl+V via ydotool using evdev keycodes:
-        # KEY_LEFTCTRL=29, KEY_V=47; value 1=press, 0=release.
-        # wtype is intentionally not handled here: wtype uses the Wayland
-        # virtual-keyboard protocol which supports Unicode natively, so it
-        # never needs the clipboard-paste workaround.
+        paste_delay = getattr(self, "_paste_delay", 0.25)
+        if paste_delay > 0:
+            logger.debug(f"Waiting {paste_delay:.2f}s before simulating paste")
+            time.sleep(paste_delay)
+
         try:
-            subprocess.run(
-                ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
-                check=True,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=3,
-            )
+            self._simulate_clipboard_paste_shortcut()
             logger.info(f"Text injected via clipboard paste: '{text[:20]}...' ({len(text)} chars)")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.warning(f"Paste simulation failed: {e}")
             return False
 
+    def _simulate_clipboard_paste_shortcut(self):
+        """Simulate Ctrl+V after text has been copied to the clipboard."""
+        method = getattr(self, "_paste_method", "ydotool-key")
+        if method == "ydotool-type":
+            self._simulate_paste_with_ydotool_type()
+        elif method == "xdotool":
+            self._simulate_paste_with_xdotool()
+        else:
+            self._simulate_paste_with_ydotool_key()
+
+    def _simulate_paste_with_ydotool_key(self):
+        """Simulate Ctrl+V via ydotool key events."""
+        key_delay = getattr(self, "_paste_key_delay", 0.05)
+        key_events = ["29:1", "47:1", "47:0", "29:0"]
+        for index, event in enumerate(key_events):
+            subprocess.run(
+                ["ydotool", "key", event],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            if key_delay > 0 and index < len(key_events) - 1:
+                time.sleep(key_delay)
+
+    def _simulate_paste_with_ydotool_type(self):
+        """Hold Ctrl with ydotool key, then send V through ydotool type."""
+        key_delay = getattr(self, "_paste_key_delay", 0.05)
+        ctrl_down = False
+        try:
+            subprocess.run(
+                ["ydotool", "key", "29:1"],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            ctrl_down = True
+            if key_delay > 0:
+                time.sleep(key_delay)
+            subprocess.run(
+                ["ydotool", "type", "v"],
+                check=True,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            if key_delay > 0:
+                time.sleep(key_delay)
+        finally:
+            if ctrl_down:
+                subprocess.run(
+                    ["ydotool", "key", "29:0"],
+                    check=True,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=3,
+                )
+
+    def _simulate_paste_with_xdotool(self):
+        """Simulate Ctrl+V via xdotool for XWayland windows."""
+        env = os.environ.copy()
+        if "DISPLAY" not in env or not env["DISPLAY"]:
+            env["DISPLAY"] = ":0"
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+            env=env,
+            check=True,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=3,
+        )
+
     def _inject_with_wayland_tool(self, text: str):
         """
         Inject text using a Wayland-compatible tool (wtype or ydotool).
 
-        For ydotool: if the text contains non-ASCII characters (accented
-        letters like á, é, ú, CJK characters, etc.), uses clipboard-based
-        injection instead, because ydotool simulates evdev key events which
-        only cover US ASCII keycodes. See issue #362.
+        For ydotool, clipboard paste is preferred because ydotool emits
+        positional evdev keycodes that are interpreted through the active
+        keyboard layout. Ctrl+V is layout-independent and Unicode-safe.
 
         Args:
             text: The text to inject
@@ -969,16 +1108,17 @@ class TextInjector:
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
-        # ydotool emits *positional* evdev keycodes, so `ydotool type` is
-        # re-interpreted through the active keyboard layout, which it assumes is
-        # US QWERTY. On any other layout (AZERTY, QWERTZ, Dvorak, ...) the text
-        # comes out scrambled (e.g. "message" -> ",essqge" on AZERTY), and
-        # non-ASCII characters are dropped entirely. Always paste via the
-        # clipboard instead: Ctrl+V is layout-independent and Unicode-safe.
         if self.wayland_tool == "ydotool":
-            logger.info("Using clipboard paste for ydotool (layout-independent, Unicode-safe)")
+            if getattr(self, "_force_ydotool_paste", False):
+                logger.info("Using forced ydotool clipboard-paste injection")
+            else:
+                logger.info(
+                    "Using clipboard paste for ydotool " "(layout-independent, Unicode-safe)"
+                )
             if self._inject_via_clipboard_paste(text):
                 return
+            if getattr(self, "_force_ydotool_paste", False):
+                raise RuntimeError("Forced ydotool clipboard-paste injection failed")
             logger.warning(
                 "Clipboard paste failed, falling back to ydotool type "
                 "(text may be scrambled on non-US layouts)"

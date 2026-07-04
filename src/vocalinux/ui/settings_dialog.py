@@ -14,8 +14,11 @@ UX Design Notes:
 - Modal dialog for model downloads (explicit confirmation for large downloads)
 """
 
+import json
 import logging
 import os
+import subprocess
+import sys
 import threading
 import time
 from typing import TYPE_CHECKING, Optional
@@ -39,8 +42,15 @@ from ..utils.whispercpp_model_info import (
 from ..utils.whispercpp_model_info import get_model_size as get_whispercpp_model_size
 from ..utils.whispercpp_model_info import get_model_variants as get_whispercpp_model_variants
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
+from ..utils.whispercpp_model_info import (
+    get_whispercpp_compiled_backends,
+)
 from ..utils.whispercpp_model_info import is_english_only_model as is_english_only_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
+from ..utils.whispercpp_model_info import (
+    list_cuda_devices,
+    list_vulkan_devices,
+)
 from .config_manager import DEFAULT_CONFIG  # noqa: E402
 from .keyboard_backends import (  # noqa: E402
     SHORTCUT_DISPLAY_NAMES,
@@ -265,6 +275,91 @@ WHISPER_MODEL_INFO = {
     "medium": {"size_mb": 1500, "desc": "High accuracy, slower", "params": "769M"},
     "large": {"size_mb": 2900, "desc": "Highest accuracy, slowest", "params": "1550M"},
 }
+
+GPU_AUTO_ID = "__gpu_auto__"
+
+
+def _make_gpu_selection_id(gpu_name: Optional[str], gpu_backend: Optional[str]) -> str:
+    """Encode a GPU selection for storing in ComboBoxText IDs."""
+    if not gpu_name or not gpu_backend:
+        return GPU_AUTO_ID
+    return json.dumps(
+        {"gpu_name": gpu_name, "gpu_backend": gpu_backend},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def _parse_gpu_selection_id(selection_id: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Decode a GPU selection from a ComboBoxText ID."""
+    if not selection_id or selection_id == GPU_AUTO_ID:
+        return None, None
+
+    try:
+        payload = json.loads(selection_id)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None, None
+
+    gpu_name = payload.get("gpu_name")
+    gpu_backend = payload.get("gpu_backend")
+    if isinstance(gpu_name, str) and isinstance(gpu_backend, str):
+        return gpu_name, gpu_backend
+    return None, None
+
+
+def _get_detected_gpu_options(
+    saved_gpu_name: Optional[str] = None,
+    saved_gpu_backend: Optional[str] = None,
+    allowed_backends: Optional[set[str]] = None,
+) -> list[dict[str, Optional[str]]]:
+    """Build UI-ready GPU selector options from currently detected devices."""
+    options = [
+        {
+            "id": GPU_AUTO_ID,
+            "label": "Automatic",
+            "gpu_name": None,
+            "gpu_backend": None,
+        }
+    ]
+
+    detected_pairs: set[tuple[str, str]] = set()
+    for backend, devices in (("vulkan", list_vulkan_devices()), ("cuda", list_cuda_devices())):
+        if allowed_backends is not None and backend not in allowed_backends:
+            continue
+
+        backend_label = get_backend_display_name(backend)
+        for device in devices:
+            if len(device) < 2:
+                continue
+
+            _, device_name = device[:2]
+            detected_pairs.add((device_name, backend))
+            options.append(
+                {
+                    "id": _make_gpu_selection_id(device_name, backend),
+                    "label": f"{device_name} ({backend_label})",
+                    "gpu_name": device_name,
+                    "gpu_backend": backend,
+                }
+            )
+
+    if (
+        saved_gpu_name
+        and saved_gpu_backend
+        and (allowed_backends is None or saved_gpu_backend in allowed_backends)
+        and (saved_gpu_name, saved_gpu_backend) not in detected_pairs
+    ):
+        backend_label = get_backend_display_name(saved_gpu_backend)
+        options.append(
+            {
+                "id": _make_gpu_selection_id(saved_gpu_name, saved_gpu_backend),
+                "label": f"{saved_gpu_name} ({backend_label}, saved but currently unavailable)",
+                "gpu_name": saved_gpu_name,
+                "gpu_backend": saved_gpu_backend,
+            }
+        )
+
+    return options
 
 
 def get_available_engines():
@@ -913,12 +1008,15 @@ class ModelDownloadDialog(Gtk.Dialog):
 class SettingsDialog(Gtk.Dialog):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
+    RESTART_RESPONSE = 1001
+
     def __init__(
         self,
         parent: Gtk.Window,
         config_manager: "ConfigManager",
         speech_engine: "SpeechRecognitionManager",
         shortcut_update_callback: callable = None,
+        restart_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.set_decorated(True)  # Force window decorations (close button) on all WMs
@@ -940,18 +1038,26 @@ class SettingsDialog(Gtk.Dialog):
         self.advanced_reset_button.connect("clicked", self._on_reset_advanced_clicked)
         action_area.pack_start(self.advanced_reset_button, False, False, 0)
         action_area.set_child_secondary(self.advanced_reset_button, True)
+        self.restart_now_button = self.add_button("Restart Now", self.RESTART_RESPONSE)
+        self.restart_now_button.get_style_context().add_class("suggested-action")
+        self.restart_now_button.hide()
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
+        self.restart_callback = restart_callback
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
         self._populating_models = False  # Flag to prevent model change handler during population
+        self._populating_gpus = False  # Flag to prevent GPU change handler during population
         self._processing_language_change = (
             False  # Flag to prevent recursive language change handling
         )
         self._applying_settings = False  # Flag to prevent recursive settings application
         self._advanced_prompt_dirty = False
+        self._gpu_restart_pending = False
+        self._gpu_restart_countdown_id = None
+        self._gpu_restart_seconds_remaining = 0
 
         # Setup CSS styling
         _setup_css()
@@ -1318,7 +1424,46 @@ class SettingsDialog(Gtk.Dialog):
         self.language_row.set_tooltip_text(LANGUAGE_TOOLTIP)
         group.add_row(self.language_row)
 
+        # GPU selection
+        gpu_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.gpu_combo = Gtk.ComboBoxText()
+        self.gpu_combo.set_size_request(260, -1)
+        self.gpu_combo.set_tooltip_text(
+            "Select a supported GPU by name, or keep automatic selection. "
+            "whisper.cpp GPU options require pywhispercpp built with the matching backend."
+        )
+        _prevent_scroll_on_hover(self.gpu_combo)
+        gpu_box.pack_start(self.gpu_combo, True, True, 0)
+
+        self.gpu_refresh_btn = Gtk.Button.new_from_icon_name(
+            "view-refresh-symbolic", Gtk.IconSize.BUTTON
+        )
+        self.gpu_refresh_btn.set_tooltip_text("Refresh detected GPUs")
+        self.gpu_refresh_btn.get_style_context().add_class("flat-button")
+        self.gpu_refresh_btn.connect("clicked", self._on_refresh_gpu_devices)
+        gpu_box.pack_start(self.gpu_refresh_btn, False, False, 0)
+
+        self.gpu_row = PreferenceRow(
+            title="GPU",
+            subtitle="Choose automatic selection or a specific GPU by name",
+            widget=gpu_box,
+        )
+        group.add_row(self.gpu_row)
+
         self.content_box.pack_start(group, False, False, 0)
+
+        self.gpu_restart_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.gpu_restart_box.set_margin_start(16)
+        self.gpu_restart_box.set_margin_end(16)
+        self.gpu_restart_box.set_margin_top(4)
+        self.gpu_restart_box.set_margin_bottom(4)
+
+        self.gpu_restart_label = Gtk.Label(label="", use_markup=True, xalign=0, wrap=True)
+        self.gpu_restart_label.get_style_context().add_class("status-warning")
+        self.gpu_restart_box.pack_start(self.gpu_restart_label, True, True, 0)
+
+        self.gpu_restart_box.hide()
+        self.content_box.pack_start(self.gpu_restart_box, False, False, 0)
 
         # Model info card (shown below the group)
         self.model_info_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -1368,6 +1513,7 @@ class SettingsDialog(Gtk.Dialog):
         self.model_combo.connect("changed", self._on_model_changed)
         self.model_variant_combo.connect("changed", self._on_model_variant_changed)
         self.language_combo.connect("changed", self._on_language_changed)
+        self.gpu_combo.connect("changed", self._on_gpu_changed)
 
     def _on_remote_api_settings_changed(self, widget):
         """Handle remote API URL/Key/endpoint changes (Advanced tab)."""
@@ -2116,8 +2262,17 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_settings_dialog_response(self, dialog, response_id):
         """Persist deferred text edits before the settings dialog closes."""
+        if response_id == self.RESTART_RESPONSE:
+            self._flush_advanced_prompt_if_dirty()
+            self._cancel_gpu_restart_countdown()
+            self._gpu_restart_seconds_remaining = 0
+            self._refresh_gpu_restart_notice_text()
+            self._restart_application_now()
+            return
+
         if response_id in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
             self._flush_advanced_prompt_if_dirty()
+            self._cancel_gpu_restart_countdown()
 
     def _on_settings_page_switched(self, notebook, page, page_num):
         """Update contextual footer actions when the active settings page changes."""
@@ -2181,6 +2336,8 @@ class SettingsDialog(Gtk.Dialog):
         self.current_model_size = settings["model_size"]
         self.current_vad = settings.get("vad_sensitivity", 3)
         self.current_silence = settings.get("silence_timeout", 2.0)
+        self.current_gpu_name = settings.get("gpu_name")
+        self.current_gpu_backend = settings.get("gpu_backend")
 
         logger.info(
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
@@ -2246,6 +2403,8 @@ class SettingsDialog(Gtk.Dialog):
         self._populate_model_options()
         self._sync_language_options_for_selected_model(self.language)
 
+        self._populate_gpu_options()
+
         # Set spin button values
         self.vad_spin.set_value(self.current_vad)
         self.silence_spin.set_value(self.current_silence)
@@ -2294,6 +2453,8 @@ class SettingsDialog(Gtk.Dialog):
         model_size = self.config_manager.get_model_size_for_engine(engine)
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
         silence_timeout = sr_settings.get("silence_timeout", 2.0)
+        gpu_name = sr_settings.get("gpu_name")
+        gpu_backend = sr_settings.get("gpu_backend")
 
         logger.info(
             f"Loaded current settings: engine={engine}, language={language}, model_size={model_size}, "
@@ -2306,7 +2467,45 @@ class SettingsDialog(Gtk.Dialog):
             "model_size": model_size,
             "vad_sensitivity": vad_sensitivity,
             "silence_timeout": silence_timeout,
+            "gpu_name": gpu_name,
+            "gpu_backend": gpu_backend,
         }
+
+    def _populate_gpu_options(self):
+        """Populate the GPU dropdown with current detections plus any saved selection."""
+        self._populating_gpus = True
+        try:
+            self.gpu_combo.remove_all()
+            options = _get_detected_gpu_options(
+                self.current_gpu_name,
+                self.current_gpu_backend,
+                allowed_backends=self._get_allowed_gpu_backends_for_selected_engine(),
+            )
+            for option in options:
+                self.gpu_combo.append(option["id"], option["label"])
+
+            active_id = _make_gpu_selection_id(self.current_gpu_name, self.current_gpu_backend)
+            if not self.gpu_combo.set_active_id(active_id):
+                self.gpu_combo.set_active_id(GPU_AUTO_ID)
+
+            detected_count = max(0, len(options) - 1)
+            if detected_count == 0:
+                self.gpu_row.set_subtitle(
+                    "No supported GPUs detected. Automatic selection will use CPU."
+                )
+            else:
+                self.gpu_row.set_subtitle("Choose automatic selection or a specific GPU by name")
+        finally:
+            self._populating_gpus = False
+
+    def _get_allowed_gpu_backends_for_selected_engine(self) -> set[str]:
+        """Return GPU backends selectable for the current engine and install."""
+        engine = self._get_selected_engine()
+        if engine == "whisper":
+            return {"cuda"}
+        if engine == "whisper_cpp":
+            return get_whispercpp_compiled_backends() & {"vulkan", "cuda"}
+        return set()
 
     def _get_selected_engine(self) -> str:
         """Return the currently selected engine ID."""
@@ -2573,6 +2772,7 @@ class SettingsDialog(Gtk.Dialog):
         self._update_engine_specific_ui()
         self._update_model_info()
         self._update_voice_commands_for_engine()
+        self._auto_apply_settings()
 
     def _update_voice_commands_for_engine(self):
         """Update voice commands switch based on current engine."""
@@ -2714,6 +2914,7 @@ class SettingsDialog(Gtk.Dialog):
         engine_text = self.engine_combo.get_active_text()
         engine = _engine_from_display(engine_text) if engine_text else "vosk"
         is_remote = engine == "remote_api"
+        gpu_supported = engine in {"whisper", "whisper_cpp"}
 
         if is_remote:
             self.model_row.hide()
@@ -2732,6 +2933,11 @@ class SettingsDialog(Gtk.Dialog):
             self.remote_server_group.hide()
             self.remote_status_label.hide()
 
+        self.gpu_combo.set_sensitive(gpu_supported)
+        self.gpu_refresh_btn.set_sensitive(gpu_supported)
+        self._populate_gpu_options()
+        self._update_gpu_row_subtitle()
+        self._update_gpu_restart_notice()
         self._update_model_info()
         self._update_language_warning()
         self._update_model_picker_tooltips()
@@ -2740,7 +2946,8 @@ class SettingsDialog(Gtk.Dialog):
     def _update_advanced_tab_sensitivity(self):
         """Enable or disable advanced settings based on selected engine."""
         engine_text = self.engine_combo.get_active_text()
-        is_whispercpp = engine_text and engine_text.lower() == "whisper_cpp"
+        engine = _engine_from_display(engine_text) if engine_text else "vosk"
+        is_whispercpp = engine == "whisper_cpp"
 
         widgets = [
             self.advanced_no_timestamps_switch,
@@ -2762,6 +2969,131 @@ class SettingsDialog(Gtk.Dialog):
             self.advanced_info_label.set_text(
                 "These settings only apply when the whisper.cpp engine is selected."
             )
+
+    def _get_runtime_gpu_selection(self) -> tuple[Optional[str], Optional[str]]:
+        """Return the GPU selection currently active in the running engine."""
+        return (
+            getattr(self.speech_engine, "requested_gpu_name", None),
+            getattr(self.speech_engine, "preferred_gpu_backend", None),
+        )
+
+    def _has_pending_gpu_restart(self, settings: Optional[dict] = None) -> bool:
+        """Return True when the selected GPU differs from the running engine."""
+        if settings is None:
+            gpu_name, gpu_backend = _parse_gpu_selection_id(self.gpu_combo.get_active_id())
+        else:
+            gpu_name = settings.get("gpu_name")
+            gpu_backend = settings.get("gpu_backend")
+
+        return (gpu_name, gpu_backend) != self._get_runtime_gpu_selection()
+
+    def _update_gpu_row_subtitle(self):
+        """Update the GPU row subtitle, including restart requirements."""
+        engine_text = self.engine_combo.get_active_text()
+        engine = _engine_from_display(engine_text) if engine_text else "vosk"
+        gpu_supported = engine in {"whisper", "whisper_cpp"}
+
+        if not gpu_supported:
+            self.gpu_row.set_subtitle("GPU acceleration is available for Whisper and whisper.cpp")
+            return
+
+        if self._gpu_restart_pending:
+            self.gpu_row.set_subtitle(
+                "GPU selection saved. Restart the app for this change to take effect."
+            )
+            return
+
+        if self.gpu_combo.get_model() and len(self.gpu_combo.get_model()) > 1:
+            self.gpu_row.set_subtitle("Choose automatic selection or a specific GPU by name")
+        else:
+            self.gpu_row.set_subtitle(
+                "No supported GPUs detected. Automatic selection will use CPU."
+            )
+
+    def _update_gpu_restart_notice(self):
+        """Show or hide the explicit restart notice for pending GPU changes."""
+        engine_text = self.engine_combo.get_active_text()
+        engine = _engine_from_display(engine_text) if engine_text else "vosk"
+        show_notice = self._gpu_restart_pending and engine in {"whisper", "whisper_cpp"}
+
+        if show_notice:
+            if self._gpu_restart_countdown_id is None:
+                self._gpu_restart_seconds_remaining = 5
+                self._gpu_restart_countdown_id = GLib.timeout_add_seconds(
+                    1, self._on_gpu_restart_countdown_tick
+                )
+            self._refresh_gpu_restart_notice_text()
+            self.gpu_restart_box.show_all()
+            self.restart_now_button.show()
+        else:
+            self._cancel_gpu_restart_countdown()
+            self.gpu_restart_box.hide()
+            self.restart_now_button.hide()
+
+    def _get_live_reconfigure_settings(self, settings: dict) -> dict:
+        """Map persisted settings to values that are safe to apply in the current process."""
+        live_settings = dict(settings)
+
+        if self._has_pending_gpu_restart(settings):
+            runtime_gpu_name, runtime_gpu_backend = self._get_runtime_gpu_selection()
+            live_settings["gpu_name"] = runtime_gpu_name
+            live_settings["gpu_backend"] = runtime_gpu_backend
+
+        return live_settings
+
+    def _cancel_gpu_restart_countdown(self):
+        """Cancel a pending GPU restart countdown."""
+        if self._gpu_restart_countdown_id is not None:
+            GLib.source_remove(self._gpu_restart_countdown_id)
+            self._gpu_restart_countdown_id = None
+        self._gpu_restart_seconds_remaining = 0
+
+    def _refresh_gpu_restart_notice_text(self):
+        """Render the current GPU restart countdown message."""
+        if self._gpu_restart_seconds_remaining > 0:
+            self.gpu_restart_label.set_markup(
+                "<span foreground='#e5a50a'>⚠ GPU selection saved. "
+                f"Restarting the app in {self._gpu_restart_seconds_remaining} seconds "
+                "to activate the new backend.</span>"
+            )
+        else:
+            self.gpu_restart_label.set_markup(
+                "<span foreground='#e5a50a'>⚠ GPU selection saved. "
+                "Restarting the app now to activate the new backend.</span>"
+            )
+
+    def _on_gpu_restart_countdown_tick(self):
+        """Advance the GPU restart countdown and restart when it reaches zero."""
+        self._gpu_restart_seconds_remaining -= 1
+        if self._gpu_restart_seconds_remaining <= 0:
+            self._gpu_restart_countdown_id = None
+            self._refresh_gpu_restart_notice_text()
+            self._restart_application_now()
+            return False
+
+        self._refresh_gpu_restart_notice_text()
+        return True
+
+    def _restart_application_now(self):
+        """Restart the application so persisted GPU changes take effect."""
+        if self.restart_callback is not None:
+            if self.restart_callback():
+                return
+
+        try:
+            subprocess.Popen(
+                [sys.executable, "-m", "vocalinux.restart_helper", str(os.getpid())],
+                close_fds=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to restart Vocalinux: {e}", exc_info=True)
+            self.gpu_restart_label.set_markup(
+                f"<span foreground='#c01c28'>✗ Restart failed: {e}</span>"
+            )
+            self.gpu_restart_box.show_all()
+            return
+
+        Gtk.main_quit()
 
     def _update_model_info(self):
         """Update the model info card display."""
@@ -2849,7 +3181,7 @@ class SettingsDialog(Gtk.Dialog):
         if self._test_active:
             return
 
-        if self._populating_models:
+        if self._populating_models or self._populating_gpus:
             return
 
         self._applying_settings = True
@@ -2934,7 +3266,10 @@ class SettingsDialog(Gtk.Dialog):
             if was_running:
                 self.speech_engine.stop_recognition()
 
-            self.speech_engine.reconfigure(**settings)
+            self.speech_engine.reconfigure(**self._get_live_reconfigure_settings(settings))
+            self._gpu_restart_pending = self._has_pending_gpu_restart(settings)
+            self._update_gpu_row_subtitle()
+            self._update_gpu_restart_notice()
             logger.info("Settings auto-applied successfully")
         except Exception as e:
             logger.error(f"Failed to auto-apply settings: {e}")
@@ -2985,6 +3320,8 @@ class SettingsDialog(Gtk.Dialog):
             "whispercpp_entropy_thold": self.advanced_entropy_thold_spin.get_value(),
             "whispercpp_logprob_thold": self.advanced_logprob_thold_spin.get_value(),
             "whispercpp_no_speech_thold": self.advanced_no_speech_thold_spin.get_value(),
+            "gpu_name": _parse_gpu_selection_id(self.gpu_combo.get_active_id())[0],
+            "gpu_backend": _parse_gpu_selection_id(self.gpu_combo.get_active_id())[1],
         }
 
         # Remote API additional settings
@@ -2996,6 +3333,33 @@ class SettingsDialog(Gtk.Dialog):
             )
 
         return settings
+
+    def _on_gpu_changed(self, widget):
+        """Handle changes in the selected GPU."""
+        if self._populating_gpus:
+            return
+
+        self.current_gpu_name, self.current_gpu_backend = _parse_gpu_selection_id(
+            self.gpu_combo.get_active_id()
+        )
+        settings = self.get_selected_settings()
+        self._gpu_restart_pending = self._has_pending_gpu_restart(settings)
+        self._update_gpu_row_subtitle()
+        self._update_gpu_restart_notice()
+
+        try:
+            self.config_manager.update_speech_recognition_settings(settings)
+            self.config_manager.save_settings()
+            logger.info("Saved GPU selection. Restart required for it to take effect.")
+        except Exception as e:
+            logger.error(f"Failed to save GPU selection: {e}")
+
+    def _on_refresh_gpu_devices(self, widget):
+        """Refresh the list of detected GPUs."""
+        self.current_gpu_name, self.current_gpu_backend = _parse_gpu_selection_id(
+            self.gpu_combo.get_active_id()
+        )
+        self._populate_gpu_options()
 
     def _on_test_clicked(self, widget):
         """Handle click on the test button."""
@@ -3212,7 +3576,10 @@ For now, the engine has been reverted to VOSK."""
                 self.speech_engine.stop_recognition()
                 time.sleep(0.5)
 
-            self.speech_engine.reconfigure(**settings)
+            self.speech_engine.reconfigure(**self._get_live_reconfigure_settings(settings))
+            self._gpu_restart_pending = self._has_pending_gpu_restart(settings)
+            self._update_gpu_row_subtitle()
+            self._update_gpu_restart_notice()
 
             logger.info("Settings applied successfully.")
             return True

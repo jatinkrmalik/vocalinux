@@ -63,13 +63,77 @@ def parse_arguments():
         choices=["vosk", "whisper", "whisper_cpp", "remote_api"],
         help="Speech recognition engine to use (whisper_cpp recommended for best performance)",
     )
+    parser.add_argument(
+        "--gpu",
+        type=str,
+        help=(
+            "GPU name to use for acceleration. The selected name is persisted in the config. "
+            "Use 'auto' to clear the saved GPU preference."
+        ),
+    )
+    parser.add_argument(
+        "--gpus",
+        action="store_true",
+        help="List detected GPUs that can be used with --gpu and exit",
+    )
     parser.add_argument("--wayland", action="store_true", help="Force Wayland compatibility mode")
+    parser.add_argument(
+        "--text-injection",
+        choices=["auto", "ydotool", "ydotool-paste"],
+        default="auto",
+        help=(
+            "Text injection backend override. Use ydotool-paste for remote clients "
+            "that need clipboard paste instead of typed key events."
+        ),
+    )
+    parser.add_argument(
+        "--clipboard-timeout",
+        type=float,
+        default=2.0,
+        help="Seconds to wait for clipboard tools in clipboard-paste injection mode.",
+    )
+    parser.add_argument(
+        "--paste-delay",
+        type=float,
+        default=0.25,
+        help="Seconds to wait after copying text before simulating Ctrl+V.",
+    )
+    parser.add_argument(
+        "--paste-method",
+        choices=["ydotool-key", "ydotool-type", "xdotool"],
+        default="ydotool-key",
+        help="Method used to simulate Ctrl+V after clipboard copy.",
+    )
     parser.add_argument(
         "--start-minimized",
         action="store_true",
         help="Start minimized to system tray",
     )
     return parser.parse_args()
+
+
+def list_available_gpus() -> int:
+    """Print the currently detectable GPUs and return a process exit code."""
+    from .utils.whispercpp_model_info import list_cuda_devices, list_vulkan_devices
+
+    vulkan_devices = list_vulkan_devices()
+    cuda_devices = list_cuda_devices()
+
+    if not vulkan_devices and not cuda_devices:
+        print("No GPUs detected.")
+        return 1
+
+    if vulkan_devices:
+        print("Vulkan GPUs:")
+        for device_index, device_name in vulkan_devices:
+            print(f"  [{device_index}] {device_name}")
+
+    if cuda_devices:
+        print("CUDA GPUs:")
+        for device_index, device_name in cuda_devices:
+            print(f"  [{device_index}] {device_name}")
+
+    return 0
 
 
 def check_dependencies():
@@ -214,6 +278,11 @@ def check_appindicator_support():
 
 def main():
     """Main entry point for the application."""
+    args = parse_arguments()
+
+    if getattr(args, "gpus", False) is True:
+        sys.exit(list_available_gpus())
+
     # Check for single instance BEFORE any initialization
     from . import single_instance
 
@@ -240,8 +309,6 @@ def main():
 
     # Register cleanup to release lock on exit
     atexit.register(single_instance.release_lock)
-
-    args = parse_arguments()
 
     # Configure debug logging if requested
     if args.debug:
@@ -281,15 +348,29 @@ def main():
     initialize_logging()
     logger.info("Logging system initialized")
 
-    # Try to start IBus daemon if not running (for text injection)
-    # This helps on desktop environments where IBus doesn't start automatically
-    try:
-        from .text_injection import start_ibus_daemon
+    text_injection_backend = getattr(args, "text_injection", "auto")
+    if not isinstance(text_injection_backend, str):
+        text_injection_backend = "auto"
+    clipboard_timeout = getattr(args, "clipboard_timeout", 2.0)
+    if not isinstance(clipboard_timeout, (int, float)):
+        clipboard_timeout = 2.0
+    paste_delay = getattr(args, "paste_delay", 0.25)
+    if not isinstance(paste_delay, (int, float)):
+        paste_delay = 0.25
+    paste_method = getattr(args, "paste_method", "ydotool-key")
+    if not isinstance(paste_method, str):
+        paste_method = "ydotool-key"
 
-        if start_ibus_daemon():
-            logger.debug("IBus daemon started for text injection")
-    except Exception as e:
-        logger.debug(f"Could not start IBus daemon: {e}")
+    # Try to start IBus daemon if not running (for text injection).
+    # Skip this when the user explicitly requested a non-IBus backend.
+    if text_injection_backend == "auto":
+        try:
+            from .text_injection import start_ibus_daemon
+
+            if start_ibus_daemon():
+                logger.debug("IBus daemon started for text injection")
+        except Exception as e:
+            logger.debug(f"Could not start IBus daemon: {e}")
 
     config_manager = ConfigManager()
     saved_settings = config_manager.get_settings().get("speech_recognition", {})
@@ -326,6 +407,26 @@ def main():
     cli_engine_set = any(arg.startswith("--engine") for arg in sys.argv[1:])
     cli_model_set = any(arg.startswith("--model") for arg in sys.argv[1:])
     cli_language_set = any(arg.startswith("--language") for arg in sys.argv[1:])
+    cli_gpu_set = any(arg == "--gpu" or arg.startswith("--gpu=") for arg in sys.argv[1:])
+
+    raw_gpu_arg = getattr(args, "gpu", None)
+    clear_gpu_preference = (
+        cli_gpu_set
+        and isinstance(raw_gpu_arg, str)
+        and raw_gpu_arg.strip().casefold() in {"auto", "default", "none", "cpu"}
+    )
+    if cli_gpu_set:
+        gpu_name = None if clear_gpu_preference else raw_gpu_arg
+        gpu_backend = None
+        logger.info(
+            "Using GPU selection from command line: %s",
+            gpu_name if gpu_name is not None else "automatic",
+        )
+    else:
+        gpu_name = saved_settings.get("gpu_name")
+        gpu_backend = saved_settings.get("gpu_backend")
+        if gpu_name:
+            logger.info(f"Using GPU selection from saved config: {gpu_name} ({gpu_backend})")
 
     # Use CLI args if explicitly set, otherwise fall back to saved config, then defaults
     if cli_engine_set:
@@ -383,14 +484,37 @@ def main():
             whispercpp_entropy_thold=advanced_settings.get("whispercpp_entropy_thold", 2.4),
             whispercpp_logprob_thold=advanced_settings.get("whispercpp_logprob_thold", -1.0),
             whispercpp_no_speech_thold=advanced_settings.get("whispercpp_no_speech_thold", 0.6),
+            gpu_name=gpu_name,
+            gpu_backend=gpu_backend,
             whispercpp_n_threads=advanced_settings.get("whispercpp_n_threads", 0),
             remote_api_url=saved_settings.get("remote_api_url", ""),
             remote_api_key=saved_settings.get("remote_api_key", ""),
             remote_api_endpoint=saved_settings.get("remote_api_endpoint", "/inference"),
         )
 
+        should_persist_gpu_preference = cli_gpu_set or saved_settings.get("gpu_name") is not None
+        if should_persist_gpu_preference:
+            persisted_gpu_name = None if clear_gpu_preference else speech_engine.selected_gpu_name
+            persisted_gpu_backend = (
+                None if clear_gpu_preference else speech_engine.selected_gpu_backend
+            )
+
+            if (
+                saved_settings.get("gpu_name") != persisted_gpu_name
+                or saved_settings.get("gpu_backend") != persisted_gpu_backend
+            ):
+                config_manager.set("speech_recognition", "gpu_name", persisted_gpu_name)
+                config_manager.set("speech_recognition", "gpu_backend", persisted_gpu_backend)
+                config_manager.save_config()
+
         # Initialize text injection system
-        text_system = text_injector.TextInjector(wayland_mode=args.wayland)
+        text_system = text_injector.TextInjector(
+            wayland_mode=args.wayland,
+            preferred_backend=text_injection_backend,
+            clipboard_timeout=clipboard_timeout,
+            paste_delay=paste_delay,
+            paste_method=paste_method,
+        )
 
         # Initialize action handler
         action_handler = ActionHandler(text_system)

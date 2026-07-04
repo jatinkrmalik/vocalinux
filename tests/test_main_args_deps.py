@@ -39,7 +39,13 @@ class TestParseArguments(unittest.TestCase):
             assert args.model is None
             assert args.language is None
             assert args.engine is None
+            assert args.gpu is None
+            assert args.gpus is False
             assert args.wayland is False
+            assert args.text_injection == "auto"
+            assert args.clipboard_timeout == 2.0
+            assert args.paste_delay == 0.25
+            assert args.paste_method == "ydotool-key"
             assert args.start_minimized is False
 
     def test_parse_args_debug_flag(self):
@@ -82,6 +88,38 @@ class TestParseArguments(unittest.TestCase):
             args = parse_arguments()
             assert args.wayland is True
 
+    def test_parse_args_text_injection_argument(self):
+        """Test parsing with text injection backend override."""
+        with patch.object(sys, "argv", ["vocalinux", "--text-injection", "ydotool-paste"]):
+            from vocalinux.main import parse_arguments
+
+            args = parse_arguments()
+            assert args.text_injection == "ydotool-paste"
+
+    def test_parse_args_clipboard_timeout_argument(self):
+        """Test parsing with clipboard timeout override."""
+        with patch.object(sys, "argv", ["vocalinux", "--clipboard-timeout", "5"]):
+            from vocalinux.main import parse_arguments
+
+            args = parse_arguments()
+            assert args.clipboard_timeout == 5.0
+
+    def test_parse_args_paste_delay_argument(self):
+        """Test parsing with paste delay override."""
+        with patch.object(sys, "argv", ["vocalinux", "--paste-delay", "1.25"]):
+            from vocalinux.main import parse_arguments
+
+            args = parse_arguments()
+            assert args.paste_delay == 1.25
+
+    def test_parse_args_paste_method_argument(self):
+        """Test parsing with paste method override."""
+        with patch.object(sys, "argv", ["vocalinux", "--paste-method", "ydotool-type"]):
+            from vocalinux.main import parse_arguments
+
+            args = parse_arguments()
+            assert args.paste_method == "ydotool-type"
+
     def test_parse_args_start_minimized_flag(self):
         """Test parsing with start-minimized flag."""
         with patch.object(sys, "argv", ["vocalinux", "--start-minimized"]):
@@ -104,7 +142,18 @@ class TestParseArguments(unittest.TestCase):
                 "es",
                 "--engine",
                 "vosk",
+                "--gpu",
+                "Intel Arc",
+                "--gpus",
                 "--wayland",
+                "--text-injection",
+                "ydotool",
+                "--clipboard-timeout",
+                "3.5",
+                "--paste-delay",
+                "1.25",
+                "--paste-method",
+                "ydotool-type",
             ],
         ):
             from vocalinux.main import parse_arguments
@@ -114,7 +163,13 @@ class TestParseArguments(unittest.TestCase):
             assert args.model == "large"
             assert args.language == "es"
             assert args.engine == "vosk"
+            assert args.gpu == "Intel Arc"
+            assert args.gpus is True
             assert args.wayland is True
+            assert args.text_injection == "ydotool"
+            assert args.clipboard_timeout == 3.5
+            assert args.paste_delay == 1.25
+            assert args.paste_method == "ydotool-type"
 
 
 class TestCheckDependencies(unittest.TestCase):
@@ -258,6 +313,23 @@ class TestCheckAppIndicatorSupport(unittest.TestCase):
 class TestMainFunction(unittest.TestCase):
     """Tests for the main() function."""
 
+    @patch("vocalinux.main.parse_arguments")
+    @patch("vocalinux.main.list_available_gpus")
+    def test_main_exits_after_listing_gpus(self, mock_list_gpus, mock_parse_args):
+        """Test that --gpus exits before the normal app startup path."""
+        from vocalinux.main import main
+
+        mock_args = MagicMock()
+        mock_args.gpus = True
+        mock_parse_args.return_value = mock_args
+        mock_list_gpus.return_value = 0
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 0
+        mock_list_gpus.assert_called_once_with()
+
     @patch("vocalinux.main.logging")
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.main.check_display_available")
@@ -355,6 +427,7 @@ class TestMainFunction(unittest.TestCase):
 
         mock_args = MagicMock()
         mock_args.debug = True
+        mock_args.gpus = False
         mock_args.wayland = False
         mock_args.start_minimized = False
         mock_parse_args.return_value = mock_args
@@ -433,6 +506,7 @@ class TestMainFunction(unittest.TestCase):
 
         mock_args = MagicMock()
         mock_args.debug = False
+        mock_args.gpus = False
         mock_args.wayland = False
         mock_args.start_minimized = False
         mock_args.engine = None
@@ -502,6 +576,7 @@ class TestMainFunction(unittest.TestCase):
 
         mock_args = MagicMock()
         mock_args.debug = False
+        mock_args.gpus = False
         mock_args.wayland = False
         mock_args.start_minimized = False
         mock_parse_args.return_value = mock_args

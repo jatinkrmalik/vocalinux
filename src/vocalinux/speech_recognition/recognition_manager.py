@@ -677,7 +677,7 @@ def _get_system_model_paths() -> list:
                 paths.append("/usr/lib/vocalinux/models")
 
             # Arch Linux doesn't use /usr/local
-            if "arch" in os_release:
+            if "arch" in os_release and "/usr/local/share/vocalinux/models" in paths:
                 paths.remove("/usr/local/share/vocalinux/models")
 
     except (IOError, OSError, FileNotFoundError):
@@ -783,6 +783,16 @@ class SpeechRecognitionManager:
         self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
         self._http_session = None
 
+        # GPU selection is stored by name and re-resolved to the current index
+        # at startup so it survives changing device enumeration.
+        self.requested_gpu_name = kwargs.get("gpu_name")
+        self.preferred_gpu_backend = kwargs.get("gpu_backend")
+        self.selected_gpu_name: Optional[str] = None
+        self.selected_gpu_backend: Optional[str] = None
+        self.selected_gpu_index: Optional[int] = None
+        self._managed_gpu_env_keys: set[str] = set()
+        self._gpu_env_originals: dict[str, Optional[str]] = {}
+
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
         self._audio_level_callbacks: list[Callable[[float], None]] = []
@@ -830,6 +840,85 @@ class SpeechRecognitionManager:
         if self._voice_commands_preference is None:
             return self.engine == "vosk"
         return bool(self._voice_commands_preference)
+
+    def _remember_env_original(self, key: str):
+        """Remember the original environment value before overriding it."""
+        if key not in self._gpu_env_originals:
+            self._gpu_env_originals[key] = os.environ.get(key)
+
+    def _set_managed_env(self, key: str, value: str):
+        """Set an environment variable and track that this instance changed it."""
+        self._remember_env_original(key)
+        os.environ[key] = value
+        self._managed_gpu_env_keys.add(key)
+
+    def _restore_managed_gpu_environment(self):
+        """Restore any GPU-related environment variables modified by this instance."""
+        for key in list(self._managed_gpu_env_keys):
+            original_value = self._gpu_env_originals.get(key)
+            if original_value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = original_value
+        self._managed_gpu_env_keys.clear()
+
+    def _clear_selected_gpu(self):
+        """Clear the active GPU tracking fields."""
+        self.selected_gpu_name = None
+        self.selected_gpu_backend = None
+        self.selected_gpu_index = None
+
+    def _resolve_requested_gpu(
+        self, allowed_backends: Optional[list[str]] = None
+    ) -> Optional[tuple[str, int, str]]:
+        """Resolve the configured GPU name to the current backend and device index."""
+        if not self.requested_gpu_name:
+            self._clear_selected_gpu()
+            return None
+
+        from ..utils.whispercpp_model_info import resolve_gpu_selection
+
+        backend, device_index, resolved_name = resolve_gpu_selection(
+            self.requested_gpu_name,
+            allowed_backends=allowed_backends,
+            preferred_backend=self.preferred_gpu_backend,
+        )
+        self.selected_gpu_backend = backend
+        self.selected_gpu_index = device_index
+        self.selected_gpu_name = resolved_name
+        logger.info(
+            "Resolved requested GPU '%s' to %s device '%s' (index=%s)",
+            self.requested_gpu_name,
+            backend,
+            resolved_name,
+            device_index,
+        )
+        return backend, device_index, resolved_name
+
+    def _apply_whispercpp_gpu_selection(self, selection: tuple[str, int, str]):
+        """Apply environment overrides so whisper.cpp uses the selected GPU."""
+        from ..utils.whispercpp_model_info import ComputeBackend
+
+        backend, device_index, device_name = selection
+        self._restore_managed_gpu_environment()
+
+        if backend == ComputeBackend.VULKAN:
+            self._set_managed_env("GGML_VK_VISIBLE_DEVICES", str(device_index))
+            self._set_managed_env("GGML_VULKAN", "1")
+            self._set_managed_env("GGML_CUDA", "0")
+        elif backend == ComputeBackend.CUDA:
+            self._set_managed_env("CUDA_VISIBLE_DEVICES", str(device_index))
+            self._set_managed_env("GGML_VULKAN", "0")
+            self._set_managed_env("GGML_CUDA", "1")
+        else:
+            raise ValueError(f"Unsupported GPU backend selection: {backend}")
+
+        logger.info(
+            "Applied whisper.cpp GPU selection: backend=%s, index=%s, name=%s",
+            backend,
+            device_index,
+            device_name,
+        )
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
@@ -894,6 +983,10 @@ class SpeechRecognitionManager:
                 warnings.simplefilter("ignore")
                 import torch
 
+            from ..utils.whispercpp_model_info import ComputeBackend
+
+            self._restore_managed_gpu_environment()
+
             # Validate model size for Whisper
             valid_whisper_models = ["tiny", "base", "small", "medium", "large"]
             if self.model_size not in valid_whisper_models:
@@ -924,8 +1017,30 @@ class SpeechRecognitionManager:
                 logger.info(f"Downloading Whisper '{self.model_size}' model...")
                 self._download_whisper_model(whisper_cache_dir)
 
-            # Determine device (GPU if available, otherwise CPU)
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            requested_gpu = self._resolve_requested_gpu([ComputeBackend.CUDA])
+            if requested_gpu:
+                if not torch.cuda.is_available():
+                    raise RuntimeError(
+                        f"Selected GPU '{self.requested_gpu_name}' requires CUDA, but CUDA is unavailable"
+                    )
+                _, device_index, resolved_name = requested_gpu
+                visible_device_count = torch.cuda.device_count()
+                if device_index >= visible_device_count:
+                    raise RuntimeError(
+                        f"Selected GPU '{resolved_name}' resolved to CUDA index {device_index}, "
+                        f"but only {visible_device_count} CUDA device(s) are visible"
+                    )
+                device = f"cuda:{device_index}"
+                logger.info(f"Using requested CUDA GPU '{resolved_name}' (device={device})")
+            else:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                if device == "cuda":
+                    current_index = torch.cuda.current_device()
+                    self.selected_gpu_backend = ComputeBackend.CUDA
+                    self.selected_gpu_index = current_index
+                    self.selected_gpu_name = torch.cuda.get_device_name(current_index)
+                else:
+                    self._clear_selected_gpu()
             logger.info(f"Using device: {device}")
 
             logger.info(f"Loading Whisper '{self.model_size}' model...")
@@ -1051,7 +1166,20 @@ class SpeechRecognitionManager:
                     logger.info(f"Downloading whisper.cpp '{self.model_size}' model...")
                     self._download_whispercpp_model()
 
-            self._load_whispercpp_model(model_path)
+            try:
+                self._load_whispercpp_model(model_path)
+            except RuntimeError as e:
+                if self._is_unsupported_requested_whispercpp_gpu_error(e):
+                    logger.warning(
+                        "Requested whisper.cpp GPU backend is unavailable; "
+                        "clearing the saved GPU selection and falling back to CPU: %s",
+                        e,
+                    )
+                    self._clear_requested_gpu_preference()
+                    self._restore_managed_gpu_environment()
+                    self._load_whispercpp_model(model_path)
+                else:
+                    raise
 
         except ImportError as e:
             logger.error(f"Failed to import pywhispercpp: {e}")
@@ -1063,6 +1191,17 @@ class SpeechRecognitionManager:
             logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
             self.state = RecognitionState.ERROR
             raise
+
+    @staticmethod
+    def _is_unsupported_requested_whispercpp_gpu_error(error: RuntimeError) -> bool:
+        """Return whether pywhispercpp lacks the requested persisted GPU backend."""
+        return "does not support the requested" in str(error).lower()
+
+    def _clear_requested_gpu_preference(self):
+        """Clear a persisted requested GPU selection in memory after CPU fallback."""
+        self.requested_gpu_name = None
+        self.preferred_gpu_backend = None
+        self._clear_selected_gpu()
 
     def _build_whispercpp_model_kwargs(self, n_threads: int) -> dict:
         model_kwargs = {
@@ -1170,7 +1309,25 @@ class SpeechRecognitionManager:
             ComputeBackend,
             detect_compute_backend,
             get_backend_display_name,
+            get_whispercpp_compiled_backends,
         )
+
+        requested_gpu = self._resolve_requested_gpu([ComputeBackend.VULKAN, ComputeBackend.CUDA])
+        compiled_backends = get_whispercpp_compiled_backends()
+
+        if requested_gpu and requested_gpu[0] not in compiled_backends:
+            requested_backend = requested_gpu[0]
+            available_backends = ", ".join(sorted(compiled_backends))
+            raise RuntimeError(
+                "The installed pywhispercpp build does not support the requested "
+                f"{requested_backend.upper()} backend. Available backends: {available_backends}. "
+                "Reinstall pywhispercpp with the matching GGML build flag."
+            )
+
+        if requested_gpu:
+            self._apply_whispercpp_gpu_selection(requested_gpu)
+        else:
+            self._restore_managed_gpu_environment()
 
         # Detect and log compute backend
         backend, backend_info = detect_compute_backend()
@@ -1178,6 +1335,17 @@ class SpeechRecognitionManager:
         logger.info(
             f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
         )
+
+        if requested_gpu:
+            self.selected_gpu_backend = requested_gpu[0]
+            self.selected_gpu_index = requested_gpu[1]
+            self.selected_gpu_name = requested_gpu[2]
+        elif backend == ComputeBackend.CPU:
+            self._clear_selected_gpu()
+        else:
+            self.selected_gpu_backend = backend
+            self.selected_gpu_index = None
+            self.selected_gpu_name = backend_info
 
         # Log hardware summary
         import psutil
@@ -1234,13 +1402,14 @@ class SpeechRecognitionManager:
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
 
-    def _handle_gpu_fallback(self, error, model_path: str, model_kwargs: dict, cpu_backend):
+    def _handle_gpu_fallback(self, error, model_path: str, model_kwargs, cpu_backend):
         """Handle GPU backend failure by falling back to CPU.
 
         Args:
             error: The RuntimeError from model loading.
             model_path: Path to the GGML model file.
-            model_kwargs: Dict of keyword arguments for pywhispercpp.Model.
+            model_kwargs: Dict of keyword arguments for pywhispercpp.Model, or the legacy
+                n_threads integer used by older tests/callers.
             cpu_backend: The CPU ComputeBackend enum value.
 
         Returns:
@@ -1265,8 +1434,11 @@ class SpeechRecognitionManager:
             "dialog-information",
         )
         # Force CPU backend by disabling GPU backends
-        os.environ["GGML_VULKAN"] = "0"
-        os.environ["GGML_CUDA"] = "0"
+        self._set_managed_env("GGML_VULKAN", "0")
+        self._set_managed_env("GGML_CUDA", "0")
+        self._clear_selected_gpu()
+        if isinstance(model_kwargs, int):
+            model_kwargs = self._build_whispercpp_model_kwargs(model_kwargs)
         self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
@@ -2726,6 +2898,17 @@ class SpeechRecognitionManager:
         ):
             if param_name in kwargs:
                 setattr(self, param_name, kwargs[param_name])
+                restart_needed = True
+
+        if "gpu_name" in kwargs or "gpu_backend" in kwargs:
+            new_gpu_name = kwargs.get("gpu_name")
+            new_gpu_backend = kwargs.get("gpu_backend")
+            if (
+                new_gpu_name != self.requested_gpu_name
+                or new_gpu_backend != self.preferred_gpu_backend
+            ):
+                self.requested_gpu_name = new_gpu_name
+                self.preferred_gpu_backend = new_gpu_backend
                 restart_needed = True
 
         # Handle Remote API settings
