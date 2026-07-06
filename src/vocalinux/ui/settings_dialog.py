@@ -3251,13 +3251,27 @@ For now, the engine has been reverted to VOSK."""
             self.audio_device_combo.append(str(device_index), label)
 
         saved_device = self.config_manager.get_optional_int("audio", "device_index", None)
+        saved_device_name = self.config_manager.get("audio", "device_name", None)
 
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")
         else:
-            if not self.audio_device_combo.set_active_id(str(saved_device)):
-                logger.warning(f"Saved audio device {saved_device} no longer available")
-                self.audio_device_combo.set_active_id("-1")
+            # Try to match by saved device name first (more stable across reboots)
+            matched = False
+            if saved_device_name:
+                for idx, name, _ in devices:
+                    if name == saved_device_name:
+                        self.audio_device_combo.set_active_id(str(idx))
+                        matched = True
+                        break
+            if not matched:
+                # Fall back to stored index
+                if not self.audio_device_combo.set_active_id(str(saved_device)):
+                    logger.warning(
+                        f"Saved audio device {saved_device} "
+                        f"(name: {saved_device_name}) no longer available"
+                    )
+                    self.audio_device_combo.set_active_id("-1")
 
         logger.info(f"Found {len(devices)} audio input devices")
 
@@ -3288,9 +3302,9 @@ For now, the engine has been reverted to VOSK."""
         self.config_manager.save_settings()
 
         if device_index == -1:
-            self.speech_engine.set_audio_device(None)
+            self.speech_engine.set_audio_device(None, None)
         else:
-            self.speech_engine.set_audio_device(device_index)
+            self.speech_engine.set_audio_device(device_index, device_name)
 
         logger.info(f"Audio device changed to: [{device_index}] {device_name}")
         self.audio_test_status.set_markup(f"<i>Selected: {device_name}</i>")
