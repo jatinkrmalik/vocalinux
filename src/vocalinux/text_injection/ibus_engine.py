@@ -357,15 +357,10 @@ def get_current_engine_gnome_fallback() -> Optional[str]:
             timeout=5,
         )
         if current_result.returncode != 0:
-            # If current fails, default to index 0 (first source)
             current_idx = 0
         else:
-            # gsettings returns uint32 values as "uint32 N" — extract the number
-            current_raw = current_result.stdout.strip()
-            if current_raw.startswith("uint32"):
-                current_idx = int(current_raw.split()[-1])
-            else:
-                current_idx = int(current_raw)
+            # ponytail: gsettings prints "uint32 N" or just "N" — split()[-1] handles both
+            current_idx = int(current_result.stdout.strip().split()[-1])
 
         if current_idx < 0 or current_idx >= len(sources):
             current_idx = 0
