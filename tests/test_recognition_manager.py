@@ -680,10 +680,12 @@ class TestModuleLevelFunctions(unittest.TestCase):
 
         mock_audio = MagicMock()
         mock_audio.get_device_count.return_value = 2
-        mock_audio.get_device_info_by_index.side_effect = [
-            {"name": "Mic", "maxInputChannels": 1},
-            {"name": "Headset", "maxInputChannels": 2},
-        ]
+        # Use return_value so the mock can be called multiple times by both
+        # _resolve_device_by_name and _resolve_valid_input_device without StopIteration
+        mock_audio.get_device_info_by_index.return_value = {
+            "name": "Mic",
+            "maxInputChannels": 1,
+        }
         mock_audio.get_default_input_device_info.return_value = {"index": 0}
 
         result = _resolve_device_by_name(mock_audio, "Missing Device", fallback_index=0)
