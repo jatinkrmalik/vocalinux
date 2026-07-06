@@ -251,7 +251,9 @@ def get_audio_input_devices() -> list:
     return devices
 
 
-def _resolve_device_by_name(audio, device_name: Optional[str], fallback_index: Optional[int] = None) -> Optional[int]:
+def _resolve_device_by_name(
+    audio, device_name: Optional[str], fallback_index: Optional[int] = None
+) -> Optional[int]:
     """Resolve a device index by matching the saved device name.
 
     Device indices can shift when USB devices are replugged or when virtual
@@ -2329,9 +2331,7 @@ class SpeechRecognitionManager:
                         name = info.get("name", "")
                         if _is_virtual_device(name):
                             continue
-                        logger.debug(
-                            f"  [{i}] {name} (inputs: {info.get('maxInputChannels')})"
-                        )
+                        logger.debug(f"  [{i}] {name} (inputs: {info.get('maxInputChannels')})")
                 except (IOError, OSError):
                     continue
 
