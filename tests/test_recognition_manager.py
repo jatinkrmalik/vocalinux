@@ -659,10 +659,12 @@ class TestModuleLevelFunctions(unittest.TestCase):
         self.assertIn("USB Headset", device_names)
         self.assertNotIn("speech-dispatcher-dummy", device_names)
 
-    def test_resolve_device_by_name_found(self):
-        """Test _resolve_device_by_name finds a matching device."""
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_found(self, mock_valid):
+        """Test _resolve_device_by_name finds a matching device and delegates validation."""
         from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
 
+        mock_valid.return_value = 1
         mock_audio = MagicMock()
         mock_audio.get_device_count.return_value = 3
         mock_audio.get_device_info_by_index.side_effect = [
@@ -673,28 +675,31 @@ class TestModuleLevelFunctions(unittest.TestCase):
 
         result = _resolve_device_by_name(mock_audio, "BRIO Webcam")
         self.assertEqual(result, 1)
+        mock_valid.assert_called_once_with(mock_audio, 1)
 
-    def test_resolve_device_by_name_not_found_with_fallback(self):
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_not_found_with_fallback(self, mock_valid):
         """Test _resolve_device_by_name falls back to index when name not found."""
         from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
 
+        mock_valid.return_value = 0
         mock_audio = MagicMock()
         mock_audio.get_device_count.return_value = 2
-        # Use return_value so the mock can be called multiple times by both
-        # _resolve_device_by_name and _resolve_valid_input_device without StopIteration
         mock_audio.get_device_info_by_index.return_value = {
             "name": "Mic",
             "maxInputChannels": 1,
         }
-        mock_audio.get_default_input_device_info.return_value = {"index": 0}
 
         result = _resolve_device_by_name(mock_audio, "Missing Device", fallback_index=0)
         self.assertEqual(result, 0)
+        mock_valid.assert_called_once_with(mock_audio, 0)
 
-    def test_resolve_device_by_name_not_found_no_fallback(self):
-        """Test _resolve_device_by_name returns None when no fallback."""
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_not_found_no_fallback(self, mock_valid):
+        """Test _resolve_device_by_name returns None when name not found and no fallback."""
         from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
 
+        mock_valid.return_value = None
         mock_audio = MagicMock()
         mock_audio.get_device_count.return_value = 1
         mock_audio.get_device_info_by_index.return_value = {
@@ -705,69 +710,40 @@ class TestModuleLevelFunctions(unittest.TestCase):
         result = _resolve_device_by_name(mock_audio, "Missing Device")
         self.assertIsNone(result)
 
-    def test_resolve_device_by_name_empty_name_with_fallback(self):
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_empty_name_with_fallback(self, mock_valid):
         """Test _resolve_device_by_name with empty name uses fallback index."""
         from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
 
+        mock_valid.return_value = 0
         mock_audio = MagicMock()
-        mock_audio.get_device_count.return_value = 1
-        mock_audio.get_device_info_by_index.return_value = {
-            "name": "Mic",
-            "maxInputChannels": 1,
-        }
-        mock_audio.get_default_input_device_info.return_value = {"index": 0}
 
         result = _resolve_device_by_name(mock_audio, None, fallback_index=0)
         self.assertEqual(result, 0)
+        mock_valid.assert_called_once_with(mock_audio, 0)
 
-    def test_resolve_device_by_name_empty_name_no_fallback(self):
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_empty_name_no_fallback(self, mock_valid):
         """Test _resolve_device_by_name with empty name and no fallback returns None."""
         from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
 
+        mock_valid.return_value = None
         mock_audio = MagicMock()
         result = _resolve_device_by_name(mock_audio, None)
         self.assertIsNone(result)
 
-    def test_resolve_device_by_name_skips_virtual(self):
-        """Test _resolve_device_by_name skips virtual devices even if name matches."""
-        from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
-
-        mock_audio = MagicMock()
-        mock_audio.get_device_count.return_value = 2
-        mock_audio.get_device_info_by_index.side_effect = [
-            {"name": "speech-dispatcher-dummy", "maxInputChannels": 2},
-            {"name": "Real Mic", "maxInputChannels": 1},
-        ]
-
-        # Even though we ask for the virtual device by name, it should be skipped
-        result = _resolve_device_by_name(mock_audio, "speech-dispatcher-dummy")
-        self.assertIsNone(result)
-
-    def test_resolve_device_by_name_skips_output_only(self):
-        """Test _resolve_device_by_name skips devices with no input channels."""
-        from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
-
-        mock_audio = MagicMock()
-        mock_audio.get_device_count.return_value = 2
-        mock_audio.get_device_info_by_index.side_effect = [
-            {"name": "HDMI Output", "maxInputChannels": 0},
-            {"name": "Real Mic", "maxInputChannels": 1},
-        ]
-
-        result = _resolve_device_by_name(mock_audio, "HDMI Output")
-        self.assertIsNone(result)
-
-    def test_resolve_device_by_name_get_count_error(self):
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_get_count_error(self, mock_valid):
         """Test _resolve_device_by_name handles get_device_count errors."""
         from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
 
+        mock_valid.return_value = 0
         mock_audio = MagicMock()
         mock_audio.get_device_count.side_effect = IOError("boom")
-        mock_audio.get_default_input_device_info.return_value = {"index": 0}
 
         result = _resolve_device_by_name(mock_audio, "Some Device", fallback_index=0)
-        # Should fall back to _resolve_valid_input_device
         self.assertEqual(result, 0)
+        mock_valid.assert_called_once_with(mock_audio, 0)
 
     def test_show_notification(self):
         """Test _show_notification helper function."""

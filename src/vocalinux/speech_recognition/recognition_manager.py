@@ -254,65 +254,30 @@ def get_audio_input_devices() -> list:
 def _resolve_device_by_name(
     audio, device_name: Optional[str], fallback_index: Optional[int] = None
 ) -> Optional[int]:
-    """Resolve a device index by matching the saved device name.
+    """Resolve a device index by name, falling back to index, then system default.
 
-    Device indices can shift when USB devices are replugged or when virtual
-    devices are added/removed. Matching by name is more stable across
-    re-enumeration.
-
-    Args:
-        audio: PyAudio instance.
-        device_name: The saved device name to search for.
-        fallback_index: If name lookup fails, try this index. Defaults to None.
-
-    Returns:
-        A valid input device index, or None if nothing suitable was found
-        (caller should fall back to system default).
+    Device indices shift when USB devices are replugged or virtual devices are
+    added/removed. Name matching is more stable.
     """
     if not device_name:
-        # No saved name — try the fallback index directly
-        if fallback_index is not None:
-            return _resolve_valid_input_device(audio, fallback_index)
-        return None
+        return _resolve_valid_input_device(audio, fallback_index)
 
     try:
         device_count = int(audio.get_device_count())
     except (IOError, OSError, TypeError, ValueError, AttributeError):
         return _resolve_valid_input_device(audio, fallback_index)
 
+    # ponytail: just find the index by name, delegate validation to _resolve_valid_input_device
     for i in range(device_count):
         try:
             info = audio.get_device_info_by_index(i)
         except (IOError, OSError, TypeError, ValueError, AttributeError):
             continue
+        if isinstance(info, dict) and info.get("name", "") == device_name:
+            return _resolve_valid_input_device(audio, i)
 
-        if not isinstance(info, dict):
-            continue
-
-        if info.get("maxInputChannels", 0) <= 0:
-            continue
-
-        name = info.get("name", "")
-        if _is_virtual_device(name):
-            continue
-
-        if name == device_name:
-            logger.debug(f"Resolved device by name: '{device_name}' -> index {i}")
-            return i
-
-    # Name not found — fall back to the stored index, then system default
-    if fallback_index is not None:
-        logger.warning(
-            f"Audio device '{device_name}' not found in current enumeration. "
-            f"Falling back to stored index {fallback_index}."
-        )
-        return _resolve_valid_input_device(audio, fallback_index)
-
-    logger.warning(
-        f"Audio device '{device_name}' not found and no fallback index available. "
-        "Falling back to system default."
-    )
-    return None
+    logger.warning(f"Audio device '{device_name}' not found, falling back to index {fallback_index}")
+    return _resolve_valid_input_device(audio, fallback_index)
 
 
 def _resolve_valid_input_device(audio, preferred_index: Optional[int] = None) -> Optional[int]:
@@ -2334,30 +2299,6 @@ class SpeechRecognitionManager:
                         logger.debug(f"  [{i}] {name} (inputs: {info.get('maxInputChannels')})")
                 except (IOError, OSError):
                     continue
-
-            # Extra safety: validate resolved device has input channels (from flatpak branch)
-            try:
-                dev_info = audio.get_device_info_by_index(resolved_device_index)
-                dev_name = dev_info.get("name", "Unknown")
-                dev_max_input = dev_info.get("maxInputChannels", 0)
-                if dev_max_input == 0:
-                    logger.warning(
-                        f"Resolved device [{resolved_device_index}] '{dev_name}' "
-                        f"has no input channels (maxInputChannels={dev_max_input}). "
-                        "Falling back to system default."
-                    )
-                    resolved_device_index = _resolve_valid_input_device(audio, None)
-                    if resolved_device_index is None:
-                        logger.error("No audio input devices found after fallback.")
-                        play_error_sound()
-                        audio.terminate()
-                        self._update_state(RecognitionState.ERROR)
-                        return
-            except (IOError, OSError) as e:
-                logger.warning(
-                    f"Could not validate device [{resolved_device_index}]: {e}. "
-                    "Proceeding anyway."
-                )
 
             # Detect supported channel count first (some devices require stereo)
             CHANNELS = _get_supported_channels(audio, resolved_device_index)
