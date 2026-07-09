@@ -276,7 +276,9 @@ def _resolve_device_by_name(
         if isinstance(info, dict) and info.get("name", "") == device_name:
             return _resolve_valid_input_device(audio, i)
 
-    logger.warning(f"Audio device '{device_name}' not found, falling back to index {fallback_index}")
+    logger.warning(
+        f"Audio device '{device_name}' not found, falling back to index {fallback_index}"
+    )
     return _resolve_valid_input_device(audio, fallback_index)
 
 
