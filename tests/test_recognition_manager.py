@@ -605,6 +605,67 @@ class TestModuleLevelFunctions(unittest.TestCase):
         with patch.dict(sys.modules, {"pyaudio": mock_pyaudio}):
             devices = recognition_manager.get_audio_input_devices()
 
+    def test_get_audio_input_devices_skips_unreadable_device(self):
+        """Test unreadable devices are skipped during enumeration."""
+        from vocalinux.speech_recognition import recognition_manager
+
+        mock_pyaudio_instance = MagicMock()
+        mock_pyaudio_instance.get_default_input_device_info.return_value = {"index": 1}
+        mock_pyaudio_instance.get_device_count.return_value = 2
+        mock_pyaudio_instance.get_device_info_by_index.side_effect = [
+            IOError("device disappeared"),
+            {"name": "USB Mic", "maxInputChannels": 1},
+        ]
+
+        mock_pyaudio = MagicMock()
+        mock_pyaudio.PyAudio.return_value = mock_pyaudio_instance
+
+        with patch.dict(sys.modules, {"pyaudio": mock_pyaudio}):
+            devices = recognition_manager.get_audio_input_devices()
+
+        self.assertEqual(devices, [(1, "USB Mic", True)])
+
+    def test_get_audio_input_devices_skips_output_only_device(self):
+        """Test output-only devices are skipped during enumeration."""
+        from vocalinux.speech_recognition import recognition_manager
+
+        mock_pyaudio_instance = MagicMock()
+        mock_pyaudio_instance.get_default_input_device_info.return_value = {"index": 1}
+        mock_pyaudio_instance.get_device_count.return_value = 2
+        mock_pyaudio_instance.get_device_info_by_index.side_effect = [
+            {"name": "HDMI Output", "maxInputChannels": 0},
+            {"name": "USB Mic", "maxInputChannels": 1},
+        ]
+
+        mock_pyaudio = MagicMock()
+        mock_pyaudio.PyAudio.return_value = mock_pyaudio_instance
+
+        with patch.dict(sys.modules, {"pyaudio": mock_pyaudio}):
+            devices = recognition_manager.get_audio_input_devices()
+
+        self.assertEqual(devices, [(1, "USB Mic", True)])
+
+    def test_get_audio_input_devices_import_error(self):
+        """Test missing PyAudio returns an empty device list."""
+        from vocalinux.speech_recognition import recognition_manager
+
+        with patch.dict(sys.modules, {"pyaudio": None}):
+            devices = recognition_manager.get_audio_input_devices()
+
+        self.assertEqual(devices, [])
+
+    def test_get_audio_input_devices_pyaudio_error(self):
+        """Test PyAudio enumeration errors return an empty device list."""
+        from vocalinux.speech_recognition import recognition_manager
+
+        mock_pyaudio = MagicMock()
+        mock_pyaudio.PyAudio.side_effect = OSError("boom")
+
+        with patch.dict(sys.modules, {"pyaudio": mock_pyaudio}):
+            devices = recognition_manager.get_audio_input_devices()
+
+        self.assertEqual(devices, [])
+
     def test_is_virtual_device(self):
         """Test _is_virtual_device detects known virtual device patterns."""
         from vocalinux.speech_recognition.recognition_manager import _is_virtual_device
@@ -691,6 +752,37 @@ class TestModuleLevelFunctions(unittest.TestCase):
         }
 
         result = _resolve_device_by_name(mock_audio, "Missing Device", fallback_index=0)
+        self.assertEqual(result, 0)
+        mock_valid.assert_called_once_with(mock_audio, 0)
+
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_skips_unreadable_device(self, mock_valid):
+        """Test _resolve_device_by_name skips devices that cannot be read."""
+        from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
+
+        mock_valid.return_value = 1
+        mock_audio = MagicMock()
+        mock_audio.get_device_count.return_value = 2
+        mock_audio.get_device_info_by_index.side_effect = [
+            OSError("device disappeared"),
+            {"name": "USB Mic", "maxInputChannels": 1},
+        ]
+
+        result = _resolve_device_by_name(mock_audio, "USB Mic")
+        self.assertEqual(result, 1)
+        mock_valid.assert_called_once_with(mock_audio, 1)
+
+    @patch("vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device")
+    def test_resolve_device_by_name_ignores_non_dict_device_info(self, mock_valid):
+        """Test _resolve_device_by_name ignores malformed device info."""
+        from vocalinux.speech_recognition.recognition_manager import _resolve_device_by_name
+
+        mock_valid.return_value = 0
+        mock_audio = MagicMock()
+        mock_audio.get_device_count.return_value = 1
+        mock_audio.get_device_info_by_index.return_value = None
+
+        result = _resolve_device_by_name(mock_audio, "USB Mic", fallback_index=0)
         self.assertEqual(result, 0)
         mock_valid.assert_called_once_with(mock_audio, 0)
 
