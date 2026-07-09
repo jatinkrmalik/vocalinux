@@ -41,7 +41,7 @@ sudo apt install -y \
     python3-venv python3-dev python3-gi python3-gi-cairo \
     gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
     libgirepository1.0-dev libcairo2-dev portaudio19-dev \
-    pkg-config xdotool wtype
+    pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -56,7 +56,7 @@ vocalinux
 sudo dnf install -y \
     python3-virtualenv python3-devel python3-gobject gtk3 gtk3-devel \
     libappindicator-gtk3 gobject-introspection-devel portaudio-devel \
-    pkg-config xdotool wtype
+    pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -70,7 +70,7 @@ vocalinux
 ```bash
 sudo pacman -S --needed \
     python python-virtualenv python-gobject gtk3 libappindicator-gtk3 \
-    gobject-introspection python-cairo portaudio pkg-config xdotool wtype
+    gobject-introspection python-cairo portaudio pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -89,7 +89,7 @@ sudo zypper install -y \
     typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
     typelib-1_0-Notify-0_7 libnotify4 \
     gobject-introspection-devel portaudio-devel "${PYVER}-devel" \
-    "${PYVER}-virtualenv" pkg-config xdotool wtype
+    "${PYVER}-virtualenv" pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
 source ~/.local/share/vocalinux-pypi/venv/bin/activate
@@ -302,7 +302,7 @@ sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 sudo apt install -y xdotool
 
 # For Wayland
-sudo apt install -y wtype
+sudo apt install -y wtype wl-clipboard xclip xsel
 ```
 
 **Debian 11/12:**
@@ -322,7 +322,7 @@ sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 sudo apt install -y xdotool
 
 # For Wayland
-sudo apt install -y wtype
+sudo apt install -y wtype wl-clipboard xclip xsel
 ```
 
 **Debian 13+:**
@@ -342,7 +342,7 @@ sudo apt install -y gir1.2-ayatanaappindicator3-0.1
 sudo apt install -y xdotool
 
 # For Wayland
-sudo apt install -y wtype
+sudo apt install -y wtype wl-clipboard xclip xsel
 ```
 
 **Fedora:**
@@ -351,7 +351,7 @@ sudo dnf install -y \
     python3-pip python3-devel python3-virtualenv \
     python3-gobject gtk3 libappindicator-gtk3 \
     gobject-introspection-devel portaudio-devel \
-    wget curl unzip xdotool
+    wget curl unzip xdotool wtype wl-clipboard xclip xsel
 ```
 
 **Arch Linux:**
@@ -360,7 +360,7 @@ sudo pacman -S --noconfirm \
     python-pip python-gobject gtk3 \
     libappindicator-gtk3 gobject-introspection \
     python-cairo portaudio python-virtualenv \
-    wget curl unzip xdotool
+    wget curl unzip xdotool wtype wl-clipboard xclip xsel
 ```
 
 **openSUSE Tumbleweed:**
@@ -373,7 +373,7 @@ sudo zypper install -y \
     gtk3 typelib-1_0-AyatanaAppIndicator3-0_1 libayatana-appindicator3-1 \
     typelib-1_0-Notify-0_7 libnotify4 \
     gobject-introspection-devel portaudio-devel pkg-config cmake \
-    wget curl unzip xdotool wtype
+    wget curl unzip xdotool wtype wl-clipboard xclip xsel
 
 # Optional: only needed for whisper.cpp Vulkan GPU builds
 sudo zypper install -y vulkan-tools vulkan-devel shaderc
@@ -593,8 +593,9 @@ For KDE Plasma Wayland:
 
 For Wayland:
 ```bash
-sudo apt install wtype
+sudo apt install wtype wl-clipboard xclip xsel
 # Test: wtype "hello"
+# Clipboard fallback test: printf "bonjour" | xsel --clipboard --input
 ```
 
 On KDE Plasma Wayland, `wtype` may fail because the compositor does not expose

@@ -152,39 +152,51 @@ def is_ibus_daemon_running() -> bool:
         return False
 
 
+def _is_real_ibus_engine(engine: Optional[str]) -> bool:
+    """Return True only for a real IBus IM engine, not a bare XKB layout.
+
+    IBus reports a bare ``xkb:*`` engine (e.g. ``xkb:us::eng``) when it is doing
+    keyboard-layout passthrough with no input-method client attached. In that
+    state ``commit_text()`` succeeds at the IBus layer but never reaches the
+    focused application, so treating it as active causes a silent no-op on
+    Wayland (see issue #478). Real IM engines (anthy, libpinyin, hangul, ...) do
+    not use the ``xkb:`` prefix.
+    """
+    if not engine:
+        return False
+    engine = engine.strip()
+    if not engine or engine.lower() == "no global engine":
+        return False
+    return not engine.startswith("xkb:")
+
+
 def is_ibus_active_input_method() -> bool:
     """
     Check if IBus is the currently active input method.
 
-    This checks environment variables and, on Wayland where env vars may not
-    be set, also checks if the IBus daemon is running and actively managing
-    an engine. On some desktop environments (e.g., KDE Plasma Wayland), IBus
-    is configured via the DE's Virtual Keyboard setting and IBus itself
-    recommends unsetting the legacy env vars.
+    Checks environment variables and, where they are not set (common on
+    Wayland), whether the IBus daemon is running with an engine.
+
+    On Wayland there is an extra requirement: IBus can only deliver
+    ``commit_text()`` to applications through a *real* IM engine. A bare
+    ``xkb:*`` engine is a layout passthrough, so on compositors that don't fully
+    bridge IBus to native clients (niri, sway, and even GNOME/Mutter with only
+    an ``xkb`` engine) injection silently reaches nothing. We therefore require a
+    real engine on Wayland regardless of how IBus was detected (issue #478). On
+    X11/XWayland IBus reaches apps through XIM, so that check is not applied
+    there.
 
     Returns:
         True if IBus appears to be the active input method, False otherwise
     """
-    # Check GTK_IM_MODULE for GTK applications
     gtk_im = os.environ.get("GTK_IM_MODULE", "").lower()
-    if gtk_im and "ibus" in gtk_im:
-        logger.debug(f"IBus detected as active input method via GTK_IM_MODULE={gtk_im}")
-        return True
-
-    # Check QT_IM_MODULE for Qt applications
     qt_im = os.environ.get("QT_IM_MODULE", "").lower()
-    if qt_im and "ibus" in qt_im:
-        logger.debug(f"IBus detected as active input method via QT_IM_MODULE={qt_im}")
-        return True
-
-    # On X11/XWayland, check XMODIFIERS for XIM compatibility
     xmodifiers = os.environ.get("XMODIFIERS", "").lower()
-    if "@im=ibus" in xmodifiers:
-        logger.debug(f"IBus detected as active input method via XMODIFIERS={xmodifiers}")
-        return True
 
-    # If another input method is explicitly configured, respect that
-    if gtk_im or qt_im or (xmodifiers and "@im=" in xmodifiers):
+    ibus_via_env = ("ibus" in gtk_im) or ("ibus" in qt_im) or ("@im=ibus" in xmodifiers)
+
+    # If another (non-IBus) input method is explicitly configured, respect it.
+    if not ibus_via_env and (gtk_im or qt_im or (xmodifiers and "@im=" in xmodifiers)):
         logger.debug(
             "Another input method is explicitly configured "
             f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
@@ -193,26 +205,48 @@ def is_ibus_active_input_method() -> bool:
         )
         return False
 
-    # No env vars set at all — common on Wayland (KDE Plasma, etc.) where
-    # IBus is configured via the DE's Virtual Keyboard setting and IBus
-    # recommends unsetting GTK_IM_MODULE / QT_IM_MODULE.
-    # Check if ibus-daemon is running and has an active engine.
-    if is_ibus_daemon_running():
-        engine = get_current_engine()
-        if engine:
-            logger.debug(
-                f"IBus detected as active input method via running daemon "
-                f"(no env vars set, current engine: {engine})"
-            )
-            return True
+    daemon_running = is_ibus_daemon_running()
 
-    logger.debug(
-        "IBus does not appear to be the active input method "
-        f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
-        f"QT_IM_MODULE={qt_im or 'not set'}, "
-        f"XMODIFIERS={xmodifiers or 'not set'}, "
-        f"daemon running: {is_ibus_daemon_running()})"
-    )
+    # Neither an IBus env-var signal nor a running daemon -> IBus is not active.
+    if not ibus_via_env and not daemon_running:
+        logger.debug(
+            "IBus does not appear to be the active input method "
+            f"(GTK_IM_MODULE={gtk_im or 'not set'}, "
+            f"QT_IM_MODULE={qt_im or 'not set'}, "
+            f"XMODIFIERS={xmodifiers or 'not set'}, daemon running: False)"
+        )
+        return False
+
+    if _is_wayland_session():
+        # On Wayland a bare xkb:* engine can't deliver commits to apps, so
+        # require a real IM engine regardless of how IBus was detected (#478).
+        engine = get_current_engine() if daemon_running else None
+        if not _is_real_ibus_engine(engine):
+            logger.debug(
+                "IBus is present on Wayland but the current engine "
+                f"({engine or 'none'}) is a bare XKB layout or unset; "
+                "commit_text() would not reach applications, so treating IBus "
+                "as inactive (see #478)."
+            )
+            return False
+        logger.debug(f"IBus detected as active input method on Wayland (engine: {engine})")
+        return True
+
+    # X11 / XWayland: IBus reaches apps via XIM. An env-var signal, or a running
+    # daemon with any engine (KDE Plasma with legacy env vars unset), counts.
+    if ibus_via_env:
+        logger.debug("IBus detected as active input method via environment variables")
+        return True
+
+    engine = get_current_engine()
+    if engine:
+        logger.debug(
+            "IBus detected as active input method via running daemon "
+            f"(no env vars set, current engine: {engine})"
+        )
+        return True
+
+    logger.debug("IBus does not appear to be the active input method (daemon has no engine)")
     return False
 
 
@@ -363,6 +397,19 @@ def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool
         True if successful, False otherwise
     """
     if not layout:
+        return False
+
+    # On Wayland the compositor owns the keyboard layout. setxkbmap only reaches
+    # the XWayland X11 server, so re-applying a layout here (or the historical
+    # "us" default when nothing was captured) silently switches XWayland — and
+    # therefore XWayland/Electron apps — to the wrong layout, while native
+    # Wayland apps and localectl stay correct. Skip it on Wayland and let the
+    # compositor manage the layout. See issue #474.
+    if _is_wayland_session():
+        logger.debug(
+            "Wayland session detected — skipping setxkbmap; the compositor "
+            "manages the keyboard layout (see #474)."
+        )
         return False
 
     try:
@@ -835,7 +882,10 @@ class IBusTextInjector:
 
         ensure_ibus_dir()
         self._previous_engine: Optional[str] = None
-        self._previous_xkb_layout: tuple = ("us", "", "")
+        # Empty until a real X11 layout is captured. A non-empty default (e.g.
+        # "us") would make stop()/restore re-apply a layout that was never
+        # captured, flipping non-US users to us. See issue #474.
+        self._previous_xkb_layout: tuple = ("", "", "")
 
         if auto_activate:
             self._setup_engine()

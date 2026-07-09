@@ -15,6 +15,24 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.13.0-beta",
+    date: "2026-06-30",
+    type: "beta",
+    highlights: [
+      "Guided whisper.cpp model selection: pick a size plus a specialization (English-only, quantized Q5/Q8, or Large v3 Turbo) through split Model Size and Specialization dropdowns with in-app guidance; the --model flag also accepts exact IDs like medium.en-q5_0 and large-v3-turbo (PR #465)",
+      "Dictation now keeps a space between segments spoken with a pause in between, so words no longer run together after a silence (PR #464)",
+      "Keyboard shortcuts now work on keyboards hotplugged after Vocalinux starts, with the evdev backend rescanning for new devices and recovering from disconnects (PR #467)",
+      "Vocalinux now detects KDE Plasma Wayland sessions and points you to enable IBus Wayland for reliable text injection, surfaced during install and when wtype injection fails (PR #466)",
+      "Wayland: fixed garbled text on non-US keyboard layouts (AZERTY/QWERTZ/Dvorak) and a clipboard-copy hang; ydotool now pastes through the clipboard, which is layout-independent (PR #480)",
+      "Wayland: use wtype/ydotool instead of IBus on compositors that don't bridge it to native apps like COSMIC, Sway, and Hyprland, fixing silent text drops (PR #486)",
+      "Wayland/IBus: require a real IM engine before using IBus, so a bare xkb layout no longer causes silent text drops on GNOME/Mutter and other compositors (#478)",
+      "Wayland: keep the keyboard layout intact by not running setxkbmap, which was flipping XWayland apps to us after dictation (#474)",
+      "Faster ydotool text injection via an explicit --key-delay (PR #488)",
+      "Settings dialog height capped on high-resolution displays (PR #465)",
+      "Refreshed website docs with new feature pages for Remote API, Silero VAD, advanced whisper.cpp settings, and desktop reliability, plus responsive layout polish (PR #470)",
+    ],
+  },
+  {
     version: "v0.12.0-beta",
     date: "2026-06-07",
     type: "beta",
@@ -276,7 +294,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-06-11",
+    dateModified: "2026-06-30",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
