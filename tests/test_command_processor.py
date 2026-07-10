@@ -1,10 +1,12 @@
 """
 Tests for the command processor functionality.
+
+Expectations assert the real generic algorithm (longest-match phrases,
+format stacking, punctuation spacing) — not fixture tables.
 """
 
 import unittest
 
-# Update import path to use the new package structure
 from vocalinux.speech_recognition.command_processor import CommandProcessor
 
 
@@ -17,43 +19,39 @@ class TestCommandProcessor(unittest.TestCase):
 
     def test_initialization(self):
         """Test initialization of command processor."""
-        # Verify command dictionaries are initialized
         self.assertTrue(hasattr(self.processor, "text_commands"))
         self.assertTrue(hasattr(self.processor, "action_commands"))
         self.assertTrue(hasattr(self.processor, "format_commands"))
 
-        # Verify dictionaries have expected entries
         self.assertIn("new line", self.processor.text_commands)
         self.assertIn("period", self.processor.text_commands)
         self.assertIn("delete that", self.processor.action_commands)
         self.assertIn("capitalize", self.processor.format_commands)
 
-        # Verify regex patterns are compiled
         self.assertTrue(hasattr(self.processor, "text_cmd_regex"))
         self.assertTrue(hasattr(self.processor, "action_cmd_regex"))
         self.assertTrue(hasattr(self.processor, "format_cmd_regex"))
 
     def test_text_command_processing(self):
-        """Test processing of text commands."""
-        # Expectations match the generic process_text algorithm
+        """Test processing of text commands via the generic algorithm."""
         test_cases = [
             ("new line", "\n", []),
             ("this is a new paragraph", "this is a \n\n", []),
             ("end of sentence period", "end of sentence.", []),
-            ("add a comma here", "add a,here", []),
+            ("add a comma here", "add a, here", []),
             ("use question mark", "use?", []),
-            ("exclamation mark test", "!test", []),
-            ("semicolon example", ";example", []),
-            ("testing colon usage", "testing:usage", []),
+            ("exclamation mark test", "! test", []),
+            ("semicolon example", "; example", []),
+            ("testing colon usage", "testing: usage", []),
             ("dash separator", "- separator", []),
             ("hyphen example", "- example", []),
             ("underscore value", "_ value", []),
             ("quote example", '" example', []),
-            # "quote" also matches inside "single quote" when shorter keys run first
-            ("single quote test", 'single " test', []),
-            ("open parenthesis content close parenthesis", "( content )", []),
-            ("open bracket item close bracket", "[ item ]", []),
-            ("open brace code close brace", "{ code }", []),
+            # Longest match: "single quote" wins over "quote"
+            ("single quote test", "' test", []),
+            ("open parenthesis content close parenthesis", "( content)", []),
+            ("open bracket item close bracket", "[ item]", []),
+            ("open brace code close brace", "{ code}", []),
         ]
 
         for input_text, expected_output, _ in test_cases:
@@ -75,10 +73,10 @@ class TestCommandProcessor(unittest.TestCase):
             ("cut this selection", "this selection", ["cut"]),
             ("copy this text", "this text", ["copy"]),
             ("paste here", "here", ["paste"]),
-            # Later action overwrites remaining text when nothing follows it
-            ("select all then copy", "", ["select_all", "copy"]),
-            # Test action with text before command (should add space)
-            ("hello select all world", " world", ["select_all"]),
+            # Actions stripped left-to-right; interstitial words kept
+            ("select all then copy", "then", ["select_all", "copy"]),
+            # Action removed; surrounding words retained
+            ("hello select all world", "hello world", ["select_all"]),
         ]
 
         for input_text, expected_output, expected_actions in test_cases:
@@ -93,7 +91,6 @@ class TestCommandProcessor(unittest.TestCase):
             ("uppercase letters", "LETTERS", []),
             ("all caps example", "EXAMPLE", []),
             ("lowercase TEXT", "text", []),
-            # Test with text before the command
             ("make this capitalize next", "make this Next", []),
         ]
 
@@ -103,22 +100,18 @@ class TestCommandProcessor(unittest.TestCase):
             self.assertEqual(actions, expected_actions)
 
     def test_combined_commands(self):
-        """Test combinations of different command types.
-
-        Format handling rewrites from the original text, so stacked
-        text/format replacements only keep the last matching format rewrite.
-        """
+        """Test combinations of format + punctuation + actions."""
         test_cases = [
-            # Text + Action: action clears remaining when nothing follows delete
-            ("new line then delete that", "", ["delete_last"]),
-            # Format + Text: format rewrite uses original text (period not applied)
-            ("capitalize name period", "Name period", []),
-            # Action + Format: format rewrite uses original text
-            ("select all then capitalize text", "select all then Text", ["select_all"]),
-            # Complex combination: last format/action effects only
+            # Text + Action: newline kept, action stripped
+            ("new line then delete that", "\n then", ["delete_last"]),
+            # Format + punctuation (skeptic regression)
+            ("capitalize name period", "Name.", []),
+            # Action + Format
+            ("select all then capitalize text", "then Text", ["select_all"]),
+            # Complex combination
             (
                 "capitalize name comma new line select paragraph",
-                "Name comma new line select paragraph",
+                "Name,\n",
                 ["select_paragraph"],
             ),
         ]
@@ -147,11 +140,10 @@ class TestCommandProcessor(unittest.TestCase):
 
     def test_partial_command_matches(self):
         """Test text with partial command matches."""
-        # Words that are substrings of commands should not be processed
         test_cases = [
-            ("periodic review", "periodic review", []),  # shouldn't match "period"
-            ("newcomer", "newcomer", []),  # shouldn't match "new"
-            ("paramount", "paramount", []),  # shouldn't match "paragraph"
+            ("periodic review", "periodic review", []),
+            ("newcomer", "newcomer", []),
+            ("paramount", "paramount", []),
         ]
 
         for input_text, expected_output, expected_actions in test_cases:
@@ -174,56 +166,58 @@ class TestCommandProcessor(unittest.TestCase):
             self.assertEqual(actions, expected_actions)
 
     def test_multiple_format_modifiers(self):
-        """Test multiple format modifiers on a single word."""
+        """Stacked format modifiers apply to the following word."""
         self.processor = CommandProcessor()
-
-        # Last matching format command rewrite wins (from original text)
         result, _ = self.processor.process_text("capitalize all caps text")
-        self.assertEqual(result, "capitalize TEXT")
+        self.assertEqual(result, "TEXT")
 
     def test_format_with_no_target_word(self):
         """Test format command with no following word."""
         result, _ = self.processor.process_text("capitalize")
         self.assertEqual(result, "")
-
-        # The active_formats should be cleared even if no word was formatted
         self.assertEqual(self.processor.active_formats, set())
 
     def test_whitespace_handling(self):
-        """Test handling of whitespace in command processing."""
-        # Multi-word commands require exact single-space phrases
+        """Flexible internal whitespace matches multi-word commands."""
         result, _ = self.processor.process_text("new    line   test")
-        self.assertEqual(result, "new    line   test")
+        self.assertEqual(result, "\n test")
 
-        # Leading/trailing spaces are stripped before command handling
         result, _ = self.processor.process_text("  period  ")
         self.assertEqual(result, ".")
 
-        # Format rewrite uses original text; extra spaces break multi-word cmds
         result, _ = self.processor.process_text(" capitalize  word  new   line ")
-        self.assertEqual(result, " Word  new   line ")
+        self.assertEqual(result, "Word \n")
 
     def test_regex_compilation(self):
         """Test the regex pattern compilation."""
         self.processor._compile_patterns()
 
-        # Test regex patterns match correctly
         self.assertTrue(self.processor.text_cmd_regex.search("new line"))
         self.assertTrue(self.processor.text_cmd_regex.search("this is a period"))
         self.assertTrue(self.processor.action_cmd_regex.search("delete that"))
         self.assertTrue(self.processor.format_cmd_regex.search("capitalize this"))
 
-        # Test non-matches
-        self.assertFalse(self.processor.text_cmd_regex.search("newline"))  # no space
-        self.assertFalse(self.processor.action_cmd_regex.search("deletion"))  # not a command
+        self.assertFalse(self.processor.text_cmd_regex.search("newline"))
+        self.assertFalse(self.processor.action_cmd_regex.search("deletion"))
 
     def test_compile_patterns_method(self):
         """Test the _compile_patterns method directly."""
-        # Add a new command to test recompilation
         self.processor.text_commands["test command"] = "TEST"
-
-        # Recompile patterns
         self.processor._compile_patterns()
-
-        # Verify new command is in the pattern
         self.assertTrue(self.processor.text_cmd_regex.search("test command"))
+
+    def test_skeptic_regressions(self):
+        """Critical cases that regressed when fixtures replaced the algorithm."""
+        result, actions = self.processor.process_text("capitalize name period")
+        self.assertEqual(result, "Name.")
+        self.assertEqual(actions, [])
+
+        result, actions = self.processor.process_text("single quote test")
+        self.assertEqual(result, "' test")
+        self.assertEqual(actions, [])
+
+        result, actions = self.processor.process_text(
+            "capitalize name comma new line select paragraph"
+        )
+        self.assertEqual(result, "Name,\n")
+        self.assertEqual(actions, ["select_paragraph"])
