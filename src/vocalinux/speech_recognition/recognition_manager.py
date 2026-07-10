@@ -20,7 +20,7 @@ from typing import Callable, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
-from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
+from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path
 from .command_processor import CommandProcessor
 from .silero_vad import SILERO_CHUNK_SIZE, load_silero_vad
 
@@ -1645,25 +1645,36 @@ class SpeechRecognitionManager:
             logger.debug(f"whisper.cpp server API format attempt failed: {e}")
             return None
 
-    def _download_whispercpp_model(self):
-        """Download a whisper.cpp model with progress tracking."""
+    def _download_with_progress(
+        self,
+        url: str,
+        dest_path: str,
+        *,
+        extract_zip: bool = False,
+        extract_dir: Optional[str] = None,
+        status_label: Optional[str] = None,
+    ) -> None:
+        """Download a file with progress tracking, cancel support, and temp cleanup.
+
+        Args:
+            url: Remote URL to download.
+            dest_path: Final destination path (or zip path when extract_zip=True).
+            extract_zip: If True, dest_path is a zip archive to extract then remove.
+            extract_dir: Directory for zip extraction (defaults to dirname of dest_path).
+            status_label: Human-readable label used in log/error messages.
+        """
+        import zipfile
+
         import requests
 
         self._download_cancelled = False
+        label = status_label or "model"
+        write_path = dest_path if extract_zip else dest_path + ".tmp"
+        parent = os.path.dirname(write_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
 
-        model_info = WHISPERCPP_MODEL_INFO.get(self.model_size)
-        if not model_info:
-            raise ValueError(f"Unknown whisper.cpp model size: {self.model_size}")
-
-        url = model_info["url"]
-        model_path = get_model_path(self.model_size)
-        temp_file = model_path + ".tmp"
-
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
-
-        logger.info(f"Downloading whisper.cpp {self.model_size} model to {model_path}")
-        logger.info(f"Downloading from {url}")
+        logger.info(f"Downloading {label} from {url}")
 
         try:
             response = requests.get(url, stream=True)
@@ -1673,15 +1684,15 @@ class SpeechRecognitionManager:
             downloaded_size = 0
             start_time = time.time()
             last_update_time = start_time
-            chunk_size = 8192  # 8KB chunks
+            chunk_size = 8192  # 8KB chunks for smoother progress
 
-            with open(temp_file, "wb") as f:
+            with open(write_path, "wb") as f:
                 for data in response.iter_content(chunk_size=chunk_size):
                     if self._download_cancelled:
                         logger.info("Download cancelled by user")
                         f.close()
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
+                        if os.path.exists(write_path):
+                            os.remove(write_path)
                         raise RuntimeError("Download cancelled")
 
                     f.write(data)
@@ -1711,35 +1722,70 @@ class SpeechRecognitionManager:
                                 )
                             else:
                                 eta_str = "--"
-                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                            status = (
+                                f"{downloaded_size / (1024 * 1024):.1f} / "
+                                f"{total_size / (1024 * 1024):.1f} MB • "
+                                f"{speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                            )
                         else:
                             progress = 0
                             status = (
-                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+                                f"{downloaded_size / (1024 * 1024):.1f} MB • "
+                                f"{speed_mbps:.1f} MB/s"
                             )
 
                         self._download_progress_callback(progress, speed_mbps, status)
                         last_update_time = current_time
-
                         logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
 
-            # Rename temp file to final
-            os.rename(temp_file, model_path)
-            logger.info("whisper.cpp model downloaded successfully")
+            if extract_zip:
+                if self._download_progress_callback:
+                    self._download_progress_callback(1.0, 0, "Extracting model...")
+
+                target_dir = extract_dir or os.path.dirname(dest_path) or "."
+                logger.info(f"Extracting {label} to {target_dir}")
+                with zipfile.ZipFile(write_path, "r") as zip_ref:
+                    zip_ref.extractall(target_dir)
+                os.remove(write_path)
+                logger.info(f"{label} downloaded and extracted successfully")
+            else:
+                os.rename(write_path, dest_path)
+                logger.info(f"{label} downloaded successfully")
 
             if self._download_progress_callback:
                 self._download_progress_callback(1.0, 0, "Complete!")
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to download whisper.cpp model from {url}: {e}")
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-            raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
+            logger.error(f"Failed to download {label} from {url}: {e}")
+            if os.path.exists(write_path):
+                os.remove(write_path)
+            raise RuntimeError(f"Failed to download {label}: {e}") from e
+        except zipfile.BadZipFile:
+            logger.error(f"Downloaded file from {url} is not a valid zip file.")
+            if os.path.exists(write_path):
+                os.remove(write_path)
+            raise RuntimeError(f"Downloaded {label} file is corrupted.")
         except (OSError, RuntimeError, ValueError) as e:
-            logger.error(f"An error occurred during whisper.cpp model download: {e}")
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+            logger.error(f"An error occurred during {label} download: {e}")
+            if os.path.exists(write_path):
+                os.remove(write_path)
             raise
+
+    def _download_whispercpp_model(self):
+        """Download a whisper.cpp model with progress tracking."""
+        model_info = WHISPERCPP_MODEL_INFO.get(self.model_size)
+        if not model_info:
+            raise ValueError(f"Unknown whisper.cpp model size: {self.model_size}")
+
+        url = model_info["url"]
+        model_path = get_model_path(self.model_size)
+
+        logger.info(f"Downloading whisper.cpp {self.model_size} model to {model_path}")
+        self._download_with_progress(
+            url,
+            model_path,
+            status_label="whisper.cpp model",
+        )
 
     def _get_vosk_model_path(self) -> str:
         """Get the path to the VOSK model based on the selected size and language."""
@@ -1781,12 +1827,6 @@ class SpeechRecognitionManager:
 
     def _download_vosk_model(self):
         """Download the VOSK model if it doesn't exist."""
-        import zipfile
-
-        import requests
-
-        self._download_cancelled = False
-
         model_urls = {
             "small": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['small']}.zip",
             "medium": f"https://alphacephei.com/vosk/models/{self.vosk_model_map['medium']}.zip",
@@ -1807,112 +1847,16 @@ class SpeechRecognitionManager:
         os.makedirs(MODELS_DIR, exist_ok=True)
 
         logger.info(f"Downloading VOSK {self.model_size} model to user directory: {model_path}")
-
-        # Download the model
-        logger.info(f"Downloading VOSK model from {url}")
-        try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
-
-            total_size = int(response.headers.get("content-length", 0))
-            downloaded_size = 0
-            start_time = time.time()
-            last_update_time = start_time
-            chunk_size = 8192  # 8KB chunks for smoother progress
-
-            with open(zip_path, "wb") as f:
-                for data in response.iter_content(chunk_size=chunk_size):
-                    if self._download_cancelled:
-                        logger.info("Download cancelled by user")
-                        f.close()
-                        if os.path.exists(zip_path):
-                            os.remove(zip_path)
-                        raise RuntimeError("Download cancelled")
-
-                    f.write(data)
-                    downloaded_size += len(data)
-
-                    # Update progress callback
-                    current_time = time.time()
-                    if (
-                        self._download_progress_callback
-                        and (current_time - last_update_time) >= 0.1
-                    ):
-                        elapsed = current_time - start_time
-                        if elapsed > 0:
-                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
-                        else:
-                            speed_mbps = 0
-
-                        if total_size > 0:
-                            progress = downloaded_size / total_size
-                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
-                            if speed_mbps > 0:
-                                eta_seconds = remaining_mb / speed_mbps
-                                eta_str = (
-                                    f"{int(eta_seconds)}s"
-                                    if eta_seconds < 60
-                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
-                                )
-                            else:
-                                eta_str = "--"
-                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
-                        else:
-                            progress = 0
-                            status = (
-                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
-                            )
-
-                        self._download_progress_callback(progress, speed_mbps, status)
-                        last_update_time = current_time
-
-                        # Also log progress periodically
-                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
-
-            # Update status for extraction phase
-            if self._download_progress_callback:
-                self._download_progress_callback(1.0, 0, "Extracting model...")
-
-            # Extract the model
-            logger.info(f"Extracting VOSK model to {model_path}")
-            with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                zip_ref.extractall(MODELS_DIR)
-
-            # Remove the zip file
-            os.remove(zip_path)
-            logger.info("VOSK model downloaded and extracted successfully")
-
-            # Final status
-            if self._download_progress_callback:
-                self._download_progress_callback(1.0, 0, "Complete!")
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to download VOSK model from {url}: {e}")
-            # Clean up potentially incomplete download
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
-            raise RuntimeError(f"Failed to download VOSK model: {e}") from e
-        except zipfile.BadZipFile:
-            logger.error(f"Downloaded file from {url} is not a valid zip file.")
-            # Clean up corrupted download
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
-            raise RuntimeError("Downloaded VOSK model file is corrupted.")
-        except (OSError, RuntimeError, ValueError) as e:
-            logger.error(f"An error occurred during VOSK model download/extraction: {e}")
-            # Clean up potentially corrupted extraction
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
-            # Consider removing partially extracted model dir if needed
-            # if os.path.exists(model_path): shutil.rmtree(model_path)
-            raise
+        self._download_with_progress(
+            url,
+            zip_path,
+            extract_zip=True,
+            extract_dir=MODELS_DIR,
+            status_label="VOSK model",
+        )
 
     def _download_whisper_model(self, cache_dir: str):
         """Download a Whisper model with progress tracking."""
-        import requests
-
-        self._download_cancelled = False
-
         # Whisper model URLs (from openai-whisper package)
         model_urls = {
             "tiny": "https://openaipublic.azureedge.net/main/whisper/models/"
@@ -1937,88 +1881,14 @@ class SpeechRecognitionManager:
             raise ValueError(f"Unknown Whisper model size: {self.model_size}")
 
         model_file = os.path.join(cache_dir, f"{self.model_size}.pt")
-        temp_file = model_file + ".tmp"
-
         os.makedirs(cache_dir, exist_ok=True)
 
         logger.info(f"Downloading Whisper {self.model_size} model to {model_file}")
-        logger.info(f"Downloading from {url}")
-
-        try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-
-            total_size = int(response.headers.get("content-length", 0))
-            downloaded_size = 0
-            start_time = time.time()
-            last_update_time = start_time
-            chunk_size = 8192  # 8KB chunks
-
-            with open(temp_file, "wb") as f:
-                for data in response.iter_content(chunk_size=chunk_size):
-                    if self._download_cancelled:
-                        logger.info("Download cancelled by user")
-                        f.close()
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
-                        raise RuntimeError("Download cancelled")
-
-                    f.write(data)
-                    downloaded_size += len(data)
-
-                    # Update progress callback
-                    current_time = time.time()
-                    if (
-                        self._download_progress_callback
-                        and (current_time - last_update_time) >= 0.1
-                    ):
-                        elapsed = current_time - start_time
-                        if elapsed > 0:
-                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
-                        else:
-                            speed_mbps = 0
-
-                        if total_size > 0:
-                            progress = downloaded_size / total_size
-                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
-                            if speed_mbps > 0:
-                                eta_seconds = remaining_mb / speed_mbps
-                                eta_str = (
-                                    f"{int(eta_seconds)}s"
-                                    if eta_seconds < 60
-                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
-                                )
-                            else:
-                                eta_str = "--"
-                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
-                        else:
-                            progress = 0
-                            status = (
-                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
-                            )
-
-                        self._download_progress_callback(progress, speed_mbps, status)
-                        last_update_time = current_time
-
-                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
-
-            # Rename temp file to final
-            os.rename(temp_file, model_file)
-            logger.info("Whisper model downloaded successfully")
-
-            if self._download_progress_callback:
-                self._download_progress_callback(1.0, 0, "Complete!")
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to download Whisper model from {url}: {e}")
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-            raise RuntimeError(f"Failed to download Whisper model: {e}") from e
-        except (OSError, RuntimeError, ValueError) as e:
-            logger.error(f"An error occurred during Whisper model download: {e}")
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-            raise
+        self._download_with_progress(
+            url,
+            model_file,
+            status_label="Whisper model",
+        )
 
     def register_text_callback(self, callback: Callable[[str], None]):
         """
@@ -2112,10 +1982,6 @@ class SpeechRecognitionManager:
     def get_audio_device_name(self) -> Optional[str]:
         """Get the currently configured audio device name."""
         return self.audio_device_name
-
-    def get_last_audio_level(self) -> float:
-        """Get the last recorded audio level (0-100)."""
-        return self._last_audio_level
 
     def _update_state(self, new_state: RecognitionState):
         """
@@ -2569,17 +2435,6 @@ class SpeechRecognitionManager:
             play_error_sound()
             self._update_state(RecognitionState.ERROR)
 
-    def _process_final_buffer(self):
-        """Process the final audio buffer after silence is detected."""
-        with self._buffer_lock:
-            if not self.audio_buffer:
-                return
-
-            audio_buffer = self.audio_buffer.copy()
-            self.audio_buffer = []
-
-        self._process_audio_buffer(audio_buffer)
-
     def _process_audio_buffer(self, audio_buffer: list[bytes]):
         """Process an immutable audio segment for transcription and commands."""
         if not audio_buffer:
@@ -3019,40 +2874,3 @@ class SpeechRecognitionManager:
                 self._update_state(RecognitionState.ERROR)
 
         self._reconnection_attempts = 0
-
-    def set_buffer_limit(self, max_chunks: int):
-        """
-        Set the maximum number of audio chunks to buffer.
-
-        Args:
-            max_chunks: Maximum number of chunks to buffer (default: 5000)
-        """
-        if max_chunks < 100:
-            logger.warning("Buffer limit too small, setting to minimum 100")
-            max_chunks = 100
-        elif max_chunks > 20000:
-            logger.warning("Buffer limit too large, setting to maximum 20000")
-            max_chunks = 20000
-
-        self._max_buffer_size = max_chunks
-        logger.info(f"Audio buffer limit set to {max_chunks} chunks")
-
-    def get_buffer_stats(self) -> dict:
-        """
-        Get current buffer statistics.
-
-        Returns:
-            dict: Buffer statistics including size, memory usage, etc.
-        """
-        with self._buffer_lock:
-            total_memory = sum(len(chunk) for chunk in self.audio_buffer)
-            buffer_size = len(self.audio_buffer)
-        return {
-            "buffer_size": buffer_size,
-            "buffer_limit": self._max_buffer_size,
-            "memory_usage_bytes": total_memory,
-            "memory_usage_mb": total_memory / (1024 * 1024),
-            "buffer_full_percentage": (
-                (buffer_size / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
-            ),
-        }

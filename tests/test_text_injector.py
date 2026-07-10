@@ -490,22 +490,6 @@ class TestTextInjector(unittest.TestCase):
             # After failure, should have switched to WAYLAND_XDOTOOL
             self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_XDOTOOL)
 
-    def test_has_non_ascii_with_ascii_text(self):
-        """Test _has_non_ascii returns False for pure ASCII text."""
-        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
-            injector = TextInjector()
-            self.assertFalse(injector._has_non_ascii("Hello world"))
-            self.assertFalse(injector._has_non_ascii("123 test!"))
-
-    def test_has_non_ascii_with_accented_text(self):
-        """Test _has_non_ascii returns True for accented characters (#362)."""
-        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}):
-            injector = TextInjector()
-            self.assertTrue(injector._has_non_ascii("Esdrújula"))
-            self.assertTrue(injector._has_non_ascii("crème brûlée"))
-            self.assertTrue(injector._has_non_ascii("café"))
-            self.assertTrue(injector._has_non_ascii("niño"))
-
     @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
     @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
     @patch("vocalinux.text_injection.text_injector.shutil.which")

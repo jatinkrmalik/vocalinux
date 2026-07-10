@@ -22,7 +22,6 @@ sys.modules["pywhispercpp.model"] = mock_pywhispercpp.model
 sys.modules["requests"] = MagicMock()
 sys.modules["pyaudio"] = MagicMock()
 sys.modules["wave"] = MagicMock()
-sys.modules["tqdm"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
 sys.modules["torch"] = MagicMock()
 sys.modules["psutil"] = MagicMock()
@@ -253,7 +252,7 @@ class TestGetSupportedSampleRate(unittest.TestCase):
 
 
 class TestBufferManagement(unittest.TestCase):
-    """Test cases for buffer management methods."""
+    """Test cases for buffer management defaults (live attributes)."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -298,47 +297,17 @@ class TestBufferManagement(unittest.TestCase):
         self.mockDownload.stop()
         self.patcher_exists.stop()
 
-    def test_set_buffer_limit(self):
-        """Test setting buffer limit."""
+    def test_default_buffer_attributes(self):
+        """Test default buffer attributes on manager."""
         manager = SpeechRecognitionManager(engine="vosk")
 
-        # Default should be 5000 (max buffer size in implementation)
+        # Default max buffer size and empty buffer
         self.assertEqual(manager._max_buffer_size, 5000)
-
-        # Just verify the manager has the buffer tracking
-        self.assertIsNotNone(manager.audio_buffer)
-
-    def test_get_buffer_stats(self):
-        """Test getting buffer statistics."""
-        manager = SpeechRecognitionManager(engine="vosk")
-
-        # Empty buffer
-        stats = manager.get_buffer_stats()
-        self.assertIsNotNone(stats)
-        self.assertIn("buffer_size", stats)
-        self.assertIn("buffer_limit", stats)
-        self.assertIn("memory_usage_bytes", stats)
-        self.assertEqual(stats["buffer_size"], 0)
-
-        # Add data to buffer
-        manager.audio_buffer = [b"\x00" * 1024, b"\x00" * 1024]
-        stats = manager.get_buffer_stats()
-        self.assertIsNotNone(stats)
-        self.assertGreater(stats["buffer_size"], 0)
-
-    def test_get_buffer_stats_at_limit(self):
-        """Test buffer stats when at limit."""
-        manager = SpeechRecognitionManager(engine="vosk")
-
-        # Fill buffer
-        manager.audio_buffer = [b"\x00" * 1024 for _ in range(100)]
-        stats = manager.get_buffer_stats()
-        self.assertIsNotNone(stats)
-        self.assertGreater(stats["buffer_size"], 0)
+        self.assertEqual(manager.audio_buffer, [])
 
 
-class TestProcessPartialResult(unittest.TestCase):
-    """Test cases for _process_partial_result method."""
+class TestProcessAudioBufferCore(unittest.TestCase):
+    """Test cases for _process_audio_buffer edge cases."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -380,10 +349,9 @@ class TestProcessPartialResult(unittest.TestCase):
         self.mockDownload.stop()
         self.patcher_exists.stop()
 
-    def test_process_final_buffer_vosk_with_text(self):
-        """Test processing final buffer with VOSK with text result."""
+    def test_process_audio_buffer_vosk_with_text(self):
+        """Test processing audio buffer with VOSK text result invokes callback."""
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"\x00" * 512]
 
         # Mock final result with text
         self.recognizerMock.FinalResult.return_value = '{"text": "hello world"}'
@@ -391,20 +359,21 @@ class TestProcessPartialResult(unittest.TestCase):
         callback_mock = MagicMock()
         manager.register_text_callback(callback_mock)
 
-        manager._process_final_buffer()
+        with patch.object(
+            manager.command_processor, "process_text", return_value=("hello world", [])
+        ):
+            manager._process_audio_buffer([b"\x00" * 512])
 
-        # Buffer should be cleared
-        self.assertEqual(manager.audio_buffer, [])
+        callback_mock.assert_called_once_with("hello world")
 
-    def test_process_final_buffer_empty_no_callback(self):
-        """Test processing empty final buffer does not call callbacks."""
+    def test_process_audio_buffer_empty_no_callback(self):
+        """Test processing empty buffer does not call callbacks."""
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = []
 
         callback_mock = MagicMock()
         manager.register_text_callback(callback_mock)
 
-        manager._process_final_buffer()
+        manager._process_audio_buffer([])
 
         # Callback should not be called for empty buffer
         callback_mock.assert_not_called()
@@ -412,7 +381,6 @@ class TestProcessPartialResult(unittest.TestCase):
     def test_recognizer_none_during_processing(self):
         """Test handling when recognizer becomes None during processing."""
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"\x00" * 512]
 
         # Set recognizer to None
         manager.recognizer = None
@@ -421,7 +389,7 @@ class TestProcessPartialResult(unittest.TestCase):
         manager.register_text_callback(callback_mock)
 
         # Should handle gracefully without crashing
-        manager._process_final_buffer()
+        manager._process_audio_buffer([b"\x00" * 512])
 
         # Callback should not be called
         callback_mock.assert_not_called()
@@ -844,90 +812,6 @@ class TestReconfiguration(unittest.TestCase):
 
         # Should have no issues
         self.assertEqual(manager.model_size, "small")
-
-
-class TestProcessFinalBuffer(unittest.TestCase):
-    """Test cases for _process_final_buffer method."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.mockKaldi = patch.object(sys.modules["vosk"], "KaldiRecognizer")
-        self.mockModel = patch.object(sys.modules["vosk"], "Model")
-        self.mockMakeDirs = patch("os.makedirs")
-        self.mockThread = patch("threading.Thread")
-        self.mockPath = patch.object(SpeechRecognitionManager, "_get_vosk_model_path")
-        self.mockDownload = patch.object(SpeechRecognitionManager, "_download_vosk_model")
-
-        self.kaldiMock = self.mockKaldi.start()
-        self.modelMock = self.mockModel.start()
-        self.makeDirsMock = self.mockMakeDirs.start()
-        self.threadMock = self.mockThread.start()
-        self.pathMock = self.mockPath.start()
-        self.downloadMock = self.mockDownload.start()
-
-        self.pathMock.return_value = "/mock/path/vosk-model"
-        self.recognizerMock = MagicMock()
-        self.kaldiMock.return_value = self.recognizerMock
-        self.recognizerMock.FinalResult.return_value = '{"text": "hello"}'
-        self.threadInstance = MagicMock()
-        self.threadMock.return_value = self.threadInstance
-
-        mock_audio_feedback.play_start_sound.reset_mock()
-        mock_audio_feedback.play_stop_sound.reset_mock()
-        mock_audio_feedback.play_error_sound.reset_mock()
-
-        self.patcher_exists = patch("os.path.exists", return_value=True)
-        self.mock_exists = self.patcher_exists.start()
-
-    def tearDown(self):
-        """Clean up patches."""
-        self.mockKaldi.stop()
-        self.mockModel.stop()
-        self.mockMakeDirs.stop()
-        self.mockThread.stop()
-        self.mockPath.stop()
-        self.mockDownload.stop()
-        self.patcher_exists.stop()
-
-    def test_process_final_buffer_vosk_empty(self):
-        """Test processing final buffer with VOSK when empty."""
-        manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = []
-
-        # Should return without calling recognizer
-        manager._process_final_buffer()
-
-        self.recognizerMock.AcceptWaveform.assert_not_called()
-
-    def test_process_final_buffer_vosk_with_data(self):
-        """Test processing final buffer with VOSK with data."""
-        manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"\x00" * 512, b"\x00" * 512]
-
-        # Register callback to verify it's called
-        callback_mock = MagicMock()
-        manager.register_text_callback(callback_mock)
-
-        manager._process_final_buffer()
-
-        # Recognizer should be called with data
-        self.assertEqual(self.recognizerMock.AcceptWaveform.call_count, 2)
-
-    def test_process_final_buffer_vosk_empty_result(self):
-        """Test processing final buffer with VOSK returning empty result."""
-        manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"\x00" * 512]
-
-        # Mock empty result
-        self.recognizerMock.FinalResult.return_value = '{"text": ""}'
-
-        callback_mock = MagicMock()
-        manager.register_text_callback(callback_mock)
-
-        manager._process_final_buffer()
-
-        # Callback should not be called for empty result
-        callback_mock.assert_not_called()
 
 
 class TestDownloadModels(unittest.TestCase):

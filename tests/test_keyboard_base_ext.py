@@ -3,7 +3,6 @@ Tests for keyboard backend base class and helper functions.
 
 This module tests the base.py module including:
 - parse_shortcut() function and error cases
-- get_shortcut_display_name() function
 - KeyboardBackend abstract class
 """
 
@@ -14,12 +13,8 @@ import pytest
 from vocalinux.ui.keyboard_backends.base import (
     DEFAULT_SHORTCUT,
     DEFAULT_SHORTCUT_MODE,
-    SHORTCUT_DISPLAY_NAMES,
-    SHORTCUT_MODE_DISPLAY_NAMES,
-    SHORTCUT_MODES,
     SUPPORTED_SHORTCUTS,
     KeyboardBackend,
-    get_shortcut_display_name,
     parse_shortcut,
 )
 
@@ -89,91 +84,6 @@ class TestParseShortcut:
         for shortcut_key in SUPPORTED_SHORTCUTS.keys():
             result = parse_shortcut(shortcut_key)
             assert result == SUPPORTED_SHORTCUTS[shortcut_key]
-
-
-class TestGetShortcutDisplayName:
-    """Test the get_shortcut_display_name() function."""
-
-    def test_get_display_name_ctrl_no_mode(self):
-        """Test getting display name for ctrl without mode."""
-        result = get_shortcut_display_name("ctrl+ctrl")
-        assert result == "Ctrl (either side)"
-
-    def test_get_display_name_alt_no_mode(self):
-        """Test getting display name for alt without mode."""
-        result = get_shortcut_display_name("alt+alt")
-        assert result == "Alt (either side)"
-
-    def test_get_display_name_shift_no_mode(self):
-        """Test getting display name for shift without mode."""
-        result = get_shortcut_display_name("shift+shift")
-        assert result == "Shift (either side)"
-
-    def test_get_display_name_left_ctrl_no_mode(self):
-        """Test getting display name for left_ctrl without mode."""
-        result = get_shortcut_display_name("left_ctrl+left_ctrl")
-        assert result == "Left Ctrl"
-
-    def test_get_display_name_right_alt_no_mode(self):
-        """Test getting display name for right_alt without mode."""
-        result = get_shortcut_display_name("right_alt+right_alt")
-        assert result == "Right Alt"
-
-    def test_get_display_name_ctrl_toggle_mode(self):
-        """Test getting display name for ctrl with toggle mode."""
-        result = get_shortcut_display_name("ctrl+ctrl", mode="toggle")
-        assert result == "Double-tap Ctrl"
-
-    def test_get_display_name_ctrl_push_to_talk_mode(self):
-        """Test getting display name for ctrl with push_to_talk mode."""
-        result = get_shortcut_display_name("ctrl+ctrl", mode="push_to_talk")
-        assert result == "Hold Ctrl"
-
-    def test_get_display_name_alt_toggle_mode(self):
-        """Test getting display name for alt with toggle mode."""
-        result = get_shortcut_display_name("alt+alt", mode="toggle")
-        assert result == "Double-tap Alt"
-
-    def test_get_display_name_left_ctrl_toggle(self):
-        """Test getting display name for left_ctrl with toggle mode."""
-        result = get_shortcut_display_name("left_ctrl+left_ctrl", mode="toggle")
-        assert result == "Double-tap Left Ctrl"
-
-    def test_get_display_name_left_ctrl_push_to_talk(self):
-        """Test getting display name for left_ctrl with push_to_talk mode."""
-        result = get_shortcut_display_name("left_ctrl+left_ctrl", mode="push_to_talk")
-        assert result == "Hold Left Ctrl"
-
-    def test_get_display_name_unknown_shortcut(self):
-        """Test getting display name for unknown shortcut (returns the shortcut itself)."""
-        result = get_shortcut_display_name("unknown+unknown")
-        assert result == "unknown+unknown"
-
-    def test_get_display_name_unknown_mode(self):
-        """Test getting display name with unknown mode (falls back to base name)."""
-        result = get_shortcut_display_name("ctrl+ctrl", mode="unknown_mode")
-        assert result == "Ctrl (either side)"
-
-    def test_get_display_name_all_supported_shortcuts_no_mode(self):
-        """Test that all supported shortcuts have display names."""
-        for shortcut_key in SUPPORTED_SHORTCUTS.keys():
-            result = get_shortcut_display_name(shortcut_key)
-            assert result  # Should not be empty
-            assert isinstance(result, str)
-
-    def test_get_display_name_all_shortcuts_with_toggle_mode(self):
-        """Test all shortcuts with toggle mode."""
-        for shortcut_key in SUPPORTED_SHORTCUTS.keys():
-            result = get_shortcut_display_name(shortcut_key, mode="toggle")
-            assert result  # Should not be empty
-            assert isinstance(result, str)
-
-    def test_get_display_name_all_shortcuts_with_push_to_talk_mode(self):
-        """Test all shortcuts with push_to_talk mode."""
-        for shortcut_key in SUPPORTED_SHORTCUTS.keys():
-            result = get_shortcut_display_name(shortcut_key, mode="push_to_talk")
-            assert result  # Should not be empty
-            assert isinstance(result, str)
 
 
 class ConcreteKeyboardBackend(KeyboardBackend):

@@ -233,19 +233,10 @@ def detect_cpu_info() -> str:
     except Exception as e:
         logger.debug(f"Could not read CPU info: {e}")
 
-    # Fallback to nproc
-    try:
-        result = subprocess.run(
-            ["nproc"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        if result.returncode == 0:
-            cpu_count = result.stdout.strip()
-            return f"{cpu_count} cores"
-    except Exception:
-        pass
+    # Fallback to os.cpu_count()
+    cpu_count = os.cpu_count()
+    if cpu_count:
+        return f"{cpu_count} cores"
 
     return "CPU"
 

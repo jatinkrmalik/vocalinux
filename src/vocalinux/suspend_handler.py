@@ -45,7 +45,6 @@ class SuspendHandler:
         self._on_suspend = on_suspend
         self._on_resume = on_resume
         self._proxy: Optional[Gio.DBusProxy] = None
-        self._was_suspended = False
         self._connect()
 
     def _connect(self) -> None:
@@ -92,7 +91,6 @@ class SuspendHandler:
 
         if entering_sleep:
             logger.info("System preparing to suspend")
-            self._was_suspended = True
             if self._on_suspend:
                 try:
                     self._on_suspend()
@@ -103,7 +101,6 @@ class SuspendHandler:
             # Also handles the edge-case where we missed the
             # PrepareForSleep(true) (e.g. hibernation resume —
             # see systemd issue #30666).
-            self._was_suspended = False
             if self._on_resume:
                 try:
                     self._on_resume()

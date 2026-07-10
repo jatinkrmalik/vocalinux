@@ -109,7 +109,6 @@ class TestConfigManager(unittest.TestCase):
             config_manager.config["speech_recognition"]["vad_sensitivity"], 3
         )  # From defaults
         self.assertEqual(config_manager.config["ui"]["start_minimized"], True)
-        self.assertEqual(config_manager.config["ui"]["show_notifications"], True)  # From defaults
 
     def test_load_config_file_error(self):
         """Test handling of errors when loading config file."""

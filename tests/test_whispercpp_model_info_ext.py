@@ -339,30 +339,28 @@ class TestDetectCPUInfo(unittest.TestCase):
             self.assertIsInstance(result, str)
             self.assertGreater(len(result), 0)
 
-    def test_detect_cpu_info_fallback_to_nproc(self):
-        """Test CPU detection falls back to nproc."""
+    def test_detect_cpu_info_fallback_to_cpu_count(self):
+        """Test CPU detection falls back to os.cpu_count()."""
+        from vocalinux.utils.whispercpp_model_info import detect_cpu_info
+
+        detect_cpu_info.cache_clear()
         with (
             patch("builtins.open", create=True, side_effect=Exception("No /proc/cpuinfo")),
-            patch("subprocess.run") as mock_run,
+            patch("os.cpu_count", return_value=8),
         ):
-
-            mock_run.return_value = MagicMock(returncode=0, stdout="8\n")
-
-            from vocalinux.utils.whispercpp_model_info import detect_cpu_info
-
             result = detect_cpu_info()
 
-            self.assertIsInstance(result, str)
+            self.assertEqual(result, "8 cores")
 
     def test_detect_cpu_info_default_fallback(self):
         """Test CPU detection returns default when all methods fail."""
+        from vocalinux.utils.whispercpp_model_info import detect_cpu_info
+
+        detect_cpu_info.cache_clear()
         with (
             patch("builtins.open", create=True, side_effect=Exception()),
-            patch("subprocess.run", side_effect=Exception()),
+            patch("os.cpu_count", return_value=None),
         ):
-
-            from vocalinux.utils.whispercpp_model_info import detect_cpu_info
-
             result = detect_cpu_info()
 
             self.assertEqual(result, "CPU")

@@ -308,31 +308,6 @@ class TestBufferManagement(unittest.TestCase):
                 manager._model_initialized = True
                 return manager
 
-    def test_set_buffer_limit_too_small(self):
-        """Test buffer limit enforcement - minimum."""
-        manager = self._create_manager()
-        manager.set_buffer_limit(50)
-        assert manager._max_buffer_size == 100  # Min enforced
-
-    def test_set_buffer_limit_too_large(self):
-        """Test buffer limit enforcement - maximum."""
-        manager = self._create_manager()
-        manager.set_buffer_limit(25000)
-        assert manager._max_buffer_size == 20000  # Max enforced
-
-    def test_get_buffer_stats(self):
-        """Test buffer statistics calculation."""
-        manager = self._create_manager()
-        manager.set_buffer_limit(1000)
-        manager.audio_buffer = [b"x" * 100, b"y" * 100]
-
-        stats = manager.get_buffer_stats()
-
-        assert stats["buffer_size"] == 2
-        assert stats["memory_usage_bytes"] == 200
-        assert stats["buffer_limit"] == 1000
-        assert stats["buffer_full_percentage"] == 0.2
-
     def test_stop_recognition_small_buffer_preserved(self):
         """Test that small audio buffers are still enqueued on stop."""
         manager = self._create_manager()
@@ -631,78 +606,6 @@ class TestStartStopRecognition(unittest.TestCase):
 
         # Should still be listening (no-op)
         assert manager.state == RecognitionState.LISTENING
-
-
-class TestAudioBufferOperations(unittest.TestCase):
-    """Test audio buffer operations."""
-
-    def setUp(self):
-        """Set up patches."""
-        self.patches = []
-
-    def tearDown(self):
-        """Clean up patches."""
-        for p in self.patches:
-            p.stop()
-
-    def test_buffer_stats_empty_buffer(self):
-        """Test buffer stats with empty buffer."""
-        patches = [
-            patch("os.makedirs"),
-            patch("os.path.exists", return_value=True),
-            patch("threading.Thread"),
-            patch.object(SpeechRecognitionManager, "_get_vosk_model_path"),
-        ]
-        for p in patches:
-            p.start()
-            self.patches.append(p)
-
-        manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        manager.audio_buffer = []
-
-        stats = manager.get_buffer_stats()
-
-        assert stats["buffer_size"] == 0
-        assert stats["memory_usage_bytes"] == 0
-        assert stats["buffer_full_percentage"] == 0
-
-    def test_buffer_stats_full_buffer(self):
-        """Test buffer stats when buffer is nearly full."""
-        patches = [
-            patch("os.makedirs"),
-            patch("os.path.exists", return_value=True),
-            patch("threading.Thread"),
-            patch.object(SpeechRecognitionManager, "_get_vosk_model_path"),
-        ]
-        for p in patches:
-            p.start()
-            self.patches.append(p)
-
-        manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        manager.set_buffer_limit(100)
-        manager.audio_buffer = [b"x" * 1000 for _ in range(95)]
-
-        stats = manager.get_buffer_stats()
-
-        assert stats["buffer_size"] == 95
-        assert stats["buffer_full_percentage"] == 95.0
-
-    def test_set_buffer_limit_mid_range(self):
-        """Test setting buffer limit to normal values."""
-        patches = [
-            patch("os.makedirs"),
-            patch("os.path.exists", return_value=True),
-            patch("threading.Thread"),
-            patch.object(SpeechRecognitionManager, "_get_vosk_model_path"),
-        ]
-        for p in patches:
-            p.start()
-            self.patches.append(p)
-
-        manager = SpeechRecognitionManager(engine="vosk", defer_download=True)
-        manager.set_buffer_limit(1000)
-
-        assert manager._max_buffer_size == 1000
 
 
 class TestAudioDeviceReconnection(unittest.TestCase):

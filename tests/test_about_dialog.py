@@ -1,7 +1,7 @@
 """
 Tests for the About Dialog module.
 
-Tests the show_about_dialog function and AboutDialog class using source code
+Tests the show_about_dialog function using source code
 inspection to verify expected behavior (since GTK mocking is complex across
 Python versions).
 """
@@ -93,86 +93,3 @@ class TestShowAboutDialogFunction(unittest.TestCase):
     def test_show_about_dialog_sets_modal(self):
         """Test that show_about_dialog sets modal."""
         self.assertIn("set_modal(True)", self.source_code)
-
-
-class TestAboutDialogClass(unittest.TestCase):
-    """Test cases for AboutDialog custom class."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.source_code = _get_source_code()
-
-    def test_about_dialog_class_exists(self):
-        """Test that AboutDialog class is defined."""
-        self.assertIn("class AboutDialog(Gtk.Dialog):", self.source_code)
-
-    def test_about_dialog_has_css(self):
-        """Test that AboutDialog has CSS styling defined."""
-        self.assertIn("ABOUT_CSS", self.source_code)
-        self.assertIn(".about-dialog", self.source_code)
-        self.assertIn(".about-header", self.source_code)
-
-    def test_about_dialog_has_setup_css_method(self):
-        """Test that AboutDialog has _setup_css method."""
-        self.assertIn("def _setup_css(self)", self.source_code)
-
-    def test_about_dialog_has_build_ui_method(self):
-        """Test that AboutDialog has _build_ui method."""
-        self.assertIn("def _build_ui(self)", self.source_code)
-
-    def test_about_dialog_has_build_header_method(self):
-        """Test that AboutDialog has _build_header method."""
-        self.assertIn("def _build_header(self)", self.source_code)
-
-    def test_about_dialog_has_build_links_method(self):
-        """Test that AboutDialog has _build_links method."""
-        self.assertIn("def _build_links(self)", self.source_code)
-
-    def test_about_dialog_has_build_credits_method(self):
-        """Test that AboutDialog has _build_credits method."""
-        self.assertIn("def _build_credits(self)", self.source_code)
-
-    def test_about_dialog_has_build_footer_method(self):
-        """Test that AboutDialog has _build_footer method."""
-        self.assertIn("def _build_footer(self)", self.source_code)
-
-    def test_about_dialog_uses_close_button(self):
-        """Test that AboutDialog uses Close-only button pattern."""
-        self.assertIn("_Close", self.source_code)
-
-
-class TestAboutDialogCSS(unittest.TestCase):
-    """Test cases for AboutDialog CSS styling."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.source_code = _get_source_code()
-
-    def test_css_has_about_icon_style(self):
-        """Test that CSS includes about-icon class."""
-        self.assertIn(".about-icon", self.source_code)
-
-    def test_css_has_about_title_style(self):
-        """Test that CSS includes about-title class."""
-        self.assertIn(".about-title", self.source_code)
-
-    def test_css_has_about_version_style(self):
-        """Test that CSS includes about-version class."""
-        self.assertIn(".about-version", self.source_code)
-
-    def test_css_has_about_description_style(self):
-        """Test that CSS includes about-description class."""
-        self.assertIn(".about-description", self.source_code)
-
-    def test_css_has_about_section_style(self):
-        """Test that CSS includes about-section class."""
-        self.assertIn(".about-section", self.source_code)
-
-    def test_css_uses_theme_variables(self):
-        """Test that CSS uses GTK theme variables."""
-        self.assertIn("@theme_bg_color", self.source_code)
-        self.assertIn("@theme_base_color", self.source_code)
-
-
-if __name__ == "__main__":
-    unittest.main()

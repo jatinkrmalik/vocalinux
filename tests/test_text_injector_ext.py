@@ -73,8 +73,6 @@ def _make_injector(env) -> Any:
     obj._ibus_injector = None
     obj.environment = env
     obj._session_environment = env
-    obj._ibus_ready = False
-    obj._ibus_init_failed = False
     obj._ibus_init_thread = None
     obj._state_lock = threading.Lock()
     obj._clipboard_tool_health = {}
@@ -530,7 +528,6 @@ class TestBackgroundIBusInitialization(unittest.TestCase):
 
         obj._initialize_ibus_in_background()
 
-        self.assertTrue(obj._ibus_ready)
         self.assertEqual(obj.environment, DesktopEnvironment.WAYLAND_IBUS)
 
     def test_background_ibus_failure_preserves_fallback(self):
@@ -542,8 +539,6 @@ class TestBackgroundIBusInitialization(unittest.TestCase):
 
         obj._initialize_ibus_in_background()
 
-        self.assertFalse(obj._ibus_ready)
-        self.assertTrue(obj._ibus_init_failed)
         self.assertEqual(obj.environment, DesktopEnvironment.WAYLAND)
 
 

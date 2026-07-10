@@ -276,33 +276,33 @@ class TestReconfigure(unittest.TestCase):
         self.assertEqual(mgr.engine, "vosk")
 
 
-class TestProcessFinalBuffer(unittest.TestCase):
-    def test_process_final_buffer_whispercpp(self):
+class TestProcessAudioBuffer(unittest.TestCase):
+    def test_process_audio_buffer_whispercpp(self):
         mgr = _make_manager(engine="whisper_cpp")
-        mgr.audio_buffer = [b"\x00\x00" * 512] * 5
         mgr._capture_sample_rate = 16000
         cb = MagicMock()
         mgr.register_text_callback(cb)
-        mgr.command_processor = MagicMock()
-        mgr.command_processor.process_text.return_value = "hello"
 
+        # whisper_cpp defaults voice_commands off -> raw transcription is emitted
         with patch.object(mgr, "_transcribe_with_whispercpp", return_value="hello world"):
-            mgr._process_final_buffer()
+            mgr._process_audio_buffer([b"\x00\x00" * 512] * 5)
 
-    def test_process_final_buffer_whisper(self):
+        cb.assert_called_once_with("hello world")
+
+    def test_process_audio_buffer_whisper(self):
         mgr = _make_manager(engine="whisper")
-        mgr.audio_buffer = [b"\x00\x00" * 512] * 5
         mgr._capture_sample_rate = 16000
-        mgr.command_processor = MagicMock()
-        mgr.command_processor.process_text.return_value = "hello"
+        cb = MagicMock()
+        mgr.register_text_callback(cb)
 
         with patch.object(mgr, "_transcribe_with_whisper", return_value="hello world"):
-            mgr._process_final_buffer()
+            mgr._process_audio_buffer([b"\x00\x00" * 512] * 5)
 
-    def test_process_final_buffer_empty(self):
+        cb.assert_called_once_with("hello world")
+
+    def test_process_audio_buffer_empty(self):
         mgr = _make_manager(engine="whisper_cpp")
-        mgr.audio_buffer = []
-        mgr._process_final_buffer()  # Should handle empty gracefully
+        mgr._process_audio_buffer([])  # Should handle empty gracefully
 
 
 class TestTranscribeWhispercpp(unittest.TestCase):
@@ -540,15 +540,10 @@ class TestDownloadWhisperModel(unittest.TestCase):
 
 
 class TestBufferManagement(unittest.TestCase):
-    def test_set_buffer_limit(self):
+    def test_default_max_buffer_size(self):
         mgr = _make_manager()
-        mgr.set_buffer_limit(100)
-        self.assertEqual(mgr._max_buffer_size, 100)
-
-    def test_get_buffer_stats(self):
-        mgr = _make_manager()
-        stats = mgr.get_buffer_stats()
-        self.assertIsInstance(stats, dict)
+        self.assertEqual(mgr._max_buffer_size, 5000)
+        self.assertEqual(mgr.audio_buffer, [])
 
 
 class TestWhispercppModelKwargs(unittest.TestCase):
