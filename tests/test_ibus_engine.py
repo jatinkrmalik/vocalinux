@@ -232,6 +232,193 @@ class TestGetCurrentEngine(unittest.TestCase):
         result = get_current_engine()
         self.assertIsNone(result)
 
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine_gnome_fallback")
+    @patch("subprocess.run")
+    def test_get_current_engine_no_global_engine_uses_gnome_fallback(
+        self, mock_run, mock_gnome_fallback
+    ):
+        """Test that 'No global engine' in stderr triggers GNOME fallback."""
+        mock_run.return_value = MagicMock(stdout="", stderr="No global engine\n", returncode=1)
+        mock_gnome_fallback.return_value = "xkb:br::"
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine
+
+        result = get_current_engine()
+        self.assertEqual(result, "xkb:br::")
+        mock_gnome_fallback.assert_called_once()
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine_gnome_fallback")
+    @patch("vocalinux.text_injection.ibus_engine._is_gnome_session", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine._is_wayland_session", return_value=True)
+    @patch("subprocess.run")
+    def test_get_current_engine_suspicious_us_default_on_gnome_wayland(
+        self, mock_run, mock_wayland, mock_gnome, mock_gnome_fallback
+    ):
+        """Test that xkb:us::eng on GNOME/Wayland triggers gsettings fallback (#497)."""
+        mock_run.return_value = MagicMock(stdout="xkb:us::eng\n", stderr="", returncode=0)
+        mock_gnome_fallback.return_value = "xkb:br::"
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine
+
+        result = get_current_engine()
+        self.assertEqual(result, "xkb:br::")
+        mock_gnome_fallback.assert_called_once()
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine_gnome_fallback")
+    @patch("vocalinux.text_injection.ibus_engine._is_gnome_session", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine._is_wayland_session", return_value=True)
+    @patch("subprocess.run")
+    def test_get_current_engine_keeps_us_default_when_gnome_fails(
+        self, mock_run, mock_wayland, mock_gnome, mock_gnome_fallback
+    ):
+        """Test that we keep xkb:us::eng when GNOME fallback returns None."""
+        mock_run.return_value = MagicMock(stdout="xkb:us::eng\n", stderr="", returncode=0)
+        mock_gnome_fallback.return_value = None
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine
+
+        result = get_current_engine()
+        self.assertEqual(result, "xkb:us::eng")
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine_gnome_fallback")
+    @patch("vocalinux.text_injection.ibus_engine._is_gnome_session", return_value=False)
+    @patch("subprocess.run")
+    def test_get_current_engine_suspicious_us_not_on_gnome(
+        self, mock_run, mock_gnome, mock_gnome_fallback
+    ):
+        """Test that xkb:us::eng is trusted when not on GNOME."""
+        mock_run.return_value = MagicMock(stdout="xkb:us::eng\n", stderr="", returncode=0)
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine
+
+        result = get_current_engine()
+        self.assertEqual(result, "xkb:us::eng")
+        mock_gnome_fallback.assert_not_called()
+
+
+class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
+    """Tests for get_current_engine_gnome_fallback function."""
+
+    @patch("vocalinux.text_injection.ibus_engine._is_gnome_session", return_value=False)
+    def test_not_gnome_returns_none(self, mock_gnome):
+        """Test that non-GNOME sessions return None."""
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_gsettings_sources_failure_returns_none(self, mock_run):
+        """Test that gsettings failure returns None."""
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_empty_sources_returns_none(self, mock_run):
+        """Test that empty input-sources list returns None."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_xkb_source_returns_ibus_engine_name(self, mock_run):
+        """Test that an xkb source is converted to IBus engine format."""
+        sources_output = "[('xkb', 'br'), ('xkb', 'us+altgr-intl')]"
+        current_output = "uint32 0"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=current_output, stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertEqual(result, "xkb:br::")
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_xkb_source_with_variant(self, mock_run):
+        """Test that an xkb source with variant is parsed correctly."""
+        sources_output = "[('xkb', 'us+altgr-intl')]"
+        current_output = "uint32 0"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=current_output, stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertEqual(result, "xkb:us::altgr-intl")
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_ibus_source_returns_engine_id(self, mock_run):
+        """Test that an ibus source returns the engine ID directly."""
+        sources_output = "[('ibus', 'anthy')]"
+        current_output = "uint32 0"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=current_output, stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertEqual(result, "anthy")
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_current_index_selects_correct_source(self, mock_run):
+        """Test that the current index from gsettings selects the right source."""
+        sources_output = "[('xkb', 'us'), ('xkb', 'br')]"
+        current_output = "uint32 1"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=current_output, stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertEqual(result, "xkb:br::")
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_current_failure_defaults_to_index_zero(self, mock_run):
+        """Test that if gsettings get current fails, index 0 is used."""
+        sources_output = "[('xkb', 'br'), ('xkb', 'us')]"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertEqual(result, "xkb:br::")
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_gsettings_not_found_returns_none(self, mock_run):
+        """Test that FileNotFoundError (gsettings not installed) returns None."""
+        mock_run.side_effect = FileNotFoundError("gsettings not found")
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
 
 class TestSwitchEngine(unittest.TestCase):
     """Tests for switch_engine function."""

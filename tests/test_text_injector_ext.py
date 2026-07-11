@@ -150,39 +150,112 @@ class TestCheckDependencies(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     obj._check_dependencies()
 
-    def test_kde_wayland_inactive_ibus_logs_virtual_keyboard_hint(self):
+    def test_kde_wayland_uses_ibus_when_daemon_runs_with_xkb_engine(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        mock_ibus = MagicMock()
+
+        with (
+            patch.dict(
+                os.environ,
+                {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE"},
+                clear=True,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_available",
+                return_value=True,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                return_value=False,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
+                return_value=True,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.IBusTextInjector",
+                return_value=mock_ibus,
+            ),
+            patch.object(obj, "_start_ibus_initialization") as mock_start,
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None,
+            ),
+        ):
+            obj._check_dependencies()
+
+        self.assertIs(obj._ibus_injector, mock_ibus)
+        mock_start.assert_called_once_with()
+        self.assertEqual(obj.wayland_tool, "wtype")
+
+    def test_gnome_wayland_keeps_xkb_engine_fallback(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
         obj = _make_injector(DesktopEnvironment.WAYLAND)
 
-        with patch.dict(
-            os.environ,
-            {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE"},
-            clear=True,
-        ):
-            with patch(
-                "vocalinux.text_injection.text_injector.is_ibus_available",
+        with (
+            patch.dict(
+                os.environ,
+                {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "GNOME"},
+                clear=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                return_value=False,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
                 return_value=True,
-            ):
-                with patch(
-                    "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
-                    return_value=False,
-                ):
-                    with patch(
-                        "shutil.which",
-                        side_effect=lambda cmd: "/usr/bin/ydotool" if cmd == "ydotool" else None,
-                    ):
-                        with patch("subprocess.run") as mock_run:
-                            mock_run.return_value = MagicMock(returncode=0, stderr="")
-                            with self.assertLogs(
-                                "vocalinux.text_injection.text_injector",
-                                level="WARNING",
-                            ) as logs:
-                                obj._check_dependencies()
+            ),
+            patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None,
+            ),
+        ):
+            obj._check_dependencies()
 
-        log_output = "\n".join(logs.output)
-        self.assertIn("KDE Plasma Wayland", log_output)
-        self.assertIn("Virtual Keyboard", log_output)
+        mock_ibus_class.assert_not_called()
+        self.assertEqual(obj.wayland_tool, "wtype")
+
+    def test_kde_wayland_respects_explicit_non_ibus_input_method(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "XDG_SESSION_TYPE": "wayland",
+                    "XDG_CURRENT_DESKTOP": "KDE",
+                    "QT_IM_MODULE": "fcitx",
+                },
+                clear=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                return_value=False,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
+                return_value=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: "/usr/bin/ydotool" if cmd == "ydotool" else None,
+            ),
+            patch.object(obj, "_is_ydotoold_running", return_value=True),
+        ):
+            obj._check_dependencies()
+
+        mock_ibus_class.assert_not_called()
+        self.assertEqual(obj.wayland_tool, "ydotool")
 
     def test_kde_wayland_wtype_probe_logs_ibus_hint(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector

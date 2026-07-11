@@ -243,21 +243,31 @@ class TextInjector:
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
         if is_ibus_available():
+            ibus_active = is_ibus_active_input_method()
+            kde_wayland = (
+                self.environment == DesktopEnvironment.WAYLAND and _is_kde_plasma_session()
+            )
+            gtk_im = os.environ.get("GTK_IM_MODULE", "").lower()
+            qt_im = os.environ.get("QT_IM_MODULE", "").lower()
+            xmodifiers = os.environ.get("XMODIFIERS", "").lower()
+            explicit_non_ibus_im = (
+                (gtk_im and "ibus" not in gtk_im)
+                or (qt_im and "ibus" not in qt_im)
+                or (xmodifiers and "@im=" in xmodifiers and "@im=ibus" not in xmodifiers)
+            )
+            kde_wayland_ibus = kde_wayland and not explicit_non_ibus_im
+
             # Check if IBus is the active input method (not just installed)
             # This is important because IBus may be installed but not being used,
-            # e.g., when the user has configured ydotool or Fcitx instead
-            if not is_ibus_active_input_method():
-                if self.environment == DesktopEnvironment.WAYLAND and _is_kde_plasma_session():
-                    logger.warning(
-                        "IBus is installed but is not active for KDE Plasma Wayland. "
-                        f"{_kde_wayland_ibus_hint()} Falling back to alternative "
-                        "text injection method."
-                    )
-                else:
-                    logger.info(
-                        "IBus is installed but not the active input method. "
-                        "Falling back to alternative text injection method."
-                    )
+            # e.g., when the user has configured ydotool or Fcitx instead. KDE
+            # Plasma Wayland can still route the Vocalinux engine through IBus
+            # Wayland when its current engine is only an xkb:* layout; GNOME and
+            # other desktops must keep the real-engine guard from issue #478.
+            if not ibus_active and not kde_wayland_ibus:
+                logger.info(
+                    "IBus is installed but not the active input method. "
+                    "Falling back to alternative text injection method."
+                )
             # Check if ibus-daemon is running before attempting setup
             elif not is_ibus_daemon_running():
                 logger.info(
@@ -276,6 +286,11 @@ class TextInjector:
                 )
             else:
                 try:
+                    if kde_wayland_ibus and not ibus_active:
+                        logger.info(
+                            "KDE Plasma Wayland detected with ibus-daemon running; "
+                            "using IBus Wayland despite the inactive input-method heuristic"
+                        )
                     self._ibus_injector = IBusTextInjector(auto_activate=False)
                     ibus_requested = True
                 except Exception as e:
