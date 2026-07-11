@@ -247,6 +247,7 @@ class TestDownloadVoskModel:
             progress_calls.append((progress, speed, status))
 
         manager._download_progress_callback = track_progress
+        (tmp_path / "model-en-us-0.22-lgraph" / "am").mkdir(parents=True)
 
         zip_data = BytesIO()
         with REAL_ZIPFILE.ZipFile(zip_data, "w") as zf:

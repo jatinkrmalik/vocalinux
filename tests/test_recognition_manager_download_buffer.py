@@ -28,7 +28,6 @@ sys.modules["pywhispercpp.model"] = MagicMock()
 sys.modules["requests"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
 sys.modules["psutil"] = MagicMock()
-sys.modules["zipfile"] = MagicMock()
 
 # Import after mocking
 from conftest import mock_audio_feedback
@@ -79,29 +78,28 @@ class TestDownloadFunctions(unittest.TestCase):
         with patch("builtins.open", mock_open()) as mock_file:
             with patch("os.rename") as mock_rename:
                 with patch("os.path.dirname") as mock_dirname:
-                    with patch("os.makedirs"):
-                        mock_dirname.return_value = "/fake/dir"
+                    mock_dirname.return_value = "/fake/dir"
 
-                        mock_response = MagicMock()
-                        mock_response.headers = {"content-length": "1024"}
-                        mock_response.iter_content.return_value = [b"x" * 512, b"y" * 512]
+                    mock_response = MagicMock()
+                    mock_response.headers = {"content-length": "1024"}
+                    mock_response.iter_content.return_value = [b"x" * 512, b"y" * 512]
 
-                        progress_calls = []
+                    progress_calls = []
 
-                        def progress_cb(progress, speed, status):
-                            progress_calls.append((progress, speed, status))
+                    def progress_cb(progress, speed, status):
+                        progress_calls.append((progress, speed, status))
 
-                        with patch("requests.get", return_value=mock_response):
-                            manager = self._create_manager(engine="whisper")
-                            manager._download_progress_callback = progress_cb
+                    with patch("requests.get", return_value=mock_response):
+                        manager = self._create_manager(engine="whisper")
+                        manager._download_progress_callback = progress_cb
 
-                            # This should call the download function
-                            manager._download_whisper_model("/fake/cache")
+                        # This should call the download function
+                        manager._download_whisper_model("/fake/cache")
 
-                            # Verify file was written
-                            mock_file.assert_called()
-                            # Verify progress callback was called
-                            assert len(progress_calls) > 0, "Progress callback not called"
+                        # Verify file was written
+                        mock_file.assert_called()
+                        # Verify progress callback was called
+                        assert len(progress_calls) > 0, "Progress callback not called"
 
     def test_download_whisper_model_cancelled(self):
         """Test Whisper download cancellation."""

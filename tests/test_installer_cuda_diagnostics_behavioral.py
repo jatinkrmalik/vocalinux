@@ -50,7 +50,7 @@ class TestCudaToolkitRootHasRuntimeLibrary:
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
 cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL"
 """
         result = run_bash_test(script)
@@ -64,7 +64,7 @@ cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
 cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL"
 """
         result = run_bash_test(script)
@@ -78,7 +78,7 @@ cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
 cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL"
 """
         result = run_bash_test(script)
@@ -92,7 +92,7 @@ cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
 cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL"
 """
         result = run_bash_test(script)
@@ -105,7 +105,7 @@ cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "PASS" || echo "FAIL
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
 cuda_toolkit_root_has_runtime_library "{cuda_root}" && echo "FAIL" || echo "PASS"
 """
         result = run_bash_test(script)
@@ -131,8 +131,8 @@ class TestValidateCudaToolkitRoot:
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
-source <(sed -n '/^validate_cuda_toolkit_root/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
+eval "$(sed -n '/^validate_cuda_toolkit_root/,/^}}/p' '{INSTALL_SH}')"
 validate_cuda_toolkit_root "{cuda_root}" && echo "PASS" || echo "FAIL"
 """
         result = run_bash_test(script)
@@ -149,8 +149,8 @@ validate_cuda_toolkit_root "{cuda_root}" && echo "PASS" || echo "FAIL"
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
-source <(sed -n '/^validate_cuda_toolkit_root/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
+eval "$(sed -n '/^validate_cuda_toolkit_root/,/^}}/p' '{INSTALL_SH}')"
 validate_cuda_toolkit_root "{cuda_root}" && echo "FAIL" || echo "PASS"
 """
         result = run_bash_test(script)
@@ -169,8 +169,8 @@ validate_cuda_toolkit_root "{cuda_root}" && echo "FAIL" || echo "PASS"
 
         script = f"""
 {source_install_sh_functions(tmp_path)}
-source <(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' "{INSTALL_SH}")
-source <(sed -n '/^validate_cuda_toolkit_root/,/^}}/p' "{INSTALL_SH}")
+eval "$(sed -n '/^cuda_toolkit_root_has_runtime_library/,/^}}/p' '{INSTALL_SH}')"
+eval "$(sed -n '/^validate_cuda_toolkit_root/,/^}}/p' '{INSTALL_SH}')"
 validate_cuda_toolkit_root "{cuda_root}" && echo "FAIL" || echo "PASS"
 """
         result = run_bash_test(script)

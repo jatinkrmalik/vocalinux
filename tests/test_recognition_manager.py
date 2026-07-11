@@ -14,7 +14,6 @@ sys.modules["pyaudio"] = MagicMock()
 sys.modules["wave"] = MagicMock()
 sys.modules["tempfile"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
-sys.modules["zipfile"] = MagicMock()
 
 # Import the shared mock from conftest
 from conftest import mock_audio_feedback  # noqa: E402
