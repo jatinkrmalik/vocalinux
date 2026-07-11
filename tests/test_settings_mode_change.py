@@ -34,3 +34,24 @@ def test_mode_change_does_not_use_stale_preset_combo():
     body = _method_source("_on_shortcut_mode_changed")
     # The stale preset combo must not drive the live mode-change apply.
     assert "self.shortcut_combo.get_active_id()" not in body
+
+
+def test_mode_ui_toggle_is_combo_aware():
+    # A combo (alt+r) toggles on a single press, so the toggle label must branch
+    # on whether the shortcut is a combo rather than always saying "Double-tap".
+    body = _method_source("_update_shortcut_ui_for_mode")
+    assert "is_combo" in body
+    assert "get_shortcut_display_name(" in body
+    assert "self.config_manager.get_str(" in body
+
+
+def test_mode_ui_double_tap_text_is_guarded_for_non_combo():
+    body = _method_source("_update_shortcut_ui_for_mode")
+    # The "Double-tap" wording must sit inside the non-combo branch, not fire
+    # unconditionally for every toggle shortcut.
+    idx_if = body.find("if is_combo:")
+    # The user-facing "Double-tap this key" subtitle (not the example in a
+    # comment) must sit inside the non-combo branch.
+    idx_double_tap = body.find("Double-tap this key")
+    assert idx_if != -1
+    assert idx_double_tap > idx_if

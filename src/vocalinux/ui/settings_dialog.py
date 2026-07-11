@@ -50,6 +50,7 @@ from .keyboard_backends import (  # noqa: E402
     SUPPORTED_SHORTCUTS,
     get_shortcut_display_name,
     is_valid_shortcut,
+    parse_shortcut_spec,
 )
 
 # Avoid circular imports for type checking
@@ -1824,16 +1825,35 @@ class SettingsDialog(Gtk.Dialog):
         return True
 
     def _update_shortcut_ui_for_mode(self, mode: str):
-        """Update the shortcut UI based on the selected mode."""
+        """Update the shortcut UI text to match both the mode and the shortcut.
+
+        A modifier+key combo (e.g. "alt+r") toggles on a single press, not a
+        double-tap, so the wording must reflect the active shortcut instead of
+        assuming a bare-modifier gesture. Reads the saved shortcut from config
+        (the single source of truth for both preset and custom shortcuts).
+        """
+        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        is_combo = is_valid_shortcut(shortcut) and parse_shortcut_spec(shortcut).is_combo
+        # e.g. "Press Alt+R" (combo toggle), "Double-tap Ctrl", "Hold Alt+R".
+        action = get_shortcut_display_name(shortcut, mode)
+
         if mode == "toggle":
-            self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
-            self.shortcut_info_label.set_text(
-                "In Toggle mode: Double-tap the key to start voice typing, double-tap again to stop."
-            )
+            if is_combo:
+                self.shortcut_row.set_subtitle(f"{action} to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    f"In Toggle mode: {action} to start voice typing, {action.lower()} "
+                    "again to stop."
+                )
+            else:
+                self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    "In Toggle mode: Double-tap the key to start voice typing, "
+                    "double-tap again to stop."
+                )
         elif mode == "push_to_talk":
-            self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
+            self.shortcut_row.set_subtitle("Hold this shortcut to speak, release to stop")
             self.shortcut_info_label.set_text(
-                "In Push-to-Talk mode: Hold the key down to speak, release to stop recording."
+                "In Push-to-Talk mode: Hold the shortcut down to speak, release to stop recording."
             )
 
     def _on_shortcut_mode_changed(self, widget):
