@@ -8,6 +8,8 @@ fires, the simulated Ctrl+V becomes Ctrl+Alt+V and nothing pastes.
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from vocalinux.text_injection.text_injector import TextInjector
 
 
@@ -219,3 +221,38 @@ class TestHeldModifierKeycodesErrorPaths:
         mod.InputDevice = lambda path: RaisingDevice()
         with patch.dict("sys.modules", {"evdev": mod}):
             assert inj._held_modifier_keycodes() == set()
+
+
+class TestInjectionModifierWaitSeconds:
+    @pytest.mark.parametrize("raw,expected", [("2.5", 2.5), ("0", 0.0), ("0.5", 0.5)])
+    def test_valid_values(self, raw, expected, monkeypatch):
+        inj = _bare_injector()
+        monkeypatch.setenv("VOCALINUX_INJECT_MODIFIER_WAIT", raw)
+        assert inj._injection_modifier_wait_seconds() == expected
+
+    @pytest.mark.parametrize("raw", ["inf", "-inf", "nan", "Infinity", "NaN"])
+    def test_non_finite_falls_back_to_default(self, raw, monkeypatch):
+        inj = _bare_injector()
+        monkeypatch.setenv("VOCALINUX_INJECT_MODIFIER_WAIT", raw)
+        assert inj._injection_modifier_wait_seconds() == 1.0
+
+    def test_non_numeric_falls_back_to_default(self, monkeypatch):
+        inj = _bare_injector()
+        monkeypatch.setenv("VOCALINUX_INJECT_MODIFIER_WAIT", "abc")
+        assert inj._injection_modifier_wait_seconds() == 1.0
+
+    def test_unset_uses_default(self, monkeypatch):
+        inj = _bare_injector()
+        monkeypatch.delenv("VOCALINUX_INJECT_MODIFIER_WAIT", raising=False)
+        assert inj._injection_modifier_wait_seconds() == 1.0
+
+    def test_inf_does_not_block_forever(self, monkeypatch):
+        # Regression: with 'inf', the wait must still terminate (bounded by the
+        # finite default) instead of looping forever while a modifier is held.
+        inj = _bare_injector()
+        monkeypatch.setenv("VOCALINUX_INJECT_MODIFIER_WAIT", "inf")
+        # Simulate the clock crossing the finite default deadline in a few steps.
+        clock = iter([0.0, 0.5, 1.5])
+        monkeypatch.setattr("time.monotonic", lambda: next(clock, 2.0))
+        with patch.object(inj, "_held_modifier_keycodes", return_value={56}), patch("time.sleep"):
+            inj._wait_for_modifiers_released()  # must return, not hang

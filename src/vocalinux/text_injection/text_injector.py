@@ -6,6 +6,7 @@ application, supporting both X11 and Wayland environments.
 """
 
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -990,6 +991,33 @@ class TextInjector:
             logger.debug(f"Could not read modifier key state: {e}")
         return held
 
+    _DEFAULT_INJECT_MODIFIER_WAIT = 1.0
+
+    def _injection_modifier_wait_seconds(self) -> float:
+        """Return the sanitized max seconds to wait for modifiers to release.
+
+        Reads VOCALINUX_INJECT_MODIFIER_WAIT and falls back to the default for
+        anything unusable: a non-numeric value, or a non-finite one. In
+        particular ``inf`` parses fine and is positive, so without this guard it
+        would make the wait deadline infinite and block injection forever while a
+        modifier stays held.
+        """
+        raw = os.environ.get("VOCALINUX_INJECT_MODIFIER_WAIT")
+        if raw is None:
+            return self._DEFAULT_INJECT_MODIFIER_WAIT
+        try:
+            value = float(raw)
+        except ValueError:
+            return self._DEFAULT_INJECT_MODIFIER_WAIT
+        if not math.isfinite(value):
+            logger.warning(
+                "VOCALINUX_INJECT_MODIFIER_WAIT=%r is not a finite number; " "using default %.1fs",
+                raw,
+                self._DEFAULT_INJECT_MODIFIER_WAIT,
+            )
+            return self._DEFAULT_INJECT_MODIFIER_WAIT
+        return value
+
     def _wait_for_modifiers_released(self) -> None:
         """Wait briefly for shortcut modifier keys to be released before injecting.
 
@@ -999,10 +1027,7 @@ class TextInjector:
         set to 0 to disable). Best-effort: if evdev/permissions are unavailable
         it simply proceeds.
         """
-        try:
-            max_wait = float(os.environ.get("VOCALINUX_INJECT_MODIFIER_WAIT", "1.0"))
-        except ValueError:
-            max_wait = 1.0
+        max_wait = self._injection_modifier_wait_seconds()
         if max_wait <= 0:
             return
 
