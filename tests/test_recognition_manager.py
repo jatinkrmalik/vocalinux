@@ -13,9 +13,7 @@ sys.modules["requests"] = MagicMock()
 sys.modules["pyaudio"] = MagicMock()
 sys.modules["wave"] = MagicMock()
 sys.modules["tempfile"] = MagicMock()
-sys.modules["tqdm"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
-sys.modules["zipfile"] = MagicMock()
 
 # Import the shared mock from conftest
 from conftest import mock_audio_feedback  # noqa: E402
@@ -156,7 +154,7 @@ class TestSpeechRecognition(unittest.TestCase):
         state_callback.assert_called_once_with(RecognitionState.LISTENING)
 
     def test_process_buffer(self):
-        """Test processing audio buffer."""
+        """Test processing audio buffer via live _process_audio_buffer path."""
         # Setup for test
         manager = SpeechRecognitionManager(engine="vosk")
 
@@ -166,11 +164,8 @@ class TestSpeechRecognition(unittest.TestCase):
         manager.register_text_callback(text_callback)
         manager.register_action_callback(action_callback)
 
-        # Setup audio buffer
-        manager.audio_buffer = [b"data1", b"data2"]
-
-        # Process buffer
-        manager._process_final_buffer()
+        # Process buffer segment
+        manager._process_audio_buffer([b"data1", b"data2"])
 
         # Verify Vosk methods were called
         self.recognizerMock.AcceptWaveform.assert_any_call(b"data1")
@@ -218,7 +213,7 @@ class TestSpeechRecognition(unittest.TestCase):
         self.threadInstance.join.assert_called()
 
     def test_whisper_engine(self):
-        """Test initialization and usage with Whisper engine."""
+        """Test initialization with Whisper engine."""
         # Setup Whisper and torch mocks
         whisper_mock = MagicMock()
         torch_mock = MagicMock()
@@ -237,40 +232,15 @@ class TestSpeechRecognition(unittest.TestCase):
             self.assertEqual(manager.model_size, "medium")
             whisper_mock.load_model.assert_called_once()
 
-            # Instead of calling the actual _process_final_buffer method which does file operations,
-            # let's test the Whisper functionality by directly mocking that method
-            original_process = manager._process_final_buffer
-
-            # Replace _process_final_buffer with our own implementation for testing
-            def mock_process():
-                # Skip file operations, just simulate the Whisper transcription directly
-                # Mock the Whisper result and process it
-                processed_text, actions = self.cmdProcessorMock("whisper test")
-                # Call the callbacks
-                for callback in manager.text_callbacks:
-                    callback(processed_text)
-                for callback in manager.action_callbacks:
-                    for action in actions:
-                        callback(action)
-
-            # Replace the method with our mock implementation
-            manager._process_final_buffer = mock_process
-
-            # Register callbacks
+            # Process a segment via live path with transcription mocked.
+            # Whisper defaults to voice_commands disabled, so text is passed through.
             text_callback = MagicMock()
             manager.register_text_callback(text_callback)
 
-            # Mock command processor
-            self.cmdProcessorMock.return_value = ("processed whisper", [])
+            with patch.object(manager, "_transcribe_with_whisper", return_value="whisper test"):
+                manager._process_audio_buffer([b"data"])
 
-            # Call the mocked process method
-            manager._process_final_buffer()
-
-            # Verify callback was called
-            text_callback.assert_called_with("processed whisper")
-
-            # Restore the original method
-            manager._process_final_buffer = original_process
+            text_callback.assert_called_with("whisper test")
 
     def test_vosk_model_path(self):
         """Test model path generation."""
@@ -378,17 +348,6 @@ class TestSpeechRecognition(unittest.TestCase):
         manager.set_audio_device(None)
         self.assertIsNone(manager.get_audio_device())
 
-    def test_get_last_audio_level(self):
-        """Test getting last audio level."""
-        manager = SpeechRecognitionManager(engine="vosk")
-
-        # Initially 0
-        self.assertEqual(manager.get_last_audio_level(), 0.0)
-
-        # Set a value directly
-        manager._last_audio_level = 50.5
-        self.assertEqual(manager.get_last_audio_level(), 50.5)
-
     def test_model_ready_property(self):
         """Test model_ready property."""
         manager = SpeechRecognitionManager(engine="vosk")
@@ -491,10 +450,9 @@ class TestSpeechRecognition(unittest.TestCase):
     def test_process_empty_buffer(self):
         """Test processing empty buffer does nothing."""
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = []
 
         # Should return without error
-        manager._process_final_buffer()
+        manager._process_audio_buffer([])
 
         # Recognizer should not be called
         self.recognizerMock.AcceptWaveform.assert_not_called()
@@ -503,10 +461,9 @@ class TestSpeechRecognition(unittest.TestCase):
         """Test processing buffer with unknown engine."""
         manager = SpeechRecognitionManager(engine="vosk")
         manager.engine = "unknown"
-        manager.audio_buffer = [b"data"]
 
         # Should log error but not crash
-        manager._process_final_buffer()
+        manager._process_audio_buffer([b"data"])
 
     def test_init_with_kwargs(self):
         """Test initialization with additional kwargs."""
@@ -1184,8 +1141,8 @@ class TestRecognitionManagerMethods(unittest.TestCase):
         self.assertIn(callback2, manager.text_callbacks)
 
 
-class TestProcessFinalBuffer(unittest.TestCase):
-    """Test _process_final_buffer method."""
+class TestProcessAudioBuffer(unittest.TestCase):
+    """Test _process_audio_buffer method (live processing path)."""
 
     def setUp(self):
         """Set up patches."""
@@ -1209,25 +1166,23 @@ class TestProcessFinalBuffer(unittest.TestCase):
         self.patcher_exists.stop()
         self.patcher_vosk.stop()
 
-    def test_process_final_buffer_empty(self):
+    def test_process_audio_buffer_empty(self):
         """Test processing empty buffer."""
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = []
 
         # Should return without error
-        manager._process_final_buffer()
+        manager._process_audio_buffer([])
 
         # Recognizer should not be called
         self.mock_recognizer.AcceptWaveform.assert_not_called()
 
-    def test_process_final_buffer_vosk(self):
+    def test_process_audio_buffer_vosk(self):
         """Test processing buffer with vosk."""
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"data1", b"data2"]
 
         # Mock recognizer result
         self.mock_recognizer.FinalResult.return_value = '{"text": "hello world"}'
@@ -1241,27 +1196,25 @@ class TestProcessFinalBuffer(unittest.TestCase):
         # Mock command processor
         with patch.object(manager.command_processor, "process_text") as mock_process:
             mock_process.return_value = ("processed hello world", [])
-            manager._process_final_buffer()
+            manager._process_audio_buffer([b"data1", b"data2"])
 
             text_callback.assert_called_once_with("processed hello world")
 
-    def test_process_final_buffer_unknown_engine(self):
+    def test_process_audio_buffer_unknown_engine(self):
         """Test processing buffer with unknown engine."""
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
         manager = SpeechRecognitionManager(engine="vosk")
         manager.engine = "unknown"
-        manager.audio_buffer = [b"data"]
 
         # Should log error but not crash
-        manager._process_final_buffer()
+        manager._process_audio_buffer([b"data"])
 
-    def test_process_final_buffer_with_actions(self):
+    def test_process_audio_buffer_with_actions(self):
         """Test processing buffer returns actions."""
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"data"]
 
         # Mock recognizer result
         self.mock_recognizer.FinalResult.return_value = '{"text": "delete that"}'
@@ -1273,16 +1226,15 @@ class TestProcessFinalBuffer(unittest.TestCase):
         # Mock command processor to return an action
         with patch.object(manager.command_processor, "process_text") as mock_process:
             mock_process.return_value = ("", ["delete_last"])
-            manager._process_final_buffer()
+            manager._process_audio_buffer([b"data"])
 
             action_callback.assert_called_once_with("delete_last")
 
-    def test_process_final_buffer_empty_processed_text(self):
+    def test_process_audio_buffer_empty_processed_text(self):
         """Test processing when processed text is empty."""
         from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
         manager = SpeechRecognitionManager(engine="vosk")
-        manager.audio_buffer = [b"data"]
 
         # Mock recognizer result
         self.mock_recognizer.FinalResult.return_value = '{"text": "silence"}'
@@ -1294,7 +1246,7 @@ class TestProcessFinalBuffer(unittest.TestCase):
         # Mock command processor to return empty text
         with patch.object(manager.command_processor, "process_text") as mock_process:
             mock_process.return_value = ("", [])
-            manager._process_final_buffer()
+            manager._process_audio_buffer([b"data"])
 
             # Text callback should not be called for empty text
             text_callback.assert_not_called()

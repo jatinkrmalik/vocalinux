@@ -75,8 +75,6 @@ class TextInjector:
         self._ibus_injector: Optional[IBusTextInjector] = None
         self.environment = self._detect_environment()
         self._session_environment = self.environment
-        self._ibus_ready = False
-        self._ibus_init_failed = False
         self._ibus_init_thread: Optional[threading.Thread] = None
         self._state_lock = threading.Lock()
         self._clipboard_tool_health = {}
@@ -145,7 +143,6 @@ class TextInjector:
                 logger.info("Stopping IBus text injector")
                 self._ibus_injector.stop()
                 self._ibus_injector = None
-            self._ibus_ready = False
 
     def _detect_environment(self) -> DesktopEnvironment:
         """
@@ -362,7 +359,6 @@ class TextInjector:
             elif shutil.which("ydotool"):
                 self.wayland_tool = "ydotool"
 
-        self._ibus_init_failed = False
         self._ibus_init_thread = threading.Thread(
             target=self._initialize_ibus_in_background,
             daemon=True,
@@ -380,8 +376,6 @@ class TextInjector:
             # commit so normal typing keeps layout-specific compose/dead keys.
             self._ibus_injector.prepare_engine()
             with self._state_lock:
-                self._ibus_ready = True
-                self._ibus_init_failed = False
                 if self._session_environment == DesktopEnvironment.X11:
                     self.environment = DesktopEnvironment.X11_IBUS
                 else:
@@ -390,9 +384,6 @@ class TextInjector:
                 f"Using IBus for {self.environment.value} text injection (best compatibility)"
             )
         except Exception as e:
-            with self._state_lock:
-                self._ibus_ready = False
-                self._ibus_init_failed = True
             logger.warning(f"IBus initialization failed: {e}, continuing with fallback")
 
     def _get_clipboard_tools(self):
@@ -917,14 +908,6 @@ class TextInjector:
         except subprocess.CalledProcessError as e:
             logger.error(f"xdotool error: {e.stderr}")
             raise
-
-    def _has_non_ascii(self, text: str) -> bool:
-        """Check if text contains any non-ASCII characters."""
-        try:
-            text.encode("ascii")
-            return False
-        except UnicodeEncodeError:
-            return True
 
     def _inject_via_clipboard_paste(self, text: str) -> bool:
         """

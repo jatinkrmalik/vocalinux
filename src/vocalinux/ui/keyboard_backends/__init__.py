@@ -14,11 +14,9 @@ from .base import (
     DEFAULT_SHORTCUT_MODE,
     SHORTCUT_DISPLAY_NAMES,
     SHORTCUT_GROUPS,
-    SHORTCUT_MODE_DISPLAY_NAMES,
     SHORTCUT_MODES,
     SUPPORTED_SHORTCUTS,
     KeyboardBackend,
-    get_shortcut_display_name,
     parse_shortcut,
 )
 

@@ -348,7 +348,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         with patch.object(engine, "_start_socket_server"):
             engine.do_enable()
             # Verify active instance is set
-            self.assertEqual(VocalinuxEngine._active_instance, engine)
+            self.assertIs(VocalinuxEngine._active_instance, engine)
 
     def test_vocalinux_engine_do_disable(self):
         """Test engine disable signal handler."""
@@ -358,7 +358,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         engine.do_enable()
         engine.do_disable()
         # Instance should still be active (not cleared on disable)
-        self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertIs(VocalinuxEngine._active_instance, engine)
 
     def test_vocalinux_engine_do_focus_in(self):
         """Test engine focus in signal handler."""
@@ -366,7 +366,7 @@ class TestVocalinuxEngine(unittest.TestCase):
 
         engine = VocalinuxEngine()
         engine.do_focus_in()
-        self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertIs(VocalinuxEngine._active_instance, engine)
 
     def test_vocalinux_engine_do_focus_out(self):
         """Test engine focus out signal handler."""
@@ -376,7 +376,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         VocalinuxEngine._active_instance = engine
         engine.do_focus_out()
         # Focus out should not clear the active instance
-        self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertIs(VocalinuxEngine._active_instance, engine)
 
     def test_vocalinux_engine_do_process_key_event(self):
         """Test engine key event processing."""

@@ -24,8 +24,6 @@
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
     "framer-motion": "^12.9.4",
     "geist": "^1.4.1",
     "lucide-react": "^0.507.0",
@@ -34,10 +32,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intersection-observer": "^9.16.0",
-    "react-syntax-highlighter": "^15.6.1",
-    "tailwind-merge": "^3.2.0",
     "tailwindcss": "^3.4.3",
-    "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.5.3"
   },
   "devDependencies": {

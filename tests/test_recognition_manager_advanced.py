@@ -276,33 +276,33 @@ class TestReconfigure(unittest.TestCase):
         self.assertEqual(mgr.engine, "vosk")
 
 
-class TestProcessFinalBuffer(unittest.TestCase):
-    def test_process_final_buffer_whispercpp(self):
+class TestProcessAudioBuffer(unittest.TestCase):
+    def test_process_audio_buffer_whispercpp(self):
         mgr = _make_manager(engine="whisper_cpp")
-        mgr.audio_buffer = [b"\x00\x00" * 512] * 5
         mgr._capture_sample_rate = 16000
         cb = MagicMock()
         mgr.register_text_callback(cb)
-        mgr.command_processor = MagicMock()
-        mgr.command_processor.process_text.return_value = "hello"
 
+        # whisper_cpp defaults voice_commands off -> raw transcription is emitted
         with patch.object(mgr, "_transcribe_with_whispercpp", return_value="hello world"):
-            mgr._process_final_buffer()
+            mgr._process_audio_buffer([b"\x00\x00" * 512] * 5)
 
-    def test_process_final_buffer_whisper(self):
+        cb.assert_called_once_with("hello world")
+
+    def test_process_audio_buffer_whisper(self):
         mgr = _make_manager(engine="whisper")
-        mgr.audio_buffer = [b"\x00\x00" * 512] * 5
         mgr._capture_sample_rate = 16000
-        mgr.command_processor = MagicMock()
-        mgr.command_processor.process_text.return_value = "hello"
+        cb = MagicMock()
+        mgr.register_text_callback(cb)
 
         with patch.object(mgr, "_transcribe_with_whisper", return_value="hello world"):
-            mgr._process_final_buffer()
+            mgr._process_audio_buffer([b"\x00\x00" * 512] * 5)
 
-    def test_process_final_buffer_empty(self):
+        cb.assert_called_once_with("hello world")
+
+    def test_process_audio_buffer_empty(self):
         mgr = _make_manager(engine="whisper_cpp")
-        mgr.audio_buffer = []
-        mgr._process_final_buffer()  # Should handle empty gracefully
+        mgr._process_audio_buffer([])  # Should handle empty gracefully
 
 
 class TestTranscribeWhispercpp(unittest.TestCase):
@@ -540,15 +540,26 @@ class TestDownloadWhisperModel(unittest.TestCase):
 
 
 class TestBufferManagement(unittest.TestCase):
-    def test_set_buffer_limit(self):
+    def test_default_max_buffer_size(self):
         mgr = _make_manager()
-        mgr.set_buffer_limit(100)
-        self.assertEqual(mgr._max_buffer_size, 100)
+        self.assertEqual(mgr._max_buffer_size, 5000)
+        self.assertEqual(mgr.audio_buffer, [])
 
-    def test_get_buffer_stats(self):
+    def test_buffer_limit_and_stats(self):
         mgr = _make_manager()
-        stats = mgr.get_buffer_stats()
-        self.assertIsInstance(stats, dict)
+        mgr.set_buffer_limit(50)
+        mgr.audio_buffer = [b"x" * 100, b"y" * 100]
+
+        self.assertEqual(
+            mgr.get_buffer_stats(),
+            {
+                "buffer_size": 2,
+                "buffer_limit": 100,
+                "memory_usage_bytes": 200,
+                "memory_usage_mb": 200 / (1024 * 1024),
+                "buffer_full_percentage": 2.0,
+            },
+        )
 
 
 class TestWhispercppModelKwargs(unittest.TestCase):
@@ -651,6 +662,22 @@ class TestVoiceCommandsProperty(unittest.TestCase):
     def test_voice_commands_explicit_off(self):
         mgr = _make_manager(engine="vosk", voice_commands_enabled=False)
         self.assertFalse(mgr._resolve_voice_commands_enabled())
+
+    def test_voice_commands_auto_mode_updates_on_engine_reconfigure(self):
+        mgr = _make_manager(engine="whisper", voice_commands_enabled=None)
+        self.assertFalse(mgr._voice_commands_enabled)
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            mgr.reconfigure(engine="vosk", force_download=False)
+
+        self.assertTrue(mgr._voice_commands_enabled)
+
+    def test_voice_commands_toggle_updates_on_reconfigure(self):
+        mgr = _make_manager(engine="vosk", voice_commands_enabled=True)
+
+        mgr.reconfigure(voice_commands_enabled=False, force_download=False)
+
+        self.assertFalse(mgr._voice_commands_enabled)
 
 
 if __name__ == "__main__":

@@ -48,7 +48,6 @@ DEFAULT_CONFIG = {
     },
     "ui": {
         "start_minimized": False,
-        "show_notifications": True,
     },
     "general": {
         "autostart": False,
@@ -59,8 +58,6 @@ DEFAULT_CONFIG = {
     },
     "advanced": {
         "power_user_mode": False,
-        "debug_logging": False,
-        "wayland_mode": False,
         "whispercpp_no_timestamps": True,
         "whispercpp_no_context": True,
         "whispercpp_initial_prompt": "",

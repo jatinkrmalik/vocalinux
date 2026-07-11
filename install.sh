@@ -2715,12 +2715,7 @@ install_whispercpp_with_gpu_support() {
         "toggle_recognition": "ctrl+ctrl"
     },
     "ui": {
-        "start_minimized": false,
-        "show_notifications": true
-    },
-    "advanced": {
-        "debug_logging": false,
-        "wayland_mode": false
+        "start_minimized": false
     }
 }
 FALLBACK_VOSK_CONFIG
@@ -2890,12 +2885,7 @@ PY
         "toggle_recognition": "ctrl+ctrl"
     },
     "ui": {
-        "start_minimized": false,
-        "show_notifications": true
-    },
-    "advanced": {
-        "debug_logging": false,
-        "wayland_mode": false
+        "start_minimized": false
     }
 }
 WHISPER_CONFIG
@@ -2942,12 +2932,7 @@ WHISPER_CONFIG
         "toggle_recognition": "ctrl+ctrl"
     },
     "ui": {
-        "start_minimized": false,
-        "show_notifications": true
-    },
-    "advanced": {
-        "debug_logging": false,
-        "wayland_mode": false
+        "start_minimized": false
     }
 }
 FALLBACK_CONFIG
@@ -2982,12 +2967,7 @@ FALLBACK_CONFIG
         "toggle_recognition": "ctrl+ctrl"
     },
     "ui": {
-        "start_minimized": false,
-        "show_notifications": true
-    },
-    "advanced": {
-        "debug_logging": false,
-        "wayland_mode": false
+        "start_minimized": false
     }
 }
 VOSK_CONFIG
@@ -3044,12 +3024,7 @@ VOSK_CONFIG
         "toggle_recognition": "ctrl+ctrl"
     },
     "ui": {
-        "start_minimized": false,
-        "show_notifications": true
-    },
-    "advanced": {
-        "debug_logging": false,
-        "wayland_mode": false
+        "start_minimized": false
     }
 }
 REMOTE_CONFIG

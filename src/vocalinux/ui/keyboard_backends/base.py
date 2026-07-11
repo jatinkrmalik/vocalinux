@@ -48,45 +48,6 @@ SHORTCUT_GROUPS = {
     "Right Side": ["right_ctrl+right_ctrl", "right_alt+right_alt", "right_shift+right_shift"],
 }
 
-# Mode-specific display names (format: {shortcut: {mode: display_name}})
-SHORTCUT_MODE_DISPLAY_NAMES = {
-    "ctrl+ctrl": {
-        "toggle": "Double-tap Ctrl",
-        "push_to_talk": "Hold Ctrl",
-    },
-    "alt+alt": {
-        "toggle": "Double-tap Alt",
-        "push_to_talk": "Hold Alt",
-    },
-    "shift+shift": {
-        "toggle": "Double-tap Shift",
-        "push_to_talk": "Hold Shift",
-    },
-    "left_ctrl+left_ctrl": {
-        "toggle": "Double-tap Left Ctrl",
-        "push_to_talk": "Hold Left Ctrl",
-    },
-    "left_alt+left_alt": {
-        "toggle": "Double-tap Left Alt",
-        "push_to_talk": "Hold Left Alt",
-    },
-    "left_shift+left_shift": {
-        "toggle": "Double-tap Left Shift",
-        "push_to_talk": "Hold Left Shift",
-    },
-    "right_ctrl+right_ctrl": {
-        "toggle": "Double-tap Right Ctrl",
-        "push_to_talk": "Hold Right Ctrl",
-    },
-    "right_alt+right_alt": {
-        "toggle": "Double-tap Right Alt",
-        "push_to_talk": "Hold Right Alt",
-    },
-    "right_shift+right_shift": {
-        "toggle": "Double-tap Right Shift",
-        "push_to_talk": "Hold Right Shift",
-    },
-}
 
 DEFAULT_SHORTCUT = "ctrl+ctrl"
 
@@ -97,24 +58,6 @@ SHORTCUT_MODES = {
 }
 
 DEFAULT_SHORTCUT_MODE = "toggle"
-
-
-def get_shortcut_display_name(shortcut: str, mode: Optional[str] = None) -> str:
-    """
-    Get a human-readable display name for a shortcut.
-
-    Args:
-        shortcut: The shortcut string (e.g., "ctrl+ctrl")
-        mode: Optional mode string. If provided, returns mode-specific name.
-
-    Returns:
-        A human-readable display name for the shortcut
-    """
-    if mode and shortcut in SHORTCUT_MODE_DISPLAY_NAMES:
-        return SHORTCUT_MODE_DISPLAY_NAMES[shortcut].get(
-            mode, SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
-        )
-    return SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
 
 
 def parse_shortcut(shortcut_string: str) -> str:
