@@ -274,3 +274,62 @@ class TestPynputComboDetection:
         backend._on_press(kb.Key.ctrl_l)
         backend._on_press(kb.KeyCode.from_char("\x12"))
         assert self._wait(fired)
+
+
+@pytest.mark.skipif(not evdev_backend.EVDEV_AVAILABLE, reason="evdev not available")
+class TestEvdevComboRecovery:
+    """Combo state must be reconciled after lost events (SYN_DROPPED / disconnect)."""
+
+    def _event(self, code, value):
+        return types.SimpleNamespace(code=code, value=value, type=1)
+
+    def _codes(self):
+        from vocalinux.ui.keyboard_backends.evdev_backend import (
+            KEY_LEFTALT,
+            evdev_code_for_key,
+        )
+
+        return KEY_LEFTALT, evdev_code_for_key("r")
+
+    def test_dropped_modifier_release_does_not_false_trigger(self):
+        alt_l, key_r = self._codes()
+        b = evdev_backend.EvdevKeyboardBackend(shortcut="alt+r", mode="toggle")
+        fired = threading.Event()
+        b.register_toggle_callback(fired.set)
+
+        # Alt goes down; its release is then LOST (SYN_DROPPED). Recovery must
+        # clear the stale "Alt held" state so R alone can't toggle.
+        b._handle_key_event(self._event(alt_l, 1), None)
+        assert alt_l in b._combo_pressed
+        b._reset_combo_state()
+        assert b._combo_pressed == set()
+
+        b._handle_key_event(self._event(key_r, 1), None)
+        assert not fired.wait(0.2)
+
+    def test_reset_ends_stuck_push_to_talk_hold(self):
+        alt_l, key_r = self._codes()
+        b = evdev_backend.EvdevKeyboardBackend(shortcut="alt+r", mode="push_to_talk")
+        pressed = threading.Event()
+        released = threading.Event()
+        b.register_press_callback(pressed.set)
+        b.register_release_callback(released.set)
+
+        b._handle_key_event(self._event(alt_l, 1), None)
+        b._handle_key_event(self._event(key_r, 1), None)
+        assert pressed.wait(1.0)
+        assert b._combo_active
+
+        b._reset_combo_state()  # e.g. a device disconnects mid-hold
+        assert released.wait(1.0)
+        assert not b._combo_active
+
+    def test_device_disconnect_resets_combo_state(self):
+        alt_l, _ = self._codes()
+        b = evdev_backend.EvdevKeyboardBackend(shortcut="alt+r", mode="toggle")
+        b._handle_key_event(self._event(alt_l, 1), None)
+        assert alt_l in b._combo_pressed
+
+        fake_device = types.SimpleNamespace(close=lambda: None, name="fake")
+        b._remove_keyboard_device(1234, fake_device)
+        assert b._combo_pressed == set()

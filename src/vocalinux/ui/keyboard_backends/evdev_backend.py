@@ -271,6 +271,21 @@ class EvdevKeyboardBackend(KeyboardBackend):
         """True if at least one key code for every required modifier is held."""
         return all(bool(codes & self._combo_pressed) for codes in self._combo_modifier_sets)
 
+    def _reset_combo_state(self) -> None:
+        """Drop cached combo key state after lost events (SYN_DROPPED / disconnect).
+
+        When the kernel drops events or a device disconnects, a modifier *release*
+        may be among the lost events. If we kept the stale "modifier held" state,
+        the main key pressed alone could falsely toggle/start dictation, and a
+        push-to-talk hold could stay stuck on. Clearing the pressed set fails
+        safe (the user simply re-presses the modifier), and ending any live hold
+        prevents a stuck session.
+        """
+        self._combo_pressed = set()
+        # Ends an active push-to-talk hold (fires the release callback); no-op
+        # for toggle mode or when no hold is active.
+        self._combo_released()
+
     def is_available(self) -> bool:
         """Check if evdev is available and we can access a keyboard device with the modifier key."""
         if not EVDEV_AVAILABLE:
@@ -471,6 +486,9 @@ class EvdevKeyboardBackend(KeyboardBackend):
                 self.device_paths.discard(device_path)
             self._dropped_devices.discard(fd)
             self.key_pressed_devices.discard(id(device))
+            # A disconnect can swallow the modifier release (e.g. a wireless
+            # split half dropping mid-hold); don't leave the combo logically held.
+            self._reset_combo_state()
 
     def _monitor_devices(self) -> None:
         """Monitor keyboard devices for events."""
@@ -522,6 +540,9 @@ class EvdevKeyboardBackend(KeyboardBackend):
                                         # End of dropped sequence — clear stale state
                                         self._dropped_devices.discard(fd)
                                         self.key_pressed_devices.discard(id(device))
+                                        # A dropped modifier release must not leave
+                                        # the combo logically held.
+                                        self._reset_combo_state()
                                 continue
                             if fd in self._dropped_devices:
                                 continue
