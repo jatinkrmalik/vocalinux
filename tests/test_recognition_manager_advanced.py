@@ -545,6 +545,22 @@ class TestBufferManagement(unittest.TestCase):
         self.assertEqual(mgr._max_buffer_size, 5000)
         self.assertEqual(mgr.audio_buffer, [])
 
+    def test_buffer_limit_and_stats(self):
+        mgr = _make_manager()
+        mgr.set_buffer_limit(50)
+        mgr.audio_buffer = [b"x" * 100, b"y" * 100]
+
+        self.assertEqual(
+            mgr.get_buffer_stats(),
+            {
+                "buffer_size": 2,
+                "buffer_limit": 100,
+                "memory_usage_bytes": 200,
+                "memory_usage_mb": 200 / (1024 * 1024),
+                "buffer_full_percentage": 2.0,
+            },
+        )
+
 
 class TestWhispercppModelKwargs(unittest.TestCase):
     def test_default_model_kwargs(self):
@@ -646,6 +662,22 @@ class TestVoiceCommandsProperty(unittest.TestCase):
     def test_voice_commands_explicit_off(self):
         mgr = _make_manager(engine="vosk", voice_commands_enabled=False)
         self.assertFalse(mgr._resolve_voice_commands_enabled())
+
+    def test_voice_commands_auto_mode_updates_on_engine_reconfigure(self):
+        mgr = _make_manager(engine="whisper", voice_commands_enabled=None)
+        self.assertFalse(mgr._voice_commands_enabled)
+
+        with patch.object(SpeechRecognitionManager, "_init_vosk"):
+            mgr.reconfigure(engine="vosk", force_download=False)
+
+        self.assertTrue(mgr._voice_commands_enabled)
+
+    def test_voice_commands_toggle_updates_on_reconfigure(self):
+        mgr = _make_manager(engine="vosk", voice_commands_enabled=True)
+
+        mgr.reconfigure(voice_commands_enabled=False, force_download=False)
+
+        self.assertFalse(mgr._voice_commands_enabled)
 
 
 if __name__ == "__main__":

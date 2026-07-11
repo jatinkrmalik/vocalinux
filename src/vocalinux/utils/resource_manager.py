@@ -13,6 +13,14 @@ from typing import Optional, cast
 
 logger = logging.getLogger(__name__)
 
+_EXPECTED_ICONS = (
+    "vocalinux",
+    "vocalinux-microphone",
+    "vocalinux-microphone-off",
+    "vocalinux-microphone-process",
+)
+_EXPECTED_SOUNDS = ("start_recording", "stop_recording", "error")
+
 
 class ResourceManager:
     """
@@ -59,32 +67,29 @@ class ResourceManager:
             Path("/usr/share/vocalinux/resources"),
         ]
 
-        # XDG data directories (if set)
-        xdg_data = os.environ.get("XDG_DATA_DIRS", "")
-        for base in xdg_data.split(":"):
-            if base:
-                candidates.append(Path(base) / "vocalinux" / "resources")
+        candidates.extend(
+            Path(base) / "vocalinux" / "resources"
+            for base in os.environ.get("XDG_DATA_DIRS", "").split(":")
+            if base
+        )
 
-        # Deduplicate while preserving order
-        seen = set()
-        unique_candidates = []
-        for candidate in candidates:
-            key = str(candidate)
-            if key not in seen:
-                seen.add(key)
-                unique_candidates.append(candidate)
-
-        for candidate in unique_candidates:
-            logger.debug(
-                "Checking resources candidate: %s (exists: %s)",
-                candidate,
-                candidate.exists(),
+        for candidate in dict.fromkeys(candidates):
+            is_complete = all(
+                (candidate / "icons" / "scalable" / f"{icon}.svg").is_file()
+                for icon in _EXPECTED_ICONS
+            ) and all(
+                (candidate / "sounds" / f"{sound}.wav").is_file() for sound in _EXPECTED_SOUNDS
             )
-            if candidate.exists():
+            logger.debug(
+                "Checking resources candidate: %s (complete: %s)",
+                candidate,
+                is_complete,
+            )
+            if is_complete:
                 logger.info("Found resources directory: %s", candidate)
                 return str(candidate)
 
-        default_path = str(unique_candidates[0])
+        default_path = str(candidates[0])
         logger.warning("Could not find resources directory, defaulting to: %s", default_path)
         return default_path
 
@@ -149,22 +154,13 @@ class ResourceManager:
         }
 
         # Expected icons
-        expected_icons = [
-            "vocalinux",
-            "vocalinux-microphone",
-            "vocalinux-microphone-off",
-            "vocalinux-microphone-process",
-        ]
-
-        for icon in expected_icons:
+        for icon in _EXPECTED_ICONS:
             icon_path = self.get_icon_path(icon)
             if not os.path.exists(icon_path):
                 results["missing_icons"].append(icon)
 
         # Expected sounds
-        expected_sounds = ["start_recording", "stop_recording", "error"]
-
-        for sound in expected_sounds:
+        for sound in _EXPECTED_SOUNDS:
             sound_path = self.get_sound_path(sound)
             if not os.path.exists(sound_path):
                 results["missing_sounds"].append(sound)

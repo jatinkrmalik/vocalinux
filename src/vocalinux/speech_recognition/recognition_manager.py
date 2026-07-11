@@ -1670,9 +1670,7 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
         label = status_label or "model"
         write_path = dest_path if extract_zip else dest_path + ".tmp"
-        parent = os.path.dirname(write_path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
+        os.makedirs(os.path.dirname(write_path) or ".", exist_ok=True)
 
         logger.info(f"Downloading {label} from {url}")
 
@@ -1690,9 +1688,6 @@ class SpeechRecognitionManager:
                 for data in response.iter_content(chunk_size=chunk_size):
                     if self._download_cancelled:
                         logger.info("Download cancelled by user")
-                        f.close()
-                        if os.path.exists(write_path):
-                            os.remove(write_path)
                         raise RuntimeError("Download cancelled")
 
                     f.write(data)
@@ -1757,19 +1752,15 @@ class SpeechRecognitionManager:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to download {label} from {url}: {e}")
-            if os.path.exists(write_path):
-                os.remove(write_path)
             raise RuntimeError(f"Failed to download {label}: {e}") from e
-        except zipfile.BadZipFile:
+        except zipfile.BadZipFile as e:
             logger.error(f"Downloaded file from {url} is not a valid zip file.")
-            if os.path.exists(write_path):
-                os.remove(write_path)
-            raise RuntimeError(f"Downloaded {label} file is corrupted.")
+            raise RuntimeError(f"Downloaded {label} file is corrupted.") from e
         except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during {label} download: {e}")
-            if os.path.exists(write_path):
-                os.remove(write_path)
             raise
+        finally:
+            Path(write_path).unlink(missing_ok=True)
 
     def _download_whispercpp_model(self):
         """Download a whisper.cpp model with progress tracking."""
@@ -1982,6 +1973,10 @@ class SpeechRecognitionManager:
     def get_audio_device_name(self) -> Optional[str]:
         """Get the currently configured audio device name."""
         return self.audio_device_name
+
+    def get_last_audio_level(self) -> float:
+        """Get the last recorded audio level (0-100)."""
+        return self._last_audio_level
 
     def _update_state(self, new_state: RecognitionState):
         """
@@ -2874,3 +2869,40 @@ class SpeechRecognitionManager:
                 self._update_state(RecognitionState.ERROR)
 
         self._reconnection_attempts = 0
+
+    def set_buffer_limit(self, max_chunks: int):
+        """
+        Set the maximum number of audio chunks to buffer.
+
+        Args:
+            max_chunks: Maximum number of chunks to buffer (default: 5000)
+        """
+        if max_chunks < 100:
+            logger.warning("Buffer limit too small, setting to minimum 100")
+            max_chunks = 100
+        elif max_chunks > 20000:
+            logger.warning("Buffer limit too large, setting to maximum 20000")
+            max_chunks = 20000
+
+        self._max_buffer_size = max_chunks
+        logger.info(f"Audio buffer limit set to {max_chunks} chunks")
+
+    def get_buffer_stats(self) -> dict:
+        """
+        Get current buffer statistics.
+
+        Returns:
+            dict: Buffer statistics including size, memory usage, etc.
+        """
+        with self._buffer_lock:
+            total_memory = sum(len(chunk) for chunk in self.audio_buffer)
+            buffer_size = len(self.audio_buffer)
+        return {
+            "buffer_size": buffer_size,
+            "buffer_limit": self._max_buffer_size,
+            "memory_usage_bytes": total_memory,
+            "memory_usage_mb": total_memory / (1024 * 1024),
+            "buffer_full_percentage": (
+                (buffer_size / self._max_buffer_size) * 100 if self._max_buffer_size > 0 else 0
+            ),
+        }

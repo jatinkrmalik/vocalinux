@@ -30,6 +30,10 @@ from vocalinux.speech_recognition.recognition_manager import (
 )
 
 
+class MockRequestException(Exception):
+    pass
+
+
 def _make_manager(engine="whisper_cpp", **kw):
     """Create a SpeechRecognitionManager with mocked initialization."""
     with patch.object(SpeechRecognitionManager, "_init_vosk"):
@@ -46,6 +50,15 @@ def _make_manager(engine="whisper_cpp", **kw):
                         "large": "vosk-model-en-us-0.22-lgraph",
                     }
                 return mgr
+
+
+def _mock_requests(chunks):
+    mock_requests = MagicMock()
+    response = mock_requests.get.return_value
+    response.headers = {"content-length": "10"}
+    response.iter_content.return_value = chunks
+    mock_requests.exceptions.RequestException = MockRequestException
+    return mock_requests
 
 
 @pytest.fixture(autouse=True)
@@ -160,6 +173,66 @@ class TestDownloadWhispercppModel:
             ):
                 with pytest.raises(RuntimeError, match="Failed to download"):
                     manager._download_whispercpp_model()
+
+    def test_unknown_model_is_rejected(self):
+        manager = _make_manager(engine="whisper_cpp")
+        manager.model_size = "missing"
+
+        with pytest.raises(ValueError, match="Unknown whisper.cpp model size"):
+            manager._download_whispercpp_model()
+
+
+class TestDownloadCleanup:
+    def test_cancelled_download_removes_partial_file(self, tmp_path):
+        manager = _make_manager()
+        destination = tmp_path / "model.bin"
+
+        def chunks():
+            yield b"partial"
+            manager._download_cancelled = True
+            yield b"cancel"
+
+        with patch.dict(
+            "sys.modules", {"requests": _mock_requests(chunks()), "zipfile": REAL_ZIPFILE}
+        ):
+            with pytest.raises(RuntimeError, match="cancelled"):
+                manager._download_with_progress("https://example.test/model", str(destination))
+
+        assert not Path(f"{destination}.tmp").exists()
+
+    def test_stream_error_removes_partial_file(self, tmp_path):
+        manager = _make_manager()
+        destination = tmp_path / "model.bin"
+
+        def chunks():
+            yield b"partial"
+            raise MockRequestException("network interrupted")
+
+        with patch.dict(
+            "sys.modules", {"requests": _mock_requests(chunks()), "zipfile": REAL_ZIPFILE}
+        ):
+            with pytest.raises(RuntimeError, match="Failed to download"):
+                manager._download_with_progress("https://example.test/model", str(destination))
+
+        assert not Path(f"{destination}.tmp").exists()
+
+    def test_corrupt_zip_is_removed(self, tmp_path):
+        manager = _make_manager()
+        archive = tmp_path / "model.zip"
+
+        with patch.dict(
+            "sys.modules",
+            {"requests": _mock_requests([b"not a zip"]), "zipfile": REAL_ZIPFILE},
+        ):
+            with pytest.raises(RuntimeError, match="corrupted"):
+                manager._download_with_progress(
+                    "https://example.test/model.zip",
+                    str(archive),
+                    extract_zip=True,
+                    extract_dir=str(tmp_path),
+                )
+
+        assert not archive.exists()
 
 
 class TestDownloadVoskModel:

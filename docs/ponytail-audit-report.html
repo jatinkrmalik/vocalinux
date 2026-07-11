@@ -280,7 +280,7 @@
 <section class="stats" aria-label="Summary metrics">
   <div class="stat"><span class="n">~14–20k</span><span class="l">lines cuttable (all areas)</span></div>
   <div class="stat"><span class="n">~55</span><span class="l">primary findings</span></div>
-  <div class="stat"><span class="n">4</span><span class="l">dead Python runtime deps</span></div>
+  <div class="stat"><span class="n">3</span><span class="l">dead Python runtime deps</span></div>
   <div class="stat"><span class="n">6–8</span><span class="l">removable npm packages</span></div>
   <div class="stat"><span class="n">~25–35%</span><span class="l">test suite shrink possible</span></div>
   <div class="stat"><span class="n">3</span><span class="l">god-files &gt;1k LOC each</span></div>
@@ -315,7 +315,7 @@
     <div>
       <h3>High-confidence wins</h3>
       <ul>
-        <li>Delete dead deps: pydub, tqdm, lxml, python-xlib</li>
+        <li>Delete dead deps: pydub, tqdm, python-xlib</li>
         <li>Delete unused web: <code>lib/api/util.ts</code>, CodeBlock, Button, DictationOverlay</li>
         <li>Delete custom <code>AboutDialog</code> class (tray already uses Gtk.AboutDialog)</li>
         <li>Collapse recognition_manager test clones (~3.5–4.5k tests)</li>
@@ -506,11 +506,11 @@
   <article class="finding" data-tag="delete">
     <span class="rank">11</span>
     <div class="body">
-      <p class="title"><span class="tag delete">delete</span> Dead runtime deps: pydub, tqdm, lxml, python-xlib <span class="impact high">high</span></p>
-      <p class="detail">Zero imports under <code>src/</code>. tqdm only mocked in tests. Audio uses paplay/aplay; downloads use hand-rolled progress + requests. Also drop unused Sphinx <code>docs</code> extra (no conf.py / tree).</p>
+      <p class="title"><span class="tag delete">delete</span> Dead runtime deps: pydub, tqdm, python-xlib <span class="impact high">high</span></p>
+      <p class="detail">Zero imports under <code>src/</code>. tqdm only mocked in tests. Audio uses paplay/aplay; downloads use hand-rolled progress + requests. Keep the <code>lxml&gt;=6.1.0</code> resolver guard added for Python 3.14 installs (#404). Also drop unused Sphinx <code>docs</code> extra (no conf.py / tree).</p>
       <p class="path">pyproject.toml</p>
     </div>
-    <span class="savings">−4 runtime + 2 optional deps</span>
+    <span class="savings">−3 runtime + 2 optional deps</span>
   </article>
 
   <article class="finding" data-tag="delete">
@@ -636,11 +636,11 @@
   <article class="finding" data-tag="delete">
     <span class="rank">24</span>
     <div class="body">
-      <p class="title"><span class="tag delete">delete</span> Test-only public APIs on recognition manager <span class="impact med">med</span></p>
-      <p class="detail"><code>set_buffer_limit</code> / <code>get_buffer_stats</code> / <code>get_last_audio_level</code> have no app callers. <code>_process_final_buffer</code> only invoked from tests (live path is enqueue → process buffer).</p>
-      <p class="path">recognition_manager.py:2116–2118, 2572–2581, 3023–3058</p>
+      <p class="title"><span class="tag delete">delete</span> Unreachable private final-buffer helper <span class="impact med">med</span></p>
+      <p class="detail"><code>_process_final_buffer</code> only has test callers; the live path is enqueue → process buffer. Keep the public buffer limit/statistics methods shipped for reliability issue #92 and the audio-level getter from #34.</p>
+      <p class="path">recognition_manager.py:2572–2581</p>
     </div>
-    <span class="savings">−55 src (+ tests)</span>
+    <span class="savings">−12 src (+ tests)</span>
   </article>
 
   <article class="finding" data-tag="yagni">
@@ -812,7 +812,6 @@
   <div class="deps">
     <span>pydub</span>
     <span>tqdm</span>
-    <span>lxml</span>
     <span>python-xlib</span>
     <span>sphinx (docs extra)</span>
     <span>sphinx-rtd-theme</span>
@@ -851,7 +850,7 @@
 <section id="plan">
   <h2>Suggested cut order (highest ROI first)</h2>
   <ol class="plan">
-    <li><strong>Week of free wins:</strong> dead Python deps; dead web <code>util.ts</code> + unused components/npm; custom AboutDialog; distro-package-map.yaml; dead recognition APIs.</li>
+    <li><strong>Week of free wins:</strong> dead Python deps; dead web <code>util.ts</code> + unused components/npm; custom AboutDialog; distro-package-map.yaml; unreachable private recognition helper.</li>
     <li><strong>Test diet:</strong> delete integration_branches; collapse recognition_manager suites; merge IBus helper tests; hoist fixtures to conftest. Expect CI green with fewer files.</li>
     <li><strong>DRY product code:</strong> download loops; backend picker; dual settings apply; logging stack; ResourceManager single root.</li>
     <li><strong>Product decisions:</strong> OpenAI Whisper engine stay/go; advanced knobs UI; install.sh bootstrap-only vs full installer.</li>
@@ -874,12 +873,12 @@
       <tr><td>Web</td><td class="num">−3.3k</td><td class="num">−5.0k</td></tr>
       <tr><td>Install / scripts / docs</td><td class="num">−0.5–0.8k</td><td class="num">−2.0–3.5k</td></tr>
       <tr><td><strong>Total</strong></td><td class="num"><strong>−13–14k lines</strong></td><td class="num"><strong>−18–22k lines</strong></td></tr>
-      <tr><td>Runtime deps removable</td><td class="num" colspan="2">4 Python + 6–8 npm</td></tr>
+      <tr><td>Runtime deps removable</td><td class="num" colspan="2">3 Python + 6–8 npm</td></tr>
     </tbody>
   </table>
   <p>
     Against ~57k of counted product/test/web/installer surface, that is roughly
-    <strong>net: −23% to −38% lines, −4 Python deps, −6–8 npm deps possible</strong>
+    <strong>net: −23% to −38% lines, −3 Python deps, −6–8 npm deps possible</strong>
     without removing the multi-desktop dictation product.
   </p>
   <p class="muted">

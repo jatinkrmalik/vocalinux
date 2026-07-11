@@ -138,6 +138,19 @@ class TestCommandProcessor(unittest.TestCase):
         self.assertEqual(result, input_text)
         self.assertEqual(actions, [])
 
+    def test_preserves_literal_punctuation_around_commands(self):
+        """Only spoken commands should rewrite punctuation or spacing."""
+        test_cases = [
+            ("hello, world period", "hello, world."),
+            ("email@example.com period", "email@example.com."),
+            ("hello (world) period", "hello (world)."),
+        ]
+
+        for input_text, expected_output in test_cases:
+            result, actions = self.processor.process_text(input_text)
+            self.assertEqual(result, expected_output, msg=f"input={input_text!r}")
+            self.assertEqual(actions, [])
+
     def test_partial_command_matches(self):
         """Test text with partial command matches."""
         test_cases = [

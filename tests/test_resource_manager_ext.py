@@ -31,24 +31,22 @@ class TestResourceManagerDefaults:
 
     def test_resource_manager_defaults_to_first_candidate(self):
         """Test that ResourceManager defaults to first candidate when none exist."""
+        from vocalinux.utils import resource_manager
         from vocalinux.utils.resource_manager import ResourceManager
 
-        with patch("vocalinux.utils.resource_manager.Path") as mock_path:
-            # All candidates return False for exists()
-            mock_candidate = MagicMock()
-            mock_candidate.exists.return_value = False
-            mock_path.return_value = mock_candidate
+        ResourceManager._instance = None
+        ResourceManager._resources_dir = None
+        expected = Path(resource_manager.__file__).resolve().parent.parent / "resources"
 
-            # Create manager and trigger _find_resources_dir
+        with (
+            patch.dict(os.environ, {"XDG_DATA_DIRS": "/usr/local/share:/usr/share"}),
+            patch.object(Path, "is_file", return_value=False),
+            patch("vocalinux.utils.resource_manager.logger.warning") as warning,
+        ):
             manager = ResourceManager()
-            # Reset to test again
-            ResourceManager._resources_dir = None
 
-            # Patch the actual _find_resources_dir to return a path
-            with patch.object(manager, "_find_resources_dir", return_value="/tmp/resources"):
-                manager._resources_dir = None
-                manager.__init__()
-                assert manager._resources_dir == "/tmp/resources"
+        assert manager.resources_dir == str(expected)
+        warning.assert_called_once()
 
     def test_resource_manager_singleton(self):
         """Test that ResourceManager follows singleton pattern."""
@@ -146,18 +144,16 @@ class TestResourceManagerLogging:
 
 
 class TestResourceManagerCandidateSelection:
-    def test_find_resources_dir_returns_first_existing_candidate(self):
-        """First existing candidate wins (no asset-scoring maze)."""
+    def test_find_resources_dir_skips_candidate_without_app_icon(self):
+        """Do not repeat #330 by selecting an empty resource directory."""
+        from vocalinux.utils import resource_manager
         from vocalinux.utils.resource_manager import ResourceManager
 
         ResourceManager._instance = None
         ResourceManager._resources_dir = None
-        manager = ResourceManager()
+        expected = Path(resource_manager.__file__).resolve().parents[3] / "resources"
 
-        # Package-relative resources should be preferred when present
-        result = Path(manager._find_resources_dir())
-        assert isinstance(str(result), str)
-        # Prefer package path under vocalinux/resources when that tree exists
-        package_resources = Path(__file__).resolve().parents[1] / "src" / "vocalinux" / "resources"
-        if package_resources.exists():
-            assert result == package_resources.resolve() or result.exists()
+        with patch.object(Path, "is_file", side_effect=[False, *([True] * 7)]):
+            manager = ResourceManager()
+
+        assert manager.resources_dir == str(expected)
