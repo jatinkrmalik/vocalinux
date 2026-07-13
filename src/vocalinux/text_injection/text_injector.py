@@ -6,6 +6,7 @@ application, supporting both X11 and Wayland environments.
 """
 
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -242,21 +243,31 @@ class TextInjector:
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
         if is_ibus_available():
+            ibus_active = is_ibus_active_input_method()
+            kde_wayland = (
+                self.environment == DesktopEnvironment.WAYLAND and _is_kde_plasma_session()
+            )
+            gtk_im = os.environ.get("GTK_IM_MODULE", "").lower()
+            qt_im = os.environ.get("QT_IM_MODULE", "").lower()
+            xmodifiers = os.environ.get("XMODIFIERS", "").lower()
+            explicit_non_ibus_im = (
+                (gtk_im and "ibus" not in gtk_im)
+                or (qt_im and "ibus" not in qt_im)
+                or (xmodifiers and "@im=" in xmodifiers and "@im=ibus" not in xmodifiers)
+            )
+            kde_wayland_ibus = kde_wayland and not explicit_non_ibus_im
+
             # Check if IBus is the active input method (not just installed)
             # This is important because IBus may be installed but not being used,
-            # e.g., when the user has configured ydotool or Fcitx instead
-            if not is_ibus_active_input_method():
-                if self.environment == DesktopEnvironment.WAYLAND and _is_kde_plasma_session():
-                    logger.warning(
-                        "IBus is installed but is not active for KDE Plasma Wayland. "
-                        f"{_kde_wayland_ibus_hint()} Falling back to alternative "
-                        "text injection method."
-                    )
-                else:
-                    logger.info(
-                        "IBus is installed but not the active input method. "
-                        "Falling back to alternative text injection method."
-                    )
+            # e.g., when the user has configured ydotool or Fcitx instead. KDE
+            # Plasma Wayland can still route the Vocalinux engine through IBus
+            # Wayland when its current engine is only an xkb:* layout; GNOME and
+            # other desktops must keep the real-engine guard from issue #478.
+            if not ibus_active and not kde_wayland_ibus:
+                logger.info(
+                    "IBus is installed but not the active input method. "
+                    "Falling back to alternative text injection method."
+                )
             # Check if ibus-daemon is running before attempting setup
             elif not is_ibus_daemon_running():
                 logger.info(
@@ -275,6 +286,11 @@ class TextInjector:
                 )
             else:
                 try:
+                    if kde_wayland_ibus and not ibus_active:
+                        logger.info(
+                            "KDE Plasma Wayland detected with ibus-daemon running; "
+                            "using IBus Wayland despite the inactive input-method heuristic"
+                        )
                     self._ibus_injector = IBusTextInjector(auto_activate=False)
                     ibus_requested = True
                 except Exception as e:
@@ -954,6 +970,96 @@ class TextInjector:
             logger.warning(f"Paste simulation failed: {e}")
             return False
 
+    # evdev keycodes for modifier keys. If any of these is still physically held
+    # when a Wayland injection fires, the injected keystrokes are modified: a
+    # held Alt turns the Ctrl+V paste into Ctrl+Alt+V (nothing pastes), and a
+    # held modifier turns typed letters into shortcuts. Because toggle/PTT
+    # shortcuts are themselves modifiers (e.g. Alt+R) and transcription can
+    # finish in tens of milliseconds, the user is often still holding the key
+    # when injection starts, causing intermittent "nothing pasted" failures.
+    _MODIFIER_KEYCODES = frozenset({29, 97, 56, 100, 42, 54, 125, 126})
+
+    def _held_modifier_keycodes(self) -> set:
+        """Return modifier keycodes currently held on any physical keyboard."""
+        try:
+            import evdev
+            from evdev import ecodes
+        except ImportError:
+            return set()
+
+        held: set = set()
+        try:
+            for path in evdev.list_devices():
+                try:
+                    device = evdev.InputDevice(path)
+                except (OSError, PermissionError):
+                    continue
+                try:
+                    if ecodes.EV_KEY not in device.capabilities():
+                        continue
+                    held |= set(device.active_keys()) & self._MODIFIER_KEYCODES
+                except OSError:
+                    continue
+                finally:
+                    device.close()
+        except Exception as e:
+            logger.debug(f"Could not read modifier key state: {e}")
+        return held
+
+    _DEFAULT_INJECT_MODIFIER_WAIT = 1.0
+
+    def _injection_modifier_wait_seconds(self) -> float:
+        """Return the sanitized max seconds to wait for modifiers to release.
+
+        Reads VOCALINUX_INJECT_MODIFIER_WAIT and falls back to the default for
+        anything unusable: a non-numeric value, or a non-finite one. In
+        particular ``inf`` parses fine and is positive, so without this guard it
+        would make the wait deadline infinite and block injection forever while a
+        modifier stays held.
+        """
+        raw = os.environ.get("VOCALINUX_INJECT_MODIFIER_WAIT")
+        if raw is None:
+            return self._DEFAULT_INJECT_MODIFIER_WAIT
+        try:
+            value = float(raw)
+        except ValueError:
+            return self._DEFAULT_INJECT_MODIFIER_WAIT
+        if not math.isfinite(value):
+            logger.warning(
+                "VOCALINUX_INJECT_MODIFIER_WAIT=%r is not a finite number; " "using default %.1fs",
+                raw,
+                self._DEFAULT_INJECT_MODIFIER_WAIT,
+            )
+            return self._DEFAULT_INJECT_MODIFIER_WAIT
+        return value
+
+    def _wait_for_modifiers_released(self) -> None:
+        """Wait briefly for shortcut modifier keys to be released before injecting.
+
+        Returns immediately if no modifier is held (the common case), so this
+        adds no latency unless the user is still holding their toggle/PTT
+        shortcut. Bounded by VOCALINUX_INJECT_MODIFIER_WAIT seconds (default 1.0;
+        set to 0 to disable). Best-effort: if evdev/permissions are unavailable
+        it simply proceeds.
+        """
+        max_wait = self._injection_modifier_wait_seconds()
+        if max_wait <= 0:
+            return
+
+        deadline = time.monotonic() + max_wait
+        waited = False
+        while time.monotonic() < deadline:
+            if not self._held_modifier_keycodes():
+                if waited:
+                    logger.debug("Modifier keys released; proceeding with injection")
+                return
+            waited = True
+            time.sleep(0.015)
+        logger.debug(
+            f"Modifier keys still held after {max_wait:.2f}s; injecting anyway "
+            "(paste/typing may be affected)"
+        )
+
     def _inject_with_wayland_tool(self, text: str):
         """
         Inject text using a Wayland-compatible tool (wtype or ydotool).
@@ -969,6 +1075,11 @@ class TextInjector:
         Raises:
             subprocess.CalledProcessError: If the tool fails, with stderr captured
         """
+        # Wait for the shortcut modifier(s) to be released first, so a held Alt
+        # doesn't turn the Ctrl+V paste into Ctrl+Alt+V (nothing pastes) or
+        # modify typed keys.
+        self._wait_for_modifiers_released()
+
         # ydotool emits *positional* evdev keycodes, so `ydotool type` is
         # re-interpreted through the active keyboard layout, which it assumes is
         # US QWERTY. On any other layout (AZERTY, QWERTZ, Dvorak, ...) the text

@@ -231,6 +231,7 @@ class TestMainModule(unittest.TestCase):
                 stop_sound_guard_ms=200,
                 voice_commands_enabled=None,
                 audio_device_index=None,
+                audio_device_name=None,
                 whispercpp_no_timestamps=True,
                 whispercpp_no_context=True,
                 whispercpp_initial_prompt="",

@@ -354,12 +354,16 @@ def main():
     stop_sound_guard_ms = saved_settings.get("stop_sound_guard_ms", 200)
     voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto
     audio_device_index = audio_settings.get("device_index", None)
+    audio_device_name = audio_settings.get("device_name", None)
 
     advanced_settings = config_manager.get_settings().get("advanced", {})
 
     logger.info(f"Final settings: engine={engine}, language={language}, model={model_size}")
     if audio_device_index is not None:
-        logger.info(f"Using audio device index={audio_device_index} (from saved config)")
+        logger.info(
+            f"Using audio device index={audio_device_index} "
+            f"(name={audio_device_name}, from saved config)"
+        )
 
     # Initialize main components
     logger.info("Initializing Vocalinux...")
@@ -375,6 +379,7 @@ def main():
             stop_sound_guard_ms=stop_sound_guard_ms,
             voice_commands_enabled=voice_commands_enabled,
             audio_device_index=audio_device_index,
+            audio_device_name=audio_device_name,
             whispercpp_no_timestamps=advanced_settings.get("whispercpp_no_timestamps", True),
             whispercpp_no_context=advanced_settings.get("whispercpp_no_context", True),
             whispercpp_initial_prompt=advanced_settings.get("whispercpp_initial_prompt", ""),
