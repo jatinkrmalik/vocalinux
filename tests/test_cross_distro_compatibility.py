@@ -79,10 +79,9 @@ class TestCrossDistroCompatibility:
 
     def test_wrapper_script_uses_detected_path(self, install_sh_content):
         """Test that wrapper scripts use the detected GI_TYPELIB_PATH."""
-        # Check that wrapper script creation uses GI_TYPELIB_DETECTED
         assert (
-            "export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED" in install_sh_content
-        ), "Wrapper script should export GI_TYPELIB_PATH with detected value"
+            'write_launcher_wrapper vocalinux "$GI_TYPELIB_DETECTED"' in install_sh_content
+        ), "Wrapper script should be created with detected GI_TYPELIB_PATH"
 
     def test_desktop_entry_uses_detected_path(self, install_sh_content):
         """Test that desktop entry uses detected GI_TYPELIB_PATH."""
