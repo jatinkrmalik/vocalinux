@@ -513,7 +513,7 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         self.assertIn("self.content_box.pack_start(self.remote_server_group", source_code)
         self.assertIn("self.content_box.pack_start(self.remote_status_label", source_code)
         self.assertIn("self.remote_api_model_entry", source_code)
-        self.assertIn("/v1/chat/completions", source_code)
+        self.assertIn("OpenAI/FunASR", source_code)
         self.assertNotIn("advanced_tab.pack_start(self.remote_server_group", source_code)
         self.assertNotIn("advanced_tab.pack_start(self.remote_status_label", source_code)
         self.assertNotIn("self.use_remote_switch", source_code)

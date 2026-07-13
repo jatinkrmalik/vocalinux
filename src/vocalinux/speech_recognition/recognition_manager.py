@@ -5,7 +5,6 @@ This module provides a unified interface to different speech recognition engines
 currently supporting VOSK, Whisper, and whisper.cpp.
 """
 
-import base64
 import ctypes
 import importlib.util
 import json
@@ -1530,8 +1529,6 @@ class SpeechRecognitionManager:
             text = None
             if self.remote_api_endpoint == "/inference":
                 text = self._try_whispercpp_server_api(wav_bytes, lang, headers, session)
-            elif self.remote_api_endpoint == "/v1/chat/completions":
-                text = self._try_chat_completions_audio_api(wav_bytes, lang, headers, session)
             else:
                 text = self._try_openai_api(wav_bytes, lang, headers, session)
 
@@ -1613,105 +1610,6 @@ class SpeechRecognitionManager:
             logger.debug(f"OpenAI API format attempt failed: {e}")
             return None
 
-    def _try_chat_completions_audio_api(self, wav_bytes: bytes, lang, headers: dict, session):
-        """Try to transcribe using a chat-completions audio API format.
-
-        This covers ASR servers such as Qwen3-ASR via vLLM that accept audio
-        through ``/v1/chat/completions`` rather than the classic Whisper-style
-        ``/v1/audio/transcriptions`` endpoint.
-
-        Args:
-            wav_bytes: Audio data in WAV format
-            lang: Language core (e.g. "en", None for auto detect)
-            headers: HTTP request headers
-            session: A requests.Session snapshot (obtained under _model_lock)
-
-        Returns:
-            Transcribed text, or None if format is not supported
-        """
-        import requests
-
-        url = f"{self.remote_api_url}{self.remote_api_endpoint}"
-
-        request_headers = dict(headers)
-        request_headers["Content-Type"] = "application/json"
-        audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
-
-        content = [
-            {
-                "type": "audio_url",
-                "audio_url": {"url": f"data:audio/wav;base64,{audio_b64}"},
-            }
-        ]
-        if lang:
-            content.append(
-                {
-                    "type": "text",
-                    "text": f"Transcribe the audio in language code '{lang}'.",
-                }
-            )
-
-        data = {
-            "model": self.remote_api_model or "Qwen/Qwen3-ASR-0.6B",
-            "messages": [{"role": "user", "content": content}],
-            "temperature": 0,
-        }
-
-        try:
-            response = session.post(url, headers=request_headers, json=data, timeout=30)
-
-            if response.status_code == 404:
-                logger.debug("Chat completions audio endpoint does not exist")
-                return None
-
-            response.raise_for_status()
-            result = response.json()
-            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return self._parse_chat_completion_transcription(content)
-
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Cannot connect to remote server {url}: {e}")
-            return None
-        except Exception as e:
-            logger.debug(f"Chat completions audio API format attempt failed: {e}")
-            return None
-
-    def _parse_chat_completion_transcription(self, content: object) -> str:
-        """Extract transcript text from chat-completion ASR responses."""
-        if content is None:
-            return ""
-
-        if isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, dict):
-                    text = item.get("text")
-                    if text:
-                        parts.append(str(text))
-                elif item:
-                    parts.append(str(item))
-            content = "\n".join(parts)
-
-        text = str(content).strip()
-        if not text:
-            return ""
-
-        try:
-            payload = json.loads(text)
-            parsed_text = self._extract_remote_transcription_text(payload)
-            if parsed_text:
-                return parsed_text.strip()
-        except (TypeError, ValueError):
-            pass
-
-        # Qwen3-ASR may return a leading language metadata line when language is
-        # auto-detected. Keep plain outputs untouched.
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        if lines and lines[0].lower().startswith("language ") and len(lines) > 1:
-            return self._strip_remote_transcription_metadata("\n".join(lines[1:])).strip()
-
-        return self._strip_remote_transcription_metadata(text)
-
     def _extract_remote_transcription_text(self, payload: object) -> str:
         """Extract transcript text from OpenAI-compatible ASR responses.
 
@@ -1738,14 +1636,7 @@ class SpeechRecognitionManager:
 
         segments = payload.get("segments")
         if isinstance(segments, list):
-            text = self._extract_remote_transcription_text(segments)
-            if text:
-                return text
-
-        for key in ("result", "data", "output"):
-            text = self._extract_remote_transcription_text(payload.get(key))
-            if text:
-                return text
+            return self._extract_remote_transcription_text(segments)
 
         return ""
 

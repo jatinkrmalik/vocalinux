@@ -2,13 +2,12 @@
 
 Vocalinux can offload speech recognition to a remote HTTP server instead of running a local model. This is useful when you want faster transcription on a more powerful machine, want to share one model across several clients, or want to keep your laptop free of GPU/model overhead.
 
-Vocalinux speaks three wire formats out of the box:
+Vocalinux speaks two wire formats out of the box:
 
 - **OpenAI-compatible** — `POST /v1/audio/transcriptions` (e.g. OpenAI, [Speaches](https://github.com/speaches-ai/speaches), LocalAI, FunASR/SenseVoice)
 - **whisper.cpp server** — `POST /inference` (the binary shipped with [whisper.cpp](https://github.com/ggerganov/whisper.cpp))
-- **Chat-completions audio** — `POST /v1/chat/completions` for ASR servers that expose audio through the OpenAI chat-completions shape, including Qwen3-ASR via vLLM
 
-Pick whichever your server exposes — the rest of this guide applies to all three.
+Pick whichever your server exposes — the rest of this guide applies to both.
 
 > **Tip — share the server with your phone.** These HTTP formats are open enough that the same self-hosted server can also back mobile dictation apps. On Android, apps like *Dictate* and *Transcribro* speak OpenAI-compatible Whisper; on iOS, Shortcuts-based dictation clients can hit the same endpoint. Run one Whisper server, point your laptop and phone at it, and you get consistent dictation everywhere without uploading audio to a third party.
 
@@ -25,7 +24,7 @@ No audio is ever written to disk. The local machine still runs the VAD/segmentat
 
 ## Server-Side Setup
 
-You need a server that accepts audio uploads and returns text. Four common setups:
+You need a server that accepts audio uploads and returns text. Three common setups:
 
 ### Option A: whisper.cpp server
 
@@ -77,22 +76,6 @@ Use `--device cpu` for CPU-only testing if your FunASR install supports it. A
 remote GPU host works too: bind the server to the LAN interface, open the port,
 and point Vocalinux at that host.
 
-### Option D: Qwen3-ASR / vLLM chat-completions server
-
-Qwen3-ASR exposes an OpenAI-style chat-completions server through `qwen-asr-serve`:
-
-```bash
-pip install -U "qwen-asr[vllm]"
-qwen-asr-serve Qwen/Qwen3-ASR-0.6B \
-    --gpu-memory-utilization 0.8 \
-    --host 0.0.0.0 \
-    --port 8000
-```
-
-Set the endpoint to `/v1/chat/completions` and the model to `Qwen/Qwen3-ASR-0.6B`.
-The same client format can be used by other chat-completions audio servers that accept
-`audio_url` content containing a base64 WAV data URL.
-
 ### Network checklist
 
 - The server must be reachable from the client over HTTP or HTTPS.
@@ -111,8 +94,8 @@ The remote engine is a power-user option in the **Speech Engine** settings.
 3. Fill in the fields:
    - **Server URL**: base URL of the server, e.g. `http://192.168.1.100:8080` (no trailing slash needed; one is stripped automatically).
    - **API Key** (optional): sent as `Authorization: Bearer <key>`. Leave blank if your server doesn't require auth.
-   - **API Endpoint**: pick **Whisper.cpp (`/inference`)**, **OpenAI/FunASR (`/v1/audio/transcriptions`)**, or **Chat audio (`/v1/chat/completions`)** to match your server.
-   - **Model**: model identifier sent to compatible servers. Use `whisper-1` for classic OpenAI-style Whisper servers, `sensevoice` for FunASR/SenseVoice, or the server's actual model name such as `Qwen/Qwen3-ASR-0.6B`.
+   - **API Endpoint**: pick **Whisper.cpp (`/inference`)** or **OpenAI/FunASR (`/v1/audio/transcriptions`)** to match your server.
+   - **Model**: model identifier sent to OpenAI-compatible servers. Use `whisper-1` for classic Whisper servers, or `sensevoice` for FunASR/SenseVoice.
 4. Click **Test Connection** — a successful test means the URL is reachable and credentials (if any) are accepted. A failure here is just a warning; Vocalinux will still try again on the first transcription.
 
 Settings auto-save and re-initialise the engine immediately, so you can start dictating as soon as the test passes. Toggling the switch off restores the local engine selected on the Speech Engine tab.
@@ -207,32 +190,6 @@ en
 --boundary--
 ```
 
-### Request — chat-completions audio format (`/v1/chat/completions`)
-
-```json
-{
-  "model": "Qwen/Qwen3-ASR-0.6B",
-  "messages": [
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "audio_url",
-          "audio_url": {
-            "url": "data:audio/wav;base64,<base64 WAV bytes>"
-          }
-        }
-      ]
-    }
-  ],
-  "temperature": 0
-}
-```
-
-The response is read from `choices[0].message.content`. If the server returns a leading
-line such as `language English`, Vocalinux removes that metadata and injects only the
-transcribed text.
-
 ### Response (`/inference` and `/v1/audio/transcriptions`)
 
 ```json
@@ -294,13 +251,6 @@ curl -H "Authorization: Bearer $API_KEY" \
 curl -F file=@sample.wav \
      -F model=sensevoice \
      http://localhost:8000/v1/audio/transcriptions
-
-# Chat-completions audio
-python scripts/benchmark_remote_asr.py \
-    --server-url http://localhost:8000 \
-    --endpoint /v1/chat/completions \
-    --model Qwen/Qwen3-ASR-0.6B \
-    sample.wav
 ```
 
 The multipart endpoints should return JSON with a text field or one of the
@@ -314,7 +264,6 @@ compatible response shapes above.
 | HTTP 401/403 | API key missing or wrong | Set the **API Key** field; ensure the server is configured for that key |
 | HTTP 404 on first send | Endpoint format mismatch | Switch the **API Endpoint** dropdown to the format your server actually exposes |
 | FunASR/SenseVoice server returns model errors | Model field does not match the served model | Try `sensevoice`, `paraformer`, or the exact model configured on the server |
-| Chat-completions server returns model errors | Model field doesn't match the served model | Set **Model** to the server's model identifier |
 | SenseVoice labels appear in injected text | Wrapper returned labels somewhere other than the leading transcript prefix | Return plain text in `text` and put language/emotion/speech labels in JSON metadata |
 | Transcription always empty | Server rejected the WAV (sample rate, channels) | Confirm server accepts 16 kHz mono 16-bit WAV; check server logs |
 | First transcription is slow | Cold model load on the server | Warm the server before dictating, or increase the client timeout server-side |
