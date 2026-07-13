@@ -392,6 +392,7 @@ def main():
             remote_api_url=saved_settings.get("remote_api_url", ""),
             remote_api_key=saved_settings.get("remote_api_key", ""),
             remote_api_endpoint=saved_settings.get("remote_api_endpoint", "/inference"),
+            remote_api_model=saved_settings.get("remote_api_model", "whisper-1"),
         )
 
         # Initialize text injection system

@@ -3,7 +3,8 @@
 Vocalinux Remote API Test Server
 
 A simple mock server for testing Vocalinux's remote API feature.
-Supports both whisper.cpp (/inference) and OpenAI-compatible (/v1/audio/transcriptions) formats.
+Supports whisper.cpp (/inference) and OpenAI/FunASR-compatible
+(/v1/audio/transcriptions) formats.
 
 Usage:
     python test_remote_server.py [--port PORT] [--delay SECONDS]
@@ -17,8 +18,7 @@ Examples:
 import argparse
 import json
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import parse_qs
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class RemoteAPITestHandler(BaseHTTPRequestHandler):
@@ -40,7 +40,7 @@ class RemoteAPITestHandler(BaseHTTPRequestHandler):
                 "message": "Vocalinux Remote API Test Server",
                 "endpoints": [
                     "/inference (whisper.cpp format)",
-                    "/v1/audio/transcriptions (OpenAI format)",
+                    "/v1/audio/transcriptions (OpenAI/FunASR format)",
                     "/v1/models (OpenAI models list)",
                 ],
             }
@@ -58,7 +58,13 @@ class RemoteAPITestHandler(BaseHTTPRequestHandler):
                         "object": "model",
                         "created": 1234567890,
                         "owned_by": "openai",
-                    }
+                    },
+                    {
+                        "id": "sensevoice",
+                        "object": "model",
+                        "created": 1767225600,
+                        "owned_by": "mock",
+                    },
                 ],
                 "object": "list",
             }
@@ -113,7 +119,7 @@ class RemoteAPITestHandler(BaseHTTPRequestHandler):
                 # whisper.cpp format
                 response = {"text": transcription}
             else:
-                # OpenAI format
+                # OpenAI/FunASR-compatible format
                 response = {"text": transcription}
 
             self.wfile.write(json.dumps(response, indent=2).encode())
@@ -187,7 +193,7 @@ def main():
     print("  GET  /v1/models                 - OpenAI models list")
     print("  GET  /inference                 - whisper.cpp health check")
     print("  POST /inference                 - whisper.cpp transcription")
-    print("  POST /v1/audio/transcriptions   - OpenAI transcription")
+    print("  POST /v1/audio/transcriptions   - OpenAI/FunASR transcription")
     print()
     print("Press Ctrl+C to stop")
     print("=" * 60)

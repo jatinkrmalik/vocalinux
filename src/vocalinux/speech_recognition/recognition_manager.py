@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -844,6 +845,7 @@ class SpeechRecognitionManager:
         self.remote_api_url = kwargs.get("remote_api_url", "")
         self.remote_api_key = kwargs.get("remote_api_key", "")
         self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+        self.remote_api_model = kwargs.get("remote_api_model", "whisper-1")
         self._http_session = None
 
         # Audio diagnostics tracking
@@ -1576,7 +1578,7 @@ class SpeechRecognitionManager:
         url = f"{self.remote_api_url}{self.remote_api_endpoint}"
 
         files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
-        data = {"model": "whisper-1"}
+        data = {"model": self.remote_api_model or "whisper-1"}
         if lang:
             data["language"] = lang
 
@@ -1590,8 +1592,7 @@ class SpeechRecognitionManager:
             response.raise_for_status()
             result = response.json()
 
-            # OpenAI format returns {"text": "..."}
-            return result.get("text", "")
+            return self._extract_remote_transcription_text(result)
 
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Cannot connect to remote server {url}: {e}")
@@ -1599,6 +1600,43 @@ class SpeechRecognitionManager:
         except Exception as e:
             logger.debug(f"OpenAI API format attempt failed: {e}")
             return None
+
+    def _extract_remote_transcription_text(self, payload: object) -> str:
+        """Extract transcript text from OpenAI-compatible ASR responses.
+
+        FunASR/SenseVoice wrappers may include extra metadata or segment arrays.
+        Vocalinux only injects the transcript text and ignores the metadata.
+        """
+        if payload is None:
+            return ""
+
+        if isinstance(payload, str):
+            return self._strip_remote_transcription_metadata(payload)
+
+        if isinstance(payload, list):
+            parts = [self._extract_remote_transcription_text(item).strip() for item in payload]
+            return "\n".join(part for part in parts if part)
+
+        if not isinstance(payload, dict):
+            return self._strip_remote_transcription_metadata(str(payload))
+
+        for key in ("text", "transcript", "transcription"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                return self._strip_remote_transcription_metadata(value)
+
+        segments = payload.get("segments")
+        if isinstance(segments, list):
+            return self._extract_remote_transcription_text(segments)
+
+        return ""
+
+    def _strip_remote_transcription_metadata(self, text: str) -> str:
+        """Remove inline ASR metadata tags while preserving ordinary text."""
+        if not text.strip():
+            return ""
+
+        return re.sub(r"^\s*(?:<\|[^|>\n]+\|>)+\s*", "", text)
 
     def _try_whispercpp_server_api(self, wav_bytes: bytes, lang, headers: dict, session):
         """Try to transcribe using whisper.cpp server API format.
@@ -2825,6 +2863,8 @@ class SpeechRecognitionManager:
             self.remote_api_key = kwargs.get("remote_api_key", "")
         if "remote_api_endpoint" in kwargs:
             self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+        if "remote_api_model" in kwargs:
+            self.remote_api_model = kwargs.get("remote_api_model", "whisper-1")
 
         self._voice_commands_enabled = self._resolve_voice_commands_enabled()
 

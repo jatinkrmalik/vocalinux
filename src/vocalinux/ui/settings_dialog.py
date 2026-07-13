@@ -1437,17 +1437,19 @@ class SettingsDialog(Gtk.Dialog):
         self.language_combo.connect("changed", self._on_language_changed)
 
     def _on_remote_api_settings_changed(self, widget):
-        """Handle remote API URL/Key/endpoint changes (Advanced tab)."""
+        """Handle remote API URL/Key/endpoint changes."""
         if self._initializing or self._applying_settings:
             return
 
         url = self.remote_api_url_entry.get_text().strip()
         key = self.remote_api_key_entry.get_text().strip()
         endpoint = self.remote_api_endpoint_combo.get_active_id() or "/inference"
+        model = self.remote_api_model_entry.get_text().strip() or "whisper-1"
 
         self.config_manager.set("speech_recognition", "remote_api_url", url)
         self.config_manager.set("speech_recognition", "remote_api_key", key)
         self.config_manager.set("speech_recognition", "remote_api_endpoint", endpoint)
+        self.config_manager.set("speech_recognition", "remote_api_model", model)
         self.config_manager.save_settings()
 
         # Auto apply only if remote engine is currently active
@@ -2252,7 +2254,7 @@ class SettingsDialog(Gtk.Dialog):
             "Select the API format of the remote server (API Endpoint Format)"
         )
         self.remote_api_endpoint_combo.append(
-            "/v1/audio/transcriptions", "OpenAI (/v1/audio/transcriptions)"
+            "/v1/audio/transcriptions", "OpenAI/FunASR (/v1/audio/transcriptions)"
         )
         self.remote_api_endpoint_combo.append("/inference", "Whisper.cpp (/inference)")
         _prevent_scroll_on_hover(self.remote_api_endpoint_combo)
@@ -2262,6 +2264,20 @@ class SettingsDialog(Gtk.Dialog):
             widget=self.remote_api_endpoint_combo,
         )
         self.remote_server_group.add_row(remote_endpoint_row)
+
+        # Model name
+        self.remote_api_model_entry = Gtk.Entry()
+        self.remote_api_model_entry.set_placeholder_text("whisper-1")
+        self.remote_api_model_entry.set_tooltip_text(
+            "Model identifier sent to OpenAI-compatible and FunASR servers"
+        )
+        self.remote_api_model_entry.set_size_request(280, -1)
+        remote_model_row = PreferenceRow(
+            title="Model",
+            subtitle="Remote model name, for example whisper-1 or sensevoice",
+            widget=self.remote_api_model_entry,
+        )
+        self.remote_server_group.add_row(remote_model_row)
 
         # Connection test
         self.remote_test_btn = Gtk.Button(label="Test Connection")
@@ -2289,15 +2305,18 @@ class SettingsDialog(Gtk.Dialog):
         saved_endpoint = self.config_manager.get(
             "speech_recognition", "remote_api_endpoint", "/inference"
         )
+        saved_model = self.config_manager.get("speech_recognition", "remote_api_model", "whisper-1")
         if saved_url:
             self.remote_api_url_entry.set_text(saved_url)
         if saved_key:
             self.remote_api_key_entry.set_text(saved_key)
         self.remote_api_endpoint_combo.set_active_id(saved_endpoint)
+        self.remote_api_model_entry.set_text(saved_model or "whisper-1")
 
         self.remote_api_url_entry.connect("changed", self._on_remote_api_settings_changed)
         self.remote_api_key_entry.connect("changed", self._on_remote_api_settings_changed)
         self.remote_api_endpoint_combo.connect("changed", self._on_remote_api_settings_changed)
+        self.remote_api_model_entry.connect("changed", self._on_remote_api_settings_changed)
 
         self.remote_server_group.hide()
         self.remote_status_label.hide()
@@ -3216,6 +3235,9 @@ class SettingsDialog(Gtk.Dialog):
             settings["remote_api_key"] = self.remote_api_key_entry.get_text().strip()
             settings["remote_api_endpoint"] = (
                 self.remote_api_endpoint_combo.get_active_id() or "/inference"
+            )
+            settings["remote_api_model"] = (
+                self.remote_api_model_entry.get_text().strip() or "whisper-1"
             )
 
         return settings

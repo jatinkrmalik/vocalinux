@@ -232,6 +232,19 @@ class TestRemoteAPIEngine(unittest.TestCase):
         )
         self.assertEqual(manager.remote_api_endpoint, "/v1/audio/transcriptions")
 
+    def test_remote_api_init_with_model_name(self):
+        """Test remote API initialization stores a configurable model name."""
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:8000",
+            remote_api_endpoint="/v1/audio/transcriptions",
+            remote_api_model="sensevoice",
+        )
+        self.assertEqual(manager.remote_api_model, "sensevoice")
+
     def test_model_ready_remote_api_initialized(self):
         """Test model_ready returns True for remote API when initialized."""
         SpeechRecognitionManager = _import_manager()
@@ -432,6 +445,55 @@ class TestOpenAIAPIFormat(unittest.TestCase):
         call_kwargs = mock_post.call_args[1]
         self.assertEqual(call_kwargs["data"]["language"], "fr")
 
+    def test_try_openai_api_uses_configured_model(self):
+        """Test OpenAI API sends the configured model name."""
+        mock_post = _setup_requests_post_ok({"text": "result"})
+        self.manager.remote_api_model = "custom-asr-model"
+
+        self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        call_kwargs = mock_post.call_args[1]
+        self.assertEqual(call_kwargs["data"]["model"], "custom-asr-model")
+
+    def test_try_openai_api_accepts_funasr_metadata_response(self):
+        """Test OpenAI-compatible FunASR/SenseVoice responses with metadata."""
+        _setup_requests_post_ok(
+            {
+                "text": "hello from sensevoice",
+                "language": "en",
+                "emotion": "neutral",
+                "duration": 1.2,
+            }
+        )
+
+        result = self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        self.assertEqual(result, "hello from sensevoice")
+
+    def test_try_openai_api_strips_sensevoice_inline_labels(self):
+        """Test SenseVoice rich-text labels are not injected into the desktop."""
+        _setup_requests_post_ok({"text": "<|en|><|NEUTRAL|><|Speech|><|withitn|>hello"})
+
+        result = self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        self.assertEqual(result, "hello")
+
+    def test_try_openai_api_accepts_segmented_response(self):
+        """Test OpenAI-compatible responses that include transcript segments."""
+        _setup_requests_post_ok(
+            {
+                "segments": [
+                    {"text": "first part"},
+                    {"text": "second part"},
+                ],
+                "metadata": {"model": "sensevoice"},
+            }
+        )
+
+        result = self.manager._try_openai_api(b"wav-bytes", "en", {}, self.manager._http_session)
+
+        self.assertEqual(result, "first part\nsecond part")
+
     def test_try_openai_api_server_error(self):
         """Test OpenAI API handles 500 server error via raise_for_status."""
         _setup_requests_post_status(500, Exception("500 Server Error"))
@@ -548,6 +610,11 @@ class TestRemoteAPIReconfiguration(unittest.TestCase):
         """Test updating remote API endpoint via reconfigure."""
         self.manager.reconfigure(remote_api_endpoint="/v1/audio/transcriptions")
         self.assertEqual(self.manager.remote_api_endpoint, "/v1/audio/transcriptions")
+
+    def test_update_remote_api_model(self):
+        """Test updating remote API model via reconfigure."""
+        self.manager.reconfigure(remote_api_model="sensevoice")
+        self.assertEqual(self.manager.remote_api_model, "sensevoice")
 
 
 class TestRemoteAPIReinitializeAfterResume(unittest.TestCase):

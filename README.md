@@ -48,6 +48,7 @@ No internet required. No data leaves your machine. Just speak and type.
 ### ✨ New Features
 
 - **Guided whisper.cpp model variants** — The Settings dialog now splits whisper.cpp selection into **Model Size** and **Specialization**, exposing English-only, quantized (Q5/Q8), Large v3 Turbo, and legacy large models with language-aware recommendations and hover guidance. Exact model IDs (e.g. `medium.en-q5_0`, `large-v3-turbo`) can also be passed to `--model` (#465)
+- **Remote API FunASR/SenseVoice support** — OpenAI-compatible remote servers can send a model name (e.g. `sensevoice`) and return richer response shapes; SenseVoice metadata labels are stripped before text injection (#468, #469)
 
 ### 🐛 Bug Fixes
 
