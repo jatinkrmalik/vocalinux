@@ -15,7 +15,10 @@ class InstallerCudaDiagnosticsTests(unittest.TestCase):
         """Keep user-site packages out of the venv, activation script, and wrappers."""
         source = _installer_source()
 
-        self.assertGreaterEqual(source.count("export PYTHONNOUSERSITE=1"), 4)
+        # Top of install.sh, activation script, and launcher-wrapper template
+        # (both vocalinux and vocalinux-gui share write_launcher_wrapper).
+        self.assertGreaterEqual(source.count("export PYTHONNOUSERSITE=1"), 3)
+        self.assertIn("write_launcher_wrapper", source)
         self.assertIn('getattr(site, "ENABLE_USER_SITE", False)', source)
 
     def test_cuda_toolkit_validation_requires_complete_root(self) -> None:

@@ -114,15 +114,11 @@ check_running_processes() {
 }
 
 # Parse command line arguments
-INSTALL_MODE="user"
 RUN_TESTS="no"
 DEV_MODE="no"
 VENV_DIR="venv"
 SKIP_MODELS="no"
 SKIP_SYSTEM_DEPS="no"
-WITH_WHISPER="no"
-WHISPER_CPU="no"
-NO_WHISPER_EXPLICIT="no"
 NON_INTERACTIVE="no"
 INTERACTIVE_MODE="yes"  # Default to interactive mode
 AUTO_MODE="no"
@@ -288,123 +284,45 @@ REPO_URL="https://github.com/jatinkrmalik/vocalinux.git"
 INSTALL_DIR=""
 CLEANUP_ON_EXIT="no"
 
-# Function to check and install git if needed
+# Install git via the first available package manager (avoids re-detecting distro).
 ensure_git_installed() {
-    if command -v git >/dev/null 2>&1; then
-        return 0
-    fi
+    command_exists git && return 0
 
     print_warning "git is not installed. Attempting to install git..."
 
-    # Detect distribution for package manager selection
-    local DISTRO_FAMILY="unknown"
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [[ "$ID" == "ubuntu" || "$ID_LIKE" == *"ubuntu"* || "$ID" == "pop" || "$ID" == "linuxmint" || "$ID" == "elementary" || "$ID" == "zorin" ]]; then
-            DISTRO_FAMILY="ubuntu"
-        elif [[ "$ID" == "debian" || "$ID_LIKE" == *"debian"* ]]; then
-            DISTRO_FAMILY="debian"
-        elif [[ "$ID" == "fedora" || "$ID_LIKE" == *"fedora"* || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "rocky" || "$ID" == "almalinux" ]]; then
-            DISTRO_FAMILY="fedora"
-        elif [[ "$ID" == "arch" || "$ID_LIKE" == *"arch"* || "$ID" == "manjaro" || "$ID" == "endeavouros" ]]; then
-            DISTRO_FAMILY="arch"
-        elif [[ "$ID" == "opensuse" || "$ID_LIKE" == *"suse"* ]]; then
-            DISTRO_FAMILY="suse"
-        elif [[ "$ID" == "gentoo" ]]; then
-            DISTRO_FAMILY="gentoo"
-        elif [[ "$ID" == "alpine" ]]; then
-            DISTRO_FAMILY="alpine"
-        elif [[ "$ID" == "void" ]]; then
-            DISTRO_FAMILY="void"
-        elif [[ "$ID" == "solus" ]]; then
-            DISTRO_FAMILY="solus"
-        elif [[ "$ID" == "mageia" ]]; then
-            DISTRO_FAMILY="mageia"
-        fi
+    local ok=0
+    if command_exists apt; then
+        sudo apt update && sudo apt install -y git && ok=1 || true
+    elif command_exists dnf; then
+        sudo dnf install -y git && ok=1 || true
+    elif command_exists pacman; then
+        sudo pacman -S --noconfirm git && ok=1 || true
+    elif command_exists zypper; then
+        sudo zypper install -y git && ok=1 || true
+    elif command_exists emerge; then
+        sudo emerge git && ok=1 || true
+    elif command_exists apk; then
+        sudo apk add git && ok=1 || true
+    elif command_exists xbps-install; then
+        sudo xbps-install -Sy git && ok=1 || true
+    elif command_exists eopkg; then
+        sudo eopkg install git && ok=1 || true
+    elif command_exists urpmi; then
+        sudo urpmi --force git && ok=1 || true
     fi
 
-    case "$DISTRO_FAMILY" in
-        ubuntu|debian)
-            sudo apt update && sudo apt install -y git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  Ubuntu/Debian: sudo apt install git"
-                exit 1
-            }
-            ;;
-        fedora)
-            sudo dnf install -y git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  Fedora: sudo dnf install git"
-                exit 1
-            }
-            ;;
-        arch)
-            sudo pacman -S --noconfirm git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  Arch: sudo pacman -S git"
-                exit 1
-            }
-            ;;
-        suse)
-            sudo zypper install -y git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  openSUSE: sudo zypper install git"
-                exit 1
-            }
-            ;;
-        gentoo)
-            sudo emerge git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  Gentoo: sudo emerge git"
-                exit 1
-            }
-            ;;
-        alpine)
-            sudo apk add git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  Alpine: sudo apk add git"
-                exit 1
-            }
-            ;;
-        void)
-            sudo xbps-install -Sy git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  Void: sudo xbps-install -Sy git"
-                exit 1
-            }
-            ;;
-        solus)
-            sudo eopkg install git || {
-                print_error "Failed to install git. Please install git manually and run the installer again."
-                print_error "  Solus: sudo eopkg install git"
-                exit 1
-            }
-            ;;
-        mageia)
-            if command -v dnf >/dev/null 2>&1; then
-                sudo dnf install -y git || {
-                    print_error "Failed to install git. Please install git manually and run the installer again."
-                    exit 1
-                }
-            else
-                sudo urpmi --force git || {
-                    print_error "Failed to install git. Please install git manually and run the installer again."
-                    exit 1
-                }
-            fi
-            ;;
-        *)
-            print_error "git is not installed and could not auto-detect your distribution."
-            print_error "Please install git manually and run the installer again:"
-            print_error "  Ubuntu/Debian: sudo apt install git"
-            print_error "  Fedora/RHEL: sudo dnf install git"
-            print_error "  Arch: sudo pacman -S git"
-            print_error "  openSUSE: sudo zypper install git"
-            exit 1
-            ;;
-    esac
+    if [ "$ok" -eq 1 ] && command_exists git; then
+        print_success "git installed successfully!"
+        return 0
+    fi
 
-    print_success "git installed successfully!"
+    print_error "git is not installed and could not be installed automatically."
+    print_error "Please install git manually and run the installer again:"
+    print_error "  Ubuntu/Debian: sudo apt install git"
+    print_error "  Fedora/RHEL: sudo dnf install git"
+    print_error "  Arch: sudo pacman -S git"
+    print_error "  openSUSE: sudo zypper install git"
+    exit 1
 }
 
 # Check if running from within the vocalinux repository
@@ -1347,22 +1265,15 @@ if [[ "$NON_INTERACTIVE" == "yes" ]] && [[ -z "$SELECTED_ENGINE" ]]; then
     echo ""
 fi
 
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# Function to check if a package is installed (for apt-based systems)
 apt_package_installed() {
     dpkg -s "$1" >/dev/null 2>&1
 }
 
-# Function to check if a package is installed (for dnf-based systems)
-dnf_package_installed() {
+# dnf/zypper/rpm-based distros all query via rpm
+rpm_package_installed() {
     rpm -q "$1" >/dev/null 2>&1
 }
 
-# Function to check if a package is installed (for pacman-based systems)
 pacman_package_installed() {
     pacman -Q "$1" >/dev/null 2>&1
 }
@@ -1383,10 +1294,6 @@ suse_python_package_candidates() {
     fi
 }
 
-suse_package_installed() {
-    rpm -q "$1" >/dev/null 2>&1
-}
-
 suse_install_first_available() {
     local DESCRIPTION="$1"
     shift
@@ -1395,7 +1302,7 @@ suse_install_first_available() {
     for PKG in "$@"; do
         [ -z "$PKG" ] && continue
 
-        if suse_package_installed "$PKG"; then
+        if rpm_package_installed "$PKG"; then
             print_info "$DESCRIPTION is already installed ($PKG)."
             return 0
         fi
@@ -1445,7 +1352,7 @@ suse_install_appindicator_runtime() {
 
     local PKG
     for PKG in "${APPINDICATOR_PACKAGES[@]}"; do
-        if suse_package_installed "$PKG"; then
+        if rpm_package_installed "$PKG"; then
             print_info "AppIndicator/Ayatana package is already installed ($PKG); verifying GI namespace..."
         elif sudo zypper install -y "$PKG" 2>/dev/null; then
             print_success "Installed AppIndicator/Ayatana package ($PKG)."
@@ -1576,7 +1483,7 @@ install_system_dependencies() {
 
             # Check for missing packages
             for pkg in $DNF_PACKAGES; do
-                if ! dnf_package_installed "$pkg"; then
+                if ! rpm_package_installed "$pkg"; then
                     MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
                 fi
             done
@@ -1628,7 +1535,7 @@ install_system_dependencies() {
 
             local MISSING_ZYPPER_PACKAGES=()
             for pkg in $ZYPPER_PACKAGES; do
-                if ! suse_package_installed "$pkg"; then
+                if ! rpm_package_installed "$pkg"; then
                     MISSING_ZYPPER_PACKAGES+=("$pkg")
                 fi
             done
@@ -1932,7 +1839,7 @@ install_text_input_tools() {
                     fi
                     ;;
                 fedora)
-                    if command_exists dnf && ! dnf_package_installed "wtype"; then
+                    if command_exists dnf && ! rpm_package_installed "wtype"; then
                         sudo dnf install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
                     elif command_exists yum && ! rpm -q wtype &>/dev/null; then
                         sudo yum install -y wtype || { print_warning "Failed to install wtype. Text injection may not work properly."; }
@@ -2054,7 +1961,7 @@ install_text_input_tools() {
                     fi
                     ;;
                 fedora)
-                    if command_exists dnf && ! dnf_package_installed "xdotool"; then
+                    if command_exists dnf && ! rpm_package_installed "xdotool"; then
                         sudo dnf install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
                     elif command_exists yum && ! rpm -q xdotool &>/dev/null; then
                         sudo yum install -y xdotool || { print_warning "Failed to install xdotool. Text injection may not work properly."; }
@@ -2328,17 +2235,7 @@ PY
 }
 
 is_pywhispercpp_gpu_capable() {
-    local LIB_DIRS
-    LIB_DIRS=$(get_pywhispercpp_library_path || true)
-    [ -n "$LIB_DIRS" ] || return 1
-
-    local IFS=:
-    for dir in $LIB_DIRS; do
-        if [ -f "$dir/libggml-vulkan.so" ] || [ -f "$dir/libggml-cuda.so" ]; then
-            return 0
-        fi
-    done
-    return 1
+    is_pywhispercpp_backend_capable cuda || is_pywhispercpp_backend_capable vulkan
 }
 
 is_pywhispercpp_backend_capable() {
@@ -2729,6 +2626,57 @@ FALLBACK_VOSK_CONFIG
     echo ""
 }
 
+write_launcher_wrapper() {
+    local BIN_NAME="$1"
+    local GI_TYPELIB_PATH_VALUE="$2"
+    local WRAPPER_PATH="$HOME/.local/bin/$BIN_NAME"
+
+    mkdir -p "$(dirname "$WRAPPER_PATH")"
+    cat > "$WRAPPER_PATH" << WRAPPER_EOF
+#!/bin/bash
+# Wrapper script for Vocalinux that sets required environment variables
+# and applies the 'input' group for keyboard shortcuts on Wayland
+export PYTHONNOUSERSITE=1
+export GI_TYPELIB_PATH=$GI_TYPELIB_PATH_VALUE
+PYWHISPERCPP_LIBRARY_PATH=""
+PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
+import sysconfig
+
+paths = []
+for key in ("platlib", "purelib"):
+    path = sysconfig.get_paths().get(key)
+    if path and path not in paths:
+        paths.append(path)
+print(" ".join(paths))
+PY
+)
+for PY_SITE in \$PY_SITE_PATHS; do
+    for PY_LIB_DIR in "\$PY_SITE/pywhispercpp.libs" "\$PY_SITE/pywhispercpp/.libs" "\$PY_SITE/pywhispercpp/lib"; do
+        if [ -d "\$PY_LIB_DIR" ] && { ls "\$PY_LIB_DIR"/libwhisper*.so* >/dev/null 2>&1 || ls "\$PY_LIB_DIR"/libggml*.so* >/dev/null 2>&1; }; then
+            if [ -z "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+                PYWHISPERCPP_LIBRARY_PATH="\$PY_LIB_DIR"
+            else
+                PYWHISPERCPP_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH:\$PY_LIB_DIR"
+            fi
+        fi
+    done
+done
+if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
+    export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+fi
+
+# Check if user is in input group but current session doesn't have it
+if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
+    # Use sg to run with input group without requiring logout
+    exec sg input -c "$VENV_DIR/bin/$BIN_NAME \$*"
+else
+    exec "$VENV_DIR/bin/$BIN_NAME" "\$@"
+fi
+WRAPPER_EOF
+    chmod +x "$WRAPPER_PATH"
+    print_info "Created wrapper: ~/.local/bin/$BIN_NAME"
+}
+
 # Function to install Python package with error handling and verification
 install_python_package() {
     # Create a temporary directory for pip logs
@@ -3075,97 +3023,9 @@ REMOTE_CONFIG
         # Create wrapper scripts in ~/.local/bin for easy access
         mkdir -p "$HOME/.local/bin"
 
-        # Create vocalinux wrapper script
-        # Uses 'sg input' to run with input group for keyboard shortcuts on Wayland
-        # This allows shortcuts to work without logging out after installation
-        cat > "$HOME/.local/bin/vocalinux" << WRAPPER_EOF
-#!/bin/bash
-# Wrapper script for Vocalinux that sets required environment variables
-# and applies the 'input' group for keyboard shortcuts on Wayland
-export PYTHONNOUSERSITE=1
-export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
-PYWHISPERCPP_LIBRARY_PATH=""
-PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
-import sysconfig
-
-paths = []
-for key in ("platlib", "purelib"):
-    path = sysconfig.get_paths().get(key)
-    if path and path not in paths:
-        paths.append(path)
-print(" ".join(paths))
-PY
-)
-for PY_SITE in \$PY_SITE_PATHS; do
-    for PY_LIB_DIR in "\$PY_SITE/pywhispercpp.libs" "\$PY_SITE/pywhispercpp/.libs" "\$PY_SITE/pywhispercpp/lib"; do
-        if [ -d "\$PY_LIB_DIR" ] && { ls "\$PY_LIB_DIR"/libwhisper*.so* >/dev/null 2>&1 || ls "\$PY_LIB_DIR"/libggml*.so* >/dev/null 2>&1; }; then
-            if [ -z "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
-                PYWHISPERCPP_LIBRARY_PATH="\$PY_LIB_DIR"
-            else
-                PYWHISPERCPP_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH:\$PY_LIB_DIR"
-            fi
-        fi
-    done
-done
-if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
-    export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-fi
-
-# Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
-    # Use sg to run with input group without requiring logout
-    exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
-else
-    exec "$VENV_DIR/bin/vocalinux" "\$@"
-fi
-WRAPPER_EOF
-        chmod +x "$HOME/.local/bin/vocalinux"
-        print_info "Created wrapper: ~/.local/bin/vocalinux"
-
-        # Create vocalinux-gui wrapper script
-        cat > "$HOME/.local/bin/vocalinux-gui" << WRAPPER_EOF
-#!/bin/bash
-# Wrapper script for Vocalinux GUI that sets required environment variables
-# and applies the 'input' group for keyboard shortcuts on Wayland
-export PYTHONNOUSERSITE=1
-export GI_TYPELIB_PATH=$GI_TYPELIB_DETECTED
-PYWHISPERCPP_LIBRARY_PATH=""
-PY_SITE_PATHS=\$("$VENV_DIR/bin/python" - <<'PY' 2>/dev/null
-import sysconfig
-
-paths = []
-for key in ("platlib", "purelib"):
-    path = sysconfig.get_paths().get(key)
-    if path and path not in paths:
-        paths.append(path)
-print(" ".join(paths))
-PY
-)
-for PY_SITE in \$PY_SITE_PATHS; do
-    for PY_LIB_DIR in "\$PY_SITE/pywhispercpp.libs" "\$PY_SITE/pywhispercpp/.libs" "\$PY_SITE/pywhispercpp/lib"; do
-        if [ -d "\$PY_LIB_DIR" ] && { ls "\$PY_LIB_DIR"/libwhisper*.so* >/dev/null 2>&1 || ls "\$PY_LIB_DIR"/libggml*.so* >/dev/null 2>&1; }; then
-            if [ -z "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
-                PYWHISPERCPP_LIBRARY_PATH="\$PY_LIB_DIR"
-            else
-                PYWHISPERCPP_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH:\$PY_LIB_DIR"
-            fi
-        fi
-    done
-done
-if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
-    export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-fi
-
-# Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
-    # Use sg to run with input group without requiring logout
-    exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
-else
-    exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
-fi
-WRAPPER_EOF
-        chmod +x "$HOME/.local/bin/vocalinux-gui"
-        print_info "Created wrapper: ~/.local/bin/vocalinux-gui"
+        # Create launcher wrappers (sg input for Wayland shortcuts without re-login)
+        write_launcher_wrapper vocalinux "$GI_TYPELIB_DETECTED"
+        write_launcher_wrapper vocalinux-gui "$GI_TYPELIB_DETECTED"
 
         # Check if ~/.local/bin is in PATH
         if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -3188,253 +3048,149 @@ if ! install_python_package; then
     exit 1
 fi
 
-# Function to download and install Whisper tiny model
-install_whisper_model() {
-    print_info "Installing Whisper tiny model (~75MB)..."
+# Download URL to DEST. LABEL is used in messages only.
+# Returns 1 if tools/network missing or download empty; caller prints "on first run" context.
+download_url() {
+    local URL="$1"
+    local DEST="$2"
+    local LABEL="${3:-file}"
 
-    # Create whisper models directory
-    local WHISPER_DIR="$DATA_DIR/models/whisper"
-    mkdir -p "$WHISPER_DIR"
-
-    # Whisper tiny model URL and path
-    local TINY_MODEL_URL="https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
-    local TINY_MODEL_PATH="$WHISPER_DIR/tiny.pt"
-
-    # Check if model already exists
-    if [ -f "$TINY_MODEL_PATH" ]; then
-        print_info "Whisper tiny model already exists at $TINY_MODEL_PATH"
-        return 0
-    fi
-
-    # Check internet connectivity
-    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
-        print_warning "Neither wget nor curl found. Cannot download Whisper model."
-        print_warning "Model will be downloaded on first application run."
+    if ! command_exists wget && ! command_exists curl; then
+        print_warning "Neither wget nor curl found. Cannot download $LABEL."
         return 1
     fi
-
-    # Test internet connectivity
     if ! ping -c 1 google.com >/dev/null 2>&1; then
         print_warning "No internet connection detected."
-        print_warning "Whisper model will be downloaded on first application run."
         return 1
     fi
 
-    print_info "Downloading Whisper tiny model..."
-    print_info "This may take a few minutes depending on your internet connection."
-
-    local TEMP_FILE="$TINY_MODEL_PATH.tmp"
-
-    # Download the model
-    if command -v wget >/dev/null 2>&1; then
-        if ! wget --progress=bar:force:noscroll -O "$TEMP_FILE" "$TINY_MODEL_URL" 2>&1; then
-            print_error "Failed to download Whisper model with wget"
-            rm -f "$TEMP_FILE"
+    if command_exists wget; then
+        if ! wget --progress=bar:force:noscroll -O "$DEST" "$URL" 2>&1; then
+            print_error "Failed to download $LABEL with wget"
+            rm -f "$DEST"
             return 1
         fi
-    elif command -v curl >/dev/null 2>&1; then
-        if ! curl -L --progress-bar -o "$TEMP_FILE" "$TINY_MODEL_URL"; then
-            print_error "Failed to download Whisper model with curl"
-            rm -f "$TEMP_FILE"
-            return 1
-        fi
-    fi
-
-    # Verify download
-    if [ ! -f "$TEMP_FILE" ] || [ ! -s "$TEMP_FILE" ]; then
-        print_error "Downloaded model file is empty or missing"
-        rm -f "$TEMP_FILE"
-        return 1
-    fi
-
-    # Move to final location
-    mv "$TEMP_FILE" "$TINY_MODEL_PATH"
-
-    # Verify the model file
-    if [ -f "$TINY_MODEL_PATH" ]; then
-        local MODEL_SIZE=$(du -h "$TINY_MODEL_PATH" | cut -f1)
-        print_success "Whisper tiny model installed successfully ($MODEL_SIZE)"
-
-        # Create a marker file to indicate this model was pre-installed
-        echo "$(date)" > "$WHISPER_DIR/.vocalinux_preinstalled"
-
-        return 0
     else
-        print_error "Whisper model installation failed"
+        if ! curl -L --progress-bar -o "$DEST" "$URL"; then
+            print_error "Failed to download $LABEL with curl"
+            rm -f "$DEST"
+            return 1
+        fi
+    fi
+
+    if [ ! -f "$DEST" ] || [ ! -s "$DEST" ]; then
+        print_error "Downloaded $LABEL is empty or missing"
+        rm -f "$DEST"
         return 1
     fi
+    return 0
 }
 
-# Function to download and install VOSK models
+# Single-file model install: skip if present, download to .tmp, move into place, mark preinstalled.
+install_single_file_model() {
+    local LABEL="$1"
+    local URL="$2"
+    local DEST="$3"
+    local MARKER_DIR="$4"
+    local SIZE_HINT="$5"
+
+    print_info "Installing $LABEL${SIZE_HINT:+ ($SIZE_HINT)}..."
+    mkdir -p "$(dirname "$DEST")"
+
+    if [ -f "$DEST" ]; then
+        print_info "$LABEL already exists at $DEST"
+        return 0
+    fi
+
+    print_info "Downloading $LABEL..."
+    print_info "This may take a few minutes depending on your internet connection."
+
+    local TEMP_FILE="$DEST.tmp"
+    if ! download_url "$URL" "$TEMP_FILE" "$LABEL"; then
+        print_warning "$LABEL will be downloaded on first application run."
+        return 1
+    fi
+
+    mv "$TEMP_FILE" "$DEST"
+    if [ -f "$DEST" ]; then
+        local MODEL_SIZE
+        MODEL_SIZE=$(du -h "$DEST" | cut -f1)
+        print_success "$LABEL installed successfully ($MODEL_SIZE)"
+        mkdir -p "$MARKER_DIR"
+        echo "$(date)" > "$MARKER_DIR/.vocalinux_preinstalled"
+        return 0
+    fi
+
+    print_error "$LABEL installation failed"
+    return 1
+}
+
+install_whisper_model() {
+    local WHISPER_DIR="$DATA_DIR/models/whisper"
+    install_single_file_model \
+        "Whisper tiny model" \
+        "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt" \
+        "$WHISPER_DIR/tiny.pt" \
+        "$WHISPER_DIR" \
+        "~75MB"
+}
+
 install_vosk_models() {
     print_info "Installing VOSK speech recognition models..."
 
-    # Create models directory
     local MODELS_DIR="$DATA_DIR/models"
     mkdir -p "$MODELS_DIR"
 
-    # Define model information
     local SMALL_MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
     local SMALL_MODEL_NAME="vosk-model-small-en-us-0.15"
     local SMALL_MODEL_PATH="$MODELS_DIR/$SMALL_MODEL_NAME"
 
-    # Check if small model already exists
     if [ -d "$SMALL_MODEL_PATH" ]; then
         print_info "Small VOSK model already exists at $SMALL_MODEL_PATH"
         return 0
     fi
 
-    # Check internet connectivity
-    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
-        print_warning "Neither wget nor curl found. Cannot download VOSK models."
-        print_warning "Models will be downloaded on first application run."
-        return 1
-    fi
+    print_info "Downloading small VOSK model (approximately 40MB)..."
+    print_info "This may take a few minutes depending on your internet connection."
 
-    # Test internet connectivity
-    if ! ping -c 1 google.com >/dev/null 2>&1; then
-        print_warning "No internet connection detected."
+    local TEMP_ZIP="$MODELS_DIR/$(basename "$SMALL_MODEL_URL")"
+    if ! download_url "$SMALL_MODEL_URL" "$TEMP_ZIP" "VOSK model"; then
         print_warning "VOSK models will be downloaded on first application run."
         return 1
     fi
 
-    print_info "Downloading small VOSK model (approximately 40MB)..."
-    print_info "This may take a few minutes depending on your internet connection."
-
-    local TEMP_ZIP="$MODELS_DIR/$(basename $SMALL_MODEL_URL)"
-
-    # Download the model
-    if command -v wget >/dev/null 2>&1; then
-        if ! wget --progress=bar:force:noscroll -O "$TEMP_ZIP" "$SMALL_MODEL_URL" 2>&1; then
-            print_error "Failed to download VOSK model with wget"
-            rm -f "$TEMP_ZIP"
-            return 1
-        fi
-    elif command -v curl >/dev/null 2>&1; then
-        if ! curl -L --progress-bar -o "$TEMP_ZIP" "$SMALL_MODEL_URL"; then
-            print_error "Failed to download VOSK model with curl"
-            rm -f "$TEMP_ZIP"
-            return 1
-        fi
-    fi
-
-    # Verify download
-    if [ ! -f "$TEMP_ZIP" ] || [ ! -s "$TEMP_ZIP" ]; then
-        print_error "Downloaded model file is empty or missing"
-        rm -f "$TEMP_ZIP"
-        return 1
-    fi
-
     print_info "Extracting VOSK model..."
-
-    # Extract the model
-    if command -v unzip >/dev/null 2>&1; then
-        if ! unzip -q "$TEMP_ZIP" -d "$MODELS_DIR"; then
-            print_error "Failed to extract VOSK model"
-            rm -f "$TEMP_ZIP"
-            return 1
-        fi
-    else
+    if ! command_exists unzip; then
         print_error "unzip command not found. Cannot extract VOSK model."
         rm -f "$TEMP_ZIP"
         return 1
     fi
-
-    # Clean up zip file
+    if ! unzip -q "$TEMP_ZIP" -d "$MODELS_DIR"; then
+        print_error "Failed to extract VOSK model"
+        rm -f "$TEMP_ZIP"
+        return 1
+    fi
     rm -f "$TEMP_ZIP"
 
-    # Verify extraction
     if [ -d "$SMALL_MODEL_PATH" ]; then
         print_success "VOSK small model installed successfully at $SMALL_MODEL_PATH"
-
-        # Set proper permissions
         chmod -R 755 "$SMALL_MODEL_PATH"
-
-        # Create a marker file to indicate this model was pre-installed
         echo "$(date)" > "$SMALL_MODEL_PATH/.vocalinux_preinstalled"
-
         return 0
-    else
-        print_error "VOSK model extraction failed - directory not found"
-        return 1
     fi
+
+    print_error "VOSK model extraction failed - directory not found"
+    return 1
 }
 
-# Function to download and install whisper.cpp tiny model
 install_whispercpp_model() {
-    print_info "Installing whisper.cpp tiny model (~39MB)..."
-
-    # Create whisper.cpp models directory
     local WHISPERCPP_DIR="$DATA_DIR/models/whispercpp"
-    mkdir -p "$WHISPERCPP_DIR"
-
-    # whisper.cpp tiny model URL and path
-    local TINY_MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
-    local TINY_MODEL_PATH="$WHISPERCPP_DIR/ggml-tiny.bin"
-
-    # Check if model already exists
-    if [ -f "$TINY_MODEL_PATH" ]; then
-        print_info "whisper.cpp tiny model already exists at $TINY_MODEL_PATH"
-        return 0
-    fi
-
-    # Check internet connectivity
-    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
-        print_warning "Neither wget nor curl found. Cannot download whisper.cpp model."
-        print_warning "Model will be downloaded on first application run."
-        return 1
-    fi
-
-    # Test internet connectivity
-    if ! ping -c 1 google.com >/dev/null 2>&1; then
-        print_warning "No internet connection detected."
-        print_warning "whisper.cpp model will be downloaded on first application run."
-        return 1
-    fi
-
-    print_info "Downloading whisper.cpp tiny model..."
-    print_info "This may take a few minutes depending on your internet connection."
-
-    local TEMP_FILE="$TINY_MODEL_PATH.tmp"
-
-    # Download the model
-    if command -v wget >/dev/null 2>&1; then
-        if ! wget --progress=bar:force:noscroll -O "$TEMP_FILE" "$TINY_MODEL_URL" 2>&1; then
-            print_error "Failed to download whisper.cpp model with wget"
-            rm -f "$TEMP_FILE"
-            return 1
-        fi
-    elif command -v curl >/dev/null 2>&1; then
-        if ! curl -L --progress-bar -o "$TEMP_FILE" "$TINY_MODEL_URL"; then
-            print_error "Failed to download whisper.cpp model with curl"
-            rm -f "$TEMP_FILE"
-            return 1
-        fi
-    fi
-
-    # Verify download
-    if [ ! -f "$TEMP_FILE" ] || [ ! -s "$TEMP_FILE" ]; then
-        print_error "Downloaded model file is empty or missing"
-        rm -f "$TEMP_FILE"
-        return 1
-    fi
-
-    # Move to final location
-    mv "$TEMP_FILE" "$TINY_MODEL_PATH"
-
-    # Verify the model file
-    if [ -f "$TINY_MODEL_PATH" ]; then
-        local MODEL_SIZE=$(du -h "$TINY_MODEL_PATH" | cut -f1)
-        print_success "whisper.cpp tiny model installed successfully ($MODEL_SIZE)"
-
-        # Create a marker file to indicate this model was pre-installed
-        echo "$(date)" > "$WHISPERCPP_DIR/.vocalinux_preinstalled"
-
-        return 0
-    else
-        print_error "whisper.cpp model installation failed"
-        return 1
-    fi
+    install_single_file_model \
+        "whisper.cpp tiny model" \
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin" \
+        "$WHISPERCPP_DIR/ggml-tiny.bin" \
+        "$WHISPERCPP_DIR" \
+        "~39MB"
 }
 
 # Function to install desktop entry with error handling
