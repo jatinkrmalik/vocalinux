@@ -190,7 +190,44 @@ class TestCheckDependencies(unittest.TestCase):
         mock_start.assert_called_once_with()
         self.assertEqual(obj.wayland_tool, "wtype")
 
-    def test_gnome_wayland_keeps_xkb_engine_fallback(self):
+    def test_gnome_wayland_uses_ibus_when_daemon_runs_with_xkb_engine(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        mock_ibus = MagicMock()
+
+        with (
+            patch.dict(
+                os.environ,
+                {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "GNOME"},
+                clear=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                return_value=False,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
+                return_value=True,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.IBusTextInjector",
+                return_value=mock_ibus,
+            ),
+            patch.object(obj, "_start_ibus_initialization") as mock_start,
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None,
+            ),
+        ):
+            obj._check_dependencies()
+
+        self.assertIs(obj._ibus_injector, mock_ibus)
+        mock_start.assert_called_once_with()
+        self.assertEqual(obj.wayland_tool, "wtype")
+
+    def test_unbridged_wayland_skips_ibus_when_engine_is_xkb(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
         obj = _make_injector(DesktopEnvironment.WAYLAND)
@@ -198,7 +235,7 @@ class TestCheckDependencies(unittest.TestCase):
         with (
             patch.dict(
                 os.environ,
-                {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "GNOME"},
+                {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "sway"},
                 clear=True,
             ),
             patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
