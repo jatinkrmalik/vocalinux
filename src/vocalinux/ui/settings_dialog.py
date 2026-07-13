@@ -16,6 +16,7 @@ UX Design Notes:
 
 import logging
 import os
+import re
 import threading
 import time
 from typing import TYPE_CHECKING, Optional
@@ -47,6 +48,9 @@ from .keyboard_backends import (  # noqa: E402
     SHORTCUT_GROUPS,
     SHORTCUT_MODES,
     SUPPORTED_SHORTCUTS,
+    get_shortcut_display_name,
+    is_valid_shortcut,
+    parse_shortcut_spec,
 )
 
 # Avoid circular imports for type checking
@@ -690,6 +694,69 @@ def _get_recommended_vosk_model() -> tuple:
             return "small", f"Limited RAM ({ram_gb}GB) - optimized for speed"
     except Exception:
         return "small", "Default recommendation"
+
+
+# GDK key-symbol names that are themselves modifiers (skipped while recording).
+_GDK_MODIFIER_KEYNAMES = {
+    "Control_L",
+    "Control_R",
+    "Alt_L",
+    "Alt_R",
+    "Shift_L",
+    "Shift_R",
+    "Super_L",
+    "Super_R",
+    "Meta_L",
+    "Meta_R",
+    "Hyper_L",
+    "Hyper_R",
+    "ISO_Level3_Shift",
+}
+
+# GDK key-symbol names -> canonical main-key tokens (irregular names only;
+# single letters/digits and function keys are handled by rule).
+_GDK_KEYNAME_TOKENS = {
+    "space": "space",
+    "Return": "enter",
+    "KP_Enter": "enter",
+    "Tab": "tab",
+    "Escape": "esc",
+    "BackSpace": "backspace",
+    "Delete": "delete",
+    "Insert": "insert",
+    "Home": "home",
+    "End": "end",
+    "Page_Up": "pageup",
+    "Page_Down": "pagedown",
+    "Up": "up",
+    "Down": "down",
+    "Left": "left",
+    "Right": "right",
+    "comma": "comma",
+    "period": "period",
+    "slash": "slash",
+    "semicolon": "semicolon",
+    "apostrophe": "apostrophe",
+    "grave": "grave",
+    "minus": "minus",
+    "equal": "equal",
+    "bracketleft": "leftbracket",
+    "bracketright": "rightbracket",
+    "backslash": "backslash",
+}
+
+
+def _gdk_keyname_to_token(name: Optional[str]) -> Optional[str]:
+    """Map a GDK keyval name to a canonical main-key token, or None."""
+    if not name:
+        return None
+    if name in _GDK_KEYNAME_TOKENS:
+        return _GDK_KEYNAME_TOKENS[name]
+    if len(name) == 1 and name.isalnum():
+        return name.lower()
+    if re.fullmatch(r"[Ff]([1-9]|1[0-9]|2[0-4])", name):
+        return name.lower()
+    return None
 
 
 class PreferencesGroup(Gtk.Box):
@@ -1597,6 +1664,43 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(self.shortcut_row)
 
+        # Custom shortcut: modifier+key combos (e.g. Alt+R) for users who want
+        # something the preset modifiers can't express (split keyboards, etc.).
+        custom_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.custom_shortcut_entry = Gtk.Entry()
+        self.custom_shortcut_entry.set_placeholder_text("e.g. alt+r")
+        self.custom_shortcut_entry.set_width_chars(12)
+        self.custom_shortcut_entry.set_tooltip_text(
+            "A modifier plus a key, e.g. alt+r, ctrl+alt+r, super+space"
+        )
+        self.custom_shortcut_entry.connect("activate", self._on_custom_shortcut_apply)
+        custom_box.pack_start(self.custom_shortcut_entry, False, False, 0)
+
+        self.record_shortcut_button = Gtk.Button(label="Record")
+        self.record_shortcut_button.set_tooltip_text("Click, then press your desired key combo")
+        self.record_shortcut_button.connect("clicked", self._on_record_shortcut_clicked)
+        custom_box.pack_start(self.record_shortcut_button, False, False, 0)
+
+        self.set_custom_shortcut_button = Gtk.Button(label="Set")
+        self.set_custom_shortcut_button.set_tooltip_text("Apply the typed shortcut")
+        self.set_custom_shortcut_button.connect("clicked", self._on_custom_shortcut_apply)
+        custom_box.pack_start(self.set_custom_shortcut_button, False, False, 0)
+
+        self.custom_shortcut_row = PreferenceRow(
+            title="Custom Shortcut",
+            subtitle="Modifier + key combo (great for split keyboards)",
+            widget=custom_box,
+        )
+        group.add_row(self.custom_shortcut_row)
+
+        # Reflect a non-preset active shortcut in the custom entry.
+        if current_shortcut not in SUPPORTED_SHORTCUTS:
+            self.custom_shortcut_entry.set_text(current_shortcut)
+
+        # Key-capture state for the Record button.
+        self._recording_shortcut = False
+        self.connect("key-press-event", self._on_shortcut_key_press)
+
         self.shortcuts_tab.pack_start(group, False, False, 0)
 
         # Info box about the shortcut
@@ -1626,17 +1730,130 @@ class SettingsDialog(Gtk.Dialog):
         # Update UI based on initial mode
         self._update_shortcut_ui_for_mode(current_mode)
 
-    def _update_shortcut_ui_for_mode(self, mode: str):
-        """Update the shortcut UI based on the selected mode."""
-        if mode == "toggle":
-            self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
-            self.shortcut_info_label.set_text(
-                "In Toggle mode: Double-tap the key to start voice typing, double-tap again to stop."
+    def _apply_custom_shortcut(self, shortcut: str) -> None:
+        """Validate, persist, and live-apply a custom shortcut string."""
+        shortcut = shortcut.strip().lower()
+        if not is_valid_shortcut(shortcut):
+            self.shortcut_info_label.set_markup(
+                f"<span foreground='#e01b24'>Invalid shortcut: "
+                f"<b>{GLib.markup_escape_text(shortcut or '(empty)')}</b>. "
+                "Try a modifier + key, e.g. alt+r.</span>"
             )
+            return
+
+        self.config_manager.set("shortcuts", "toggle_recognition", shortcut)
+        self.config_manager.save_settings()
+
+        mode_id = self.shortcut_mode_combo.get_active_id()
+        display_name = get_shortcut_display_name(shortcut, mode_id)
+        logger.info(f"Keyboard shortcut changed to custom: {display_name}")
+
+        applied = False
+        if self.shortcut_update_callback:
+            applied = self.shortcut_update_callback(shortcut, mode_id)
+        if applied:
+            self.shortcut_info_label.set_markup(
+                f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
+                "Active now!</span>"
+            )
+        else:
+            self.shortcut_info_label.set_markup(
+                f"<i>Shortcut updated to <b>{display_name}</b>. "
+                "Restart the app for the change to take full effect.</i>"
+            )
+
+    def _on_custom_shortcut_apply(self, widget):
+        """Handle Set button / Entry activation for a typed custom shortcut."""
+        if self._initializing:
+            return
+        self._apply_custom_shortcut(self.custom_shortcut_entry.get_text())
+
+    def _on_record_shortcut_clicked(self, widget):
+        """Begin capturing the next key combo pressed in the dialog."""
+        self._recording_shortcut = True
+        self.record_shortcut_button.set_label("Press keys…")
+        self.shortcut_info_label.set_markup(
+            "<i>Press a modifier + key (e.g. Alt+R). Press Esc to cancel.</i>"
+        )
+
+    def _stop_recording_shortcut(self):
+        """Exit key-capture mode and restore the Record button."""
+        self._recording_shortcut = False
+        self.record_shortcut_button.set_label("Record")
+
+    def _gdk_event_to_shortcut(self, event) -> Optional[str]:
+        """Build a canonical shortcut string from a GDK key-press event."""
+        modifiers = []
+        state = event.state
+        if state & Gdk.ModifierType.CONTROL_MASK:
+            modifiers.append("ctrl")
+        if state & Gdk.ModifierType.MOD1_MASK:
+            modifiers.append("alt")
+        if state & Gdk.ModifierType.SHIFT_MASK:
+            modifiers.append("shift")
+        if state & Gdk.ModifierType.SUPER_MASK:
+            modifiers.append("super")
+        token = _gdk_keyname_to_token(Gdk.keyval_name(event.keyval))
+        if not modifiers or token is None:
+            return None
+        return "+".join(modifiers + [token])
+
+    def _on_shortcut_key_press(self, widget, event):
+        """Capture a pressed combo while recording; otherwise pass through."""
+        if not getattr(self, "_recording_shortcut", False):
+            return False  # not recording: let normal event handling proceed
+
+        keyname = Gdk.keyval_name(event.keyval) or ""
+        if keyname in _GDK_MODIFIER_KEYNAMES:
+            return True  # wait for the non-modifier key
+
+        shortcut = self._gdk_event_to_shortcut(event)
+        if keyname == "Escape" and not shortcut:
+            self._stop_recording_shortcut()
+            self.shortcut_info_label.set_text("Recording cancelled.")
+            return True
+
+        if shortcut and is_valid_shortcut(shortcut):
+            self.custom_shortcut_entry.set_text(shortcut)
+            self._stop_recording_shortcut()
+            self._apply_custom_shortcut(shortcut)
+        else:
+            self.shortcut_info_label.set_markup(
+                "<span foreground='#e01b24'>Need a modifier + key. "
+                "Try again or press Esc to cancel.</span>"
+            )
+        return True
+
+    def _update_shortcut_ui_for_mode(self, mode: str):
+        """Update the shortcut UI text to match both the mode and the shortcut.
+
+        A modifier+key combo (e.g. "alt+r") toggles on a single press, not a
+        double-tap, so the wording must reflect the active shortcut instead of
+        assuming a bare-modifier gesture. Reads the saved shortcut from config
+        (the single source of truth for both preset and custom shortcuts).
+        """
+        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        is_combo = is_valid_shortcut(shortcut) and parse_shortcut_spec(shortcut).is_combo
+        # e.g. "Press Alt+R" (combo toggle), "Double-tap Ctrl", "Hold Alt+R".
+        action = get_shortcut_display_name(shortcut, mode)
+
+        if mode == "toggle":
+            if is_combo:
+                self.shortcut_row.set_subtitle(f"{action} to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    f"In Toggle mode: {action} to start voice typing, {action.lower()} "
+                    "again to stop."
+                )
+            else:
+                self.shortcut_row.set_subtitle("Double-tap this key to start/stop voice typing")
+                self.shortcut_info_label.set_text(
+                    "In Toggle mode: Double-tap the key to start voice typing, "
+                    "double-tap again to stop."
+                )
         elif mode == "push_to_talk":
-            self.shortcut_row.set_subtitle("Hold this key to speak, release to stop")
+            self.shortcut_row.set_subtitle("Hold this shortcut to speak, release to stop")
             self.shortcut_info_label.set_text(
-                "In Push-to-Talk mode: Hold the key down to speak, release to stop recording."
+                "In Push-to-Talk mode: Hold the shortcut down to speak, release to stop recording."
             )
 
     def _on_shortcut_mode_changed(self, widget):
@@ -1658,9 +1875,15 @@ class SettingsDialog(Gtk.Dialog):
         # Update UI to reflect new mode
         self._update_shortcut_ui_for_mode(mode_id)
 
-        # Try to apply the mode change live
+        # Try to apply the mode change live. Read the active shortcut from the
+        # saved config rather than the preset combo: a custom shortcut (e.g.
+        # "alt+r") is stored in config but leaves the preset combo pointing at a
+        # default/previous preset, so using the combo here would restart the
+        # listener on the wrong shortcut.
         if self.shortcut_update_callback:
-            shortcut_id = self.shortcut_combo.get_active_id()
+            shortcut_id = self.config_manager.get_str(
+                "shortcuts", "toggle_recognition", "ctrl+ctrl"
+            )
             success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
                 self.shortcut_info_label.set_markup(

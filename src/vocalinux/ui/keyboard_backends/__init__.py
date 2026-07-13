@@ -18,8 +18,12 @@ from .base import (
     SHORTCUT_MODES,
     SUPPORTED_SHORTCUTS,
     KeyboardBackend,
+    ShortcutSpec,
+    format_shortcut_label,
     get_shortcut_display_name,
+    is_valid_shortcut,
     parse_shortcut,
+    parse_shortcut_spec,
 )
 
 logger = logging.getLogger(__name__)
@@ -167,4 +171,8 @@ __all__ = [
     "DEFAULT_SHORTCUT",
     "DEFAULT_SHORTCUT_MODE",
     "parse_shortcut",
+    "parse_shortcut_spec",
+    "is_valid_shortcut",
+    "format_shortcut_label",
+    "ShortcutSpec",
 ]

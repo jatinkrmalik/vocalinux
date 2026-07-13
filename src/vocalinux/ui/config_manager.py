@@ -43,8 +43,10 @@ DEFAULT_CONFIG = {
     "shortcuts": {
         "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
         "mode": "toggle",  # "toggle" or "push_to_talk"
-        # Supported values: "ctrl+ctrl", "alt+alt", "shift+shift"
-        # These represent double-tap shortcuts for the respective modifier keys
+        # Pure-modifier gestures: "ctrl+ctrl", "alt+alt", "shift+shift" (and
+        # left_/right_ variants) — double-tap (toggle) or hold (push_to_talk).
+        # Modifier+key combos are also supported, e.g. "alt+r", "ctrl+alt+r",
+        # "super+space" — press (toggle) or hold (push_to_talk).
     },
     "ui": {
         "start_minimized": False,
