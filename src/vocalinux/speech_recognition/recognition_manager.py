@@ -1266,15 +1266,6 @@ class SpeechRecognitionManager:
         elif has_gpu_libs:
             n_threads = max(1, multiprocessing.cpu_count() // 4)
         else:
-            # Leave a couple of cores for the OS and audio capture, and avoid
-            # oversubscribing hybrid CPUs. Using *every* core drags the slow
-            # efficiency cores into the pool; whisper.cpp synchronises all threads
-            # at each decode step, so the barrier stalls on the slowest core and
-            # throughput collapses. On an 8-core hybrid CPU (Intel Core Ultra,
-            # P+E cores) the old `min(cpu_count, 8)` picked 8 = every core and
-            # measured RTF jumped from ~0.14x (6 threads) to ~2.1x (8 threads) —
-            # a ~15x slowdown. Cap at 8; base/small models rarely scale past that.
-            # Users can still override with the `whispercpp_n_threads` setting.
             n_threads = max(1, min(multiprocessing.cpu_count() - 2, 8))
 
         load_start_time = time.time()
