@@ -1,0 +1,5 @@
+# Phase: desktop integration.
+install_desktop_entry
+install_icons
+install_resources_to_venv
+update_icon_cache

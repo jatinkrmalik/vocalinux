@@ -133,6 +133,7 @@ skip = [".git", "venv", "node_modules", "build", "dist"]
 minversion = "7.0"
 addopts = "-ra -q --strict-markers --timeout=10 --timeout_method=thread"
 testpaths = ["tests"]
+pythonpath = ["src", "installer/tui"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 markers = [
