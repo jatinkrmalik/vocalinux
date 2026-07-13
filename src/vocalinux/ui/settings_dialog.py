@@ -1092,6 +1092,12 @@ class SettingsDialog(Gtk.Dialog):
         self.advanced_tab.set_margin_start(16)
         self.advanced_tab.set_margin_end(16)
 
+        self.post_processing_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.post_processing_tab.set_margin_top(16)
+        self.post_processing_tab.set_margin_bottom(16)
+        self.post_processing_tab.set_margin_start(16)
+        self.post_processing_tab.set_margin_end(16)
+
         # Add tabs to notebook (ordered by importance)
         # Speech Engine tab - most important (what model/language to use)
         speech_engine_label = Gtk.Label(label="Speech Engine")
@@ -1124,6 +1130,11 @@ class SettingsDialog(Gtk.Dialog):
             "Advanced whisper.cpp parameters and settings for power users"
         )
         self.advanced_page_num = notebook.append_page(self.advanced_tab, advanced_label)
+
+        post_processing_label = Gtk.Label(label="Post-Processing")
+        post_processing_label.set_tooltip_text("Run a script to transform transcribed text")
+        notebook.append_page(self.post_processing_tab, post_processing_label)
+
         notebook.connect("switch-page", self._on_settings_page_switched)
 
         self.get_content_area().pack_start(notebook, True, True, 0)
@@ -1139,6 +1150,7 @@ class SettingsDialog(Gtk.Dialog):
         self._build_recognition_section()
         self._build_shortcuts_section()
         self._build_advanced_section()
+        self._build_post_processing_section()
         self._build_test_section()
 
         # Load settings and populate UI
@@ -2209,6 +2221,63 @@ class SettingsDialog(Gtk.Dialog):
 
         self.power_user_switch.connect("state-set", self._on_power_user_toggled)
 
+    def _build_post_processing_section(self):
+        """Build the Post-Processing section."""
+        group = PreferencesGroup(
+            title="Post-Processing Script",
+            description=(
+                "Run an executable on each transcription result. "
+                "The script receives the text on stdin and must write the replacement text to stdout."
+            ),
+        )
+
+        path_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.post_processor_entry = Gtk.Entry()
+        self.post_processor_entry.set_placeholder_text("/path/to/script.sh")
+        self.post_processor_entry.set_tooltip_text(
+            "Path to an executable that transforms transcribed text"
+        )
+        self.post_processor_entry.set_hexpand(True)
+
+        browse_button = Gtk.Button(label="Browse…")
+        browse_button.connect("clicked", self._on_post_processor_browse_clicked)
+
+        path_box.pack_start(self.post_processor_entry, True, True, 0)
+        path_box.pack_start(browse_button, False, False, 0)
+
+        script_row = PreferenceRow(
+            title="Script Path",
+            subtitle="Leave empty to disable post-processing",
+            widget=path_box,
+        )
+        group.add_row(script_row)
+        self.post_processing_tab.pack_start(group, False, False, 0)
+
+        self.post_processor_entry.connect("changed", self._on_post_processor_script_changed)
+
+    def _on_post_processor_browse_clicked(self, widget):
+        dialog = Gtk.FileChooserDialog(
+            title="Select Post-Processing Script",
+            parent=self,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN,
+            Gtk.ResponseType.OK,
+        )
+        if dialog.run() == Gtk.ResponseType.OK:
+            self.post_processor_entry.set_text(dialog.get_filename())
+        dialog.destroy()
+
+    def _on_post_processor_script_changed(self, widget):
+        if self._initializing or self._applying_settings:
+            return
+        path = widget.get_text().strip()
+        self.config_manager.set("post_processing", "script_path", path)
+        self.config_manager.save_config()
+
     def _build_remote_server_section(self):
         """Build the Remote Server configuration section (shown when Remote API engine is selected)."""
         self.remote_server_group = PreferencesGroup(
@@ -2440,6 +2509,9 @@ class SettingsDialog(Gtk.Dialog):
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
+
+        post_processing_settings = self.config_manager.get_settings().get("post_processing", {})
+        self.post_processor_entry.set_text(post_processing_settings.get("script_path", ""))
 
         available_engines = get_available_engines()
         available_count = 0

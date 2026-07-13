@@ -280,9 +280,14 @@ Configuration is stored in `~/.config/vocalinux/config.json`:
     "model_size": "tiny",
     "vad_sensitivity": 3,
     "silence_timeout": 2.0
+  },
+  "post_processing": {
+    "script_path": ""
   }
 }
 ```
+
+Set `post_processing.script_path` to the path of an executable to transform each transcription result (stdin → stdout) before it is injected. Leave empty to disable.
 
 For whisper.cpp, `model_size` may be a size such as `tiny` or an exact ggml model ID
 such as `medium.en-q5_0` or `large-v3-turbo`. You can also configure this through

@@ -216,6 +216,7 @@ def main():
     """Main entry point for the application."""
     # Check for single instance BEFORE any initialization
     from . import single_instance
+    from .post_processor import apply_post_processing
 
     if not single_instance.acquire_lock():
         # Another instance is already running - show notification and exit
@@ -434,6 +435,10 @@ def main():
             """
             text_to_inject = text.strip()
             if not text_to_inject:
+                return
+
+            text_to_inject = apply_post_processing(text_to_inject, config_manager)
+            if text_to_inject is None:
                 return
 
             # Add a separating space between consecutive dictation segments,
