@@ -15,6 +15,23 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.14.0-beta",
+    date: "2026-07-13",
+    type: "beta",
+    highlights: [
+      "Configurable modifier+key hotkeys: set custom shortcuts with any combination of Ctrl, Alt, Shift, and Super plus a letter/number key, e.g. Alt+R or Ctrl+Shift+V (PR #493)",
+      "Remote API engine now supports FunASR/SenseVoice models via OpenAI-compatible endpoints; SenseVoice metadata labels are stripped before text injection (PR #468)",
+      "GNOME Wayland IBus text injection restored when only a bare xkb engine is configured; engine restore fallback now picks the correct IM engine (PR #506, #500)",
+      "KDE Plasma Wayland IBus text-injection path restored after recent compositor-detection regressions (PR #502)",
+      "Wayland text injection now waits for held modifiers to release before typing, preventing accidental shortcut triggers and garbled output (PR #494)",
+      "Shortcuts UI keeps preset and custom shortcut selection exclusive: selecting a preset clears the custom field, and setting a custom combo selects the Custom Shortcut preset (PR #509)",
+      "whisper.cpp no longer defaults to all CPU cores on hybrid processors, improving UI responsiveness and battery life (PR #492)",
+      "Fixed a crash on recording start when the selected audio device index no longer matches the current system enumeration (PR #499)",
+      "Installer includes xsel as a fallback for the Wayland clipboard path when xclip is unavailable (PR #496)",
+      "Removed an outdated long comment about whisper.cpp default thread counts (PR #505)",
+    ],
+  },
+  {
     version: "v0.13.0-beta",
     date: "2026-06-30",
     type: "beta",

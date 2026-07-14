@@ -2,6 +2,41 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.14.0-beta
+
+### 🚀 Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **⌨️ Configurable Shortcuts** | Bind any modifier combination to a key — e.g. `Alt+R`, `Ctrl+Shift+V`, or `Super+F10` |
+| **🌐 FunASR / SenseVoice Remote API** | Remote-API engine now supports FunASR and SenseVoice models via OpenAI-compatible endpoints |
+| **🖥️ GNOME Wayland IBus Reliability** | Text injection works again on GNOME Wayland with bare `xkb` layouts and engine restore fallbacks are fixed |
+| **🎙️ Audio Crash Fix** | Recording no longer crashes when the system audio device index changes between sessions |
+| **⚡ Hybrid-CPU Efficiency** | whisper.cpp no longer defaults to all cores on hybrid Intel/AMD processors |
+
+### ✨ New Features
+
+- **Configurable modifier+key hotkeys** — The Settings dialog now lets you set custom shortcuts using any combination of Ctrl, Alt, Shift, and Super plus a letter/number key. The legacy defaults still work, and you can now bind combinations like `Alt+R` or `Ctrl+Shift+V` (#493)
+- **Remote API FunASR/SenseVoice support** — OpenAI-compatible remote endpoints can specify FunASR/SenseVoice model names (e.g. `sensevoice`) and return richer response shapes; SenseVoice metadata labels are stripped before text injection (#468)
+
+### 🐛 Bug Fixes
+
+- **GNOME Wayland/IBus**: Restore text injection when only a bare `xkb` engine is configured; the engine restore fallback now picks the correct IM engine instead of silently dropping text (#506, #500)
+- **KDE Wayland/IBus**: Restore the KDE Plasma Wayland IBus text-injection path that was regressed in recent compositor-detection changes (#502)
+- **Wayland injection**: Wait for held modifiers (Ctrl/Alt/Shift/Super) to release before injecting text, preventing accidental shortcut triggers and garbled output on modifier-heavy workflows (#494)
+- **Shortcuts UI**: Keep preset and custom shortcut selection exclusive — selecting a preset now clears the custom field, and setting a custom combo selects the "Custom Shortcut" preset (#509)
+- **whisper.cpp**: Stop defaulting to all CPU cores on hybrid processors (Intel Performance + Efficient cores), which caused UI lag and excess battery drain (#492)
+- **Audio**: Fix a crash on recording start when the selected audio device index no longer matches the current system enumeration (#499)
+- **Installer**: Include `xsel` as a fallback for the Wayland clipboard path when `xclip` is unavailable (#496)
+
+### 🔧 Improvements
+
+- **Code style** — Removed an outdated long comment about whisper.cpp default thread counts (#505)
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.0-beta).
+
+---
+
 ## What's New in v0.13.0-beta
 
 ### 🚀 Highlights
@@ -238,7 +273,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.13.0-beta
+git checkout v0.14.0-beta
 ./install.sh
 ```
 

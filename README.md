@@ -32,40 +32,38 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.13.0-beta
+## 📚 What's New in v0.14.0-beta
 
-> 🎉 **Release: Guided whisper.cpp model selection, plus Wayland text-injection reliability, hotplug keyboard support, dictation spacing fixes, and refreshed website docs.**
+> 🎉 **Release: Configurable keyboard shortcuts, FunASR/SenseVoice remote-API support, and another round of Wayland reliability fixes.**
 
 ### 🚀 Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **🎙️ Guided Whisper Models** | Pick a whisper.cpp **size** and **specialization** (English-only, quantized, Turbo) through split dropdowns with in-app guidance |
-| **🔌 Hotplug Keyboard Support** | Shortcuts keep working on keyboards connected after startup, with automatic recovery from disconnects |
-| **✍️ Dictation Spacing** | Spacing is preserved between speech segments separated by a pause in the same session |
-| **🖥️ Wayland Reliability** | Fixes silent text drops on wlroots/COSMIC compositors and garbled output on non-US keyboard layouts |
+| **⌨️ Configurable Shortcuts** | Bind any modifier combination to a key — e.g. `Alt+R`, `Ctrl+Shift+V`, or `Super+F10` |
+| **🌐 FunASR / SenseVoice Remote API** | Remote-API engine now supports FunASR and SenseVoice models via OpenAI-compatible endpoints |
+| **🖥️ GNOME Wayland IBus Reliability** | Text injection works again on GNOME Wayland with bare `xkb` layouts and engine restore fallbacks are fixed |
+| **🎙️ Audio Crash Fix** | Recording no longer crashes when the system audio device index changes between sessions |
+| **⚡ Hybrid-CPU Efficiency** | whisper.cpp no longer defaults to all cores on hybrid Intel/AMD processors |
 
 ### ✨ New Features
 
-- **Guided whisper.cpp model variants** — The Settings dialog now splits whisper.cpp selection into **Model Size** and **Specialization**, exposing English-only, quantized (Q5/Q8), Large v3 Turbo, and legacy large models with language-aware recommendations and hover guidance. Exact model IDs (e.g. `medium.en-q5_0`, `large-v3-turbo`) can also be passed to `--model` (#465)
-- **Remote API FunASR/SenseVoice support** — OpenAI-compatible remote servers can send a model name (e.g. `sensevoice`) and return richer response shapes; SenseVoice metadata labels are stripped before text injection (#468, #469)
+- **Configurable modifier+key hotkeys** — The Settings dialog now lets you set custom shortcuts using any combination of Ctrl, Alt, Shift, and Super plus a letter/number key. The legacy defaults still work, and you can now bind combinations like `Alt+R` or `Ctrl+Shift+V` (#493)
+- **Remote API FunASR/SenseVoice support** — OpenAI-compatible remote endpoints can specify FunASR/SenseVoice model names (e.g. `sensevoice`) and return richer response shapes; SenseVoice metadata labels are stripped before text injection (#468)
 
 ### 🐛 Bug Fixes
 
-- **Dictation**: Preserve spacing between speech segments separated by a pause, so words no longer run together after a silence within the same session (#464)
-- **Shortcuts**: The evdev keyboard backend rescans for hotplugged keyboards, so shortcuts work on devices connected after startup and disconnected devices can be replugged (#467)
-- **KDE Plasma Wayland**: Detect KDE Plasma Wayland sessions and guide you to enable IBus Wayland (System Settings → Keyboard → Virtual Keyboard) when `wtype` injection fails, with matching hints during install and in logs (#466)
-- **Wayland**: Fix garbled output on non-US keyboard layouts (AZERTY/QWERTZ/Dvorak) and a clipboard-copy hang; ydotool now pastes through the clipboard for layout-independent injection (#480)
-- **Wayland/IBus**: Use wtype/ydotool instead of IBus on compositors that don't bridge IBus to native apps (COSMIC, Sway, Hyprland, and similar), fixing silent text drops (#486)
-- **Wayland/IBus**: Require a real IM engine before using IBus on Wayland, so a bare `xkb` layout no longer causes silent text drops on GNOME/Mutter and other compositors (#478)
-- **Wayland**: Preserve the keyboard layout on Wayland by not running `setxkbmap`, which was flipping XWayland/Electron apps to `us` after dictation (#474)
-- **UI**: Cap the settings dialog height on high-resolution displays (#465)
+- **GNOME Wayland/IBus**: Restore text injection when only a bare `xkb` engine is configured; the engine restore fallback now picks the correct IM engine instead of silently dropping text (#506, #500)
+- **KDE Wayland/IBus**: Restore the KDE Plasma Wayland IBus text-injection path that was regressed in recent compositor-detection changes (#502)
+- **Wayland injection**: Wait for held modifiers (Ctrl/Alt/Shift/Super) to release before injecting text, preventing accidental shortcut triggers and garbled output on modifier-heavy workflows (#494)
+- **Shortcuts UI**: Keep preset and custom shortcut selection exclusive — selecting a preset now clears the custom field, and setting a custom combo selects the "Custom Shortcut" preset (#509)
+- **whisper.cpp**: Stop defaulting to all CPU cores on hybrid processors (Intel Performance + Efficient cores), which caused UI lag and excess battery drain (#492)
+- **Audio**: Fix a crash on recording start when the selected audio device index no longer matches the current system enumeration (#499)
+- **Installer**: Include `xsel` as a fallback for the Wayland clipboard path when `xclip` is unavailable (#496)
 
 ### 🔧 Improvements
 
-- **Performance** — Faster ydotool text injection via an explicit `--key-delay` (#488)
-- **Website** — New documentation pages for Remote API, Silero VAD, advanced whisper.cpp settings, and desktop reliability, plus responsive layout polish (#470)
-- **CI** — Automatic pull-request labeling by changed files (#473)
+- **Code style** — Removed an outdated long comment about whisper.cpp default thread counts (#505)
 
 ---
 
@@ -387,7 +385,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.13.0 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.14.0 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 
