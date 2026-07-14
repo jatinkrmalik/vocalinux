@@ -155,6 +155,15 @@ class TestIsIBusActiveInputMethod(unittest.TestCase):
         result = is_ibus_active_input_method()
         self.assertFalse(result)
 
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=False)
+    @patch.dict("os.environ", {"XMODIFIERS": "@im=none"}, clear=True)
+    def test_xmodifiers_none_is_not_a_competing_input_method(self, mock_daemon):
+        """Treat the XIM 'none' sentinel like an unset input method."""
+        from vocalinux.text_injection.ibus_engine import is_ibus_active_input_method
+
+        self.assertFalse(is_ibus_active_input_method())
+        mock_daemon.assert_called_once_with()
+
 
 class TestStartIBusDaemon(unittest.TestCase):
     """Tests for start_ibus_daemon function."""

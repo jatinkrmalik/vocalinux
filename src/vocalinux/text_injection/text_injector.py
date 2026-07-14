@@ -250,7 +250,11 @@ class TextInjector:
             explicit_non_ibus_im = (
                 (gtk_im and "ibus" not in gtk_im)
                 or (qt_im and "ibus" not in qt_im)
-                or (xmodifiers and "@im=" in xmodifiers and "@im=ibus" not in xmodifiers)
+                or (
+                    xmodifiers not in ("", "@im=none")
+                    and "@im=" in xmodifiers
+                    and "@im=ibus" not in xmodifiers
+                )
             )
             # Bridging Wayland DEs (GNOME/KDE): inject_text() switches to the
             # real vocalinux engine for each commit, so a bare xkb:* baseline is
