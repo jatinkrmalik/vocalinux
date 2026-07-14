@@ -24,6 +24,7 @@ This guide explains how to update Vocalinux to the latest version.
 - **GNOME Wayland/IBus**: Restore text injection when only a bare `xkb` engine is configured; the engine restore fallback now picks the correct IM engine instead of silently dropping text (#506, #500)
 - **KDE Wayland/IBus**: Restore the KDE Plasma Wayland IBus text-injection path that was regressed in recent compositor-detection changes (#502)
 - **Wayland injection**: Wait for held modifiers (Ctrl/Alt/Shift/Super) to release before injecting text, preventing accidental shortcut triggers and garbled output on modifier-heavy workflows (#494)
+- **Shortcuts UI**: Keep preset and custom shortcut selection exclusive — selecting a preset now clears the custom field, and setting a custom combo selects the "Custom Shortcut" preset (#509)
 - **whisper.cpp**: Stop defaulting to all CPU cores on hybrid processors (Intel Performance + Efficient cores), which caused UI lag and excess battery drain (#492)
 - **Audio**: Fix a crash on recording start when the selected audio device index no longer matches the current system enumeration (#499)
 - **Installer**: Include `xsel` as a fallback for the Wayland clipboard path when `xclip` is unavailable (#496)
