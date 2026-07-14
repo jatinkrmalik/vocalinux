@@ -424,17 +424,7 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 
 ## Star Chart
 
-## Star History
-
-## Star History
-
-<a href="https://www.star-history.com/?type=date&repos=jatinkrmalik%2Fvocalinux">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=jatinkrmalik/vocalinux&type=date&theme=dark&legend=top-left&sealed_token=ZWyQQLhSORoR4mKf6UXMGFSCBXRxM_yEZgc8MFCH_ysBjaFUm_OCH-bI3TD7OivczEzm-ADRIpF9xCWFOMHvBPW95eQBxzfRMpNksChz7rN_eiqL7AIMDw" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=jatinkrmalik/vocalinux&type=date&legend=top-left&sealed_token=ZWyQQLhSORoR4mKf6UXMGFSCBXRxM_yEZgc8MFCH_ysBjaFUm_OCH-bI3TD7OivczEzm-ADRIpF9xCWFOMHvBPW95eQBxzfRMpNksChz7rN_eiqL7AIMDw" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jatinkrmalik/vocalinux&type=date&legend=top-left&sealed_token=ZWyQQLhSORoR4mKf6UXMGFSCBXRxM_yEZgc8MFCH_ysBjaFUm_OCH-bI3TD7OivczEzm-ADRIpF9xCWFOMHvBPW95eQBxzfRMpNksChz7rN_eiqL7AIMDw" />
- </picture>
-</a>
+[![Star History Chart](https://api.star-history.com/chart?repos=jatinkrmalik/vocalinux&type=date&legend=top-left&sealed_token=ZWyQQLhSORoR4mKf6UXMGFSCBXRxM_yEZgc8MFCH_ysBjaFUm_OCH-bI3TD7OivczEzm-ADRIpF9xCWFOMHvBPW95eQBxzfRMpNksChz7rN_eiqL7AIMDw)](https://www.star-history.com/?type=date&repos=jatinkrmalik%2Fvocalinux)
 
 ---
 
