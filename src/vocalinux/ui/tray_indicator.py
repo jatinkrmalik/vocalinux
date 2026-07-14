@@ -25,7 +25,7 @@ except (ImportError, ValueError):
         gi.require_version("AyatanaAppindicator3", "0.1")
         from gi.repository import AyatanaAppindicator3 as AppIndicator3
 
-from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
@@ -34,6 +34,7 @@ from ..utils.resource_manager import ResourceManager
 from .config_manager import ConfigManager
 from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog
+from .transcription_history import TranscriptionHistory
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,9 @@ ICON_DIR = _resource_manager.icons_dir
 DEFAULT_ICON = "vocalinux-microphone-off"
 ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
+
+# Maximum characters shown for a history snippet label before truncation.
+_HISTORY_LABEL_MAX_CHARS = 50
 
 # /dev/input settle-detection tuning (used after resume)
 _INPUT_SETTLE_SECONDS = 2
@@ -67,6 +71,7 @@ class TrayIndicator:
         self,
         speech_engine: SpeechRecognitionManagerProtocol,
         text_injector: TextInjectorProtocol,
+        transcription_history: Optional[TranscriptionHistory] = None,
     ):
         """
         Initialize the system tray indicator.
@@ -74,11 +79,23 @@ class TrayIndicator:
         Args:
             speech_engine: The speech recognition manager instance
             text_injector: The text injector instance
+            transcription_history: Optional in-memory store of recent dictation
+                snippets. When provided, a "Recent Snippets" submenu is shown.
         """
         self.speech_engine = speech_engine
         self.text_injector = text_injector
+        self.transcription_history = transcription_history
         self.config_manager = ConfigManager()  # Added: Initialize ConfigManager
         self._syncing_autostart_menu = False
+        self._history_menu_item = None
+
+        # Refresh the history submenu whenever the history changes. The change
+        # callback fires on the recognition thread, so marshal onto the GTK
+        # main thread before touching widgets.
+        if self.transcription_history is not None:
+            self.transcription_history.set_change_callback(
+                lambda: GLib.idle_add(self._refresh_history_menu)
+            )
 
         # Get configured shortcut and mode from config
         shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
@@ -218,6 +235,13 @@ class TrayIndicator:
         self._add_menu_item("Start Voice Typing", self._on_start_clicked)
         self._add_menu_item("Stop Voice Typing", self._on_stop_clicked)
         self._add_menu_separator()
+
+        # Recent snippets submenu (only when history is enabled)
+        if self.transcription_history is not None and self.transcription_history.enabled:
+            self._history_menu_item = Gtk.MenuItem.new_with_label("Recent Snippets")
+            self.menu.append(self._history_menu_item)
+            self._refresh_history_menu()
+            self._add_menu_separator()
 
         self._autostart_menu_item = self._add_menu_checkbox(
             "Start on Login", self._on_autostart_toggled
@@ -459,6 +483,57 @@ class TrayIndicator:
         """Handle click on the Stop Voice Typing menu item."""
         logger.debug("Stop Voice Typing clicked")
         self.speech_engine.stop_recognition()
+
+    def _refresh_history_menu(self):
+        """Rebuild the Recent Snippets submenu from the current history."""
+        if self._history_menu_item is None or self.transcription_history is None:
+            return False  # Remove idle callback
+
+        submenu = Gtk.Menu()
+        entries = self.transcription_history.get_all()
+
+        if not entries:
+            empty_item = Gtk.MenuItem.new_with_label("(no snippets yet)")
+            empty_item.set_sensitive(False)
+            submenu.append(empty_item)
+        else:
+            for entry in entries:
+                item = Gtk.MenuItem.new_with_label(self._truncate_label(entry))
+                item.set_tooltip_text(entry)
+                # The full snippet is passed as connect user-data, so each item
+                # copies its own text (no late-binding closure pitfall).
+                item.connect("activate", self._on_history_item_clicked, entry)
+                submenu.append(item)
+
+            submenu.append(Gtk.SeparatorMenuItem())
+            clear_item = Gtk.MenuItem.new_with_label("Clear History")
+            clear_item.connect("activate", self._on_clear_history_clicked)
+            submenu.append(clear_item)
+
+        submenu.show_all()
+        self._history_menu_item.set_submenu(submenu)
+        return False  # Remove idle callback
+
+    @staticmethod
+    def _truncate_label(text: str) -> str:
+        """Collapse whitespace and truncate a snippet for menu display."""
+        single_line = " ".join(text.split())
+        if len(single_line) > _HISTORY_LABEL_MAX_CHARS:
+            return single_line[: _HISTORY_LABEL_MAX_CHARS - 1].rstrip() + "…"
+        return single_line
+
+    def _on_history_item_clicked(self, widget, text: str):
+        """Copy the selected snippet to the clipboard."""
+        logger.debug("History snippet clicked, copying to clipboard")
+        clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        clipboard.set_text(text, -1)
+        clipboard.store()
+
+    def _on_clear_history_clicked(self, widget):
+        """Clear all stored snippets."""
+        logger.debug("Clear history clicked")
+        if self.transcription_history is not None:
+            self.transcription_history.clear()
 
     def _on_settings_clicked(self, widget):
         """Handle click on the Settings menu item."""
