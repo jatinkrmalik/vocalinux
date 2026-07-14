@@ -343,6 +343,7 @@ git push origin v0.5.1-beta
 | 0.10.2-beta | 2026-04-08 | Beta | Non-ASCII text injection, IBus Wayland detection, Pop!_OS deps, code quality refactor |
 | 0.11.0-beta | 2026-05-30 | Beta | Advanced Settings tab, IBus/recognition hardening, installer fixes, distro compatibility |
 | 0.12.0-beta | 2026-06-07 | Beta | Remote API engine, Silero VAD, threading/IBus hardening, settings and installer fixes |
+| 0.14.0-beta | 2026-07-13 | Beta | Configurable modifier+key hotkeys, FunASR/SenseVoice remote-API support, GNOME/KDE Wayland IBus reliability fixes, audio crash fix, hybrid-CPU efficiency fix |
 | 0.13.0-beta | 2026-06-30 | Beta | Guided whisper.cpp model variants, Wayland text-injection reliability, hotplug keyboard support, dictation spacing fix, website docs refresh |
 
 ## Questions?
