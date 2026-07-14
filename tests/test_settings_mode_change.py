@@ -1,9 +1,8 @@
 """Regression test: switching shortcut mode must use the saved shortcut.
 
-A custom shortcut (e.g. "alt+r") is stored in config but leaves the preset
-combo pointing at a default/previous preset. When the user toggles between
-Toggle and Push-to-Talk, the live listener must be restarted on the *saved*
-shortcut, not the stale preset shown in the combo. (Codex P2 on PR #493.)
+Config is the source of truth for both presets and custom shortcuts. When the
+user toggles between Toggle and Push-to-Talk, the live listener must restart on
+the *saved* shortcut (not a stale combo selection). (Codex P2 on PR #493.)
 
 The settings dialog can't be instantiated under the mocked-GTK test harness, so
 (like test_settings_shortcuts.py) this asserts against the source of the
@@ -55,3 +54,19 @@ def test_mode_ui_double_tap_text_is_guarded_for_non_combo():
     idx_double_tap = body.find("Double-tap this key")
     assert idx_if != -1
     assert idx_double_tap > idx_if
+
+
+def test_sync_ui_mutually_excludes_preset_and_custom():
+    """Custom and preset UI state must not both look active at once."""
+    body = _method_source("_sync_shortcut_selection_ui")
+    assert '_set_shortcut_combo_active_id("__custom__")' in body
+    assert 'self.custom_shortcut_entry.set_text("")' in body
+    assert "self._is_preset_shortcut(shortcut)" in body
+
+
+def test_preset_change_clears_custom_entry():
+    body = _method_source("_on_shortcut_changed")
+    # After a real preset id is chosen, clear the custom entry so users are not
+    # left thinking the old custom combo is still active.
+    assert 'self.custom_shortcut_entry.set_text("")' in body
+    assert 'shortcut_id == "__custom__"' in body

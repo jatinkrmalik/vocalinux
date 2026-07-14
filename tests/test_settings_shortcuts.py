@@ -117,6 +117,24 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         self.assertIn("SHORTCUT_GROUPS", self.source_code)
         self.assertIn("SUPPORTED_SHORTCUTS", self.source_code)
 
+    def test_custom_shortcut_option_in_combo(self):
+        """Preset combo includes a Custom Shortcut sentinel for non-presets."""
+        self.assertIn(
+            'self.shortcut_combo.append("__custom__", "Custom Shortcut")', self.source_code
+        )
+        self.assertIn("def _sync_shortcut_selection_ui(self, shortcut: str)", self.source_code)
+
+    def test_preset_selection_clears_custom_entry(self):
+        """Selecting a preset clears leftover custom text so active binding is obvious."""
+        self.assertIn('self.custom_shortcut_entry.set_text("")', self.source_code)
+        # Preset path in _on_shortcut_changed must clear before/while saving.
+        self.assertIn("def _on_shortcut_changed(self, widget)", self.source_code)
+
+    def test_custom_apply_syncs_combo_to_custom(self):
+        """Applying a custom shortcut selects Custom in the dropdown."""
+        self.assertIn("def _apply_custom_shortcut(self, shortcut: str)", self.source_code)
+        self.assertIn("self._sync_shortcut_selection_ui(shortcut)", self.source_code)
+
 
 class TestKeyboardBackendsBase(unittest.TestCase):
     """Test cases for keyboard backends base module."""
