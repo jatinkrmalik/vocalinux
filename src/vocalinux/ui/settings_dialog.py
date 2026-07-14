@@ -1643,7 +1643,8 @@ class SettingsDialog(Gtk.Dialog):
         self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut for voice typing")
         _prevent_scroll_on_hover(self.shortcut_combo)
 
-        # Populate shortcut options grouped by side
+        # Populate shortcut options grouped by side, then a Custom sentinel.
+        # Preset and custom are mutually exclusive: only one is active at a time.
         for group_label, shortcut_ids in SHORTCUT_GROUPS.items():
             # Add group separator as a disabled label entry
             separator_id = f"__separator_{group_label}__"
@@ -1651,13 +1652,12 @@ class SettingsDialog(Gtk.Dialog):
             for shortcut_id in shortcut_ids:
                 display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut_id, shortcut_id)
                 self.shortcut_combo.append(shortcut_id, display_name)
+        self.shortcut_combo.append("__custom__", "Custom Shortcut")
 
         # Load current shortcut from config
         current_shortcut = self.config_manager.get_str(
             "shortcuts", "toggle_recognition", "ctrl+ctrl"
         )
-        if not self.shortcut_combo.set_active_id(current_shortcut):
-            self.shortcut_combo.set_active_id("ctrl+ctrl")
 
         self.shortcut_row = PreferenceRow(
             title="Shortcut Key",
@@ -1695,10 +1695,6 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(self.custom_shortcut_row)
 
-        # Reflect a non-preset active shortcut in the custom entry.
-        if current_shortcut not in SUPPORTED_SHORTCUTS:
-            self.custom_shortcut_entry.set_text(current_shortcut)
-
         # Key-capture state for the Record button.
         self._recording_shortcut = False
         self.connect("key-press-event", self._on_shortcut_key_press)
@@ -1725,12 +1721,60 @@ class SettingsDialog(Gtk.Dialog):
 
         self.shortcuts_tab.pack_start(info_box, False, False, 0)
 
+        # Reflect active shortcut in combo + custom entry (preset vs custom).
+        self._sync_shortcut_selection_ui(current_shortcut)
+
         # Connect signals
         self.shortcut_combo.connect("changed", self._on_shortcut_changed)
         self.shortcut_mode_combo.connect("changed", self._on_shortcut_mode_changed)
 
         # Update UI based on initial mode
         self._update_shortcut_ui_for_mode(current_mode)
+
+    def _is_preset_shortcut(self, shortcut: str) -> bool:
+        """Return True if shortcut is one of the built-in double-tap presets."""
+        return shortcut in SUPPORTED_SHORTCUTS
+
+    def _set_shortcut_combo_active_id(self, active_id: str) -> None:
+        """Select a combo item without firing the changed handler."""
+        # Handler may not be connected yet (during section build).
+        try:
+            self.shortcut_combo.handler_block_by_func(self._on_shortcut_changed)
+            blocked = True
+        except TypeError:
+            blocked = False
+        try:
+            if not self.shortcut_combo.set_active_id(active_id):
+                self.shortcut_combo.set_active_id("ctrl+ctrl")
+        finally:
+            if blocked:
+                self.shortcut_combo.handler_unblock_by_func(self._on_shortcut_changed)
+
+    def _sync_shortcut_selection_ui(self, shortcut: str) -> None:
+        """Keep preset combo and custom entry mutually exclusive.
+
+        - Preset active: combo shows that preset; custom entry is cleared.
+        - Custom active: combo shows "Custom Shortcut"; entry holds the combo string.
+        """
+        if self._is_preset_shortcut(shortcut):
+            self._set_shortcut_combo_active_id(shortcut)
+            self.custom_shortcut_entry.set_text("")
+        else:
+            self._set_shortcut_combo_active_id("__custom__")
+            self.custom_shortcut_entry.set_text(shortcut)
+
+    def _report_shortcut_apply_result(self, display_name: str, applied: bool) -> None:
+        """Show success/restart feedback after a shortcut change."""
+        if applied:
+            self.shortcut_info_label.set_markup(
+                f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
+                "Active now!</span>"
+            )
+        else:
+            self.shortcut_info_label.set_markup(
+                f"<i>Shortcut updated to <b>{display_name}</b>. "
+                "Restart the app for the change to take full effect.</i>"
+            )
 
     def _apply_custom_shortcut(self, shortcut: str) -> None:
         """Validate, persist, and live-apply a custom shortcut string."""
@@ -1743,8 +1787,24 @@ class SettingsDialog(Gtk.Dialog):
             )
             return
 
+        # If the user typed/recorded a preset id, treat it as selecting that preset.
+        if self._is_preset_shortcut(shortcut):
+            self.config_manager.set("shortcuts", "toggle_recognition", shortcut)
+            self.config_manager.save_settings()
+            self._sync_shortcut_selection_ui(shortcut)
+            mode_id = self.shortcut_mode_combo.get_active_id()
+            display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut, shortcut)
+            logger.info(f"Keyboard shortcut changed to preset via custom entry: {display_name}")
+            applied = False
+            if self.shortcut_update_callback:
+                applied = bool(self.shortcut_update_callback(shortcut, mode_id))
+            self._report_shortcut_apply_result(display_name, applied)
+            return
+
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut)
         self.config_manager.save_settings()
+        # Dropdown should show Custom, not a leftover preset.
+        self._sync_shortcut_selection_ui(shortcut)
 
         mode_id = self.shortcut_mode_combo.get_active_id()
         display_name = get_shortcut_display_name(shortcut, mode_id)
@@ -1752,17 +1812,8 @@ class SettingsDialog(Gtk.Dialog):
 
         applied = False
         if self.shortcut_update_callback:
-            applied = self.shortcut_update_callback(shortcut, mode_id)
-        if applied:
-            self.shortcut_info_label.set_markup(
-                f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
-                "Active now!</span>"
-            )
-        else:
-            self.shortcut_info_label.set_markup(
-                f"<i>Shortcut updated to <b>{display_name}</b>. "
-                "Restart the app for the change to take full effect.</i>"
-            )
+            applied = bool(self.shortcut_update_callback(shortcut, mode_id))
+        self._report_shortcut_apply_result(display_name, applied)
 
     def _on_custom_shortcut_apply(self, widget):
         """Handle Set button / Entry activation for a typed custom shortcut."""
@@ -1877,11 +1928,7 @@ class SettingsDialog(Gtk.Dialog):
         # Update UI to reflect new mode
         self._update_shortcut_ui_for_mode(mode_id)
 
-        # Try to apply the mode change live. Read the active shortcut from the
-        # saved config rather than the preset combo: a custom shortcut (e.g.
-        # "alt+r") is stored in config but leaves the preset combo pointing at a
-        # default/previous preset, so using the combo here would restart the
-        # listener on the wrong shortcut.
+        # Apply from saved config (source of truth for both preset and custom).
         if self.shortcut_update_callback:
             shortcut_id = self.config_manager.get_str(
                 "shortcuts", "toggle_recognition", "ctrl+ctrl"
@@ -1903,6 +1950,14 @@ class SettingsDialog(Gtk.Dialog):
                 f"Restart the app for the change to take full effect.</i>"
             )
 
+    def _revert_shortcut_combo_to_saved(self) -> None:
+        """Restore the combo selection to match the saved active shortcut."""
+        current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        if self._is_preset_shortcut(current):
+            self._set_shortcut_combo_active_id(current)
+        else:
+            self._set_shortcut_combo_active_id("__custom__")
+
     def _on_shortcut_changed(self, widget):
         """Handle shortcut selection change."""
         if self._initializing:
@@ -1914,37 +1969,34 @@ class SettingsDialog(Gtk.Dialog):
 
         # Ignore separator entries (used for grouped display)
         if shortcut_id.startswith("__separator_"):
-            # Revert to the previously saved shortcut
-            current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
-            self.shortcut_combo.set_active_id(current)
+            self._revert_shortcut_combo_to_saved()
             return
 
-        # Save to config
+        # Selecting "Custom Shortcut" does not change the active binding until
+        # the user records/sets one; just focus the custom entry for convenience.
+        if shortcut_id == "__custom__":
+            current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+            if not self._is_preset_shortcut(current):
+                self.custom_shortcut_entry.set_text(current)
+            self.custom_shortcut_entry.grab_focus()
+            self.shortcut_info_label.set_markup(
+                "<i>Record or type a custom shortcut (e.g. alt+r), then click Set.</i>"
+            )
+            return
+
+        # Preset selected: clear any leftover custom entry so UI matches config.
+        self.custom_shortcut_entry.set_text("")
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
         self.config_manager.save_settings()
 
         display_name = SHORTCUT_DISPLAY_NAMES.get(shortcut_id, shortcut_id)
         logger.info(f"Keyboard shortcut changed to: {display_name}")
 
-        # Try to apply the shortcut change live
+        applied = False
         if self.shortcut_update_callback:
             mode_id = self.shortcut_mode_combo.get_active_id()
-            success = self.shortcut_update_callback(shortcut_id, mode_id)
-            if success:
-                self.shortcut_info_label.set_markup(
-                    f"<span foreground='#26a269'>Shortcut updated to <b>{display_name}</b>. "
-                    f"Active now!</span>"
-                )
-            else:
-                self.shortcut_info_label.set_markup(
-                    f"<i>Shortcut updated to <b>{display_name}</b>. "
-                    f"Restart the app for the change to take full effect.</i>"
-                )
-        else:
-            self.shortcut_info_label.set_markup(
-                f"<i>Shortcut updated to <b>{display_name}</b>. "
-                f"Restart the app for the change to take full effect.</i>"
-            )
+            applied = bool(self.shortcut_update_callback(shortcut_id, mode_id))
+        self._report_shortcut_apply_result(display_name, applied)
 
     def _build_test_section(self):
         """Build the Test Recognition section."""
