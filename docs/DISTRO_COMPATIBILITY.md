@@ -13,7 +13,7 @@ The cross-distribution compatibility improvements have been implemented in phase
 | **Phase 5** | ✅ **Complete** | **Fixed remaining hardcoded GI_TYPELIB_PATH values in install.sh and CI workflow** |
 | **Phase 6** | ✅ **Complete** | **Added wrapper script verification tests, updated documentation** |
 | Phase 7 | 📋 Planned | Flatpak packaging for universal distribution support |
-| Phase 8 | 📋 Planned | Snap packaging for Ubuntu Software Store |
+| Phase 8 | 🚧 In progress | Snap packaging recipe in-repo (`snap/snapcraft.yaml`); **not on Snap Store yet** — see [packaging/snap/README.md](../packaging/snap/README.md) |
 
 ## Technical Implementation
 
