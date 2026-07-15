@@ -37,6 +37,7 @@ describe("SEO Assets", () => {
       "https://vocalinux.com/voice-activity-detection/",
       "https://vocalinux.com/advanced-settings/",
       "https://vocalinux.com/desktop-reliability/",
+      "https://vocalinux.com/screenshots/",
     ];
 
     expectedUrls.forEach((url) => {

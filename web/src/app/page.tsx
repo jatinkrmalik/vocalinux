@@ -309,6 +309,7 @@ export default function HomePage() {
   const navLinks = [
     { href: "#demo", label: "Demo" },
     { href: "#features", label: "Features" },
+    { href: "/screenshots/", label: "Screenshots" },
     { href: "#install", label: "Install" },
     { href: "#guides", label: "Guides" },
     { href: "#faq", label: "FAQ" },
@@ -346,15 +347,25 @@ export default function HomePage() {
 
           {/* Desktop navigation */}
           <div className="hidden items-center gap-6 md:flex">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {link.label}
-              </a>
-            ))}
+            {navLinks.map((link) =>
+              link.href.startsWith("/") ? (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {link.label}
+                </a>
+              ),
+            )}
             <a
               href="https://github.com/jatinkrmalik/vocalinux"
               target="_blank"
@@ -399,16 +410,27 @@ export default function HomePage() {
           className="overflow-hidden border-b border-border bg-background md:hidden"
         >
           <div className="space-y-2 px-4 py-3">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="block py-2 text-foreground transition-colors hover:text-primary"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {link.label}
-              </a>
-            ))}
+            {navLinks.map((link) =>
+              link.href.startsWith("/") ? (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="block py-2 text-foreground transition-colors hover:text-primary"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="block py-2 text-foreground transition-colors hover:text-primary"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </a>
+              ),
+            )}
             <a
               href="https://github.com/jatinkrmalik/vocalinux"
               target="_blank"
@@ -754,6 +776,16 @@ export default function HomePage() {
               </p>
             </div>
           </FadeInSection>
+
+          <div className="mb-10 text-center">
+            <Link
+              href="/screenshots/"
+              className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors"
+            >
+              See screenshots of the app UI
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
@@ -1849,6 +1881,14 @@ export default function HomePage() {
                     className="text-zinc-400 transition-colors hover:text-white"
                   >
                     Install Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/screenshots/"
+                    className="text-zinc-400 transition-colors hover:text-white"
+                  >
+                    Screenshots
                   </Link>
                 </li>
                 <li>
