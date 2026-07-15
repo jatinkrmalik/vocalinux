@@ -32,7 +32,6 @@ from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, T
 from ..suspend_handler import SuspendHandler
 from ..utils.resource_manager import ResourceManager
 from .config_manager import ConfigManager
-from .dictation_overlay import DictationOverlay
 from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog
 
@@ -107,6 +106,9 @@ class TrayIndicator:
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
 
         # Floating on-screen indicator (glow while listening); gated by config.
+        # Lazy import keeps tray import light for tests that mock gi.
+        from .dictation_overlay import DictationOverlay
+
         self.overlay = DictationOverlay(enabled=self.config_manager.is_overlay_enabled())
 
         # Initialize the icon files and validate resources
