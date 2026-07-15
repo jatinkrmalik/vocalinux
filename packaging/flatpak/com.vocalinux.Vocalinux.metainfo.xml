@@ -97,6 +97,11 @@
   </content_rating>
 
   <releases>
+    <release version="0.14.0-beta" date="2026-07-14">
+      <description>
+        <p>Align Flatpak metadata with Vocalinux 0.14.0-beta (whisper.cpp + Vulkan, XDG paths, XWayland injection).</p>
+      </description>
+    </release>
     <release version="0.12.0-beta" date="2026-06-07">
       <description>
         <p>First Flatpak release: whisper.cpp engine with Vulkan GPU support, XDG-compliant data paths, and XWayland text injection.</p>

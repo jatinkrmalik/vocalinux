@@ -86,6 +86,7 @@ build/
 # Flatpak build artifacts
 .flatpak-builder/
 build-dir/
+flatpak-build-dir/
 /repo/
 *.flatpak
 
