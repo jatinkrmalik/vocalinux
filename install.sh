@@ -3075,9 +3075,15 @@ REMOTE_CONFIG
         # Create wrapper scripts in ~/.local/bin for easy access
         mkdir -p "$HOME/.local/bin"
 
+        # Shared sg check logic for wrapper scripts
+        # Uses sg to activate input group for Wayland keyboard shortcuts without logout
+        local SG_CHECK='if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q "\binput\b" && command -v sg &>/dev/null; then
+    exec sg input -c "\$EXEC_CMD"
+else
+    exec \$EXEC_CMD
+fi'
+
         # Create vocalinux wrapper script
-        # Uses 'sg input' to run with input group for keyboard shortcuts on Wayland
-        # This allows shortcuts to work without logging out after installation
         cat > "$HOME/.local/bin/vocalinux" << WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux that sets required environment variables
@@ -3111,25 +3117,8 @@ if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
     export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 fi
 
-# Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
-    # Try to use sg to run with input group without requiring logout
-    if command -v sg &>/dev/null; then
-        exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
-    else
-        # sg not found, try to install util-linux-extra
-        if command -v apt-get &>/dev/null; then
-            sudo apt-get install -y util-linux-extra &>/dev/null
-            if command -v sg &>/dev/null; then
-                exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
-            fi
-        fi
-        # Fall back to direct execution
-        exec "$VENV_DIR/bin/vocalinux" "\$@"
-    fi
-else
-    exec "$VENV_DIR/bin/vocalinux" "\$@"
-fi
+EXEC_CMD="$VENV_DIR/bin/vocalinux \$*"
+$SG_CHECK
 WRAPPER_EOF
         chmod +x "$HOME/.local/bin/vocalinux"
         print_info "Created wrapper: ~/.local/bin/vocalinux"
@@ -3168,25 +3157,8 @@ if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
     export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 fi
 
-# Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
-    # Try to use sg to run with input group without requiring logout
-    if command -v sg &>/dev/null; then
-        exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
-    else
-        # sg not found, try to install util-linux-extra
-        if command -v apt-get &>/dev/null; then
-            sudo apt-get install -y util-linux-extra &>/dev/null
-            if command -v sg &>/dev/null; then
-                exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
-            fi
-        fi
-        # Fall back to direct execution
-        exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
-    fi
-else
-    exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
-fi
+EXEC_CMD="$VENV_DIR/bin/vocalinux-gui \$*"
+$SG_CHECK
 WRAPPER_EOF
         chmod +x "$HOME/.local/bin/vocalinux-gui"
         print_info "Created wrapper: ~/.local/bin/vocalinux-gui"
