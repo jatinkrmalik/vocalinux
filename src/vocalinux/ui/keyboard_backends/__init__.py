@@ -61,8 +61,7 @@ class DesktopEnvironment:
         wayland_display = os.environ.get("WAYLAND_DISPLAY")
         x11_display = os.environ.get("DISPLAY")
         if session_type == "wayland":
-            # A Flatpak with only X11/XWayland access reports a Wayland session but
-            # has no Wayland socket; pynput over XWayland handles global shortcuts.
+            # Flatpak grants X11 only; pynput over XWayland when no Wayland socket.
             if os.environ.get("FLATPAK_ID") and not wayland_display and x11_display:
                 logger.info("Flatpak has X11/XWayland access only; using X11 keyboard backend")
                 return DesktopEnvironment.X11

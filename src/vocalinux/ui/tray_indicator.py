@@ -37,10 +37,7 @@ from .settings_dialog import SettingsDialog
 
 logger = logging.getLogger(__name__)
 
-# Define constants. Inside a Flatpak the indicator id and themed icon names must
-# match the host-visible app id, because the StatusNotifier host runs outside the
-# sandbox and resolves icons from the exported "<app-id>-*" theme rather than from
-# a path inside /app.
+# Flatpak StatusNotifier host resolves exported <app-id>-* icons, not /app paths.
 FLATPAK_ID = os.environ.get("FLATPAK_ID")
 APP_ID = FLATPAK_ID or "vocalinux"
 
@@ -48,18 +45,14 @@ APP_ID = FLATPAK_ID or "vocalinux"
 _resource_manager = ResourceManager()
 ICON_DIR = _resource_manager.icons_dir
 
-# Bundled icon file names (used to locate the packaged SVG resources).
+# Bundled icon file names (paths under ICON_DIR).
 DEFAULT_ICON = "vocalinux-microphone-off"
 ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
 
 
 def _themed_icon_names() -> dict:
-    """Map states to the icon names visible to the current runtime.
-
-    Outside a Flatpak the bundled names are looked up from ``ICON_DIR``. Inside a
-    Flatpak the icons are exported to the host theme as ``<app-id>-microphone*``.
-    """
+    """Icon theme names for the current runtime (host-exported names in Flatpak)."""
     if FLATPAK_ID:
         return {
             "default": f"{FLATPAK_ID}-microphone-off",
@@ -213,8 +206,6 @@ class TrayIndicator:
         initial_icon = _themed_icon_names()["default"]
         try:
             if FLATPAK_ID:
-                # The host renderer cannot read ICON_DIR (inside /app); rely on the
-                # exported host icon theme instead of a sandbox path.
                 self.indicator = AppIndicator3.Indicator.new(
                     APP_ID,
                     initial_icon,

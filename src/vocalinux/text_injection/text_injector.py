@@ -161,9 +161,7 @@ class TextInjector:
         x11_display = os.environ.get("DISPLAY")
 
         if session_type == "wayland":
-            # Inside a Flatpak the sandbox is granted X11 (XWayland) but not the
-            # native Wayland socket, so a Wayland host session is reached through
-            # XWayland. Route text injection through the xdotool fallback.
+            # Flatpak grants X11 only; inject via XWayland/xdotool when no Wayland socket.
             if os.environ.get("FLATPAK_ID") and not wayland_display and x11_display:
                 logger.info("Flatpak has X11/XWayland access only; using xdotool text injection")
                 return DesktopEnvironment.WAYLAND_XDOTOOL

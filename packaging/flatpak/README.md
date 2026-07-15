@@ -1,96 +1,60 @@
 # Vocalinux Flatpak Packaging
 
-This directory contains the Flatpak manifest and AppStream metadata for building
-Vocalinux as a Flatpak.
+Manifest and AppStream metadata for building Vocalinux as a Flatpak.
 
 ## Current Scope
 
-The manifest targets the default `whisper_cpp` engine. The VOSK engine is not
-included in this Flatpak yet because the PyPI `vosk` package only publishes
-platform wheels, not a source distribution. A Flathub-ready VOSK module will need
-to build VOSK and its native dependencies from source, or VOSK support should be
-made an optional non-Flatpak feature.
+The manifest ships the default `whisper_cpp` engine only. VOSK is omitted because
+the PyPI package is wheel-only (no sdist), so a Flathub-ready VOSK build would
+need to compile VOSK and its native deps from source.
 
-The Flatpak intentionally uses the X11 socket so it runs under XWayland on
-Wayland sessions. Native Wayland input injection is compositor-dependent and is
-not available on GNOME without privileged protocols, while the XWayland path lets
-the packaged `xdotool` backend work wherever X11/XWayland injection is possible.
+The Flatpak uses `--socket=x11` and runs under XWayland on Wayland sessions.
+Native Wayland injection is compositor-dependent and not available on GNOME
+without privileged protocols; XWayland keeps the packaged `xdotool` path working.
 
-Global keyboard shortcuts are limited inside the sandbox. The Flatpak does not
-request direct `/dev/input` access, so users should expect tray/menu control
-rather than evdev-based push-to-talk shortcuts.
+Global keyboard shortcuts are limited in the sandbox (no `/dev/input`). Prefer
+tray/menu control over evdev push-to-talk.
 
 ## Local Build
 
-Install the current GNOME runtime and SDK:
-
 ```bash
+# one-time runtime/SDK
 flatpak install flathub org.gnome.Platform//50 org.gnome.Sdk//50
+
+# from repo root — add flags as needed:
+#   --user --install     install for the current user
+#   --repo=repo          export a local repo (then bundle or lint)
+#   --compose-url-policy=full --mirror-screenshots-url=https://dl.flathub.org/media
+flatpak-builder --force-clean build-dir packaging/flatpak/com.vocalinux.Vocalinux.yml
+
+flatpak run com.vocalinux.Vocalinux --debug
+
+# single-file bundle (after a --repo=repo build)
+flatpak build-bundle repo vocalinux.flatpak com.vocalinux.Vocalinux
+# elsewhere: flatpak install --user vocalinux.flatpak
 ```
 
-Build from the repository root:
+Lint (needs `org.flatpak.Builder`):
 
 ```bash
-flatpak-builder \
-  --force-clean \
-  build-dir \
-  packaging/flatpak/com.vocalinux.Vocalinux.yml
-```
-
-For a Flathub-style local build with screenshot mirroring and linter inputs:
-
-```bash
-flatpak-builder \
-  --force-clean \
-  --repo=repo \
-  --compose-url-policy=full \
-  --mirror-screenshots-url=https://dl.flathub.org/media \
-  build-dir \
-  packaging/flatpak/com.vocalinux.Vocalinux.yml
 flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest packaging/flatpak/com.vocalinux.Vocalinux.yml
 flatpak run --command=flatpak-builder-lint org.flatpak.Builder builddir build-dir
-flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
+flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo   # if you used --repo=repo
 ```
 
-Install locally:
+Prefer `flatpak run` after `--install` for GUI testing. On GNOME runtimes with
+glycin loaders, `flatpak-builder --run` can fail to load themed SVG icons for an
+uninstalled stable app ID; it is still fine for non-GUI smokes:
 
 ```bash
-flatpak-builder \
-  --user \
-  --install \
-  --force-clean \
-  build-dir \
-  packaging/flatpak/com.vocalinux.Vocalinux.yml
-```
-
-Launch after installing:
-
-```bash
-flatpak run com.vocalinux.Vocalinux --debug
-```
-
-Build a single-file bundle for distribution (what CI uploads):
-
-```bash
-flatpak-builder --force-clean --repo=repo build-dir \
-  packaging/flatpak/com.vocalinux.Vocalinux.yml
-flatpak build-bundle repo vocalinux.flatpak com.vocalinux.Vocalinux
-# install it elsewhere with: flatpak install --user vocalinux.flatpak
-```
-
-Prefer the installed launch path for GUI testing. On GNOME runtimes that use
-glycin image loaders, `flatpak-builder --run` can fail to load themed SVG icons
-for an uninstalled stable app ID. `flatpak-builder --run` is still useful for
-non-GUI smoke tests:
-
-```bash
-flatpak-builder --run build-dir packaging/flatpak/com.vocalinux.Vocalinux.yml python3 -c 'from pywhispercpp.model import Model; print("pywhispercpp ok")'
+flatpak-builder --run build-dir packaging/flatpak/com.vocalinux.Vocalinux.yml \
+  python3 -c 'from pywhispercpp.model import Model; print("pywhispercpp ok")'
 ```
 
 ## Python Dependencies
 
-`python3-dependencies.yaml` is generated with `flatpak-pip-generator` and keeps
-the build itself offline. Regenerate it when `pyproject.toml` dependencies change:
+`python3-dependencies.yaml` is generated with `flatpak-pip-generator` (offline
+builds). Regenerate when `pyproject.toml` deps change:
 
 ```bash
 pipx run flatpak-pip-generator \
@@ -102,13 +66,10 @@ pipx run flatpak-pip-generator \
   meson-python pyproject-metadata
 ```
 
-`python3-build-dependencies.yaml` is kept as a small hand-maintained helper so
-source builds that use `--no-build-isolation` can import `mesonpy` before NumPy
-is built.
+`python3-build-dependencies.yaml` is a small hand-maintained helper so
+`--no-build-isolation` builds can import `mesonpy` before NumPy is built.
 
 ## Flathub Submission Notes
-
-For a Flathub PR:
 
 1. Change the `vocalinux` module source from `type: dir` to a tagged release:
 
@@ -116,26 +77,20 @@ For a Flathub PR:
    sources:
      - type: git
        url: https://github.com/jatinkrmalik/vocalinux.git
-       tag: v0.12.0-beta
+       tag: v0.14.0-beta
        commit: <release-commit-sha>
    ```
 
-2. Keep build-time network access disabled. The manifest should only download
-   declared sources before the build starts.
+2. Keep build-time network access disabled; only declared sources.
 3. Re-run AppStream validation and `flatpak-builder` locally.
-4. Be ready to justify the sandbox permissions, especially D-Bus access for IBus
-   and status notifier support.
+4. Be ready to justify sandbox permissions (IBus and StatusNotifier D-Bus talk names).
 
 ## Manifest Details
 
-- Runtime: `org.gnome.Platform//50`
-- SDK: `org.gnome.Sdk//50`
-- Microphone access: `--socket=pulseaudio`
-- GPU access: `--device=dri`
-- Model downloads: `--share=network`
-- Text injection: `--socket=x11` with packaged `xdotool` and `xsel`
-- IBus D-Bus access: `--talk-name=org.freedesktop.IBus`
-- Tray/status notifier: `--talk-name=org.kde.StatusNotifierWatcher`
+- Runtime / SDK: `org.gnome.Platform//50`, `org.gnome.Sdk//50`
+- Mic: `--socket=pulseaudio` · GPU: `--device=dri` · models: `--share=network`
+- Injection: `--socket=x11` with packaged `xdotool` / `xsel`
+- IBus: `--talk-name=org.freedesktop.IBus`
+- Tray: `--talk-name=org.kde.StatusNotifierWatcher`
 
-Configuration and model data use the standard Flatpak XDG directories under
-`~/.var/app/com.vocalinux.Vocalinux/`.
+Config and models use Flatpak XDG dirs under `~/.var/app/com.vocalinux.Vocalinux/`.

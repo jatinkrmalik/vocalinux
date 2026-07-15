@@ -29,9 +29,7 @@ def get_autostart_file() -> Path:
 
 
 def get_exec_command() -> str:
-    # Inside a Flatpak sandbox the wrapped binary lives at /app/bin and is not on
-    # the host PATH, so the session manager cannot launch it directly. Use the
-    # host-side launcher, which is always on PATH.
+    # Host session manager cannot exec /app/bin; use the flatpak launcher instead.
     flatpak_id = os.environ.get("FLATPAK_ID")
     if flatpak_id:
         return f"flatpak run {flatpak_id} --start-minimized"
