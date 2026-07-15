@@ -196,7 +196,9 @@ def is_ibus_active_input_method() -> bool:
     ibus_via_env = ("ibus" in gtk_im) or ("ibus" in qt_im) or ("@im=ibus" in xmodifiers)
 
     # If another (non-IBus) input method is explicitly configured, respect it.
-    if not ibus_via_env and (gtk_im or qt_im or (xmodifiers and "@im=" in xmodifiers)):
+    if not ibus_via_env and (
+        gtk_im or qt_im or (xmodifiers not in ("", "@im=none") and "@im=" in xmodifiers)
+    ):
         logger.debug(
             "Another input method is explicitly configured "
             f"(GTK_IM_MODULE={gtk_im or 'not set'}, "

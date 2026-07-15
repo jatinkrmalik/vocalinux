@@ -159,7 +159,11 @@ class TestCheckDependencies(unittest.TestCase):
         with (
             patch.dict(
                 os.environ,
-                {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE"},
+                {
+                    "XDG_SESSION_TYPE": "wayland",
+                    "XDG_CURRENT_DESKTOP": "KDE",
+                    "XMODIFIERS": "@im=none",
+                },
                 clear=True,
             ),
             patch(
