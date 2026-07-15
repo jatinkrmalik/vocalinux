@@ -457,5 +457,81 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
         mock_glib.source_remove.assert_not_called()
 
 
+class TestTrayAutoPauseWiring(unittest.TestCase):
+    """TrayIndicator auto-pause config + pause/resume handlers.
+
+    Kept here (not in test_auto_pause_monitor) so tray_indicator is only
+    imported from this module's existing tray tests, avoiding early import
+    under a collection-time gi MagicMock that would pin a stale GLib on the
+    module and break SOURCE_REMOVE comparisons later in the suite.
+    """
+
+    def _make_tray_indicator(self):
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        with patch.object(TrayIndicator, "__init__", lambda self: None):
+            indicator = TrayIndicator.__new__(TrayIndicator)
+
+        indicator.speech_engine = MagicMock()
+        indicator.speech_engine.state = RecognitionState.IDLE
+        indicator.speech_engine.unload_model = MagicMock()
+        indicator.speech_engine.reinitialize_after_resume = MagicMock()
+        indicator.speech_engine.is_auto_paused = False
+        indicator.config_manager = MagicMock()
+        indicator._setup_keyboard_shortcuts = MagicMock()
+        indicator._input_monitor = None
+        indicator._settle_timer_id = None
+        indicator._monitor_timeout_id = None
+        return indicator
+
+    def test_get_auto_pause_config(self):
+        indicator = self._make_tray_indicator()
+        indicator.config_manager.get_bool.return_value = True
+        indicator.config_manager.get.return_value = ["steam"]
+        indicator.config_manager.get_float.return_value = 7.0
+
+        enabled, apps, interval = indicator._get_auto_pause_config()
+
+        assert enabled is True
+        assert apps == ["steam"]
+        assert interval == 7.0
+        indicator.config_manager.get_bool.assert_called_with("auto_pause", "enabled", False)
+        indicator.config_manager.get.assert_called_with("auto_pause", "apps", [])
+
+    def test_on_auto_pause_calls_unload(self):
+        indicator = self._make_tray_indicator()
+        indicator._on_auto_pause()
+        indicator.speech_engine.unload_model.assert_called_once()
+
+    def test_on_auto_resume_calls_reinit(self):
+        indicator = self._make_tray_indicator()
+        indicator._on_auto_resume()
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_system_resume_skips_reinit_when_auto_paused(self, mock_glib):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.is_auto_paused = True
+        indicator._start_input_device_monitor = MagicMock()
+
+        indicator._on_system_resume()
+
+        assert mock_glib.timeout_add_seconds.call_count == 1
+        assert (
+            mock_glib.timeout_add_seconds.call_args[0][1] == indicator._start_input_device_monitor
+        )
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_system_resume_reinits_when_not_auto_paused(self, mock_glib):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.is_auto_paused = False
+        indicator._reinit_speech_after_resume = MagicMock()
+        indicator._start_input_device_monitor = MagicMock()
+
+        indicator._on_system_resume()
+
+        assert mock_glib.timeout_add_seconds.call_count == 2
+
+
 if __name__ == "__main__":
     unittest.main()
