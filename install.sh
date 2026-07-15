@@ -3112,9 +3112,21 @@ if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
 fi
 
 # Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b' && command -v sg &>/dev/null; then
-    # Use sg to run with input group without requiring logout
-    exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
+if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
+    # Try to use sg to run with input group without requiring logout
+    if command -v sg &>/dev/null; then
+        exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
+    else
+        # sg not found, try to install util-linux-extra
+        if command -v apt-get &>/dev/null; then
+            sudo apt-get install -y util-linux-extra &>/dev/null
+            if command -v sg &>/dev/null; then
+                exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
+            fi
+        fi
+        # Fall back to direct execution
+        exec "$VENV_DIR/bin/vocalinux" "\$@"
+    fi
 else
     exec "$VENV_DIR/bin/vocalinux" "\$@"
 fi
@@ -3157,9 +3169,21 @@ if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
 fi
 
 # Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b' && command -v sg &>/dev/null; then
-    # Use sg to run with input group without requiring logout
-    exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
+if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
+    # Try to use sg to run with input group without requiring logout
+    if command -v sg &>/dev/null; then
+        exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
+    else
+        # sg not found, try to install util-linux-extra
+        if command -v apt-get &>/dev/null; then
+            sudo apt-get install -y util-linux-extra &>/dev/null
+            if command -v sg &>/dev/null; then
+                exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
+            fi
+        fi
+        # Fall back to direct execution
+        exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
+    fi
 else
     exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
 fi
