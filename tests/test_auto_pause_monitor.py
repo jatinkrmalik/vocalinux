@@ -223,6 +223,220 @@ class TestAutoPauseMonitor(unittest.TestCase):
         monitor.shutdown()
         self.assertFalse(monitor.active)
 
+    def test_start_is_idempotent(self):
+        monitor, _, _, _ = self._make_monitor()
+        monitor.start()
+        monitor.start()
+        self.assertTrue(monitor.active)
+        monitor.stop()
+
+    def test_resume_callback_exception_does_not_raise(self):
+        state = {"running": {"x"}}
+        resume_cb = MagicMock(side_effect=RuntimeError("resume boom"))
+        monitor = AutoPauseMonitor(
+            get_config=lambda: (True, ["x"], 5.0),
+            on_pause=MagicMock(),
+            on_resume=resume_cb,
+            process_snapshot=lambda: state["running"],
+            use_glib=False,
+        )
+        monitor.check_once()
+        state["running"] = set()
+        monitor.check_once()  # should not raise
+        resume_cb.assert_called_once()
+        self.assertFalse(monitor.paused)
+
+    def test_read_config_handles_get_config_failure(self):
+        monitor = AutoPauseMonitor(
+            get_config=MagicMock(side_effect=RuntimeError("config broken")),
+            use_glib=False,
+        )
+        matched = monitor.check_once()
+        self.assertFalse(matched)
+        self.assertFalse(monitor.paused)
+
+    def test_read_config_coerces_invalid_apps_and_interval(self):
+        monitor = AutoPauseMonitor(
+            get_config=lambda: (True, "not-a-list", "bad"),
+            process_snapshot=lambda: {"overwatch"},
+            use_glib=False,
+        )
+        # invalid apps → treated as empty → no match even if overwatch runs
+        self.assertFalse(monitor.check_once())
+
+        monitor2 = AutoPauseMonitor(
+            get_config=lambda: (True, ["overwatch"], 999),  # clamps to max 60
+            process_snapshot=lambda: {"overwatch"},
+            use_glib=False,
+        )
+        enabled, apps, interval = monitor2._read_config()
+        self.assertTrue(enabled)
+        self.assertEqual(list(apps), ["overwatch"])
+        self.assertEqual(interval, 60.0)
+
+        monitor3 = AutoPauseMonitor(
+            get_config=lambda: (True, ["x"], 0),  # clamps to min 1
+            use_glib=False,
+        )
+        _, _, interval3 = monitor3._read_config()
+        self.assertEqual(interval3, 1.0)
+
+    @patch("vocalinux.auto_pause_monitor.GLib", create=True)
+    def test_start_with_glib_schedules_idle_then_timeout(self, _unused):
+        """Drive real GLib scheduling helpers via mocked gi.repository.GLib."""
+        mock_glib = MagicMock()
+        mock_glib.idle_add.return_value = 11
+        mock_glib.timeout_add_seconds.return_value = 22
+
+        with patch.dict(
+            "sys.modules",
+            {"gi": MagicMock(), "gi.repository": MagicMock(GLib=mock_glib)},
+        ):
+            # Force re-import path used inside methods
+            import vocalinux.auto_pause_monitor as apm
+
+            monitor = apm.AutoPauseMonitor(
+                get_config=lambda: (False, [], 5.0),
+                process_snapshot=lambda: set(),
+                use_glib=True,
+            )
+            monitor.start()
+            self.assertTrue(monitor.active)
+            mock_glib.idle_add.assert_called()
+            # Simulate the idle callback (immediate first poll)
+            result = monitor._glib_poll()
+            self.assertFalse(result)  # always SOURCE_REMOVE style
+            mock_glib.timeout_add_seconds.assert_called()
+            monitor.stop()
+            mock_glib.source_remove.assert_called()
+
+    def test_glib_poll_when_stopped_returns_false(self):
+        monitor = AutoPauseMonitor(
+            get_config=lambda: (False, [], 5.0),
+            use_glib=False,
+        )
+        monitor._running = False
+        self.assertFalse(monitor._glib_poll())
+
+    def test_glib_poll_swallows_check_once_errors(self):
+        monitor = AutoPauseMonitor(
+            get_config=lambda: (True, ["x"], 5.0),
+            process_snapshot=MagicMock(side_effect=RuntimeError("psutil down")),
+            use_glib=False,
+        )
+        monitor._running = True
+        # use_glib False so reschedule is a no-op after poll
+        self.assertFalse(monitor._glib_poll())
+
+    def test_cancel_timeout_noop_when_none(self):
+        monitor = AutoPauseMonitor(
+            get_config=lambda: (False, [], 5.0),
+            use_glib=False,
+        )
+        monitor._timeout_id = None
+        monitor._cancel_timeout()  # no raise
+        self.assertIsNone(monitor._timeout_id)
+
+    def test_cancel_timeout_handles_source_remove_failure(self):
+        mock_glib = MagicMock()
+        mock_glib.source_remove.side_effect = RuntimeError("bad id")
+        with patch.dict(
+            "sys.modules",
+            {"gi": MagicMock(), "gi.repository": MagicMock(GLib=mock_glib)},
+        ):
+            monitor = AutoPauseMonitor(
+                get_config=lambda: (False, [], 5.0),
+                use_glib=False,
+            )
+            monitor._timeout_id = 99
+            monitor._cancel_timeout()
+            self.assertIsNone(monitor._timeout_id)
+
+    def test_schedule_skipped_when_not_running(self):
+        monitor = AutoPauseMonitor(
+            get_config=lambda: (False, [], 5.0),
+            use_glib=True,
+        )
+        monitor._running = False
+        monitor._schedule_next_poll(immediate=True)
+        self.assertIsNone(monitor._timeout_id)
+
+    def test_schedule_handles_glib_import_failure(self):
+        monitor = AutoPauseMonitor(
+            get_config=lambda: (False, [], 5.0),
+            use_glib=True,
+        )
+        monitor._running = True
+        real_import = __import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "gi" or name.startswith("gi."):
+                raise ImportError("no gi")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            monitor._schedule_next_poll(immediate=False)
+        self.assertIsNone(monitor._timeout_id)
+
+
+class TestCollectRunningProcessNames(unittest.TestCase):
+    """collect_running_process_names uses real helper with mocked psutil."""
+
+    def _psutil_mock(self):
+        mock_psutil = MagicMock()
+        mock_psutil.NoSuchProcess = type("NoSuchProcess", (Exception,), {})
+        mock_psutil.AccessDenied = type("AccessDenied", (Exception,), {})
+        mock_psutil.ZombieProcess = type("ZombieProcess", (Exception,), {})
+        return mock_psutil
+
+    def test_collects_name_and_exe_basename(self):
+        import vocalinux.auto_pause_monitor as apm
+
+        mock_psutil = self._psutil_mock()
+        proc_ok = MagicMock()
+        proc_ok.info = {"name": "steam", "exe": "/usr/bin/steam"}
+        proc_no_name = MagicMock()
+        proc_no_name.info = {"name": None, "exe": "/opt/game/Game.exe"}
+
+        class Denied:
+            @property
+            def info(self):
+                raise mock_psutil.AccessDenied()
+
+        mock_psutil.process_iter.return_value = [proc_ok, Denied(), proc_no_name]
+
+        with patch.dict("sys.modules", {"psutil": mock_psutil}):
+            names = apm.collect_running_process_names()
+
+        self.assertIn("steam", names)
+        self.assertIn("Game.exe", names)
+
+    def test_collect_skips_empty_entries(self):
+        import vocalinux.auto_pause_monitor as apm
+
+        mock_psutil = self._psutil_mock()
+        proc = MagicMock()
+        proc.info = {"name": "", "exe": None}
+        mock_psutil.process_iter.return_value = [proc]
+        with patch.dict("sys.modules", {"psutil": mock_psutil}):
+            names = apm.collect_running_process_names()
+        self.assertEqual(names, set())
+
+    def test_collect_swallows_basename_errors(self):
+        import vocalinux.auto_pause_monitor as apm
+
+        mock_psutil = self._psutil_mock()
+        proc = MagicMock()
+        # os.path.basename on non-path-like may raise; helper must continue
+        bad_exe = MagicMock()
+        bad_exe.__fspath__ = MagicMock(side_effect=TypeError("nope"))
+        proc.info = {"name": "ok", "exe": bad_exe}
+        mock_psutil.process_iter.return_value = [proc]
+        with patch.dict("sys.modules", {"psutil": mock_psutil}):
+            with patch("os.path.basename", side_effect=TypeError("bad")):
+                names = apm.collect_running_process_names()
+        self.assertIn("ok", names)
+
 
 class TestUnloadModelAndAutoPauseBlock(unittest.TestCase):
     """SpeechRecognitionManager.unload_model and start_recognition guard."""
@@ -281,6 +495,24 @@ class TestUnloadModelAndAutoPauseBlock(unittest.TestCase):
 
         session.close.assert_called_once()
         self.assertIsNone(mgr._http_session)
+
+    def test_unload_http_session_close_error_is_swallowed(self):
+        mgr = self._make_manager()
+        session = MagicMock()
+        session.close.side_effect = RuntimeError("already closed")
+        mgr._http_session = session
+
+        mgr.unload_model()
+
+        self.assertIsNone(mgr._http_session)
+        self.assertTrue(mgr.is_auto_paused)
+
+    def test_unload_continues_if_gc_raises(self):
+        mgr = self._make_manager()
+        with patch("gc.collect", side_effect=RuntimeError("gc failed")):
+            mgr.unload_model()
+        self.assertTrue(mgr.is_auto_paused)
+        self.assertIsNone(mgr.model)
 
     def test_start_recognition_blocked_when_auto_paused(self):
         mgr = self._make_manager()

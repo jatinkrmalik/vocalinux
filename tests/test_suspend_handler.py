@@ -532,6 +532,64 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
 
         assert mock_glib.timeout_add_seconds.call_count == 2
 
+    def test_get_auto_pause_config_coerces_non_list_apps(self):
+        indicator = self._make_tray_indicator()
+        indicator.config_manager.get_bool.return_value = True
+        indicator.config_manager.get.return_value = "steam"  # not a list
+        indicator.config_manager.get_float.return_value = 5.0
+
+        enabled, apps, interval = indicator._get_auto_pause_config()
+
+        assert enabled is True
+        assert apps == []
+        assert interval == 5.0
+
+    def test_get_auto_pause_config_treats_none_apps_as_empty(self):
+        indicator = self._make_tray_indicator()
+        indicator.config_manager.get_bool.return_value = False
+        indicator.config_manager.get.return_value = None
+        indicator.config_manager.get_float.return_value = 5.0
+
+        enabled, apps, _interval = indicator._get_auto_pause_config()
+
+        assert enabled is False
+        assert apps == []
+
+    def test_on_auto_pause_fallback_stops_when_no_unload(self):
+        indicator = self._make_tray_indicator()
+        # Non-callable attribute so getattr finds it but callable() is False
+        indicator.speech_engine.unload_model = None
+        indicator.speech_engine.state = RecognitionState.LISTENING
+        indicator.speech_engine.stop_recognition = MagicMock()
+
+        indicator._on_auto_pause()
+
+        indicator.speech_engine.stop_recognition.assert_called_once()
+
+    def test_on_auto_pause_fallback_idle_is_noop(self):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.unload_model = None
+        indicator.speech_engine.state = RecognitionState.IDLE
+        indicator.speech_engine.stop_recognition = MagicMock()
+
+        indicator._on_auto_pause()
+
+        indicator.speech_engine.stop_recognition.assert_not_called()
+
+    def test_on_auto_resume_swallows_reinit_errors(self):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.reinitialize_after_resume.side_effect = RuntimeError("boom")
+
+        indicator._on_auto_resume()  # must not raise
+
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+
+    def test_on_auto_resume_without_reinit_method(self):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.reinitialize_after_resume = None
+
+        indicator._on_auto_resume()  # no-op path
+
 
 if __name__ == "__main__":
     unittest.main()
