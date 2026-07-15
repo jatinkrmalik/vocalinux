@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   Activity,
+  Camera,
   ChevronDown,
   ChevronRight,
   Code2,
@@ -39,6 +40,7 @@ const navCategories = [
     items: [
       { href: "/", label: "Home", icon: Home },
       { href: "/install/", label: "Install Guides", icon: BookOpen },
+      { href: "/screenshots/", label: "Screenshots", icon: Camera },
       { href: "/changelog/", label: "Changelog", icon: Zap },
     ],
   },
@@ -211,6 +213,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
       items: [
         { href: "/", label: "Home", icon: Home },
         { href: "/install/", label: "Install", icon: BookOpen },
+        { href: "/screenshots/", label: "Screenshots", icon: Camera },
         { href: "/changelog/", label: "Changelog", icon: Zap },
       ],
     },

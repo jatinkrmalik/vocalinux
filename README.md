@@ -83,15 +83,17 @@ No internet required. No data leaves your machine. Just speak and type.
 
 ## 📸 Screenshots
 
-Here are some screenshots showcasing Vocalinux in action:
+Vocalinux in action, plus the settings tabs from v0.14.0-beta. Full gallery on the [website screenshots page](https://vocalinux.com/screenshots/).
+
+### Product
 
 <table>
   <tr>
-    <td align="center">
+    <td align="center" width="50%">
       <img src="resources/screenshots/00-transcription.png" alt="Transcription in Action" width="350"><br>
       <em>Real-time voice-to-text transcription</em>
     </td>
-    <td align="center">
+    <td align="center" width="50%">
       <img src="resources/screenshots/02-system-tray.png" alt="System Tray" width="350"><br>
       <em>System tray with listening indicator</em>
     </td>
@@ -99,7 +101,7 @@ Here are some screenshots showcasing Vocalinux in action:
   <tr>
     <td align="center">
       <img src="resources/screenshots/05-about-view.png" alt="About View" width="350"><br>
-      <em>About view with version info</em>
+      <em>About dialog with version info</em>
     </td>
     <td align="center">
       <img src="resources/screenshots/03-log-viewer.png" alt="Log Viewer" width="350"><br>
@@ -109,7 +111,40 @@ Here are some screenshots showcasing Vocalinux in action:
   <tr>
     <td colspan="2" align="center">
       <img src="resources/screenshots/04-features-overview.png" alt="Features Overview" width="500"><br>
-      <em>Overview of key features and configuration options with annotations</em>
+      <em>Annotated overview of key features and configuration options</em>
+    </td>
+  </tr>
+</table>
+
+### Settings
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="resources/screenshots/settings-speech-engine.png" alt="Speech Engine settings" width="260"><br>
+      <em>Speech Engine</em>
+    </td>
+    <td align="center" width="33%">
+      <img src="resources/screenshots/settings-recognition.png" alt="Recognition settings" width="260"><br>
+      <em>Recognition</em>
+    </td>
+    <td align="center" width="33%">
+      <img src="resources/screenshots/settings-audio.png" alt="Audio settings" width="260"><br>
+      <em>Audio</em>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="resources/screenshots/settings-shortcuts.png" alt="Shortcuts and hotkeys" width="260"><br>
+      <em>Shortcuts &amp; Hotkeys</em>
+    </td>
+    <td align="center">
+      <img src="resources/screenshots/settings-general.png" alt="General settings" width="260"><br>
+      <em>General</em>
+    </td>
+    <td align="center">
+      <img src="resources/screenshots/settings-advanced.png" alt="Advanced tuning and settings" width="260"><br>
+      <em>Advanced</em>
     </td>
   </tr>
 </table>
