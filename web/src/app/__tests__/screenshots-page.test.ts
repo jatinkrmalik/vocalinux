@@ -17,7 +17,6 @@ describe("Screenshots page and assets", () => {
     "00-transcription.png",
     "02-system-tray.png",
     "03-log-viewer.png",
-    "04-features-overview.png",
     "05-about-view.png",
     "settings-speech-engine.png",
     "settings-recognition.png",

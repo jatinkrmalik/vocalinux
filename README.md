@@ -108,12 +108,6 @@ Vocalinux in action, plus the settings tabs from v0.14.0-beta. Full gallery on t
       <em>Log viewer for debugging</em>
     </td>
   </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="resources/screenshots/04-features-overview.png" alt="Features Overview" width="500"><br>
-      <em>Annotated overview of key features and configuration options</em>
-    </td>
-  </tr>
 </table>
 
 ### Settings

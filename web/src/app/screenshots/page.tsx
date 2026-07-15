@@ -53,14 +53,6 @@ const productShots: Screenshot[] = [
     width: 1904,
     height: 1578,
   },
-  {
-    src: "/screenshots/04-features-overview.png",
-    alt: "Annotated overview of Vocalinux features",
-    title: "Features overview",
-    description: "Annotated walkthrough of configuration and core capabilities.",
-    width: 1800,
-    height: 2086,
-  },
 ];
 
 const settingsShots: Screenshot[] = [
