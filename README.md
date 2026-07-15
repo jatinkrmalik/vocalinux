@@ -158,6 +158,14 @@ curl -fsSL raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /
 ```
 Lightweight option (~40MB), works on systems with 4GB RAM.
 
+### Arch Linux (AUR)
+
+```bash
+yay -S vocalinux
+```
+
+See [docs/AUR.md](docs/AUR.md).
+
 ### Alternative: Install from Source
 
 ```bash

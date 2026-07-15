@@ -98,6 +98,11 @@ jobs:
             desktop integration, and model setup, use the Quick Install command above.
             See docs/INSTALL.md for distro-specific PyPI prerequisites.
 
+            ### Arch Linux (AUR)
+            ```bash
+            yay -S vocalinux
+            ```
+
             ---
             See [CHANGELOG](https://github.com/jatinkrmalik/vocalinux/releases) for detailed changes.
 
@@ -139,6 +144,49 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           twine upload dist/* --skip-existing
+
+  publish-aur:
+    name: Publish to AUR
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    # Secrets: AUR_SSH_PRIVATE_KEY, AUR_USERNAME, AUR_EMAIL — see docs/AUR.md
+    steps:
+      - name: Check for AUR credentials
+        id: aur
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "AUR_SSH_PRIVATE_KEY not set; skipping (docs/AUR.md)"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.aur.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Bump PKGBUILD version
+        if: steps.aur.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PKGBUILD=packaging/aur/vocalinux/PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=${TAG//-/}/; s/^_tag=.*/_tag=${TAG}/; s/^pkgrel=.*/pkgrel=1/" "$PKGBUILD"
+          grep -E '^(pkgver|_tag|pkgrel)=' "$PKGBUILD"
+
+      - name: Publish AUR package
+        if: steps.aur.outputs.configured == 'true'
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: vocalinux
+          pkgbuild: packaging/aur/vocalinux/PKGBUILD
+          updpkgsums: 'true'
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: 'Release ${{ github.ref_name }}'
 
   deploy-website:
     name: Deploy Website

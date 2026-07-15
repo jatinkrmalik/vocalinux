@@ -1,0 +1,68 @@
+# Maintainer: Jatin K Malik <jatinkrmalik@gmail.com>
+# Updated by .github/workflows/release.yml on v* tags. Setup: docs/AUR.md
+
+pkgname=vocalinux
+# AUR pkgver cannot contain hyphens (v0.14.0-beta -> 0.14.0beta).
+pkgver=0.14.0beta
+_tag=0.14.0-beta
+pkgrel=1
+pkgdesc="Free, offline voice dictation for Linux"
+arch=('any')
+url="https://github.com/jatinkrmalik/vocalinux"
+license=('GPL-3.0-only')
+depends=(
+  'python>=3.9'
+  'python-gobject'
+  'gtk3'
+  'libappindicator-gtk3'
+  'ibus'
+  'gobject-introspection'
+  'python-cairo'
+  'python-pynput'
+  'python-pywhispercpp-cpu'
+  'python-pyaudio'
+  'portaudio'
+  'python-numpy'
+  'python-requests'
+  'python-tqdm'
+  'python-psutil'
+  'python-lxml'
+  'python-pydub'
+  'python-evdev'
+  'python-xlib'
+  'xclip'
+  'wl-clipboard'
+  'wtype'
+  'hicolor-icon-theme'
+)
+makedepends=(
+  'python-build'
+  'python-installer'
+  'python-wheel'
+  'python-setuptools'
+)
+optdepends=(
+  'python-pywhispercpp-cuda: NVIDIA GPU (replace python-pywhispercpp-cpu)'
+  'python-onnxruntime: Silero VAD'
+  'xdotool: X11 injection fallback'
+)
+conflicts=('vocalinux-git')
+source=("${pkgname}-${_tag}.tar.gz::https://github.com/jatinkrmalik/vocalinux/archive/refs/tags/v${_tag}.tar.gz")
+sha256sums=('030dfe1ddbc51672c7bfb0f471c256a998fe871bd190028dd882e4507d00af58')
+
+build() {
+  cd "${pkgname}-${_tag}"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "${pkgname}-${_tag}"
+  python -m installer --destdir="${pkgdir}" dist/*.whl
+
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 vocalinux.desktop "${pkgdir}/usr/share/applications/vocalinux.desktop"
+
+  for icon in resources/icons/scalable/*.svg; do
+    install -Dm644 "$icon" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/$(basename "$icon")"
+  done
+}
