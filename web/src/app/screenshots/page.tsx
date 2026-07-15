@@ -26,8 +26,8 @@ const productShots: Screenshot[] = [
     alt: "Vocalinux real-time transcription in action",
     title: "Transcription in action",
     description: "Dictate into any Linux app with real-time voice-to-text.",
-    width: 1400,
-    height: 1101,
+    width: 2565,
+    height: 2018,
   },
   {
     src: "/screenshots/02-system-tray.png",
