@@ -986,6 +986,7 @@ class SettingsDialog(Gtk.Dialog):
         config_manager: "ConfigManager",
         speech_engine: "SpeechRecognitionManager",
         shortcut_update_callback: callable = None,
+        overlay_enabled_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.set_decorated(True)  # Force window decorations (close button) on all WMs
@@ -1010,6 +1011,7 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
+        self.overlay_enabled_callback = overlay_enabled_callback
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -1260,6 +1262,17 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(start_minimized_row)
 
+        self.show_overlay_switch = Gtk.Switch()
+        self.show_overlay_switch.set_tooltip_text(
+            "Show a floating glowing indicator on screen while the microphone is active"
+        )
+        show_overlay_row = PreferenceRow(
+            title="Show Dictation Overlay",
+            subtitle="Floating on-screen glow when listening or processing",
+            widget=self.show_overlay_switch,
+        )
+        group.add_row(show_overlay_row)
+
         self.copy_to_clipboard_switch = Gtk.Switch()
         self.copy_to_clipboard_switch.set_tooltip_text(
             "Copy recognized text to clipboard after each transcription. "
@@ -1276,6 +1289,7 @@ class SettingsDialog(Gtk.Dialog):
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
+        self.show_overlay_switch.connect("state-set", self._on_show_overlay_toggled)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
 
     def _on_autostart_toggled(self, widget, state):
@@ -1306,6 +1320,22 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("ui", "start_minimized", enabled)
         self.config_manager.save_settings()
         logger.info(f"Start minimized {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_show_overlay_toggled(self, widget, state):
+        """Handle toggle of the floating dictation overlay switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        self.config_manager.set_overlay_enabled(enabled)
+        self.config_manager.save_settings()
+        if self.overlay_enabled_callback is not None:
+            try:
+                self.overlay_enabled_callback(enabled)
+            except Exception as e:
+                logger.warning(f"Overlay enabled callback failed: {e}")
+        logger.info(f"Dictation overlay {'enabled' if enabled else 'disabled'}")
         return False
 
     def _on_copy_to_clipboard_toggled(self, widget, state):
@@ -2486,10 +2516,12 @@ class SettingsDialog(Gtk.Dialog):
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
+        show_overlay = ui_settings.get("show_overlay", True)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
+        self.show_overlay_switch.set_active(show_overlay)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
 

@@ -105,6 +105,12 @@ class TrayIndicator:
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
 
+        # Floating on-screen indicator (glow while listening); gated by config.
+        # Lazy import keeps tray import light for tests that mock gi.
+        from .dictation_overlay import DictationOverlay
+
+        self.overlay = DictationOverlay(enabled=self.config_manager.is_overlay_enabled())
+
         # Initialize the icon files and validate resources
         self._init_icons()
         self._validate_resources()
@@ -432,7 +438,27 @@ class TrayIndicator:
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
+        # Keep floating overlay in sync with tray (same RecognitionState path).
+        self._update_overlay(state)
+
         return False  # Remove idle callback
+
+    def _update_overlay(self, state: RecognitionState):
+        """Show/hide the floating dictation overlay for the given state."""
+        if getattr(self, "overlay", None) is None:
+            return
+        # Re-read config so Settings toggles apply without restart.
+        self.overlay.set_enabled(self.config_manager.is_overlay_enabled())
+        self.overlay.on_recognition_state(state)
+
+    def set_overlay_enabled(self, enabled: bool) -> None:
+        """Live-update overlay enabled state (called from Settings)."""
+        self.config_manager.set_overlay_enabled(enabled)
+        if getattr(self, "overlay", None) is None:
+            return
+        self.overlay.set_enabled(enabled)
+        # Re-apply current recognition state so hide/show is immediate.
+        self.overlay.on_recognition_state(self.speech_engine.state)
 
     def _set_menu_item_enabled(self, label: str, enabled: bool):
         """
@@ -470,6 +496,7 @@ class TrayIndicator:
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
             shortcut_update_callback=self.update_shortcut,
+            overlay_enabled_callback=self.set_overlay_enabled,
         )
 
         # Connect to the response signal
@@ -635,6 +662,10 @@ class TrayIndicator:
 
         # Stop the keyboard shortcut manager
         self.shortcut_manager.stop()
+
+        if getattr(self, "overlay", None) is not None:
+            self.overlay.destroy()
+            self.overlay = None
 
         # Stop the text injector (restores previous IBus engine)
         if hasattr(self, "text_injector") and self.text_injector is not None:
