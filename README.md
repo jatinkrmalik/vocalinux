@@ -141,6 +141,16 @@ Vocalinux in action, plus the settings tabs from v0.14.0-beta. Full gallery on t
       <em>Advanced</em>
     </td>
   </tr>
+  <tr>
+    <td align="center">
+      <img src="resources/screenshots/06-dictation-overlay-listening.png" alt="Dictation overlay listening" width="96"><br>
+      <em>Floating overlay while listening (green)</em>
+    </td>
+    <td align="center">
+      <img src="resources/screenshots/07-dictation-overlay-processing.png" alt="Dictation overlay processing" width="96"><br>
+      <em>Floating overlay while processing (amber)</em>
+    </td>
+  </tr>
 </table>
 
 ## 🚀 Quick Install
