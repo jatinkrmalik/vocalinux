@@ -161,15 +161,10 @@ Lightweight option (~40MB), works on systems with 4GB RAM.
 ### Arch Linux (AUR)
 
 ```bash
-# Latest release (beta)
 yay -S vocalinux
-# or: paru -S vocalinux
-
-# Bleeding-edge (tracks main)
-yay -S vocalinux-git
 ```
 
-See [docs/AUR.md](docs/AUR.md) for details. `vocalinux` and `vocalinux-git` conflict — install only one.
+See [docs/AUR.md](docs/AUR.md).
 
 ### Alternative: Install from Source
 

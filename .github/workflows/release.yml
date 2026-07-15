@@ -101,9 +101,7 @@ jobs:
             ### Arch Linux (AUR)
             ```bash
             yay -S vocalinux
-            # or bleeding-edge: yay -S vocalinux-git
             ```
-            See docs/AUR.md for details.
 
             ---
             See [CHANGELOG](https://github.com/jatinkrmalik/vocalinux/releases) for detailed changes.
@@ -151,8 +149,7 @@ jobs:
     name: Publish to AUR
     needs: build-and-release
     runs-on: ubuntu-latest
-    # Requires secrets AUR_SSH_PRIVATE_KEY, AUR_USERNAME, AUR_EMAIL (see docs/AUR.md).
-    # Skips cleanly when AUR_SSH_PRIVATE_KEY is not configured.
+    # Secrets: AUR_SSH_PRIVATE_KEY, AUR_USERNAME, AUR_EMAIL — see docs/AUR.md
     steps:
       - name: Check for AUR credentials
         id: aur
@@ -161,7 +158,7 @@ jobs:
         run: |
           if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "AUR_SSH_PRIVATE_KEY not set; skipping AUR publish (see docs/AUR.md)"
+            echo "AUR_SSH_PRIVATE_KEY not set; skipping (docs/AUR.md)"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
@@ -170,24 +167,13 @@ jobs:
         if: steps.aur.outputs.configured == 'true'
         uses: actions/checkout@v4
 
-      - name: Update PKGBUILD for this tag
+      - name: Bump PKGBUILD version
         if: steps.aur.outputs.configured == 'true'
         run: |
           set -euo pipefail
-          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          # AUR pkgver cannot contain hyphens
-          PKGVER="${TAG_VERSION//-/}"
-          PKGBUILD="packaging/aur/vocalinux/PKGBUILD"
-
-          echo "Tag version: $TAG_VERSION"
-          echo "AUR pkgver:  $PKGVER"
-
-          sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" "$PKGBUILD"
-          sed -i "s/^_tag=.*/_tag=${TAG_VERSION}/" "$PKGBUILD"
-          # New upstream version always starts at pkgrel 1
-          sed -i "s/^pkgrel=.*/pkgrel=1/" "$PKGBUILD"
-
-          echo "Updated PKGBUILD:"
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PKGBUILD=packaging/aur/vocalinux/PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=${TAG//-/}/; s/^_tag=.*/_tag=${TAG}/; s/^pkgrel=.*/pkgrel=1/" "$PKGBUILD"
           grep -E '^(pkgver|_tag|pkgrel)=' "$PKGBUILD"
 
       - name: Publish AUR package
@@ -195,13 +181,12 @@ jobs:
         uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
         with:
           pkgname: vocalinux
-          asset_dir: packaging/aur/vocalinux
+          pkgbuild: packaging/aur/vocalinux/PKGBUILD
           updpkgsums: 'true'
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: 'Release ${{ github.ref_name }}'
-          ssh_keyscan_types: rsa,ecdsa,ed25519
 
   deploy-website:
     name: Deploy Website

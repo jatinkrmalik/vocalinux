@@ -67,16 +67,11 @@ vocalinux
 
 **Arch Linux:**
 
-Preferred: install from the AUR (handles system deps):
-
 ```bash
 yay -S vocalinux
-# bleeding-edge: yay -S vocalinux-git
 ```
 
-See [AUR.md](AUR.md) for package details.
-
-PyPI alternative:
+See [AUR.md](AUR.md). Or via PyPI:
 
 ```bash
 sudo pacman -S --needed \

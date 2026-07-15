@@ -1,16 +1,12 @@
 # Maintainer: Jatin K Malik <jatinkrmalik@gmail.com>
-#
-# Release package for Arch Linux (AUR). Updated automatically by
-# .github/workflows/release.yml when a version tag is pushed.
-# See docs/AUR.md for one-time maintainer setup.
+# Updated by .github/workflows/release.yml on v* tags. Setup: docs/AUR.md
 
 pkgname=vocalinux
-# AUR pkgver cannot contain hyphens; strip them from the Git tag (v0.14.0-beta -> 0.14.0beta).
+# AUR pkgver cannot contain hyphens (v0.14.0-beta -> 0.14.0beta).
 pkgver=0.14.0beta
-# Full GitHub release tag without the leading "v" (used for the source URL and extract dir).
 _tag=0.14.0-beta
 pkgrel=1
-pkgdesc="Free, offline voice dictation for Linux — speak and type anywhere"
+pkgdesc="Free, offline voice dictation for Linux"
 arch=('any')
 url="https://github.com/jatinkrmalik/vocalinux"
 license=('GPL-3.0-only')
@@ -40,30 +36,19 @@ depends=(
   'hicolor-icon-theme'
 )
 makedepends=(
-  'python-setuptools'
-  'python-wheel'
   'python-build'
   'python-installer'
+  'python-wheel'
+  'python-setuptools'
 )
 optdepends=(
-  'python-pywhispercpp-cuda: NVIDIA GPU acceleration (replace python-pywhispercpp-cpu)'
-  'python-pywhispercpp-rocm: AMD GPU acceleration (replace python-pywhispercpp-cpu)'
-  'openai-whisper: OpenAI Whisper speech recognition engine'
-  'python-onnxruntime: neural voice activity detection (Silero VAD)'
-  'xdotool: X11 text injection fallback'
-  'ydotool: alternative Wayland text injection'
-  'vulkan-tools: GPU diagnostics for whisper.cpp Vulkan'
+  'python-pywhispercpp-cuda: NVIDIA GPU (replace python-pywhispercpp-cpu)'
+  'python-onnxruntime: Silero VAD'
+  'xdotool: X11 injection fallback'
 )
 conflicts=('vocalinux-git')
-source=(
-  "${pkgname}-${_tag}.tar.gz::https://github.com/jatinkrmalik/vocalinux/archive/refs/tags/v${_tag}.tar.gz"
-  "vocalinux.service"
-)
-sha256sums=(
-  '030dfe1ddbc51672c7bfb0f471c256a998fe871bd190028dd882e4507d00af58'
-  '39879abfc03b057e202d014695c52339f02627a3fc6f508958673c4964b0b0a8'
-)
-install="${pkgname}.install"
+source=("${pkgname}-${_tag}.tar.gz::https://github.com/jatinkrmalik/vocalinux/archive/refs/tags/v${_tag}.tar.gz")
+sha256sums=('030dfe1ddbc51672c7bfb0f471c256a998fe871bd190028dd882e4507d00af58')
 
 build() {
   cd "${pkgname}-${_tag}"
@@ -72,21 +57,12 @@ build() {
 
 package() {
   cd "${pkgname}-${_tag}"
-
   python -m installer --destdir="${pkgdir}" dist/*.whl
 
   install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
   install -Dm644 vocalinux.desktop "${pkgdir}/usr/share/applications/vocalinux.desktop"
-  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
-  install -Dm644 "${srcdir}/vocalinux.service" "${pkgdir}/usr/lib/systemd/user/vocalinux.service"
 
-  for icon in vocalinux.svg vocalinux-microphone.svg \
-              vocalinux-microphone-off.svg vocalinux-microphone-process.svg; do
-    if [[ -f "resources/icons/scalable/${icon}" ]]; then
-      install -Dm644 "resources/icons/scalable/${icon}" \
-        "${pkgdir}/usr/share/icons/hicolor/scalable/apps/${icon}"
-    fi
+  for icon in resources/icons/scalable/*.svg; do
+    install -Dm644 "$icon" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/$(basename "$icon")"
   done
-
-  install -d "${pkgdir}/usr/share/vocalinux/models"
 }

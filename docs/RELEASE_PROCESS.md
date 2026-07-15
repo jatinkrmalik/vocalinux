@@ -43,17 +43,12 @@ Use this checklist for every release:
 
 > Note: CI workflows also sync website version metadata from `src/vocalinux/version.py`, but source files should still be updated in-repo during release prep for review clarity.
 
-### Packaging
-- [ ] `packaging/aur/vocalinux/PKGBUILD` — optional manual bump of `pkgver`/`_tag` (CI rewrites these on tag push)
-- [ ] Confirm AUR secrets are set if you want auto-publish: `AUR_SSH_PRIVATE_KEY`, `AUR_USERNAME`, `AUR_EMAIL` (see [docs/AUR.md](AUR.md))
-
 ### Git Operations
 - [ ] Create release branch: `git checkout -b release/vX.Y.Z-PHASE`
 - [ ] Commit all version changes
 - [ ] Push branch and create PR
 - [ ] After PR merge, create tag: `git tag -a vX.Y.Z-PHASE -m "Release X.Y.Z-PHASE"`
 - [ ] Push tag: `git push origin vX.Y.Z-PHASE`
-- [ ] Verify AUR job in the Release workflow (skipped until secrets are configured)
 ```
 
 ## Detailed Release Steps

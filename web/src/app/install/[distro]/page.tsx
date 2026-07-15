@@ -95,25 +95,26 @@ const distroConfig: Record<DistroSlug, DistroConfig> = {
     name: "Arch Linux",
     title: "Install Voice Dictation on Arch Linux",
     description:
-      "Arch Linux voice dictation guide for offline speech recognition. Install Vocalinux via the AUR on Arch, Manjaro, and EndeavourOS.",
+      "Arch Linux voice dictation guide for offline speech recognition. Install Vocalinux on Arch, Manjaro, and EndeavourOS with distro-aware setup notes.",
     intro:
-      "Arch users usually care about control and performance. The preferred path is the AUR package; the universal installer remains available as a fallback.",
+      "Arch users usually care about control and performance. This guide keeps setup lean while preserving compatibility across rolling-release desktop environments.",
     prerequisites: [
-      "Arch Linux / Manjaro / EndeavourOS",
-      "An AUR helper (yay or paru)",
+       "Arch Linux / Manjaro / EndeavourOS",
+       "Python 3.9+",
       "Working microphone",
+      "curl installed (sudo pacman -Sy --needed curl)",
     ],
     testedOn: [
       "Arch Linux (GNOME, Wayland)",
       "Arch Linux (KDE Plasma)",
       "Manjaro (X11 and Wayland sessions)",
     ],
-    installCommand: "yay -S vocalinux",
+    installCommand:
+      "curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive",
     setupNotes: [
-      "Use yay -S vocalinux for the latest release, or yay -S vocalinux-git for bleeding-edge main.",
       "Prefer whisper.cpp for lower dependency footprint and faster cold start.",
-      "On Wayland, you may need: sudo usermod -aG input $USER (then log out/in) for keyboard shortcuts.",
-      "Fallback without AUR: curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive",
+      "On custom compositor setups, verify text injection behavior in both terminal and browser contexts.",
+      "If you tweak keybinds heavily, set a non-conflicting activation shortcut in Vocalinux settings.",
     ],
     postInstallChecks: [
       "Run vocalinux and test dictation in multiple apps (terminal, browser, editor).",
@@ -141,8 +142,6 @@ const distroKeywords: Record<DistroSlug, string[]> = {
     "speech to text arch linux",
     "manjaro dictation",
     "offline dictation arch",
-    "vocalinux aur",
-    "yay vocalinux",
   ],
 };
 
