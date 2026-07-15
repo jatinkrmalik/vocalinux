@@ -68,6 +68,12 @@ vocalinux
 **Arch Linux:**
 
 ```bash
+yay -S vocalinux
+```
+
+See [AUR.md](AUR.md). Or via PyPI:
+
+```bash
 sudo pacman -S --needed \
     python python-virtualenv python-gobject gtk3 libappindicator-gtk3 \
     gobject-introspection python-cairo portaudio pkg-config xdotool wtype wl-clipboard xclip xsel
