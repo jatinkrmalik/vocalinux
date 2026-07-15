@@ -8,7 +8,6 @@ input devices, which works on both X11 and Wayland (with proper permissions).
 import errno
 import logging
 import os
-import re
 import select
 import threading
 import time
@@ -27,6 +26,7 @@ except ImportError:
     EVDEV_AVAILABLE = False
 
 from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend, parse_shortcut
+from .layout_key_map import get_active_char_to_evdev_map, resolve_token_to_evdev_code
 
 logger = logging.getLogger(__name__)
 
@@ -91,19 +91,38 @@ _NAMED_EVDEV_KEYS = {
 }
 
 
-def evdev_code_for_key(token: str) -> Optional[int]:
-    """Resolve a canonical main-key token (e.g. "r", "f5", "space") to an evdev code."""
+def evdev_code_for_key(
+    token: str,
+    char_to_evdev: Optional[dict] = None,
+    *,
+    use_active_layout: bool = True,
+) -> Optional[int]:
+    """Resolve a canonical main-key token (e.g. "r", "f5", "space") to an evdev code.
+
+    Letter/digit tokens are character-semantic (settings capture stores GDK
+    keyvals). On non-US layouts the physical key that types a letter is not
+    necessarily ``KEY_<LETTER>``. When ``use_active_layout`` is True (default),
+    single-character tokens are resolved through the active XKB layout map so
+    AZERTY Alt+A matches the key that produces A, not US-position KEY_A.
+
+    Args:
+        token: Canonical main-key token from the shortcut string.
+        char_to_evdev: Optional explicit char→evdev map (tests / override). When
+            provided, it is used instead of the detected active layout.
+        use_active_layout: When True and ``char_to_evdev`` is None, consult the
+            cached system layout map. Set False for pure US KEY_* resolution.
+    """
     if not EVDEV_AVAILABLE or not token:
         return None
-    name = _NAMED_EVDEV_KEYS.get(token)
-    if name is None:
-        if len(token) == 1 and token.isalnum():
-            name = f"KEY_{token.upper()}"
-        elif re.fullmatch(r"f\d+", token):
-            name = f"KEY_{token.upper()}"
-    if name is None:
-        return None
-    return getattr(ecodes, name, None)
+    layout_map = char_to_evdev
+    if layout_map is None and use_active_layout:
+        layout_map = get_active_char_to_evdev_map()
+    return resolve_token_to_evdev_code(
+        token,
+        _NAMED_EVDEV_KEYS,
+        ecodes,
+        char_to_evdev=layout_map,
+    )
 
 
 def find_keyboard_devices() -> list[str]:
