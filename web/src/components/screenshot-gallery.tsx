@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useId, useState } from "react";
-import Image from "next/image";
 import {
   ChevronLeft,
   ChevronRight,
@@ -40,13 +39,16 @@ function ScreenshotCard({
         className="group relative block w-full cursor-zoom-in bg-zinc-50 p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:bg-zinc-900/50"
         aria-label={`View larger: ${shot.title}`}
       >
-        <Image
+        {/* Plain img avoids flaky next/image HMR chunk errors in dev */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={shot.src}
           alt={shot.alt}
           width={shot.width}
           height={shot.height}
           className="mx-auto h-auto w-full rounded-lg object-contain transition-transform duration-200 group-hover:scale-[1.02]"
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          loading="lazy"
+          decoding="async"
         />
         <span className="pointer-events-none absolute bottom-4 right-4 inline-flex items-center gap-1.5 rounded-full bg-zinc-900/80 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:bg-zinc-100/90 dark:text-zinc-900">
           <Expand className="h-3.5 w-3.5" />
