@@ -27,6 +27,7 @@ except ImportError:
     EVDEV_AVAILABLE = False
 
 from .base import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE, KeyboardBackend, parse_shortcut
+from .layout_key_map import get_active_char_to_evdev_map
 
 logger = logging.getLogger(__name__)
 
@@ -92,18 +93,26 @@ _NAMED_EVDEV_KEYS = {
 
 
 def evdev_code_for_key(token: str) -> Optional[int]:
-    """Resolve a canonical main-key token (e.g. "r", "f5", "space") to an evdev code."""
+    """Resolve a canonical main-key token (e.g. "r", "f5", "space") to an evdev code.
+
+    Letters are character-semantic (GDK keyval). Non-US layouts remap via the
+    active XKB map so AZERTY "a" hits KEY_Q, not US KEY_A.
+    """
     if not EVDEV_AVAILABLE or not token:
         return None
     name = _NAMED_EVDEV_KEYS.get(token)
-    if name is None:
-        if len(token) == 1 and token.isalnum():
-            name = f"KEY_{token.upper()}"
-        elif re.fullmatch(r"f\d+", token):
-            name = f"KEY_{token.upper()}"
-    if name is None:
+    if name is not None:
+        return getattr(ecodes, name, None)
+    if len(token) == 1:
+        layout_map = get_active_char_to_evdev_map()
+        if layout_map and token in layout_map:
+            return layout_map[token]
+        if token.isalnum():
+            return getattr(ecodes, f"KEY_{token.upper()}", None)
         return None
-    return getattr(ecodes, name, None)
+    if re.fullmatch(r"f\d+", token):
+        return getattr(ecodes, f"KEY_{token.upper()}", None)
+    return None
 
 
 def find_keyboard_devices() -> list[str]:
