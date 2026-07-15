@@ -28,6 +28,7 @@ except (ImportError, ValueError):
 from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
+from ..auto_pause_monitor import DEFAULT_POLL_INTERVAL_SECONDS, AutoPauseMonitor
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
 from ..suspend_handler import SuspendHandler
 from ..utils.resource_manager import ResourceManager
@@ -116,6 +117,14 @@ class TrayIndicator:
             on_suspend=self._on_system_suspend,
             on_resume=self._on_system_resume,
         )
+
+        # Auto-pause: unload model while configured games/apps are running
+        self._auto_pause_monitor = AutoPauseMonitor(
+            get_config=self._get_auto_pause_config,
+            on_pause=self._on_auto_pause,
+            on_resume=self._on_auto_resume,
+        )
+        self._auto_pause_monitor.start()
 
         # Set up keyboard shortcuts with mode support
         self._setup_keyboard_shortcuts()
@@ -539,6 +548,38 @@ class TrayIndicator:
         logger.debug("About clicked")
         show_about_dialog(parent=None)
 
+    def _get_auto_pause_config(self):
+        """Return (enabled, apps, poll_interval_seconds) for AutoPauseMonitor."""
+        enabled = self.config_manager.get_bool("auto_pause", "enabled", False)
+        apps = self.config_manager.get("auto_pause", "apps", []) or []
+        if not isinstance(apps, list):
+            apps = []
+        interval = self.config_manager.get_float(
+            "auto_pause", "poll_interval_seconds", float(DEFAULT_POLL_INTERVAL_SECONDS)
+        )
+        return enabled, apps, interval
+
+    def _on_auto_pause(self):
+        """Unload speech model when a configured game/app is detected."""
+        logger.info("Auto-pause triggered — unloading speech model")
+        unload = getattr(self.speech_engine, "unload_model", None)
+        if callable(unload):
+            unload()
+        else:
+            # Fallback for engines that only expose reinit/stop
+            if self.speech_engine.state != RecognitionState.IDLE:
+                self.speech_engine.stop_recognition()
+
+    def _on_auto_resume(self):
+        """Reload speech model after configured games/apps have exited."""
+        logger.info("Auto-pause cleared — reloading speech model")
+        reinit = getattr(self.speech_engine, "reinitialize_after_resume", None)
+        if callable(reinit):
+            try:
+                reinit()
+            except Exception:
+                logger.error("Failed to reload speech engine after auto-pause", exc_info=True)
+
     def _on_system_suspend(self):
         """Stop active recognition before the system goes to sleep."""
         if self.speech_engine.state != RecognitionState.IDLE:
@@ -551,9 +592,16 @@ class TrayIndicator:
         Speech engine reinitializes after 2s (audio hardware recovers fast).
         Keyboard backend waits for /dev/input to settle using inotify-backed
         directory monitoring, with a timer fallback if monitoring unavailable.
+
+        If auto-pause still has a configured app running, skip speech reinit —
+        the auto-pause monitor owns model lifecycle until that app exits.
         """
         logger.info("System resumed — scheduling reinit")
-        GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
+        # Use `is True` so duck-typed mocks without a real bool flag still reinit.
+        if getattr(self.speech_engine, "is_auto_paused", False) is True:
+            logger.info("Skipping resume reinit: auto-pause still active")
+        else:
+            GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
         GLib.timeout_add_seconds(2, self._start_input_device_monitor)
 
     def _reinit_speech_after_resume(self):
@@ -630,6 +678,9 @@ class TrayIndicator:
 
         if self._suspend_handler is not None:
             self._suspend_handler.shutdown()
+
+        if getattr(self, "_auto_pause_monitor", None) is not None:
+            self._auto_pause_monitor.shutdown()
 
         self._cleanup_input_monitor()
 

@@ -1278,6 +1278,262 @@ class SettingsDialog(Gtk.Dialog):
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
 
+        self._build_auto_pause_section()
+
+    def _build_auto_pause_section(self):
+        """Build Auto-Pause settings: enable toggle + process name list."""
+        group = PreferencesGroup(
+            title="Auto-Pause for Games & Apps",
+            description=(
+                "When a listed process is running, Vocalinux unloads the speech model "
+                "to free CPU/GPU/RAM, then reloads it when the process exits."
+            ),
+        )
+
+        self.auto_pause_switch = Gtk.Switch()
+        self.auto_pause_switch.set_tooltip_text(
+            "Unload the speech model while any listed game or app is running"
+        )
+        enable_row = PreferenceRow(
+            title="Enable Auto-Pause",
+            subtitle="Free resources while selected games or apps are running",
+            widget=self.auto_pause_switch,
+        )
+        group.add_row(enable_row)
+
+        # Add process name: entry + Add button
+        add_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        add_box.set_margin_top(8)
+        add_box.set_margin_bottom(4)
+        add_box.set_margin_start(16)
+        add_box.set_margin_end(16)
+
+        self.auto_pause_entry = Gtk.Entry()
+        self.auto_pause_entry.set_placeholder_text("Process name (e.g. overwatch, steam)")
+        self.auto_pause_entry.set_hexpand(True)
+        self.auto_pause_entry.set_tooltip_text(
+            "Executable basename as shown by the process list (case-insensitive). "
+            "For Windows games under Wine/Proton, omit the .exe suffix."
+        )
+        add_box.pack_start(self.auto_pause_entry, True, True, 0)
+
+        add_btn = Gtk.Button(label="Add")
+        add_btn.set_tooltip_text("Add this process name to the auto-pause list")
+        add_btn.connect("clicked", self._on_auto_pause_add_clicked)
+        self.auto_pause_entry.connect("activate", self._on_auto_pause_add_clicked)
+        add_box.pack_start(add_btn, False, False, 0)
+
+        pick_btn = Gtk.Button(label="From running…")
+        pick_btn.set_tooltip_text("Pick a process name from currently running processes")
+        pick_btn.connect("clicked", self._on_auto_pause_pick_running)
+        add_box.pack_start(pick_btn, False, False, 0)
+
+        # Custom row for the add controls (not a PreferenceRow)
+        add_row = Gtk.ListBoxRow()
+        add_row.set_activatable(False)
+        add_row.add(add_box)
+        group.add_row(add_row)
+
+        # List of configured apps
+        self.auto_pause_listbox = Gtk.ListBox()
+        self.auto_pause_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.auto_pause_listbox.set_activate_on_single_click(False)
+
+        list_scrolled = Gtk.ScrolledWindow()
+        list_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        list_scrolled.set_min_content_height(80)
+        list_scrolled.set_max_content_height(160)
+        list_scrolled.set_margin_start(8)
+        list_scrolled.set_margin_end(8)
+        list_scrolled.set_margin_bottom(8)
+        list_scrolled.add(self.auto_pause_listbox)
+
+        list_row = Gtk.ListBoxRow()
+        list_row.set_activatable(False)
+        list_row.add(list_scrolled)
+        group.add_row(list_row)
+
+        self.auto_pause_empty_label = Gtk.Label(
+            label="No apps listed yet. Add process names above.",
+            xalign=0,
+        )
+        self.auto_pause_empty_label.get_style_context().add_class("preference-row-subtitle")
+        self.auto_pause_empty_label.set_margin_start(16)
+        self.auto_pause_empty_label.set_margin_end(16)
+        self.auto_pause_empty_label.set_margin_bottom(12)
+
+        empty_row = Gtk.ListBoxRow()
+        empty_row.set_activatable(False)
+        empty_row.add(self.auto_pause_empty_label)
+        group.add_row(empty_row)
+        self._auto_pause_empty_row = empty_row
+
+        self.general_tab.pack_start(group, False, False, 0)
+
+        self.auto_pause_switch.connect("state-set", self._on_auto_pause_enabled_toggled)
+
+    def _get_auto_pause_apps(self) -> list:
+        """Return a clean list of configured auto-pause process names."""
+        apps = self.config_manager.get("auto_pause", "apps", []) or []
+        if not isinstance(apps, list):
+            return []
+        return [str(a).strip() for a in apps if a and str(a).strip()]
+
+    def _save_auto_pause_apps(self, apps: list) -> None:
+        # Deduplicate case-insensitively while preserving first-seen casing
+        seen = set()
+        cleaned = []
+        for name in apps:
+            key = name.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(name.strip())
+        self.config_manager.set("auto_pause", "apps", cleaned)
+        self.config_manager.save_settings()
+        self._refresh_auto_pause_list()
+
+    def _refresh_auto_pause_list(self) -> None:
+        """Rebuild the auto-pause app list UI from config."""
+        if not hasattr(self, "auto_pause_listbox"):
+            return
+
+        for child in list(self.auto_pause_listbox.get_children()):
+            self.auto_pause_listbox.remove(child)
+
+        apps = self._get_auto_pause_apps()
+        if hasattr(self, "_auto_pause_empty_row"):
+            self._auto_pause_empty_row.set_visible(len(apps) == 0)
+
+        for name in apps:
+            row = Gtk.ListBoxRow()
+            row.set_activatable(False)
+            hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            hbox.set_margin_top(6)
+            hbox.set_margin_bottom(6)
+            hbox.set_margin_start(16)
+            hbox.set_margin_end(16)
+
+            label = Gtk.Label(label=name, xalign=0)
+            label.set_hexpand(True)
+            hbox.pack_start(label, True, True, 0)
+
+            remove_btn = Gtk.Button(label="Remove")
+            remove_btn.set_tooltip_text(f"Remove {name} from auto-pause list")
+            remove_btn.connect("clicked", self._on_auto_pause_remove_clicked, name)
+            hbox.pack_start(remove_btn, False, False, 0)
+
+            row.add(hbox)
+            self.auto_pause_listbox.add(row)
+
+        self.auto_pause_listbox.show_all()
+
+    def _on_auto_pause_enabled_toggled(self, widget, state):
+        if self._initializing or self._applying_settings:
+            return False
+        enabled = bool(state)
+        logger.info("Auto-pause enabled toggled: %s", enabled)
+        self.config_manager.set("auto_pause", "enabled", enabled)
+        self.config_manager.save_settings()
+        return False
+
+    def _on_auto_pause_add_clicked(self, widget):
+        if self._initializing or self._applying_settings:
+            return
+        name = self.auto_pause_entry.get_text().strip()
+        if not name:
+            return
+        # Strip path if user pasted a full path
+        name = os.path.basename(name)
+        if name.lower().endswith(".exe"):
+            name = name[:-4]
+        apps = self._get_auto_pause_apps()
+        if name.lower() in {a.lower() for a in apps}:
+            self.auto_pause_entry.set_text("")
+            return
+        apps.append(name)
+        self._save_auto_pause_apps(apps)
+        self.auto_pause_entry.set_text("")
+        logger.info("Added auto-pause app: %s", name)
+
+    def _on_auto_pause_remove_clicked(self, widget, name: str):
+        if self._initializing or self._applying_settings:
+            return
+        apps = [a for a in self._get_auto_pause_apps() if a.lower() != name.lower()]
+        self._save_auto_pause_apps(apps)
+        logger.info("Removed auto-pause app: %s", name)
+
+    def _on_auto_pause_pick_running(self, widget):
+        """Show a simple dialog listing running process names to add."""
+        if self._initializing or self._applying_settings:
+            return
+
+        try:
+            import psutil
+        except ImportError:
+            logger.warning("psutil not available for process picker")
+            return
+
+        names: set[str] = set()
+        for proc in psutil.process_iter(["name"]):
+            try:
+                n = proc.info.get("name")
+                if n:
+                    base = os.path.basename(n)
+                    if base.lower().endswith(".exe"):
+                        base = base[:-4]
+                    names.add(base)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+
+        if not names:
+            return
+
+        dialog = Gtk.Dialog(title="Running processes", transient_for=self, flags=0)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Add", Gtk.ResponseType.OK)
+        dialog.set_default_size(360, 400)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_margin_top(8)
+        scrolled.set_margin_bottom(8)
+        scrolled.set_margin_start(8)
+        scrolled.set_margin_end(8)
+
+        listbox = Gtk.ListBox()
+        listbox.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
+        already = {a.lower() for a in self._get_auto_pause_apps()}
+        for name in sorted(names, key=str.lower):
+            if name.lower() in already:
+                continue
+            row = Gtk.ListBoxRow()
+            label = Gtk.Label(label=name, xalign=0)
+            label.set_margin_start(8)
+            label.set_margin_end(8)
+            label.set_margin_top(4)
+            label.set_margin_bottom(4)
+            row.add(label)
+            listbox.add(row)
+        scrolled.add(listbox)
+        dialog.get_content_area().pack_start(scrolled, True, True, 0)
+        dialog.show_all()
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            selected = listbox.get_selected_rows()
+            apps = self._get_auto_pause_apps()
+            existing = {a.lower() for a in apps}
+            for row in selected:
+                label = row.get_child()
+                if isinstance(label, Gtk.Label):
+                    name = label.get_text().strip()
+                    if name and name.lower() not in existing:
+                        apps.append(name)
+                        existing.add(name.lower())
+            self._save_auto_pause_apps(apps)
+        dialog.destroy()
+
     def _on_autostart_toggled(self, widget, state):
         """Handle toggle of the autostart switch."""
         if self._initializing or self._applying_settings:
@@ -2492,6 +2748,10 @@ class SettingsDialog(Gtk.Dialog):
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
+
+        auto_pause_settings = self.config_manager.get_settings().get("auto_pause", {})
+        self.auto_pause_switch.set_active(bool(auto_pause_settings.get("enabled", False)))
+        self._refresh_auto_pause_list()
 
         available_engines = get_available_engines()
         available_count = 0

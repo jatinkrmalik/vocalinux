@@ -57,6 +57,13 @@ DEFAULT_CONFIG = {
         "autostart": False,
         "first_run": True,
     },
+    "auto_pause": {
+        # When enabled, unload the speech model while any listed process is running
+        # so games/apps can use full CPU/GPU/RAM. Model reloads when they exit.
+        "enabled": False,
+        "apps": [],  # Process/executable basenames, e.g. ["overwatch", "steam"]
+        "poll_interval_seconds": 5,  # How often to scan running processes
+    },
     "text_injection": {
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
     },
