@@ -1,24 +1,12 @@
 import Link from "next/link";
-import Image from "next/image";
 import { type Metadata } from "next";
+import { Camera, ChevronRight, Download } from "lucide-react";
 import {
-  Camera,
-  ChevronRight,
-  Download,
-  ImageIcon,
-  Settings,
-} from "lucide-react";
+  ScreenshotGallery,
+  type Screenshot,
+} from "@/components/screenshot-gallery";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
-
-type Screenshot = {
-  src: string;
-  alt: string;
-  title: string;
-  description: string;
-  width: number;
-  height: number;
-};
 
 const productShots: Screenshot[] = [
   {
@@ -60,7 +48,8 @@ const settingsShots: Screenshot[] = [
     src: "/screenshots/settings-speech-engine.png",
     alt: "Speech Engine settings tab",
     title: "Speech Engine",
-    description: "Choose whisper.cpp, Whisper, VOSK, or Remote API and pick a model.",
+    description:
+      "Choose whisper.cpp, Whisper, VOSK, or Remote API and pick a model.",
     width: 1504,
     height: 2146,
   },
@@ -120,27 +109,6 @@ export const metadata: Metadata = buildPageMetadata({
   ],
 });
 
-function ScreenshotCard({ shot }: { shot: Screenshot }) {
-  return (
-    <figure className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-      <div className="bg-zinc-50 p-3 dark:bg-zinc-900/50">
-        <Image
-          src={shot.src}
-          alt={shot.alt}
-          width={shot.width}
-          height={shot.height}
-          className="mx-auto h-auto w-full rounded-lg object-contain"
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-        />
-      </div>
-      <figcaption className="space-y-1 border-t border-zinc-200 p-4 dark:border-zinc-700">
-        <h3 className="text-lg font-semibold">{shot.title}</h3>
-        <p className="text-sm text-muted-foreground">{shot.description}</p>
-      </figcaption>
-    </figure>
-  );
-}
-
 export default function ScreenshotsPage() {
   const articleJsonLd = {
     "@context": "https://schema.org",
@@ -148,7 +116,7 @@ export default function ScreenshotsPage() {
     name: "Vocalinux Screenshots",
     description:
       "Product and settings screenshots of Vocalinux, offline voice dictation for Linux.",
-    dateModified: "2026-07-14",
+    dateModified: "2026-07-15",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -182,38 +150,15 @@ export default function ScreenshotsPage() {
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           A look at offline voice dictation on Linux: tray controls, debugging
-          tools, and the full settings dialog. Capture your own workflow after
-          install — these shots match the current v0.14.0-beta UI.
+          tools, and the full settings dialog. Click any image to expand it and
+          browse the gallery. These shots match the current v0.14.0-beta UI.
         </p>
       </section>
 
-      <section className="mb-14">
-        <div className="mb-6 flex items-center gap-2">
-          <ImageIcon className="h-5 w-5 text-primary" />
-          <h2 className="text-2xl font-bold">Product</h2>
-        </div>
-        <div className="grid gap-6 sm:grid-cols-2">
-          {productShots.map((shot) => (
-            <ScreenshotCard key={shot.src} shot={shot} />
-          ))}
-        </div>
-      </section>
-
-      <section className="mb-14">
-        <div className="mb-6 flex items-center gap-2">
-          <Settings className="h-5 w-5 text-primary" />
-          <h2 className="text-2xl font-bold">Settings</h2>
-        </div>
-        <p className="mb-6 max-w-3xl text-muted-foreground">
-          Every major settings tab, from speech engine selection through
-          advanced whisper.cpp tuning.
-        </p>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {settingsShots.map((shot) => (
-            <ScreenshotCard key={shot.src} shot={shot} />
-          ))}
-        </div>
-      </section>
+      <ScreenshotGallery
+        productShots={productShots}
+        settingsShots={settingsShots}
+      />
 
       <section className="border-primary/20 bg-primary/5 rounded-2xl border p-8">
         <h2 className="mb-3 text-2xl font-bold">Try it yourself</h2>

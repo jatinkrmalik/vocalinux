@@ -36,11 +36,21 @@ describe("Screenshots page and assets", () => {
     homeSource = fs.readFileSync(homePath, "utf-8");
   });
 
-  it("ships a dedicated /screenshots page module", () => {
+  it("ships a dedicated /screenshots page module with lightbox gallery", () => {
     expect(fs.existsSync(pagePath)).toBe(true);
     expect(pageSource).toMatch(/export default function ScreenshotsPage/);
     expect(pageSource).toContain('path: "/screenshots"');
     expect(pageSource).toContain("Vocalinux Screenshots");
+    expect(pageSource).toContain("ScreenshotGallery");
+    const galleryPath = path.join(
+      webRoot,
+      "src/components/screenshot-gallery.tsx",
+    );
+    expect(fs.existsSync(galleryPath)).toBe(true);
+    const gallerySource = fs.readFileSync(galleryPath, "utf-8");
+    expect(gallerySource).toContain('role="dialog"');
+    expect(gallerySource).toContain("aria-modal");
+    expect(gallerySource).toContain("View larger");
   });
 
   it("references every public screenshot asset from the page source", () => {
