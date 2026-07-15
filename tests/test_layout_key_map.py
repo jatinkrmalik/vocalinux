@@ -11,8 +11,8 @@ from vocalinux.ui.keyboard_backends.layout_key_map import build_char_to_evdev_ma
 
 evdev_backend = pytest.importorskip("vocalinux.ui.keyboard_backends.evdev_backend")
 
-# Minimal AZERTY fr positions used by #513 (a/q swap; r unchanged).
-AZERTY = {"a": 16, "q": 30, "r": 19}  # KEY_Q, KEY_A, KEY_R
+# Minimal AZERTY fr positions for #513 (a ↔ q swap).
+AZERTY = {"a": 16, "q": 30}  # KEY_Q, KEY_A
 
 
 @pytest.mark.skipif(not evdev_backend.EVDEV_AVAILABLE, reason="evdev not available")
@@ -24,19 +24,13 @@ class TestAzertyCombo:
         monkeypatch.setattr(evdev_backend, "get_active_char_to_evdev_map", lambda: AZERTY)
         return evdev_backend.EvdevKeyboardBackend(shortcut=shortcut, mode="toggle")
 
-    def test_alt_a_resolves_to_key_q(self, monkeypatch):
-        from evdev import ecodes
-
-        backend = self._backend(monkeypatch)
-        assert backend._combo_main_code == ecodes.KEY_Q
-        assert backend._combo_main_code != ecodes.KEY_A
-
     def test_alt_a_fires_on_physical_a(self, monkeypatch):
         from evdev import ecodes
 
         from vocalinux.ui.keyboard_backends.evdev_backend import KEY_LEFTALT
 
         backend = self._backend(monkeypatch)
+        assert backend._combo_main_code == ecodes.KEY_Q
         fired = threading.Event()
         backend.register_toggle_callback(fired.set)
         backend._handle_key_event(self._event(KEY_LEFTALT, 1), None)
