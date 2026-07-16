@@ -37,17 +37,34 @@ from .settings_dialog import SettingsDialog
 
 logger = logging.getLogger(__name__)
 
-# Define constants
-APP_ID = "vocalinux"
+# Flatpak StatusNotifier host resolves exported <app-id>-* icons, not /app paths.
+FLATPAK_ID = os.environ.get("FLATPAK_ID")
+APP_ID = FLATPAK_ID or "vocalinux"
 
 # Initialize resource manager
 _resource_manager = ResourceManager()
 ICON_DIR = _resource_manager.icons_dir
 
-# Icon file names
+# Bundled icon file names (paths under ICON_DIR).
 DEFAULT_ICON = "vocalinux-microphone-off"
 ACTIVE_ICON = "vocalinux-microphone"
 PROCESSING_ICON = "vocalinux-microphone-process"
+
+
+def _themed_icon_names() -> dict:
+    """Icon theme names for the current runtime (host-exported names in Flatpak)."""
+    if FLATPAK_ID:
+        return {
+            "default": f"{FLATPAK_ID}-microphone-off",
+            "active": f"{FLATPAK_ID}-microphone",
+            "processing": f"{FLATPAK_ID}-microphone-process",
+        }
+    return {
+        "default": DEFAULT_ICON,
+        "active": ACTIVE_ICON,
+        "processing": PROCESSING_ICON,
+    }
+
 
 # /dev/input settle-detection tuning (used after resume)
 _INPUT_SETTLE_SECONDS = 2
@@ -96,11 +113,7 @@ class TrayIndicator:
             "active": _resource_manager.get_icon_path(ACTIVE_ICON),
             "processing": _resource_manager.get_icon_path(PROCESSING_ICON),
         }
-        self.icon_names = {
-            "default": DEFAULT_ICON,
-            "active": ACTIVE_ICON,
-            "processing": PROCESSING_ICON,
-        }
+        self.icon_names = _themed_icon_names()
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -190,14 +203,22 @@ class TrayIndicator:
                 exists = os.path.exists(path)
                 logger.info(f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}")
 
+        initial_icon = _themed_icon_names()["default"]
         try:
-            self.indicator = AppIndicator3.Indicator.new_with_path(
-                APP_ID,
-                DEFAULT_ICON,
-                AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
-                ICON_DIR,
-            )
-            self.indicator.set_icon_theme_path(ICON_DIR)
+            if FLATPAK_ID:
+                self.indicator = AppIndicator3.Indicator.new(
+                    APP_ID,
+                    initial_icon,
+                    AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
+                )
+            else:
+                self.indicator = AppIndicator3.Indicator.new_with_path(
+                    APP_ID,
+                    initial_icon,
+                    AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
+                    ICON_DIR,
+                )
+                self.indicator.set_icon_theme_path(ICON_DIR)
             self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         except Exception as e:
             logger.error(f"Failed to create AppIndicator: {e}")

@@ -10,10 +10,12 @@ import logging
 import os
 from typing import Any, Optional
 
+from ..utils.paths import config_dir
+
 logger = logging.getLogger(__name__)
 
 # Define constants
-CONFIG_DIR = os.path.expanduser("~/.config/vocalinux")
+CONFIG_DIR = config_dir()
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 # Default configuration

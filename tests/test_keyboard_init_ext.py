@@ -48,6 +48,73 @@ class TestDesktopEnvironmentDetect:
             result = DesktopEnvironment.detect()
             assert result == DesktopEnvironment.X11
 
+    def test_detect_flatpak_wayland_without_socket_uses_x11(self):
+        """Flatpak with only X11/XWayland is labeled X11 (injection path).
+
+        Global shortcuts still prefer evdev via create_backend when FLATPAK_ID
+        is set — pynput over XWayland is not truly global.
+        """
+        env = {
+            "FLATPAK_ID": "com.vocalinux.Vocalinux",
+            "XDG_SESSION_TYPE": "wayland",
+            "DISPLAY": ":0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            assert DesktopEnvironment.detect() == DesktopEnvironment.X11
+
+    def test_detect_flatpak_wayland_with_socket_stays_wayland(self):
+        """With a Wayland socket exposed, detection still reports Wayland."""
+        env = {
+            "FLATPAK_ID": "com.vocalinux.Vocalinux",
+            "XDG_SESSION_TYPE": "wayland",
+            "WAYLAND_DISPLAY": "wayland-0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            assert DesktopEnvironment.detect() == DesktopEnvironment.WAYLAND
+
+    def test_create_backend_flatpak_prefers_evdev(self):
+        """Flatpak must use evdev so hotkeys work when another app is focused."""
+        from vocalinux.ui.keyboard_backends import create_backend
+
+        fake = MagicMock()
+        fake.is_available.return_value = True
+
+        env = {
+            "FLATPAK_ID": "com.vocalinux.Vocalinux",
+            "XDG_SESSION_TYPE": "wayland",
+            "DISPLAY": ":0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            with (
+                patch.object(kb_module, "EVDEV_AVAILABLE", True),
+                patch.object(kb_module, "EvdevKeyboardBackend", return_value=fake) as mock_evdev,
+                patch.object(kb_module, "PYNPUT_AVAILABLE", True),
+                patch.object(kb_module, "PynputKeyboardBackend") as mock_pynput,
+            ):
+                backend = create_backend()
+        assert backend is fake
+        mock_evdev.assert_called_once()
+        mock_pynput.assert_not_called()
+
+    def test_create_backend_native_x11_prefers_pynput(self):
+        """Outside Flatpak on X11, pynput remains the default."""
+        from vocalinux.ui.keyboard_backends import create_backend
+
+        env = {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}
+        with patch.dict(os.environ, env, clear=True):
+            with (
+                patch.object(kb_module, "EVDEV_AVAILABLE", True),
+                patch.object(kb_module, "EvdevKeyboardBackend") as mock_evdev,
+                patch.object(kb_module, "PYNPUT_AVAILABLE", True),
+                patch.object(
+                    kb_module, "PynputKeyboardBackend", return_value=MagicMock()
+                ) as mock_pynput,
+            ):
+                backend = create_backend()
+        assert backend is mock_pynput.return_value
+        mock_pynput.assert_called_once()
+        mock_evdev.assert_not_called()
+
     def test_detect_xdg_session_type_case_insensitive(self):
         """Test that XDG_SESSION_TYPE detection is case-insensitive."""
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "WAYLAND"}, clear=False):

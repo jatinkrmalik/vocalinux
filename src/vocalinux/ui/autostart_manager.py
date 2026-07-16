@@ -29,6 +29,11 @@ def get_autostart_file() -> Path:
 
 
 def get_exec_command() -> str:
+    # Host session manager cannot exec /app/bin; use the flatpak launcher instead.
+    flatpak_id = os.environ.get("FLATPAK_ID")
+    if flatpak_id:
+        return f"flatpak run {flatpak_id} --start-minimized"
+
     installed_command = shutil.which("vocalinux")
     if installed_command:
         return f"{shlex.quote(installed_command)} --start-minimized"

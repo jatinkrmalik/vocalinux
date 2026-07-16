@@ -12,10 +12,12 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from .utils.paths import data_dir
+
 logger = logging.getLogger(__name__)
 
-# Lock file location: ~/.local/share/vocalinux/
-LOCK_FILE_DIR = Path.home() / ".local" / "share" / "vocalinux"
+# Lock file location: $XDG_DATA_HOME/vocalinux/ (defaults to ~/.local/share/vocalinux/)
+LOCK_FILE_DIR = Path(data_dir())
 LOCK_FILE_PATH = LOCK_FILE_DIR / "instance.lock"
 
 # Global lock file handle

@@ -11,6 +11,8 @@ import subprocess
 from functools import lru_cache
 from typing import Optional
 
+from .paths import models_dir
+
 logger = logging.getLogger(__name__)
 
 # Whisper.cpp model information
@@ -311,14 +313,14 @@ def get_model_path(model_name: str) -> str:
     Returns:
         Path to the model file
     """
-    models_dir = os.path.expanduser("~/.local/share/vocalinux/models/whispercpp")
-    os.makedirs(models_dir, exist_ok=True)
+    whispercpp_dir = os.path.join(models_dir(), "whispercpp")
+    os.makedirs(whispercpp_dir, exist_ok=True)
 
     model_info = WHISPERCPP_MODEL_INFO.get(model_name)
     if model_info and model_info.get("url"):
-        return os.path.join(models_dir, os.path.basename(model_info["url"]))
+        return os.path.join(whispercpp_dir, os.path.basename(model_info["url"]))
 
-    return os.path.join(models_dir, f"ggml-{model_name}.bin")
+    return os.path.join(whispercpp_dir, f"ggml-{model_name}.bin")
 
 
 def is_model_downloaded(model_name: str) -> bool:

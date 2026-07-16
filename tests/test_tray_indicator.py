@@ -547,3 +547,36 @@ class TestTrayIndicator(unittest.TestCase):
             delattr(self.tray_indicator, "menu")
 
         self.tray_indicator._set_menu_item_enabled("Start Voice Typing", True)
+
+
+class TestTrayIndicatorFlatpakIcons(unittest.TestCase):
+    """Tray icon names must adapt to the Flatpak runtime.
+
+    Inside a Flatpak the StatusNotifier host runs outside the sandbox and resolves
+    icons from the exported ``<app-id>-*`` theme, so the indicator must reference
+    those names rather than the bundled ``vocalinux-*`` names.
+    """
+
+    def setUp(self):
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = mock_gi_repository
+        for mod in [k for k in list(sys.modules.keys()) if "tray_indicator" in k]:
+            del sys.modules[mod]
+
+    def test_themed_icon_names_outside_flatpak(self):
+        import vocalinux.ui.tray_indicator as tray
+
+        with patch.object(tray, "FLATPAK_ID", None):
+            names = tray._themed_icon_names()
+        self.assertEqual(names["default"], "vocalinux-microphone-off")
+        self.assertEqual(names["active"], "vocalinux-microphone")
+        self.assertEqual(names["processing"], "vocalinux-microphone-process")
+
+    def test_themed_icon_names_inside_flatpak(self):
+        import vocalinux.ui.tray_indicator as tray
+
+        with patch.object(tray, "FLATPAK_ID", "com.vocalinux.Vocalinux"):
+            names = tray._themed_icon_names()
+        self.assertEqual(names["default"], "com.vocalinux.Vocalinux-microphone-off")
+        self.assertEqual(names["active"], "com.vocalinux.Vocalinux-microphone")
+        self.assertEqual(names["processing"], "com.vocalinux.Vocalinux-microphone-process")

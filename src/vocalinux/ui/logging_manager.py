@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from ..utils.paths import data_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,8 +64,8 @@ class LoggingManager:
         self.log_callbacks: list[Callable[[LogRecord], None]] = []
         self.lock = threading.Lock()
 
-        # Create logs directory
-        self.logs_dir = Path.home() / ".local" / "share" / "vocalinux" / "logs"
+        # Create logs directory ($XDG_DATA_HOME/vocalinux/logs; Flatpak-safe)
+        self.logs_dir = Path(data_dir()) / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
 
         # Set up custom log handler
