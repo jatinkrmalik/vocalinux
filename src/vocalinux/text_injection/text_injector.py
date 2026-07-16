@@ -9,6 +9,7 @@ import logging
 import math
 import os
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -223,47 +224,59 @@ class TextInjector:
         ).lower()
         return not any(name in desktop for name in self._IBUS_UNBRIDGED_COMPOSITORS)
 
-    def _is_ydotoold_running(self) -> bool:
-        """Return True if the ydotoold daemon appears to be running.
-
-        ``ydotool type ""`` exits 0 even with no daemon (it prints a notice and
-        silently does nothing), so the exit code alone is not a reliable probe.
-        Check for the daemon's socket first, then fall back to scanning for the
-        process itself.
-        """
-        socket_candidates = []
+    def _ydotool_socket_paths(self) -> list:
+        """Return candidate Unix socket paths used by ydotoold."""
+        paths = []
         env_socket = os.environ.get("YDOTOOL_SOCKET")
         if env_socket:
-            socket_candidates.append(env_socket)
+            paths.append(env_socket)
         runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
         if runtime_dir:
-            socket_candidates.append(os.path.join(runtime_dir, ".ydotool_socket"))
-        socket_candidates.append("/tmp/.ydotool_socket")
-        if any(os.path.exists(path) for path in socket_candidates):
-            return True
-        try:
-            result = subprocess.run(
-                ["pgrep", "-x", "ydotoold"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=2,
-            )
-            return result.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            # pgrep missing, timed out, or otherwise unavailable -> assume not running
-            return False
+            paths.append(os.path.join(runtime_dir, ".ydotool_socket"))
+        paths.append("/tmp/.ydotool_socket")
+        return paths
+
+    def _is_ydotoold_running(self) -> bool:
+        """Return True if ydotoold is accepting connections.
+
+        A leftover socket file is not enough: after a crash or a Flatpak session
+        exit the path can remain while nothing listens, and ydotool then fails
+        with exit status 2. Probe the socket with a real connect(); remove stale
+        sockets so the next start can bind again.
+        """
+        for path in self._ydotool_socket_paths():
+            if not os.path.exists(path):
+                continue
+            try:
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                try:
+                    sock.settimeout(0.5)
+                    sock.connect(path)
+                finally:
+                    sock.close()
+                return True
+            except OSError:
+                try:
+                    os.unlink(path)
+                    logger.info("Removed stale ydotool socket: %s", path)
+                except OSError:
+                    pass
+        return False
 
     def _ensure_ydotoold(self) -> bool:
         """Start ydotoold if needed so ydotool can inject via uinput.
 
         ydotool 1.x talks to a daemon that owns /dev/uinput. Inside Flatpak we
         start the daemon on demand when the app is granted device access.
+        Host ydotool 0.1.x often works without a daemon; starting one is still
+        safe when ydotoold is installed.
         """
         if self._is_ydotoold_running():
             return True
         ydotoold = shutil.which("ydotoold")
         if not ydotoold:
-            return False
+            # Distro ydotool 0.1.x may not ship a daemon; treat as ready.
+            return shutil.which("ydotool") is not None
         if not os.path.exists("/dev/uinput"):
             logger.warning(
                 "ydotoold needs /dev/uinput (Flatpak: grant --device=all). "

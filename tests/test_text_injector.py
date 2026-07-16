@@ -1756,23 +1756,33 @@ class TestCompositorIBusBridging(unittest.TestCase):
         with patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "COSMIC"}):
             self.assertTrue(injector._wayland_compositor_bridges_ibus())
 
+    @patch("vocalinux.text_injection.text_injector.socket.socket")
     @patch("os.path.exists", return_value=True)
-    def test_is_ydotoold_running_true_when_socket_exists(self, _mock_exists):
+    def test_is_ydotoold_running_true_when_socket_connects(self, _mock_exists, mock_socket_cls):
+        """Live ydotoold socket must accept a connect() probe."""
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
         injector = self._bare_injector()
         self.assertTrue(injector._is_ydotoold_running())
+        mock_sock.connect.assert_called()
 
-    @patch("vocalinux.text_injection.text_injector.subprocess.run")
-    @patch("os.path.exists", return_value=False)
-    def test_is_ydotoold_running_true_when_process_found(self, _mock_exists, mock_run):
+    @patch("os.unlink")
+    @patch("vocalinux.text_injection.text_injector.socket.socket")
+    @patch("os.path.exists", return_value=True)
+    def test_is_ydotoold_running_false_and_unlinks_stale_socket(
+        self, _mock_exists, mock_socket_cls, mock_unlink
+    ):
+        """Stale socket files must not count as a running daemon."""
+        mock_sock = MagicMock()
+        mock_sock.connect.side_effect = ConnectionRefusedError("stale")
+        mock_socket_cls.return_value = mock_sock
         injector = self._bare_injector()
-        mock_run.return_value = MagicMock(returncode=0)
-        self.assertTrue(injector._is_ydotoold_running())
+        self.assertFalse(injector._is_ydotoold_running())
+        self.assertTrue(mock_unlink.called)
 
-    @patch("vocalinux.text_injection.text_injector.subprocess.run")
     @patch("os.path.exists", return_value=False)
-    def test_is_ydotoold_running_false_when_absent(self, _mock_exists, mock_run):
+    def test_is_ydotoold_running_false_when_absent(self, _mock_exists):
         injector = self._bare_injector()
-        mock_run.return_value = MagicMock(returncode=1)
         self.assertFalse(injector._is_ydotoold_running())
 
     @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
@@ -1811,11 +1821,13 @@ class TestCompositorIBusBridging(unittest.TestCase):
         mock_ibus_class.assert_not_called()
 
     def test_is_ydotoold_running_true_when_socket_env_set(self):
-        """An explicit YDOTOOL_SOCKET pointing at an existing socket counts as running."""
+        """An explicit YDOTOOL_SOCKET that accepts connect() counts as running."""
         injector = self._bare_injector()
         with patch.dict("os.environ", {"YDOTOOL_SOCKET": "/run/user/1000/.ydotool_socket"}):
             with patch("os.path.exists", return_value=True):
-                self.assertTrue(injector._is_ydotoold_running())
+                with patch("vocalinux.text_injection.text_injector.socket.socket") as mock_cls:
+                    mock_cls.return_value = MagicMock()
+                    self.assertTrue(injector._is_ydotoold_running())
 
     @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
     @patch("vocalinux.text_injection.text_injector.shutil.which")
