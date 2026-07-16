@@ -688,6 +688,47 @@ class TestTextInjector(unittest.TestCase):
                 "wtype must NOT use clipboard-paste workaround",
             )
 
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ydotool_ctrl_v_command_legacy_uses_named_sequence(self, mock_which, mock_run):
+        """Distro ydotool 0.1.x expects ctrl+v, not keycode:value."""
+        mock_which.return_value = "/usr/bin/ydotool"
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="",
+            stderr=(
+                "Each key sequence can be any number of modifiers and keys, "
+                "separated by plus (+)\n"
+            ),
+        )
+        injector = TextInjector.__new__(TextInjector)
+        with patch.dict("os.environ", {}, clear=False):
+            # Ensure host path (not Flatpak)
+            os.environ.pop("FLATPAK_ID", None)
+            cmd = injector._ydotool_ctrl_v_command()
+        self.assertEqual(cmd, ["ydotool", "key", "ctrl+v"])
+        self.assertEqual(injector._ydotool_ctrl_v_command(), ["ydotool", "key", "ctrl+v"])
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ydotool_ctrl_v_command_flatpak_uses_keycodes(self, mock_which):
+        """Flatpak pins ydotool 1.0.4; always use keycode:value form."""
+        mock_which.return_value = "/app/bin/ydotool"
+        injector = TextInjector.__new__(TextInjector)
+        with patch.dict("os.environ", {"FLATPAK_ID": "com.vocalinux.Vocalinux"}):
+            cmd = injector._ydotool_ctrl_v_command()
+        self.assertEqual(cmd, ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"])
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ydotool_ctrl_v_command_v1_help_uses_keycodes(self, mock_which, mock_run):
+        """Host ydotool 1.x (no plus-sequence help) uses press/release keycodes."""
+        mock_which.return_value = "/usr/local/bin/ydotool"
+        mock_run.return_value = MagicMock(returncode=0, stdout="Usage: key N:1 N:0 ...", stderr="")
+        injector = TextInjector.__new__(TextInjector)
+        os.environ.pop("FLATPAK_ID", None)
+        cmd = injector._ydotool_ctrl_v_command()
+        self.assertEqual(cmd, ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"])
+
     @patch("vocalinux.text_injection.text_injector.shutil.which")
     @patch("vocalinux.text_injection.text_injector.subprocess.run")
     def test_clipboard_paste_returns_false_on_paste_failure(self, mock_run, mock_which):

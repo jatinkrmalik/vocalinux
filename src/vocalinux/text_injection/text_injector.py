@@ -1011,14 +1011,15 @@ class TextInjector:
             logger.warning("Could not copy text to clipboard for paste injection")
             return False
 
-        # Simulate Ctrl+V via ydotool using evdev keycodes:
-        # KEY_LEFTCTRL=29, KEY_V=47; value 1=press, 0=release.
-        # wtype is intentionally not handled here: wtype uses the Wayland
-        # virtual-keyboard protocol which supports Unicode natively, so it
-        # never needs the clipboard-paste workaround.
+        # Simulate Ctrl+V via ydotool. Syntax differs by major version:
+        # - 0.1.x (distro packages): named sequences, e.g. ctrl+v
+        # - 1.x (Flatpak build): keycode:value  (29=LEFTCTRL, 47=V)
+        # Passing 1.x codes to 0.1.x does not paste; it types garbage (e.g. "2442").
         try:
+            cmd = self._ydotool_ctrl_v_command()
+            logger.debug(f"Simulating paste with: {cmd}")
             subprocess.run(
-                ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
+                cmd,
                 check=True,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -1029,6 +1030,59 @@ class TextInjector:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.warning(f"Paste simulation failed: {e}")
             return False
+
+    # ydotool 1.x (Flatpak pins v1.0.4): KEY_LEFTCTRL=29, KEY_V=47 press/release.
+    _YDOTOOL_V1_CTRL_V = ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
+    # ydotool 0.1.x (common distro packages): named key sequences.
+    _YDOTOOL_LEGACY_CTRL_V = ["ydotool", "key", "ctrl+v"]
+
+    def _ydotool_ctrl_v_command(self) -> list:
+        """Return argv to simulate Ctrl+V for the installed ydotool.
+
+        ydotool 0.1.x expects ``key ctrl+v``. ydotool 1.x expects
+        ``key 29:1 47:1 47:0 29:0`` (evdev press/release).
+
+        Flatpak always ships pinned ydotool 1.0.4 under /app, so we use the
+        keycode form there without probing. Host installs probe ``key --help``.
+        """
+        cached = getattr(self, "_ydotool_ctrl_v_cmd", None)
+        if cached is not None:
+            return list(cached)
+
+        # Flatpak package pins ydotool v1.0.4 (see packaging/flatpak manifest).
+        ydotool_path = shutil.which("ydotool")
+        if not isinstance(ydotool_path, str):
+            ydotool_path = ""
+        if os.environ.get("FLATPAK_ID") or ydotool_path.startswith("/app/"):
+            cmd = list(self._YDOTOOL_V1_CTRL_V)
+            self._ydotool_ctrl_v_cmd = cmd
+            return list(cmd)
+
+        help_text = ""
+        try:
+            result = subprocess.run(
+                ["ydotool", "key", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            help_text = f"{result.stdout or ''}{result.stderr or ''}"
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.debug(f"Could not probe ydotool key --help: {e}")
+
+        # 0.1.x help: "separated by plus (+)" / examples like alt+r, CTRL+alt+f3
+        if "plus (+)" in help_text or "separated by plus" in help_text.lower():
+            cmd = list(self._YDOTOOL_LEGACY_CTRL_V)
+        elif ":1" in help_text or "keycode" in help_text.lower():
+            cmd = list(self._YDOTOOL_V1_CTRL_V)
+        else:
+            # Unknown help text: prefer named sequence (safe on 0.1.x; fails
+            # loudly on 1.x rather than typing digit garbage).
+            logger.debug("Unrecognized ydotool key --help; defaulting to legacy ctrl+v syntax")
+            cmd = list(self._YDOTOOL_LEGACY_CTRL_V)
+
+        self._ydotool_ctrl_v_cmd = cmd
+        return list(cmd)
 
     # evdev keycodes for modifier keys. If any of these is still physically held
     # when a Wayland injection fires, the injected keystrokes are modified: a
