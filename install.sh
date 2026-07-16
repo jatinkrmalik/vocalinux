@@ -1494,10 +1494,10 @@ install_system_dependencies() {
     # Debian install they are absent and cause CMake's bootstrap to fail (Hurdle 2 from
     # https://medium.com/@cslev/talking-to-my-linux-box-without-talking-to-the-cloud-vocalinux-on-debian-without-the-tears-10bf053ea21b).
     local PYWHISPERCPP_BUILD_DEPS="libssl-dev autoconf automake libtool patchelf"
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard util-linux-extra $PYWHISPERCPP_BUILD_DEPS"
     local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
-    local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1"
+    local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1 util-linux-extra"
     local DNF_PACKAGES="python3-pip python3-gobject gtk3 libappindicator-gtk3 ibus-devel gobject-introspection-devel python3-devel portaudio-devel python3-virtualenv pkg-config cmake wget curl unzip vulkan-tools vulkan-loader-devel glslang xclip xsel wl-clipboard"
     local PACMAN_PACKAGES="python-pip python-gobject gtk3 libappindicator-gtk3 ibus gobject-introspection python-cairo portaudio python-virtualenv pkg-config cmake wget curl unzip base-devel vulkan-tools vulkan-headers glslang xclip xsel wl-clipboard"
     local ZYPPER_PACKAGES="gtk3 ibus-devel gobject-introspection-devel portaudio-devel pkg-config cmake wget curl unzip xclip xsel wl-clipboard typelib-1_0-Notify-0_7 libnotify4"
@@ -3075,9 +3075,15 @@ REMOTE_CONFIG
         # Create wrapper scripts in ~/.local/bin for easy access
         mkdir -p "$HOME/.local/bin"
 
+        # Shared sg check logic for wrapper scripts
+        # Uses sg to activate input group for Wayland keyboard shortcuts without logout
+        local SG_CHECK='if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q "\binput\b" && command -v sg &>/dev/null; then
+    exec sg input -c "\$EXEC_CMD"
+else
+    exec \$EXEC_CMD
+fi'
+
         # Create vocalinux wrapper script
-        # Uses 'sg input' to run with input group for keyboard shortcuts on Wayland
-        # This allows shortcuts to work without logging out after installation
         cat > "$HOME/.local/bin/vocalinux" << WRAPPER_EOF
 #!/bin/bash
 # Wrapper script for Vocalinux that sets required environment variables
@@ -3111,13 +3117,8 @@ if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
     export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 fi
 
-# Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
-    # Use sg to run with input group without requiring logout
-    exec sg input -c "$VENV_DIR/bin/vocalinux \$*"
-else
-    exec "$VENV_DIR/bin/vocalinux" "\$@"
-fi
+EXEC_CMD="$VENV_DIR/bin/vocalinux \$*"
+$SG_CHECK
 WRAPPER_EOF
         chmod +x "$HOME/.local/bin/vocalinux"
         print_info "Created wrapper: ~/.local/bin/vocalinux"
@@ -3156,13 +3157,8 @@ if [ -n "\$PYWHISPERCPP_LIBRARY_PATH" ]; then
     export LD_LIBRARY_PATH="\$PYWHISPERCPP_LIBRARY_PATH\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 fi
 
-# Check if user is in input group but current session doesn't have it
-if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q '\binput\b'; then
-    # Use sg to run with input group without requiring logout
-    exec sg input -c "$VENV_DIR/bin/vocalinux-gui \$*"
-else
-    exec "$VENV_DIR/bin/vocalinux-gui" "\$@"
-fi
+EXEC_CMD="$VENV_DIR/bin/vocalinux-gui \$*"
+$SG_CHECK
 WRAPPER_EOF
         chmod +x "$HOME/.local/bin/vocalinux-gui"
         print_info "Created wrapper: ~/.local/bin/vocalinux-gui"
