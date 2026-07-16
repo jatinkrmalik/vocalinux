@@ -100,8 +100,8 @@ class TestDetectEnvironment(unittest.TestCase):
                         result, [DesktopEnvironment.WAYLAND, DesktopEnvironment.WAYLAND_IBUS]
                     )
 
-    def test_detect_flatpak_wayland_without_socket_uses_xwayland(self):
-        """A Flatpak on a Wayland host has X11/XWayland only, not a Wayland socket."""
+    def test_detect_flatpak_prefers_ydotool_when_available(self):
+        """Flatpak prefers ydotool so injection reaches native Wayland apps."""
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
         obj = _make_injector(DesktopEnvironment.X11)
@@ -111,7 +111,23 @@ class TestDetectEnvironment(unittest.TestCase):
             "DISPLAY": ":0",
         }
         with patch.dict(os.environ, env, clear=True):
-            self.assertEqual(obj._detect_environment(), DesktopEnvironment.WAYLAND_XDOTOOL)
+            with patch("vocalinux.text_injection.text_injector.shutil.which") as which:
+                which.side_effect = lambda name: "/app/bin/ydotool" if name == "ydotool" else None
+                self.assertEqual(obj._detect_environment(), DesktopEnvironment.WAYLAND)
+
+    def test_detect_flatpak_without_ydotool_uses_xwayland(self):
+        """Without ydotool, Flatpak falls back to xdotool/XWayland."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        env = {
+            "FLATPAK_ID": "com.vocalinux.Vocalinux",
+            "XDG_SESSION_TYPE": "wayland",
+            "DISPLAY": ":0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            with patch("vocalinux.text_injection.text_injector.shutil.which", return_value=None):
+                self.assertEqual(obj._detect_environment(), DesktopEnvironment.WAYLAND_XDOTOOL)
 
     def test_detect_flatpak_with_wayland_socket_stays_wayland(self):
         """If the Wayland socket is exposed, normal Wayland detection still applies."""

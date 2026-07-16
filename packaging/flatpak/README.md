@@ -12,9 +12,12 @@ The Flatpak uses `--socket=x11` and runs under XWayland on Wayland sessions.
 Native Wayland injection is compositor-dependent and not available on GNOME
 without privileged protocols; XWayland keeps the packaged `xdotool` path working.
 
-Global keyboard shortcuts use the evdev backend with `--device=input` so hotkeys
-work while other apps are focused (pynput over XWayland only sees keys when an
-X11 window is focused).
+Global keyboard shortcuts use the **evdev** backend (reads `/dev/input`).
+Text injection uses **ydotool** via `/dev/uinput` so typing reaches native
+Wayland apps. `xdotool` only works for X11/XWayland clients, so it is a fallback.
+
+The manifest grants `--device=all` because Flatpak has no narrower flag for
+uinput (required by ydotoold).
 
 ## Local Build
 
@@ -90,8 +93,9 @@ pipx run flatpak-pip-generator \
 
 - Runtime / SDK: `org.gnome.Platform//50`, `org.gnome.Sdk//50`
 - Mic: `--socket=pulseaudio` · GPU: `--device=dri` · models: `--share=network`
-- Global hotkeys: `--device=input` (evdev / `/dev/input`)
-- Injection: `--socket=x11` with packaged `xdotool` / `xsel`
+- Input: `--device=all` (evdev hotkeys + ydotool/`uinput` injection)
+- Injection tools: packaged `ydotool`/`ydotoold`, plus `xdotool`/`xsel` fallback
+- Display: `--socket=x11` (XWayland for xdotool fallback; no Wayland socket)
 - IBus: `--talk-name=org.freedesktop.IBus`
 - Tray: `--talk-name=org.kde.StatusNotifierWatcher`
 

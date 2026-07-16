@@ -161,9 +161,18 @@ class TextInjector:
         x11_display = os.environ.get("DISPLAY")
 
         if session_type == "wayland":
-            # Flatpak grants X11 only; inject via XWayland/xdotool when no Wayland socket.
+            # Flatpak often has no Wayland socket (injection uses uinput/x11). Prefer
+            # ydotool: xdotool only types into XWayland windows, not native clients.
             if os.environ.get("FLATPAK_ID") and not wayland_display and x11_display:
-                logger.info("Flatpak has X11/XWayland access only; using xdotool text injection")
+                if shutil.which("ydotool"):
+                    logger.info(
+                        "Flatpak on Wayland host: using ydotool (uinput) for text injection"
+                    )
+                    return DesktopEnvironment.WAYLAND
+                logger.info(
+                    "Flatpak on Wayland host: no ydotool; falling back to xdotool/XWayland "
+                    "(X11 apps only)"
+                )
                 return DesktopEnvironment.WAYLAND_XDOTOOL
             return DesktopEnvironment.WAYLAND
         elif session_type == "x11":
@@ -244,6 +253,41 @@ class TextInjector:
             # pgrep missing, timed out, or otherwise unavailable -> assume not running
             return False
 
+    def _ensure_ydotoold(self) -> bool:
+        """Start ydotoold if needed so ydotool can inject via uinput.
+
+        ydotool 1.x talks to a daemon that owns /dev/uinput. Inside Flatpak we
+        start the daemon on demand when the app is granted device access.
+        """
+        if self._is_ydotoold_running():
+            return True
+        ydotoold = shutil.which("ydotoold")
+        if not ydotoold:
+            return False
+        if not os.path.exists("/dev/uinput"):
+            logger.warning(
+                "ydotoold needs /dev/uinput (Flatpak: grant --device=all). "
+                "Text injection into native Wayland apps will fail."
+            )
+            return False
+        try:
+            subprocess.Popen(
+                [ydotoold],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as e:
+            logger.warning(f"Could not start ydotoold: {e}")
+            return False
+        for _ in range(40):
+            time.sleep(0.05)
+            if self._is_ydotoold_running():
+                logger.info("Started ydotoold for uinput text injection")
+                return True
+        logger.warning("ydotoold did not become ready in time")
+        return False
+
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
         ibus_requested = False
@@ -320,17 +364,16 @@ class TextInjector:
             ydotool_available = shutil.which("ydotool") is not None
             xdotool_available = shutil.which("xdotool") is not None
 
-            if ydotool_available and self._is_ydotoold_running():
-                # ydotoold is running; ydotool can inject via the daemon.
+            # Prefer ydotool when the daemon is (or can be) ready. Flatpak ships
+            # ydotool for native Wayland typing; wtype needs a Wayland socket.
+            if ydotool_available and self._ensure_ydotoold():
                 self.wayland_tool = "ydotool"
-                logger.info(f"Using {self.wayland_tool} for Wayland text injection")
+                logger.info("Using ydotool for Wayland text injection")
             elif ydotool_available and not wtype_available:
-                # ydotool present but no daemon and no wtype: try ydotool anyway
-                # (direct uinput mode, requires access to /dev/uinput).
                 self.wayland_tool = "ydotool"
                 logger.warning(
-                    "ydotoold daemon not running; using ydotool in direct mode "
-                    "(may have latency/permission issues)"
+                    "ydotoold not ready; using ydotool without daemon "
+                    "(may fail or have latency/permission issues)"
                 )
             elif wtype_available:
                 self.wayland_tool = "wtype"
@@ -1092,19 +1135,27 @@ class TextInjector:
         self._wait_for_modifiers_released()
 
         # ydotool emits *positional* evdev keycodes, so `ydotool type` is
-        # re-interpreted through the active keyboard layout, which it assumes is
-        # US QWERTY. On any other layout (AZERTY, QWERTZ, Dvorak, ...) the text
-        # comes out scrambled (e.g. "message" -> ",essqge" on AZERTY), and
-        # non-ASCII characters are dropped entirely. Always paste via the
-        # clipboard instead: Ctrl+V is layout-independent and Unicode-safe.
+        # re-interpreted through the active keyboard layout (assumes US QWERTY).
+        # Outside Flatpak we paste via clipboard (layout-independent). Inside
+        # Flatpak we only have the X11 clipboard unless wl-copy is present, and
+        # native Wayland apps won't see that paste buffer — so type via uinput.
         if self.wayland_tool == "ydotool":
-            logger.info("Using clipboard paste for ydotool (layout-independent, Unicode-safe)")
-            if self._inject_via_clipboard_paste(text):
-                return
-            logger.warning(
-                "Clipboard paste failed, falling back to ydotool type "
-                "(text may be scrambled on non-US layouts)"
-            )
+            can_use_clipboard = not os.environ.get("FLATPAK_ID") or shutil.which("wl-copy")
+            if can_use_clipboard:
+                logger.info("Using clipboard paste for ydotool (layout-independent, Unicode-safe)")
+                if self._inject_via_clipboard_paste(text):
+                    return
+                logger.warning(
+                    "Clipboard paste failed, falling back to ydotool type "
+                    "(text may be scrambled on non-US layouts)"
+                )
+            else:
+                logger.info(
+                    "Flatpak: using ydotool type via uinput "
+                    "(no Wayland clipboard bridge; US layout assumed)"
+                )
+            if not self._ensure_ydotoold():
+                logger.warning("ydotoold not ready before typing")
 
         if self.wayland_tool == "wtype":
             cmd = ["wtype", text]
