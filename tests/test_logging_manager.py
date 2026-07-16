@@ -117,6 +117,24 @@ class TestLoggingManager:
         assert logging_manager.log_callbacks == []
         assert logging_manager.handler is not None
 
+    def test_logs_dir_honours_xdg_data_home(self, tmp_path, monkeypatch):
+        """Logs must follow XDG_DATA_HOME so Flatpak sandbox paths work."""
+        import vocalinux.ui.logging_manager as lm
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        lm._logging_manager = None
+        root_logger = logging.getLogger()
+        for h in [h for h in root_logger.handlers if isinstance(h, lm.LoggingHandler)]:
+            root_logger.removeHandler(h)
+
+        manager = lm.LoggingManager(max_records=10)
+        try:
+            assert manager.logs_dir == tmp_path / "vocalinux" / "logs"
+            assert manager.logs_dir.is_dir()
+        finally:
+            root_logger.removeHandler(manager.handler)
+            lm._logging_manager = None
+
     def test_add_log_record(self, logging_manager):
         """Test adding a log record."""
         from vocalinux.ui.logging_manager import LogRecord

@@ -9,7 +9,7 @@
   </developer>
 
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0</project_license>
+  <project_license>GPL-3.0-only</project_license>
 
   <description>
     <p>
@@ -58,7 +58,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>Real-time voice-to-text transcription</caption>
-      <image>https://github.com/user-attachments/assets/e3d8dd16-3d4f-408c-b899-93d85e98b107</image>
+      <image>https://vocalinux.com/screenshots/00-transcription.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Speech engine settings</caption>
+      <image>https://vocalinux.com/screenshots/settings-speech-engine.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>System tray indicator</caption>
+      <image>https://vocalinux.com/screenshots/02-system-tray.png</image>
     </screenshot>
   </screenshots>
 
@@ -99,7 +107,7 @@
   <releases>
     <release version="0.14.0-beta" date="2026-07-14">
       <description>
-        <p>Align Flatpak metadata with Vocalinux 0.14.0-beta (whisper.cpp + Vulkan, XDG paths, XWayland injection).</p>
+        <p>Vocalinux 0.14.0-beta as Flatpak: whisper.cpp with Vulkan, XDG config/models/logs, XWayland text injection, and system tray integration.</p>
       </description>
     </release>
     <release version="0.12.0-beta" date="2026-06-07">
