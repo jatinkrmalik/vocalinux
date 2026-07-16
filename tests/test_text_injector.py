@@ -205,9 +205,10 @@ class TestTextInjector(unittest.TestCase):
             # Inject text
             injector.inject_text("Hello world")
 
-            # Verify ydotool was called correctly with timing parameters
+            # Clipboard paste fails (no wl-copy/xclip/xsel in this mock); type fallback.
+            # Default key-delay is 2 (overridable via VOCALINUX_YDOTOOL_KEY_DELAY).
             self.mock_subprocess.assert_any_call(
-                ["ydotool", "type", "--key-delay", "8", "Hello world"],
+                ["ydotool", "type", "--key-delay", "2", "Hello world"],
                 check=True,
                 stderr=subprocess.PIPE,
                 text=True,
