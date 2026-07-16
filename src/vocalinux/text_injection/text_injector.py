@@ -452,13 +452,19 @@ class TextInjector:
 
     def _get_clipboard_tools(self):
         tools = []
-        if self._session_environment == DesktopEnvironment.WAYLAND and shutil.which("wl-copy"):
+        # Prefer wl-copy on Wayland (including Flatpak with --socket=wayland).
+        host_is_wayland = (
+            self._session_environment == DesktopEnvironment.WAYLAND
+            or os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+            or bool(os.environ.get("WAYLAND_DISPLAY"))
+        )
+        if host_is_wayland and shutil.which("wl-copy"):
             tools.append("wl-copy")
         if shutil.which("xclip"):
             tools.append("xclip")
         if shutil.which("xsel"):
             tools.append("xsel")
-        if self._session_environment != DesktopEnvironment.WAYLAND and shutil.which("wl-copy"):
+        if not host_is_wayland and shutil.which("wl-copy"):
             tools.append("wl-copy")
         return tools
 
@@ -1134,38 +1140,26 @@ class TextInjector:
         # modify typed keys.
         self._wait_for_modifiers_released()
 
-        # ydotool emits *positional* evdev keycodes, so `ydotool type` is
-        # re-interpreted through the active keyboard layout (assumes US QWERTY).
-        # Outside Flatpak we paste via clipboard (layout-independent). Inside
-        # Flatpak we only have the X11 clipboard unless wl-copy is present, and
-        # native Wayland apps won't see that paste buffer — so type via uinput.
+        # Prefer clipboard + Ctrl+V for ydotool: one paste, layout-independent.
+        # Flatpak ships wl-copy (--socket=wayland) so native Wayland apps get
+        # bulk paste; character-by-character type is only a fallback.
         if self.wayland_tool == "ydotool":
-            can_use_clipboard = not os.environ.get("FLATPAK_ID") or shutil.which("wl-copy")
-            if can_use_clipboard:
-                logger.info("Using clipboard paste for ydotool (layout-independent, Unicode-safe)")
-                if self._inject_via_clipboard_paste(text):
-                    return
-                logger.warning(
-                    "Clipboard paste failed, falling back to ydotool type "
-                    "(text may be scrambled on non-US layouts)"
-                )
-            else:
-                logger.info(
-                    "Flatpak: using ydotool type via uinput "
-                    "(no Wayland clipboard bridge; US layout assumed)"
-                )
             if not self._ensure_ydotoold():
-                logger.warning("ydotoold not ready before typing")
+                logger.warning("ydotoold not ready before injection")
+            logger.info("Using clipboard paste for ydotool (instant, layout-independent)")
+            if self._inject_via_clipboard_paste(text):
+                return
+            logger.warning(
+                "Clipboard paste failed, falling back to ydotool type "
+                "(character-by-character; text may be scrambled on non-US layouts)"
+            )
 
         if self.wayland_tool == "wtype":
             cmd = ["wtype", text]
         else:  # ydotool
-            # Pass explicit timing parameters to speed up injection.
-            # ydotool defaults to --key-delay 12 (or 20 in older versions).
-            # We use a faster default configurable via environment variable.
-            # IMPORTANT: key-delay must stay > 0 to avoid Shift-leak bug where
-            # capital letters corrupt following characters (e.g. "Can you" -> "CAN YOu").
-            key_delay = os.environ.get("VOCALINUX_YDOTOOL_KEY_DELAY", "8")
+            # Keep key-delay > 0 to avoid Shift-leak ("Can you" -> "CAN YOu").
+            # Low delay so fallback typing finishes quickly for long phrases.
+            key_delay = os.environ.get("VOCALINUX_YDOTOOL_KEY_DELAY", "2")
             cmd = ["ydotool", "type", "--key-delay", key_delay, text]
 
         try:

@@ -8,16 +8,13 @@ The manifest ships the default `whisper_cpp` engine only. VOSK is omitted becaus
 the PyPI package is wheel-only (no sdist), so a Flathub-ready VOSK build would
 need to compile VOSK and its native deps from source.
 
-The Flatpak uses `--socket=x11` and runs under XWayland on Wayland sessions.
-Native Wayland injection is compositor-dependent and not available on GNOME
-without privileged protocols; XWayland keeps the packaged `xdotool` path working.
+Global keyboard shortcuts use **evdev** (`/dev/input`).
+Text injection uses **wl-copy** + **ydotool Ctrl+V** (instant paste into native
+Wayland apps). Character-by-character `ydotool type` is only a fallback.
+`xdotool` remains for pure X11/XWayland clients.
 
-Global keyboard shortcuts use the **evdev** backend (reads `/dev/input`).
-Text injection uses **ydotool** via `/dev/uinput` so typing reaches native
-Wayland apps. `xdotool` only works for X11/XWayland clients, so it is a fallback.
-
-The manifest grants `--device=all` because Flatpak has no narrower flag for
-uinput (required by ydotoold).
+Permissions: `--socket=wayland` (clipboard), `--socket=x11` (xdotool fallback),
+`--device=all` (evdev hotkeys + uinput; Flatpak has no narrower uinput flag).
 
 ## Local Build
 
@@ -93,9 +90,9 @@ pipx run flatpak-pip-generator \
 
 - Runtime / SDK: `org.gnome.Platform//50`, `org.gnome.Sdk//50`
 - Mic: `--socket=pulseaudio` · GPU: `--device=dri` · models: `--share=network`
-- Input: `--device=all` (evdev hotkeys + ydotool/`uinput` injection)
-- Injection tools: packaged `ydotool`/`ydotoold`, plus `xdotool`/`xsel` fallback
-- Display: `--socket=x11` (XWayland for xdotool fallback; no Wayland socket)
+- Input: `--device=all` (evdev hotkeys + ydotool/`uinput`)
+- Injection: packaged `wl-copy`, `ydotool`/`ydotoold`, plus `xdotool`/`xsel` fallback
+- Display: `--socket=wayland` (clipboard) and `--socket=x11` (xdotool fallback)
 - IBus: `--talk-name=org.freedesktop.IBus`
 - Tray: `--talk-name=org.kde.StatusNotifierWatcher`
 
