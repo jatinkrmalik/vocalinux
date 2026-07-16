@@ -3075,12 +3075,14 @@ REMOTE_CONFIG
         # Create wrapper scripts in ~/.local/bin for easy access
         mkdir -p "$HOME/.local/bin"
 
-        # Shared sg check logic for wrapper scripts
-        # Uses sg to activate input group for Wayland keyboard shortcuts without logout
-        local SG_CHECK='if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q "\binput\b" && command -v sg &>/dev/null; then
-    exec sg input -c "\$EXEC_CMD"
+        # Shared sg check logic for wrapper scripts.
+        # Uses sg to activate the input group for Wayland keyboard shortcuts without logout.
+        # Single-quoted so install.sh does not expand; the wrapper expands $(whoami)/$EXEC_CMD
+        # at runtime. Do not write \$ — that leaves a literal $EXEC_CMD for exec.
+        local SG_CHECK='if grep -q "^input:.*\b$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q "\binput\b" && command -v sg &>/dev/null; then
+    exec sg input -c "$EXEC_CMD"
 else
-    exec \$EXEC_CMD
+    exec $EXEC_CMD
 fi'
 
         # Create vocalinux wrapper script
