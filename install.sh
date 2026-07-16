@@ -420,8 +420,12 @@ if [ "$IS_VOCALINUX_LOCAL" = true ]; then
     # Running from within the vocalinux repo
     INSTALL_DIR="$(pwd)"
     print_info "Running from local repository: $INSTALL_DIR"
-    # Convert VENV_DIR to absolute path for wrapper scripts
-    VENV_DIR="$INSTALL_DIR/$VENV_DIR"
+    # Convert relative VENV_DIR to absolute for wrapper scripts.
+    # Absolute --venv-dir= paths must not be re-prefixed with INSTALL_DIR.
+    case "$VENV_DIR" in
+        /*) ;;
+        *) VENV_DIR="$INSTALL_DIR/$VENV_DIR" ;;
+    esac
 else
     # Running remotely (e.g., via curl | bash)
     print_info "Installing Vocalinux version: ${INSTALL_TAG}"
