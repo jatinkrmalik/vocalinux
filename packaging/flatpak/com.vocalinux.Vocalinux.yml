@@ -24,6 +24,9 @@ finish-args:
   - --socket=pulseaudio
   # GPU render node for the Vulkan-accelerated whisper.cpp build.
   - --device=dri
+  # Global hotkeys: pynput over XWayland only sees keys when an X11 window is
+  # focused. evdev needs /dev/input so shortcuts work while other apps are focused.
+  - --device=input
   # IBus Unicode injection backend.
   - --talk-name=org.freedesktop.IBus
   # Desktop notifications.

@@ -12,8 +12,9 @@ The Flatpak uses `--socket=x11` and runs under XWayland on Wayland sessions.
 Native Wayland injection is compositor-dependent and not available on GNOME
 without privileged protocols; XWayland keeps the packaged `xdotool` path working.
 
-Global keyboard shortcuts are limited in the sandbox (no `/dev/input`). Prefer
-tray/menu control over evdev push-to-talk.
+Global keyboard shortcuts use the evdev backend with `--device=input` so hotkeys
+work while other apps are focused (pynput over XWayland only sees keys when an
+X11 window is focused).
 
 ## Local Build
 
@@ -89,6 +90,7 @@ pipx run flatpak-pip-generator \
 
 - Runtime / SDK: `org.gnome.Platform//50`, `org.gnome.Sdk//50`
 - Mic: `--socket=pulseaudio` · GPU: `--device=dri` · models: `--share=network`
+- Global hotkeys: `--device=input` (evdev / `/dev/input`)
 - Injection: `--socket=x11` with packaged `xdotool` / `xsel`
 - IBus: `--talk-name=org.freedesktop.IBus`
 - Tray: `--talk-name=org.kde.StatusNotifierWatcher`
