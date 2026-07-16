@@ -15,6 +15,19 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.14.1-beta",
+    date: "2026-07-16",
+    type: "beta",
+    highlights: [
+      "Flatpak packaging for universal distribution: whisper.cpp engine, XDG sandbox paths, global hotkeys via evdev, Wayland text injection via wl-copy + ydotool (PR #484, closes #167)",
+      "AUR package and CI publish path for Arch Linux (PR #518)",
+      "Layout-aware combo keys so custom shortcuts work on non-US keyboard layouts (PR #514)",
+      "Installer fix for sg not found on Ubuntu 26.04 / Debian 13 (PR #524)",
+      "Text injection treats XIM none as unset (PR #512)",
+      "Website screenshot gallery refresh and Dependabot npm alert fixes (PR #521, #515)",
+    ],
+  },
+  {
     version: "v0.14.0-beta",
     date: "2026-07-13",
     type: "beta",

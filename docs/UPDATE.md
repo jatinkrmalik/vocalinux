@@ -2,17 +2,49 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
-## What's New in v0.14.0-beta
+## What's New in v0.14.1-beta
 
-### 🚀 Highlights
+### Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **⌨️ Configurable Shortcuts** | Bind any modifier combination to a key — e.g. `Alt+R`, `Ctrl+Shift+V`, or `Super+F10` |
-| **🌐 FunASR / SenseVoice Remote API** | Remote-API engine now supports FunASR and SenseVoice models via OpenAI-compatible endpoints |
-| **🖥️ GNOME Wayland IBus Reliability** | Text injection works again on GNOME Wayland with bare `xkb` layouts and engine restore fallbacks are fixed |
-| **🎙️ Audio Crash Fix** | Recording no longer crashes when the system audio device index changes between sessions |
-| **⚡ Hybrid-CPU Efficiency** | whisper.cpp no longer defaults to all cores on hybrid Intel/AMD processors |
+| **Flatpak packaging** | Universal Flatpak (whisper.cpp) with sandbox-aware paths, global hotkeys, and Wayland paste injection |
+| **AUR package** | Official Arch packaging and CI publish path |
+| **Layout-aware hotkeys** | Combo keys respect non-US layouts |
+| **Installer / injection fixes** | `sg` on Ubuntu 26.04/Debian 13; XIM `none` treated as unset |
+
+### New Features
+
+- **Flatpak packaging** — GNOME Platform 50, whisper.cpp + Vulkan, ydotool/wl-copy injection, evdev global shortcuts; build via `packaging/flatpak/` (#484, closes #167)
+- **AUR release package** — PKGBUILD and CI publish for Arch Linux (#518)
+
+### Bug Fixes
+
+- **Hotkeys**: Layout-aware combo keys for non-US layouts (#514)
+- **Installer**: `sg` not found on Ubuntu 26.04 / Debian 13 (#524)
+- **Text injection**: Treat XIM `none` as unset (#512)
+- **Web**: Dependabot npm alerts in package-lock (#515)
+
+### Docs
+
+- Refreshed v0.14 UI screenshots and website gallery (#521)
+- README Star History and related polish
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.1-beta).
+
+---
+
+## What's New in v0.14.0-beta
+
+### Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **Configurable Shortcuts** | Bind any modifier combination to a key — e.g. `Alt+R`, `Ctrl+Shift+V`, or `Super+F10` |
+| **FunASR / SenseVoice Remote API** | Remote-API engine now supports FunASR and SenseVoice models via OpenAI-compatible endpoints |
+| **GNOME Wayland IBus Reliability** | Text injection works again on GNOME Wayland with bare `xkb` layouts and engine restore fallbacks are fixed |
+| **Audio Crash Fix** | Recording no longer crashes when the system audio device index changes between sessions |
+| **Hybrid-CPU Efficiency** | whisper.cpp no longer defaults to all cores on hybrid Intel/AMD processors |
 
 ### ✨ New Features
 
@@ -273,7 +305,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.14.0-beta
+git checkout v0.14.1-beta
 ./install.sh
 ```
 
