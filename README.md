@@ -32,7 +32,7 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.14.1-beta
+## 📚 What's New in v0.14.1
 
 > **Release: Flatpak packaging, AUR package, layout-aware hotkeys, and installer/text-injection fixes.**
 
@@ -45,7 +45,7 @@ No internet required. No data leaves your machine. Just speak and type.
 | **Layout-aware hotkeys** | Combo keys work correctly on non-US keyboard layouts |
 | **Installer / text injection** | `sg` fix for Ubuntu 26.04/Debian 13; treat XIM `none` as unset |
 
-See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.1-beta).
+See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.1).
 
 ### Previous: v0.14.0-beta
 

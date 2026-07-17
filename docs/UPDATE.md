@@ -2,7 +2,7 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
-## What's New in v0.14.1-beta
+## What's New in v0.14.1
 
 ### Highlights
 
@@ -30,7 +30,7 @@ This guide explains how to update Vocalinux to the latest version.
 - Refreshed v0.14 UI screenshots and website gallery (#521)
 - README Star History and related polish
 
-See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.1-beta).
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.1).
 
 ---
 
@@ -305,7 +305,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.14.1-beta
+git checkout v0.14.1
 ./install.sh
 ```
 
