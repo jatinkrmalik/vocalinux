@@ -11,6 +11,7 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
@@ -390,6 +391,69 @@ class TestVocalinuxEngine(unittest.TestCase):
         with patch.object(engine, "_start_socket_server"):
             engine.do_enable()
         self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertFalse(VocalinuxEngine._focus_event.is_set())
+
+    def test_ping_status_matrix(self):
+        """PING status distinguishes no-engine / enabled / focused (#523)."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine, _ibus_ping_status
+
+        focus = threading.Event()
+        self.assertEqual(_ibus_ping_status(None, focus), b"NO_ENGINE")
+
+        engine = VocalinuxEngine()
+        self.assertEqual(_ibus_ping_status(engine, focus), b"OK")
+
+        focus.set()
+        self.assertEqual(_ibus_ping_status(engine, focus), b"FOCUSED")
+
+    def test_ensure_client_focus_true_when_already_focused(self):
+        """Already-focused engine does not wait before commit."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+        focus.set()
+        self.assertTrue(_ibus_ensure_client_focus(object(), focus, timeout=0.05))
+
+    def test_ensure_client_focus_false_without_instance(self):
+        """No active instance is not ready to commit."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+        self.assertFalse(_ibus_ensure_client_focus(None, focus, timeout=0.05))
+
+    def test_ensure_client_focus_waits_then_succeeds(self):
+        """Cold path: FocusIn arriving after enable unblocks commit (#523)."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+
+        def set_focus_soon():
+            time.sleep(0.05)
+            focus.set()
+
+        t = threading.Thread(target=set_focus_soon, daemon=True)
+        t.start()
+        self.assertTrue(_ibus_ensure_client_focus(object(), focus, timeout=0.5))
+        t.join(timeout=1.0)
+        self.assertTrue(focus.is_set())
+
+    def test_ensure_client_focus_times_out(self):
+        """Timeout without FocusIn returns False so caller can send NO_FOCUS."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+        self.assertFalse(_ibus_ensure_client_focus(object(), focus, timeout=0.05))
+
+    def test_do_destroy_clears_focus_when_active(self):
+        """Destroy of the active instance clears FocusIn readiness."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        engine = VocalinuxEngine()
+        engine.do_focus_in()
+        self.assertTrue(VocalinuxEngine._focus_event.is_set())
+        with patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False):
+            engine.do_destroy()
+        self.assertIsNone(VocalinuxEngine._active_instance)
         self.assertFalse(VocalinuxEngine._focus_event.is_set())
 
     def test_vocalinux_engine_do_process_key_event(self):

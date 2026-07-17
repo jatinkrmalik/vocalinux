@@ -588,6 +588,39 @@ def _handle_engine_destroy(
     return next_active_instance
 
 
+def _ibus_ping_status(active_instance: object, focus_event: threading.Event) -> bytes:
+    """Readiness bytes for the inject socket PING probe (#523).
+
+    FOCUSED: bound to a client context (safe to commit).
+    OK: engine instance exists but FocusIn has not arrived yet.
+    NO_ENGINE: no active instance.
+    """
+    # Use identity checks: VocalinuxEngine may subclass MagicMock in tests,
+    # so truthiness on the instance is unreliable.
+    if active_instance is None:
+        return b"NO_ENGINE"
+    if focus_event.is_set():
+        return b"FOCUSED"
+    return b"OK"
+
+
+def _ibus_ensure_client_focus(
+    active_instance: object,
+    focus_event: threading.Event,
+    timeout: float,
+) -> bool:
+    """Wait for FocusIn before commit_text when needed (#523).
+
+    Returns True when a client context is focused (or already was).
+    Returns False when there is no instance or FocusIn times out.
+    """
+    if active_instance is None:
+        return False
+    if focus_event.is_set():
+        return True
+    return focus_event.wait(timeout=timeout)
+
+
 def switch_engine(engine_name: str) -> bool:
     """Switch to the specified IBus engine."""
     import time
@@ -861,15 +894,9 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
                             data = conn.recv(65536)  # Max text size
                             if data:
                                 if data == b"\x00PING":
-                                    # FOCUSED: bound to a client context (safe to commit).
-                                    # OK: engine instance exists but not focused yet.
-                                    # NO_ENGINE: no instance.
-                                    if not cls._active_instance:
-                                        conn.sendall(b"NO_ENGINE")
-                                    elif cls._focus_event.is_set():
-                                        conn.sendall(b"FOCUSED")
-                                    else:
-                                        conn.sendall(b"OK")
+                                    conn.sendall(
+                                        _ibus_ping_status(cls._active_instance, cls._focus_event)
+                                    )
                                     continue
 
                                 text = data.decode("utf-8")
@@ -877,14 +904,19 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
                                 # activation, do_enable can set _active_instance
                                 # before mutter binds the client context; committing
                                 # then reports success while text is dropped (#523).
-                                if cls._active_instance and not cls._focus_event.is_set():
-                                    if not cls._focus_event.wait(timeout=cls._FOCUS_WAIT_TIMEOUT_S):
-                                        logger.warning(
-                                            "Timed out waiting for IBus FocusIn "
-                                            "before text commit"
-                                        )
-                                        conn.sendall(b"NO_FOCUS")
-                                        continue
+                                if (
+                                    cls._active_instance is not None
+                                    and not _ibus_ensure_client_focus(
+                                        cls._active_instance,
+                                        cls._focus_event,
+                                        cls._FOCUS_WAIT_TIMEOUT_S,
+                                    )
+                                ):
+                                    logger.warning(
+                                        "Timed out waiting for IBus FocusIn " "before text commit"
+                                    )
+                                    conn.sendall(b"NO_FOCUS")
+                                    continue
 
                                 # Snapshot after focus wait (FocusIn may set a new instance)
                                 instance = cls._active_instance
