@@ -25,9 +25,7 @@ if "gi" not in sys.modules:
 if "gi.repository" not in sys.modules:
     sys.modules["gi.repository"] = MagicMock()
 
-from vocalinux.speech_recognition.recognition_manager import (
-    SpeechRecognitionManager,
-)
+from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
 
 
 def _make_manager(engine="whisper_cpp", **kw):
@@ -160,6 +158,131 @@ class TestDownloadWhispercppModel:
             ):
                 with pytest.raises(RuntimeError, match="Failed to download"):
                     manager._download_whispercpp_model()
+
+    def test_download_whispercpp_appends_download_true(self, tmp_path):
+        """Hugging Face URLs get ?download=true for reliable binary responses."""
+        manager = _make_manager(engine="whisper_cpp")
+        model_file = str(tmp_path / "ggml-small.bin")
+
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {"content-length": "4", "content-type": "application/octet-stream"}
+        mock_response.iter_content.return_value = [b"data"]
+        mock_requests.get.return_value = mock_response
+        mock_requests.exceptions.RequestException = Exception
+
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value=model_file,
+            ):
+                manager._download_whispercpp_model()
+
+        called_url = mock_requests.get.call_args[0][0]
+        assert "huggingface.co" in called_url
+        assert "download=true" in called_url
+        assert mock_requests.get.call_args[1].get("timeout") == manager._MODEL_DOWNLOAD_TIMEOUT
+
+    def test_download_whispercpp_timeout_message(self, tmp_path):
+        """Timeout-like errors surface a dedicated user-facing message."""
+        manager = _make_manager(engine="whisper_cpp")
+        model_file = str(tmp_path / "ggml-small.bin")
+
+        mock_requests = MagicMock()
+        mock_requests.get.side_effect = Exception("Read timeout")
+        mock_requests.exceptions.RequestException = Exception
+
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value=model_file,
+            ):
+                with pytest.raises(RuntimeError, match="timed out"):
+                    manager._download_whispercpp_model()
+
+    def test_stream_model_download_rejects_html(self, tmp_path):
+        """HTML error pages must not be written as model binaries."""
+        manager = _make_manager(engine="whisper_cpp")
+        dest = str(tmp_path / "bad.bin")
+
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {"content-type": "text/html; charset=utf-8"}
+        mock_response.status_code = 200
+        mock_requests.get.return_value = mock_response
+
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with pytest.raises(RuntimeError, match="HTML"):
+                manager._stream_model_download("https://example.com/model.bin", dest)
+
+        assert not os.path.exists(dest)
+
+    def test_stream_model_download_empty_body(self, tmp_path):
+        """Zero-byte downloads are treated as failure and cleaned up."""
+        manager = _make_manager(engine="whisper_cpp")
+        dest = str(tmp_path / "empty.bin")
+
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {"content-length": "0", "content-type": "application/octet-stream"}
+        mock_response.iter_content.return_value = [b"", b""]
+        mock_requests.get.return_value = mock_response
+
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with pytest.raises(RuntimeError, match="0 bytes"):
+                manager._stream_model_download("https://example.com/model.bin", dest)
+
+        assert not os.path.exists(dest)
+
+    def test_stream_model_download_cancelled(self, tmp_path):
+        """User cancel mid-stream removes the partial file."""
+        manager = _make_manager(engine="whisper_cpp")
+        manager._download_cancelled = True
+        dest = str(tmp_path / "partial.bin")
+
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.headers = {
+            "content-length": "100",
+            "content-type": "application/octet-stream",
+        }
+        mock_response.iter_content.return_value = [b"chunk"]
+        mock_requests.get.return_value = mock_response
+
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with pytest.raises(RuntimeError, match="cancelled"):
+                manager._stream_model_download("https://example.com/model.bin", dest)
+
+        assert not os.path.exists(dest)
+
+    def test_stream_model_download_eta_minutes_and_empty_chunks(self, tmp_path):
+        """Progress path covers multi-minute ETA and skips empty chunks."""
+        manager = _make_manager(engine="whisper_cpp")
+        progress_calls = []
+        manager._download_progress_callback = lambda progress, speed, status: progress_calls.append(
+            status
+        )
+        dest = str(tmp_path / "big.bin")
+
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        # Large total so remaining/speed yields ETA >= 60s
+        mock_response.headers = {
+            "content-length": str(100 * 1024 * 1024),
+            "content-type": "application/octet-stream",
+        }
+        mock_response.iter_content.return_value = [b"", b"x" * 1024]
+        mock_requests.get.return_value = mock_response
+
+        # start=0, then 0.2 for progress update (elapsed > 0, small speed)
+        times = [0.0, 0.2, 0.2]
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            with patch("time.time", side_effect=lambda: times.pop(0) if times else 1.0):
+                manager._stream_model_download("https://example.com/model.bin", dest)
+
+        assert os.path.exists(dest)
+        assert os.path.getsize(dest) == 1024
+        assert any("m " in s or "ETA" in s for s in progress_calls)
 
 
 class TestDownloadVoskModel:

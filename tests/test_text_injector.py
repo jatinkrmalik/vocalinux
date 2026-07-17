@@ -729,6 +729,37 @@ class TestTextInjector(unittest.TestCase):
         cmd = injector._ydotool_ctrl_v_command()
         self.assertEqual(cmd, ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"])
 
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ydotool_ctrl_v_command_unknown_help_defaults_legacy(self, mock_which, mock_run):
+        """Unrecognized help text prefers named ctrl+v (safe on 0.1.x)."""
+        mock_which.return_value = "/usr/bin/ydotool"
+        mock_run.return_value = MagicMock(returncode=0, stdout="mystery help", stderr="")
+        injector = TextInjector.__new__(TextInjector)
+        os.environ.pop("FLATPAK_ID", None)
+        cmd = injector._ydotool_ctrl_v_command()
+        self.assertEqual(cmd, ["ydotool", "key", "ctrl+v"])
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ydotool_ctrl_v_command_probe_error_defaults_legacy(self, mock_which, mock_run):
+        """If key --help fails, default to legacy named sequence."""
+        mock_which.return_value = "/usr/bin/ydotool"
+        mock_run.side_effect = OSError("no ydotool")
+        injector = TextInjector.__new__(TextInjector)
+        os.environ.pop("FLATPAK_ID", None)
+        cmd = injector._ydotool_ctrl_v_command()
+        self.assertEqual(cmd, ["ydotool", "key", "ctrl+v"])
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ydotool_ctrl_v_command_app_prefix_uses_keycodes(self, mock_which):
+        """/app/bin/ydotool (Flatpak path) always uses 1.x keycodes without FLATPAK_ID."""
+        mock_which.return_value = "/app/bin/ydotool"
+        injector = TextInjector.__new__(TextInjector)
+        os.environ.pop("FLATPAK_ID", None)
+        cmd = injector._ydotool_ctrl_v_command()
+        self.assertEqual(cmd, ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"])
+
     @patch("vocalinux.text_injection.text_injector.shutil.which")
     @patch("vocalinux.text_injection.text_injector.subprocess.run")
     def test_clipboard_paste_returns_false_on_paste_failure(self, mock_run, mock_which):
@@ -1780,10 +1811,79 @@ class TestCompositorIBusBridging(unittest.TestCase):
         self.assertFalse(injector._is_ydotoold_running())
         self.assertTrue(mock_unlink.called)
 
+    @patch("os.unlink")
+    @patch("vocalinux.text_injection.text_injector.socket.socket")
+    @patch("os.path.exists", return_value=True)
+    def test_is_ydotoold_running_prefers_dgram_connect(
+        self, _mock_exists, mock_socket_cls, mock_unlink
+    ):
+        """ydotool 1.x listens on SOCK_DGRAM; probe connects with dgram first."""
+        import socket as socket_mod
+
+        dgram_sock = MagicMock()
+        stream_sock = MagicMock()
+        err = OSError(91, "Protocol wrong type for socket")
+        err.errno = 91
+        stream_sock.connect.side_effect = err
+
+        def socket_factory(family, sock_type, *args, **kwargs):
+            if sock_type == socket_mod.SOCK_DGRAM:
+                return dgram_sock
+            return stream_sock
+
+        mock_socket_cls.side_effect = socket_factory
+        injector = self._bare_injector()
+        self.assertTrue(injector._is_ydotoold_running())
+        dgram_sock.connect.assert_called()
+        stream_sock.connect.assert_not_called()
+        mock_unlink.assert_not_called()
+
+    @patch("os.unlink")
+    @patch("vocalinux.text_injection.text_injector.socket.socket")
+    @patch("os.path.exists", return_value=True)
+    def test_is_ydotoold_running_eprototype_only_does_not_unlink(
+        self, _mock_exists, mock_socket_cls, mock_unlink
+    ):
+        """If only EPROTOTYPE is seen, do not delete a possibly live socket."""
+        err = OSError(91, "Protocol wrong type for socket")
+        err.errno = 91
+        mock_sock = MagicMock()
+        mock_sock.connect.side_effect = err
+        mock_socket_cls.return_value = mock_sock
+        injector = self._bare_injector()
+        self.assertFalse(injector._is_ydotoold_running())
+        mock_unlink.assert_not_called()
+
     @patch("os.path.exists", return_value=False)
     def test_is_ydotoold_running_false_when_absent(self, _mock_exists):
         injector = self._bare_injector()
         self.assertFalse(injector._is_ydotoold_running())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_ensure_ydotoold_ready_when_only_ydotool_cli(self, mock_which):
+        """Host ydotool 0.1.x without ydotoold is still considered ready."""
+        mock_which.side_effect = lambda cmd: "/usr/bin/ydotool" if cmd == "ydotool" else None
+        injector = self._bare_injector()
+        with patch.object(injector, "_is_ydotoold_running", return_value=False):
+            self.assertTrue(injector._ensure_ydotoold())
+
+    @patch("os.path.exists", return_value=False)
+    @patch("vocalinux.text_injection.text_injector.shutil.which", return_value="/app/bin/ydotoold")
+    def test_ensure_ydotoold_false_without_uinput(self, _mock_which, _mock_exists):
+        injector = self._bare_injector()
+        with patch.object(injector, "_is_ydotoold_running", return_value=False):
+            self.assertFalse(injector._ensure_ydotoold())
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.Popen")
+    @patch("os.path.exists", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.shutil.which", return_value="/app/bin/ydotoold")
+    def test_ensure_ydotoold_starts_daemon(self, _mock_which, _mock_exists, mock_popen):
+        injector = self._bare_injector()
+        # First probe: not running; after start: running
+        with patch.object(injector, "_is_ydotoold_running", side_effect=[False, False, True]):
+            with patch("time.sleep"):
+                self.assertTrue(injector._ensure_ydotoold())
+        mock_popen.assert_called_once()
 
     @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
     @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
