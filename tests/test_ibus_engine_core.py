@@ -10,6 +10,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -846,6 +847,251 @@ class TestIBusEngineMainEntrypoint(unittest.TestCase):
         mock_init.assert_called_once_with()
         mock_app_cls.assert_called_once_with(exec_by_ibus=True)
         mock_app.run.assert_called_once_with()
+
+
+class TestStartEngineProcess(unittest.TestCase):
+    """Coverage for start_engine_process success and failure diagnostics."""
+
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_process_running", return_value=True)
+    def test_returns_true_when_already_running(self, mock_running):
+        from vocalinux.text_injection.ibus_engine import start_engine_process
+
+        self.assertTrue(start_engine_process())
+        mock_running.assert_called()
+
+    def test_success_when_process_becomes_running(self):
+        from vocalinux.text_injection import ibus_engine
+
+        mock_proc = MagicMock()
+        mock_proc.pid = 4242
+        # Not running on first check (before spawn), then running after poll loop starts.
+        running_states = iter([False, True])
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", side_effect=running_states),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "PID_FILE") as mock_pid,
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", Path(tempfile.mkdtemp())),
+            patch.object(ibus_engine.subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            patch.object(ibus_engine.time, "sleep"),
+            patch.object(ibus_engine.sys, "prefix", "/venv"),
+            patch.object(ibus_engine.sys, "base_prefix", "/usr"),
+        ):
+            self.assertTrue(ibus_engine.start_engine_process())
+            mock_popen.assert_called_once()
+            # VIRTUAL_ENV set when running under a venv-like prefix
+            env = mock_popen.call_args.kwargs["env"]
+            self.assertEqual(env.get("VIRTUAL_ENV"), "/venv")
+            mock_pid.write_text.assert_called_with("4242")
+
+    def test_failure_logs_stderr_and_clears_pid(self):
+        from vocalinux.text_injection import ibus_engine
+
+        tmp = Path(tempfile.mkdtemp())
+        mock_proc = MagicMock()
+        mock_proc.pid = 99
+        mock_proc.poll.return_value = 1
+        mock_proc.returncode = 1
+
+        written = {}
+
+        def write_text(data, *a, **k):
+            written["pid"] = data
+            written["exists"] = True
+
+        def unlink():
+            written["exists"] = False
+
+        def popen_side_effect(*args, **kwargs):
+            # After open() truncates the log, plant failure stderr.
+            (tmp / "engine.stderr.log").write_text("ImportError: attempted relative import\n")
+            return mock_proc
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", return_value=False),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "PID_FILE") as mock_pid,
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", tmp),
+            patch.object(ibus_engine.subprocess, "Popen", side_effect=popen_side_effect),
+            patch.object(ibus_engine.time, "sleep"),
+            patch.object(ibus_engine.logger, "error") as mock_error,
+        ):
+            mock_pid.write_text.side_effect = write_text
+            mock_pid.exists.side_effect = lambda: written.get("exists", False)
+            mock_pid.unlink.side_effect = unlink
+            result = ibus_engine.start_engine_process()
+
+        self.assertFalse(result)
+        self.assertTrue(
+            any(
+                "ImportError" in str(c) or "failed to start" in str(c)
+                for c in mock_error.call_args_list
+            )
+        )
+        mock_pid.unlink.assert_called()
+        self.assertFalse(written.get("exists", True))
+
+    def test_failure_logs_when_stderr_empty(self):
+        from vocalinux.text_injection import ibus_engine
+
+        tmp = Path(tempfile.mkdtemp())
+        mock_proc = MagicMock()
+        mock_proc.pid = 100
+        mock_proc.poll.return_value = 2
+        mock_proc.returncode = 2
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", return_value=False),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "PID_FILE") as mock_pid,
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", tmp),
+            patch.object(ibus_engine.subprocess, "Popen", return_value=mock_proc),
+            patch.object(ibus_engine.time, "sleep"),
+            patch.object(ibus_engine.logger, "error") as mock_error,
+        ):
+            mock_pid.exists.return_value = False
+            result = ibus_engine.start_engine_process()
+
+        self.assertFalse(result)
+        logged = " ".join(str(c) for c in mock_error.call_args_list)
+        self.assertIn("no stderr", logged)
+
+    def test_failure_terminates_orphan_process(self):
+        from vocalinux.text_injection import ibus_engine
+
+        tmp = Path(tempfile.mkdtemp())
+        mock_proc = MagicMock()
+        mock_proc.pid = 101
+        # Still alive after wait loop
+        mock_proc.poll.return_value = None
+        mock_proc.returncode = -15
+        mock_proc.wait.return_value = -15
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", return_value=False),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "PID_FILE") as mock_pid,
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", tmp),
+            patch.object(ibus_engine.subprocess, "Popen", return_value=mock_proc),
+            patch.object(ibus_engine.time, "sleep"),
+            patch.object(ibus_engine.logger, "error") as mock_error,
+        ):
+            mock_pid.exists.return_value = True
+            mock_pid.unlink.side_effect = OSError("permission denied")
+            result = ibus_engine.start_engine_process()
+
+        self.assertFalse(result)
+        mock_proc.terminate.assert_called_once()
+        mock_proc.wait.assert_called()
+        # PID unlink OSError is swallowed
+        mock_pid.unlink.assert_called()
+        self.assertTrue(mock_error.called)
+
+    def test_failure_kills_when_terminate_times_out(self):
+        from vocalinux.text_injection import ibus_engine
+
+        tmp = Path(tempfile.mkdtemp())
+        mock_proc = MagicMock()
+        mock_proc.pid = 102
+        mock_proc.poll.return_value = None
+        mock_proc.returncode = -9
+
+        def wait_side_effect(timeout=None):
+            if timeout == 1.0:
+                raise subprocess.TimeoutExpired(cmd="engine", timeout=1.0)
+            return -9
+
+        mock_proc.wait.side_effect = wait_side_effect
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", return_value=False),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "PID_FILE") as mock_pid,
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", tmp),
+            patch.object(ibus_engine.subprocess, "Popen", return_value=mock_proc),
+            patch.object(ibus_engine.time, "sleep"),
+        ):
+            mock_pid.exists.return_value = False
+            result = ibus_engine.start_engine_process()
+
+        self.assertFalse(result)
+        mock_proc.terminate.assert_called_once()
+        mock_proc.kill.assert_called_once()
+
+    def test_failure_when_kill_wait_also_times_out(self):
+        from vocalinux.text_injection import ibus_engine
+
+        tmp = Path(tempfile.mkdtemp())
+        mock_proc = MagicMock()
+        mock_proc.pid = 103
+        mock_proc.poll.return_value = None
+        mock_proc.returncode = None
+        mock_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="engine", timeout=1.0)
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", return_value=False),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "PID_FILE") as mock_pid,
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", tmp),
+            patch.object(ibus_engine.subprocess, "Popen", return_value=mock_proc),
+            patch.object(ibus_engine.time, "sleep"),
+        ):
+            mock_pid.exists.return_value = False
+            result = ibus_engine.start_engine_process()
+
+        self.assertFalse(result)
+        mock_proc.kill.assert_called_once()
+        # Both wait calls timed out
+        self.assertGreaterEqual(mock_proc.wait.call_count, 2)
+
+    def test_stderr_read_oserror_uses_empty_stderr_branch(self):
+        from vocalinux.text_injection import ibus_engine
+
+        tmp = Path(tempfile.mkdtemp())
+        mock_proc = MagicMock()
+        mock_proc.pid = 104
+        mock_proc.poll.return_value = 1
+        mock_proc.returncode = 1
+
+        real_read = Path.read_text
+
+        def selective_read(self, *a, **k):
+            if str(self).endswith("engine.stderr.log"):
+                raise OSError("gone")
+            return real_read(self, *a, **k)
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", return_value=False),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "PID_FILE") as mock_pid,
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", tmp),
+            patch.object(ibus_engine.subprocess, "Popen", return_value=mock_proc),
+            patch.object(ibus_engine.time, "sleep"),
+            patch.object(ibus_engine.logger, "error") as mock_error,
+            patch.object(Path, "read_text", selective_read),
+        ):
+            mock_pid.exists.return_value = False
+            result = ibus_engine.start_engine_process()
+
+        self.assertFalse(result)
+        logged = " ".join(str(c) for c in mock_error.call_args_list)
+        self.assertIn("no stderr", logged)
+
+    def test_popen_exception_returns_false(self):
+        from vocalinux.text_injection import ibus_engine
+
+        with (
+            patch.object(ibus_engine, "is_engine_process_running", return_value=False),
+            patch.object(ibus_engine, "ensure_ibus_dir"),
+            patch.object(ibus_engine, "VOCALINUX_IBUS_DIR", Path(tempfile.mkdtemp())),
+            patch.object(ibus_engine.subprocess, "Popen", side_effect=OSError("cannot exec")),
+            patch.object(ibus_engine.logger, "error") as mock_error,
+        ):
+            result = ibus_engine.start_engine_process()
+
+        self.assertFalse(result)
+        logged = " ".join(str(c) for c in mock_error.call_args_list)
+        self.assertIn("cannot exec", logged)
 
 
 class TestIBusTextInjectorRetry(unittest.TestCase):
