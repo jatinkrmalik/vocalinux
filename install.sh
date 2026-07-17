@@ -420,8 +420,12 @@ if [ "$IS_VOCALINUX_LOCAL" = true ]; then
     # Running from within the vocalinux repo
     INSTALL_DIR="$(pwd)"
     print_info "Running from local repository: $INSTALL_DIR"
-    # Convert VENV_DIR to absolute path for wrapper scripts
-    VENV_DIR="$INSTALL_DIR/$VENV_DIR"
+    # Convert relative VENV_DIR to absolute for wrapper scripts.
+    # Absolute --venv-dir= paths must not be re-prefixed with INSTALL_DIR.
+    case "$VENV_DIR" in
+        /*) ;;
+        *) VENV_DIR="$INSTALL_DIR/$VENV_DIR" ;;
+    esac
 else
     # Running remotely (e.g., via curl | bash)
     print_info "Installing Vocalinux version: ${INSTALL_TAG}"
@@ -3075,12 +3079,14 @@ REMOTE_CONFIG
         # Create wrapper scripts in ~/.local/bin for easy access
         mkdir -p "$HOME/.local/bin"
 
-        # Shared sg check logic for wrapper scripts
-        # Uses sg to activate input group for Wayland keyboard shortcuts without logout
-        local SG_CHECK='if grep -q "^input:.*\b\$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q "\binput\b" && command -v sg &>/dev/null; then
-    exec sg input -c "\$EXEC_CMD"
+        # Shared sg check logic for wrapper scripts.
+        # Uses sg to activate the input group for Wayland keyboard shortcuts without logout.
+        # Single-quoted so install.sh does not expand; the wrapper expands $(whoami)/$EXEC_CMD
+        # at runtime. Do not write \$ — that leaves a literal $EXEC_CMD for exec.
+        local SG_CHECK='if grep -q "^input:.*\b$(whoami)\b" /etc/group 2>/dev/null && ! groups | grep -q "\binput\b" && command -v sg &>/dev/null; then
+    exec sg input -c "$EXEC_CMD"
 else
-    exec \$EXEC_CMD
+    exec $EXEC_CMD
 fi'
 
         # Create vocalinux wrapper script

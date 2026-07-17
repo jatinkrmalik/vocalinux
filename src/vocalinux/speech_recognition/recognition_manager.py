@@ -1684,6 +1684,92 @@ class SpeechRecognitionManager:
             logger.debug(f"whisper.cpp server API format attempt failed: {e}")
             return None
 
+    # (connect timeout, read timeout) for model HTTP downloads. HF often hangs
+    # without a timeout when the CDN is degraded (e.g. 504 / empty body).
+    _MODEL_DOWNLOAD_TIMEOUT = (15, 120)
+
+    def _stream_model_download(self, url: str, dest_path: str) -> None:
+        """Stream a model file from ``url`` to ``dest_path`` with progress.
+
+        Raises RuntimeError on cancel, HTTP errors, timeouts, or empty body.
+        """
+        import requests
+
+        logger.info(f"Downloading from {url}")
+        response = requests.get(
+            url,
+            stream=True,
+            timeout=self._MODEL_DOWNLOAD_TIMEOUT,
+            headers={"User-Agent": "vocalinux/0.14.1"},
+        )
+        response.raise_for_status()
+
+        content_type = (response.headers.get("content-type") or "").lower()
+        if "text/html" in content_type:
+            raise RuntimeError(
+                f"Model URL returned HTML instead of a binary file "
+                f"(status {response.status_code}, content-type {content_type}). "
+                f"Hugging Face may be unavailable; try again later."
+            )
+
+        total_size = int(response.headers.get("content-length", 0))
+        downloaded_size = 0
+        start_time = time.time()
+        last_update_time = start_time
+        chunk_size = 8192
+
+        with open(dest_path, "wb") as f:
+            for data in response.iter_content(chunk_size=chunk_size):
+                if self._download_cancelled:
+                    logger.info("Download cancelled by user")
+                    f.close()
+                    if os.path.exists(dest_path):
+                        os.remove(dest_path)
+                    raise RuntimeError("Download cancelled")
+
+                if not data:
+                    continue
+                f.write(data)
+                downloaded_size += len(data)
+
+                current_time = time.time()
+                if self._download_progress_callback and (current_time - last_update_time) >= 0.1:
+                    elapsed = current_time - start_time
+                    speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+
+                    if total_size > 0:
+                        progress = downloaded_size / total_size
+                        remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
+                        if speed_mbps > 0:
+                            eta_seconds = remaining_mb / speed_mbps
+                            eta_str = (
+                                f"{int(eta_seconds)}s"
+                                if eta_seconds < 60
+                                else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                            )
+                        else:
+                            eta_str = "--"
+                        status = (
+                            f"{downloaded_size / (1024 * 1024):.1f} / "
+                            f"{total_size / (1024 * 1024):.1f} MB • "
+                            f"{speed_mbps:.1f} MB/s • ETA: {eta_str}"
+                        )
+                    else:
+                        progress = 0
+                        status = f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
+
+                    self._download_progress_callback(progress, speed_mbps, status)
+                    last_update_time = current_time
+                    logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+        if downloaded_size == 0:
+            if os.path.exists(dest_path):
+                os.remove(dest_path)
+            raise RuntimeError(
+                f"Downloaded 0 bytes from {url}. "
+                "Hugging Face may be down or blocked; try again later."
+            )
+
     def _download_whispercpp_model(self):
         """Download a whisper.cpp model with progress tracking."""
         import requests
@@ -1695,84 +1781,37 @@ class SpeechRecognitionManager:
             raise ValueError(f"Unknown whisper.cpp model size: {self.model_size}")
 
         url = model_info["url"]
+        # Prefer explicit download=true (some HF edges serve HTML without it).
+        if "huggingface.co" in url and "download=" not in url:
+            url = url + ("&" if "?" in url else "?") + "download=true"
         model_path = get_model_path(self.model_size)
         temp_file = model_path + ".tmp"
 
-        # Ensure directory exists
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
         logger.info(f"Downloading whisper.cpp {self.model_size} model to {model_path}")
-        logger.info(f"Downloading from {url}")
 
         try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-
-            total_size = int(response.headers.get("content-length", 0))
-            downloaded_size = 0
-            start_time = time.time()
-            last_update_time = start_time
-            chunk_size = 8192  # 8KB chunks
-
-            with open(temp_file, "wb") as f:
-                for data in response.iter_content(chunk_size=chunk_size):
-                    if self._download_cancelled:
-                        logger.info("Download cancelled by user")
-                        f.close()
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
-                        raise RuntimeError("Download cancelled")
-
-                    f.write(data)
-                    downloaded_size += len(data)
-
-                    # Update progress callback
-                    current_time = time.time()
-                    if (
-                        self._download_progress_callback
-                        and (current_time - last_update_time) >= 0.1
-                    ):
-                        elapsed = current_time - start_time
-                        if elapsed > 0:
-                            speed_mbps = (downloaded_size / (1024 * 1024)) / elapsed
-                        else:
-                            speed_mbps = 0
-
-                        if total_size > 0:
-                            progress = downloaded_size / total_size
-                            remaining_mb = (total_size - downloaded_size) / (1024 * 1024)
-                            if speed_mbps > 0:
-                                eta_seconds = remaining_mb / speed_mbps
-                                eta_str = (
-                                    f"{int(eta_seconds)}s"
-                                    if eta_seconds < 60
-                                    else f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
-                                )
-                            else:
-                                eta_str = "--"
-                            status = f"{downloaded_size / (1024 * 1024):.1f} / {total_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s • ETA: {eta_str}"
-                        else:
-                            progress = 0
-                            status = (
-                                f"{downloaded_size / (1024 * 1024):.1f} MB • {speed_mbps:.1f} MB/s"
-                            )
-
-                        self._download_progress_callback(progress, speed_mbps, status)
-                        last_update_time = current_time
-
-                        logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
-
-            # Rename temp file to final
+            self._stream_model_download(url, temp_file)
             os.rename(temp_file, model_path)
             logger.info("whisper.cpp model downloaded successfully")
 
             if self._download_progress_callback:
                 self._download_progress_callback(1.0, 0, "Complete!")
 
+        # Use RequestException when available; tests mock requests and set
+        # RequestException=Exception. Do not catch Timeout separately — under a
+        # MagicMock that is not a real exception type (TypeError in CI).
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to download whisper.cpp model from {url}: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+            msg = str(e).lower()
+            if "timeout" in msg or type(e).__name__ == "Timeout":
+                raise RuntimeError(
+                    "Model download timed out (Hugging Face may be slow or unavailable). "
+                    "Check your network and try again."
+                ) from e
             raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
         except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during whisper.cpp model download: {e}")
@@ -1850,7 +1889,7 @@ class SpeechRecognitionManager:
         # Download the model
         logger.info(f"Downloading VOSK model from {url}")
         try:
-            response = requests.get(url, stream=True)
+            response = requests.get(url, stream=True, timeout=self._MODEL_DOWNLOAD_TIMEOUT)
             response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
             total_size = int(response.headers.get("content-length", 0))

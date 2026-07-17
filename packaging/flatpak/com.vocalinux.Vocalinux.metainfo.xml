@@ -105,6 +105,11 @@
   </content_rating>
 
   <releases>
+    <release version="0.14.1-beta" date="2026-07-16">
+      <description>
+        <p>First Flathub-oriented packaging release: Flatpak with whisper.cpp + Vulkan, wl-copy/ydotool Wayland paste, evdev global hotkeys, AUR package, layout-aware shortcuts, and installer fixes.</p>
+      </description>
+    </release>
     <release version="0.14.0-beta" date="2026-07-14">
       <description>
         <p>Vocalinux 0.14.0-beta as Flatpak: whisper.cpp with Vulkan, XDG config/models/logs, XWayland text injection, and system tray integration.</p>
