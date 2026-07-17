@@ -23,11 +23,6 @@ This guide explains how to update Vocalinux to the latest version.
 - **IBus**: Restore engine process launch after the Flatpak XDG path import change. `start_engine_process` and the IBus component exec run `ibus_engine.py` by path, so the relative import failed with `ImportError` and Vocalinux fell back to ydotool/clipboard paste (#534)
 - **IBus**: Wait for FocusIn before commit on scoped injection. Cold first activation on GNOME Wayland could commit before mutter bound a client context, so the first dictation of a session was dropped while logs still reported success (#533, fixes #523)
 
-### Also in 0.14.x (unchanged this patch)
-
-- Flatpak packaging, AUR package, layout-aware hotkeys, installer/`sg` and XIM fixes (0.14.1)
-- Configurable hotkeys, FunASR/SenseVoice, GNOME/KDE Wayland IBus paths, modifier-release wait, hybrid-CPU and audio crash fixes (0.14.0)
-
 See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2).
 
 ---

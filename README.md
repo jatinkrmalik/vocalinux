@@ -52,11 +52,7 @@ No internet required. No data leaves your machine. Just speak and type.
 - **IBus**: Restore engine process launch after the Flatpak XDG path import change (no silent ydotool fallback when IBus should work) (#534)
 - **IBus**: Wait for FocusIn before commit on scoped injection so the first dictation of a session is not dropped on GNOME Wayland (#533, fixes #523)
 
-See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2).
-
-### Previous: v0.14.1 / v0.14.0-beta
-
-Flatpak/AUR packaging, layout-aware hotkeys, installer fixes, configurable shortcuts, FunASR/SenseVoice, hybrid-CPU and audio crash fixes. Details in [UPDATE.md](docs/UPDATE.md).
+See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2). Earlier 0.14.x notes are in UPDATE.md.
 
 ---
 
@@ -433,7 +429,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.14.2 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Stable v0.14.2 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 

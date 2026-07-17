@@ -105,9 +105,9 @@
   </content_rating>
 
   <releases>
-    <release version="0.14.2" date="2026-07-16">
+    <release version="0.14.2" date="2026-07-17">
       <description>
-        <p>Stability patch on the 0.14 series: IBus engine process launch restored after XDG path import, and first dictation of a session no longer dropped on GNOME Wayland. Feature set unchanged (Flatpak, AUR, configurable hotkeys, FunASR/SenseVoice, layout-aware shortcuts).</p>
+        <p>IBus stability: restore engine process launch after XDG path import; do not drop the first dictation of a session on GNOME Wayland (FocusIn gate).</p>
       </description>
     </release>
     <release version="0.14.1" date="2026-07-16">

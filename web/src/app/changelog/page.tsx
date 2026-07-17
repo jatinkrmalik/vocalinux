@@ -16,12 +16,11 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 const releases = [
   {
     version: "v0.14.2",
-    date: "2026-07-16",
+    date: "2026-07-17",
     type: "stable",
     highlights: [
       "IBus: restore engine process launch after Flatpak XDG path import so the engine no longer dies with ImportError and falls back to ydotool/clipboard paste (PR #534)",
       "IBus: wait for FocusIn before commit on scoped injection so the first dictation of a session is not dropped on GNOME Wayland (PR #533, fixes #523)",
-      "0.14 series feature set unchanged: Flatpak, AUR, configurable hotkeys, FunASR/SenseVoice, layout-aware shortcuts, Wayland IBus reliability",
     ],
   },
   {
