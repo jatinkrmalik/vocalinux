@@ -241,26 +241,53 @@ class TextInjector:
 
         A leftover socket file is not enough: after a crash or a Flatpak session
         exit the path can remain while nothing listens, and ydotool then fails
-        with exit status 2. Probe the socket with a real connect(); remove stale
-        sockets so the next start can bind again.
+        with exit status 2. Probe with a real connect(); remove only sockets
+        that nothing accepts.
+
+        ydotool 1.x uses a Unix **datagram** socket (not stream). Probing with
+        SOCK_STREAM fails with EPROTOTYPE and must not be treated as stale.
         """
         for path in self._ydotool_socket_paths():
             if not os.path.exists(path):
                 continue
-            try:
-                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            # Try dgram first (ydotool 1.x), then stream (other clients).
+            connected = False
+            wrong_type = False
+            for sock_type in (socket.SOCK_DGRAM, socket.SOCK_STREAM):
+                sock = None
                 try:
+                    sock = socket.socket(socket.AF_UNIX, sock_type)
                     sock.settimeout(0.5)
                     sock.connect(path)
+                    connected = True
+                    break
+                except OSError as e:
+                    # Linux: EPROTOTYPE (91) / some kernels EISCONN variants when
+                    # socket type mismatches the listening end.
+                    if getattr(e, "errno", None) in (
+                        getattr(socket, "EPROTOTYPE", 91),
+                        91,
+                    ):
+                        wrong_type = True
+                        continue
                 finally:
-                    sock.close()
+                    if sock is not None:
+                        try:
+                            sock.close()
+                        except OSError:
+                            pass
+            if connected:
                 return True
+            if wrong_type:
+                # Socket exists with a type we failed to match; do not unlink —
+                # a live ydotoold may still be serving clients that use dgram.
+                # Fall through to next path.
+                continue
+            try:
+                os.unlink(path)
+                logger.info("Removed stale ydotool socket: %s", path)
             except OSError:
-                try:
-                    os.unlink(path)
-                    logger.info("Removed stale ydotool socket: %s", path)
-                except OSError:
-                    pass
+                pass
         return False
 
     def _ensure_ydotoold(self) -> bool:
