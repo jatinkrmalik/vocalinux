@@ -105,6 +105,11 @@
   </content_rating>
 
   <releases>
+    <release version="0.14.2" date="2026-07-16">
+      <description>
+        <p>Stability patch on the 0.14 series: IBus engine process launch restored after XDG path import, and first dictation of a session no longer dropped on GNOME Wayland. Feature set unchanged (Flatpak, AUR, configurable hotkeys, FunASR/SenseVoice, layout-aware shortcuts).</p>
+      </description>
+    </release>
     <release version="0.14.1" date="2026-07-16">
       <description>
         <p>First Flathub-oriented packaging release: Flatpak with whisper.cpp + Vulkan, wl-copy/ydotool Wayland paste, evdev global hotkeys, AUR package, layout-aware shortcuts, and installer fixes.</p>

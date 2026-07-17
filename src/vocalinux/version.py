@@ -2,8 +2,8 @@
 Version information for Vocalinux.
 """
 
-__version__ = "0.14.1"
-__version_info__ = (0, 14, 1)
+__version__ = "0.14.2"
+__version_info__ = (0, 14, 2)
 __author__ = "Jatin K Malik"
 __email__ = "jatinkrmalik@gmail.com"
 __license__ = "GPL-3.0"

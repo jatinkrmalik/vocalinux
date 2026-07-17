@@ -1700,7 +1700,7 @@ class SpeechRecognitionManager:
             url,
             stream=True,
             timeout=self._MODEL_DOWNLOAD_TIMEOUT,
-            headers={"User-Agent": "vocalinux/0.14.1"},
+            headers={"User-Agent": "vocalinux/0.14.2"},
         )
         response.raise_for_status()
 
