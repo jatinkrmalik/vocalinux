@@ -801,6 +801,32 @@ class TestIBusEngineMainEntrypoint(unittest.TestCase):
         mock_print.assert_called_once_with("<engines></engines>")
         mock_init.assert_not_called()
 
+    def test_engine_script_runs_by_path_for_xml(self):
+        """Regression: path-based launch must work after XDG path import (#484).
+
+        start_engine_process and IBus component exec run this file as
+        ``python /path/to/ibus_engine.py``, which has no package context for
+        relative imports. --xml exits before connecting to IBus, so this is a
+        fast import/bootstrap smoke test.
+        """
+        from vocalinux.text_injection import ibus_engine
+
+        engine_script = Path(ibus_engine.__file__).resolve()
+        result = subprocess.run(
+            [sys.executable, str(engine_script), "--xml"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=f"stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertIn("<engines>", result.stdout)
+        self.assertIn("vocalinux", result.stdout)
+        self.assertNotIn("attempted relative import", result.stderr)
+
     def test_main_passes_ibus_flag_to_application(self):
         """Test --ibus path initializes application in IBus exec mode."""
         from vocalinux.text_injection import ibus_engine

@@ -26,7 +26,18 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..utils.paths import xdg_data_home
+# Package import when loaded normally; absolute / inline fallbacks when this
+# file is executed by path (Vocalinux start_engine_process / IBus component exec).
+try:
+    from ..utils.paths import xdg_data_home
+except ImportError:  # pragma: no cover - exercised via script-path subprocess
+    try:
+        from vocalinux.utils.paths import xdg_data_home
+    except ImportError:
+        # Last resort: same semantics as vocalinux.utils.paths.xdg_data_home.
+        def xdg_data_home() -> str:
+            return os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+
 
 logger = logging.getLogger(__name__)
 
@@ -666,16 +677,20 @@ def start_engine_process() -> bool:
             env["VIRTUAL_ENV"] = sys.prefix
             # Keep PATH so the venv's bin is first
 
-        process = subprocess.Popen(
-            [sys.executable, str(engine_script)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            env=env,
-        )
-
-        # Write PID file for tracking
+        # Write PID + stderr log under the IBus data dir. A log file (not a pipe)
+        # keeps early import/startup failures visible without SIGPIPE risk if the
+        # engine keeps running and continues to log after we return.
         ensure_ibus_dir()
+        stderr_log = VOCALINUX_IBUS_DIR / "engine.stderr.log"
+        with open(stderr_log, "w", encoding="utf-8") as stderr_fh:
+            process = subprocess.Popen(
+                [sys.executable, str(engine_script)],
+                stdout=subprocess.DEVNULL,
+                stderr=stderr_fh,
+                start_new_session=True,
+                env=env,
+            )
+
         PID_FILE.write_text(str(process.pid))
 
         # Wait a bit for the engine to start
@@ -685,7 +700,42 @@ def start_engine_process() -> bool:
                 logger.info("IBus engine process started successfully")
                 return True
 
-        logger.error("IBus engine process failed to start")
+        exit_code = process.poll()
+        if exit_code is None:
+            # Still alive but not recognized as our engine (stale PID race, etc.).
+            process.terminate()
+            try:
+                process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                try:
+                    process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    pass
+            exit_code = process.returncode
+
+        stderr_text = ""
+        try:
+            stderr_text = stderr_log.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            pass
+
+        if stderr_text and stderr_text.strip():
+            logger.error(
+                "IBus engine process failed to start (exit=%s): %s",
+                exit_code,
+                stderr_text.strip()[:2000],
+            )
+        else:
+            logger.error(
+                "IBus engine process failed to start (exit=%s, no stderr)",
+                exit_code,
+            )
+        if PID_FILE.exists():
+            try:
+                PID_FILE.unlink()
+            except OSError:
+                pass
         return False
 
     except Exception as e:
