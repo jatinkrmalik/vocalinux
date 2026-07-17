@@ -576,14 +576,11 @@ def _handle_engine_destroy(
     current_instance: object,
     ibus_available: bool,
     super_destroy: Optional[Callable[[], None]] = None,
-    clear_focus: Optional[Callable[[], None]] = None,
 ) -> Optional["VocalinuxEngine"]:
     """Compute next active engine state and invoke optional parent destroy."""
     next_active_instance = active_instance
     if active_instance is current_instance:
         next_active_instance = None
-        if clear_focus is not None:
-            clear_focus()
 
     if ibus_available and super_destroy is not None:
         super_destroy()
@@ -780,13 +777,15 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
         super_destroy: Optional[Callable[[], None]] = None
         if IBUS_AVAILABLE:
             super_destroy = super().do_destroy
+        was_active = VocalinuxEngine._active_instance is self
         VocalinuxEngine._active_instance = _handle_engine_destroy(
             VocalinuxEngine._active_instance,
             self,
             IBUS_AVAILABLE,
             super_destroy,
-            clear_focus=VocalinuxEngine._focus_event.clear,
         )
+        if was_active:
+            VocalinuxEngine._focus_event.clear()
 
     def do_focus_in(self) -> None:
         """Called when the engine gains focus on a client input context."""
