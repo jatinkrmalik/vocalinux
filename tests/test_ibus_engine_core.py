@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
@@ -323,6 +324,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         from vocalinux.text_injection.ibus_engine import VocalinuxEngine
 
         VocalinuxEngine._active_instance = None
+        VocalinuxEngine._focus_event.clear()
         VocalinuxEngine._socket_server = None
         VocalinuxEngine._server_socket = None
         VocalinuxEngine._server_running = False
@@ -368,6 +370,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         engine = VocalinuxEngine()
         engine.do_focus_in()
         self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertTrue(VocalinuxEngine._focus_event.is_set())
 
     def test_vocalinux_engine_do_focus_out(self):
         """Test engine focus out signal handler."""
@@ -375,9 +378,84 @@ class TestVocalinuxEngine(unittest.TestCase):
 
         engine = VocalinuxEngine()
         VocalinuxEngine._active_instance = engine
+        engine.do_focus_in()
         engine.do_focus_out()
-        # Focus out should not clear the active instance
+        # Focus out should not clear the active instance, only client focus
         self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertFalse(VocalinuxEngine._focus_event.is_set())
+
+    def test_do_enable_does_not_mark_client_focused(self):
+        """Enable alone must not claim FocusIn readiness (#523)."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        engine = VocalinuxEngine()
+        with patch.object(engine, "_start_socket_server"):
+            engine.do_enable()
+        self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertFalse(VocalinuxEngine._focus_event.is_set())
+
+    def test_ping_status_matrix(self):
+        """PING status distinguishes no-engine / enabled / focused (#523)."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine, _ibus_ping_status
+
+        focus = threading.Event()
+        self.assertEqual(_ibus_ping_status(None, focus), b"NO_ENGINE")
+
+        engine = VocalinuxEngine()
+        self.assertEqual(_ibus_ping_status(engine, focus), b"OK")
+
+        focus.set()
+        self.assertEqual(_ibus_ping_status(engine, focus), b"FOCUSED")
+
+    def test_ensure_client_focus_true_when_already_focused(self):
+        """Already-focused engine does not wait before commit."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+        focus.set()
+        self.assertTrue(_ibus_ensure_client_focus(object(), focus, timeout=0.05))
+
+    def test_ensure_client_focus_false_without_instance(self):
+        """No active instance is not ready to commit."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+        self.assertFalse(_ibus_ensure_client_focus(None, focus, timeout=0.05))
+
+    def test_ensure_client_focus_waits_then_succeeds(self):
+        """Cold path: FocusIn arriving after enable unblocks commit (#523)."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+
+        def set_focus_soon():
+            time.sleep(0.05)
+            focus.set()
+
+        t = threading.Thread(target=set_focus_soon, daemon=True)
+        t.start()
+        self.assertTrue(_ibus_ensure_client_focus(object(), focus, timeout=0.5))
+        t.join(timeout=1.0)
+        self.assertTrue(focus.is_set())
+
+    def test_ensure_client_focus_times_out(self):
+        """Timeout without FocusIn returns False so caller can send NO_FOCUS."""
+        from vocalinux.text_injection.ibus_engine import _ibus_ensure_client_focus
+
+        focus = threading.Event()
+        self.assertFalse(_ibus_ensure_client_focus(object(), focus, timeout=0.05))
+
+    def test_do_destroy_clears_focus_when_active(self):
+        """Destroy of the active instance clears FocusIn readiness."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        engine = VocalinuxEngine()
+        engine.do_focus_in()
+        self.assertTrue(VocalinuxEngine._focus_event.is_set())
+        with patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", False):
+            engine.do_destroy()
+        self.assertIsNone(VocalinuxEngine._active_instance)
+        self.assertFalse(VocalinuxEngine._focus_event.is_set())
 
     def test_vocalinux_engine_do_process_key_event(self):
         """Test engine key event processing."""
@@ -1148,6 +1226,32 @@ class TestIBusTextInjectorRetry(unittest.TestCase):
         # 3 max_attempts: first 2 get NO_ENGINE and retry, 3rd gets NO_ENGINE and fails
         self.assertEqual(mock_sock.recv.call_count, 3)
 
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
+    @patch("socket.socket")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.time")
+    def test_retry_on_no_focus_then_succeeds(
+        self, mock_time, mock_socket_path, mock_socket_cls, mock_active, mock_switch, mock_ensure
+    ):
+        """NO_FOCUS (FocusIn timeout) should re-activate and succeed on retry (#523)."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        mock_socket_path.exists.return_value = True
+        mock_sock = MagicMock()
+        mock_sock.__enter__.return_value = mock_sock
+        mock_sock.__exit__.return_value = None
+        mock_sock.recv.side_effect = [b"NO_FOCUS", b"OK"]
+        mock_socket_cls.return_value = mock_sock
+
+        injector = IBusTextInjector(auto_activate=False)
+        result = injector.inject_text("hello")
+
+        self.assertTrue(result)
+        self.assertEqual(mock_sock.recv.call_count, 2)
+        self.assertGreaterEqual(mock_switch.call_count, 1)
+
 
 class TestIBusEngineStartupReadiness(unittest.TestCase):
     """Test startup readiness probe behavior in setup flow."""
@@ -1217,6 +1321,27 @@ class TestIBusEngineStartupReadiness(unittest.TestCase):
         mock_sock.__enter__.return_value = mock_sock
         mock_sock.__exit__.return_value = None
         mock_sock.recv.return_value = b"OK"
+        mock_socket_cls.return_value = mock_sock
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._wait_for_engine_ready(max_attempts=1)
+
+        mock_sock.sendall.assert_called_once_with(b"\x00PING")
+
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("socket.socket")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    def test_wait_for_engine_ready_accepts_focused(
+        self, mock_socket_path, mock_socket_cls, mock_ensure_dir
+    ):
+        """Readiness probe treats FOCUSED as success (#523)."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        mock_socket_path.exists.return_value = True
+        mock_sock = MagicMock()
+        mock_sock.__enter__.return_value = mock_sock
+        mock_sock.__exit__.return_value = None
+        mock_sock.recv.return_value = b"FOCUSED"
         mock_socket_cls.return_value = mock_sock
 
         injector = IBusTextInjector(auto_activate=False)
