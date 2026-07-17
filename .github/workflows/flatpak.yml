@@ -22,19 +22,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # matrix is not available in job-level if; build the arch list here instead.
+  # PRs: x86_64 only. main / workflow_dispatch: both arches.
+  matrix:
+    name: Resolve build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo 'include=[{"arch":"x86_64","runner":"ubuntu-latest"}]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'include=[{"arch":"x86_64","runner":"ubuntu-latest"},{"arch":"aarch64","runner":"ubuntu-24.04-arm"}]' >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build Flatpak (${{ matrix.arch }})
-    # PRs: x86_64 only. main / workflow_dispatch: both arches.
-    if: matrix.arch == 'x86_64' || github.event_name != 'pull_request'
+    needs: matrix
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: x86_64
-            runner: ubuntu-latest
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
       options: --privileged
