@@ -1961,13 +1961,16 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
         from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
 
         engine = object()
+        clear_focus = MagicMock()
         next_active = _handle_engine_destroy(
             active_instance=engine,
             current_instance=engine,
             ibus_available=False,
+            clear_focus=clear_focus,
         )
 
         self.assertIsNone(next_active)
+        clear_focus.assert_called_once()
 
     def test_do_destroy_ignores_different_instance(self):
         """Test destroy handler keeps active instance for different engine."""

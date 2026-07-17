@@ -576,11 +576,14 @@ def _handle_engine_destroy(
     current_instance: object,
     ibus_available: bool,
     super_destroy: Optional[Callable[[], None]] = None,
+    clear_focus: Optional[Callable[[], None]] = None,
 ) -> Optional["VocalinuxEngine"]:
     """Compute next active engine state and invoke optional parent destroy."""
     next_active_instance = active_instance
     if active_instance is current_instance:
         next_active_instance = None
+        if clear_focus is not None:
+            clear_focus()
 
     if ibus_available and super_destroy is not None:
         super_destroy()
@@ -737,9 +740,14 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
 
     # Class-level reference to active engine instance
     _active_instance: Optional["VocalinuxEngine"] = None
+    # Set only after do_focus_in binds the engine to a client input context.
+    # do_enable alone is not enough for commit_text delivery (#523).
+    _focus_event: threading.Event = threading.Event()
     _socket_server: Optional[threading.Thread] = None
     _server_socket: Optional[socket.socket] = None
     _server_running: bool = False
+    # Max wait for FocusIn before committing text (cold first activation).
+    _FOCUS_WAIT_TIMEOUT_S: float = 1.0
 
     def __init__(self):
         """Initialize the Vocalinux IBus engine."""
@@ -751,6 +759,8 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
         """Called when the engine is enabled/selected."""
         logger.info("VocalinuxEngine enabled - ready for text injection")
         VocalinuxEngine._active_instance = self
+        # do_enable does not imply a focused client context; wait for do_focus_in
+        # before commit_text (#523).
 
         # Start socket server if not already running
         if VocalinuxEngine._socket_server is None:
@@ -775,16 +785,19 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
             self,
             IBUS_AVAILABLE,
             super_destroy,
+            clear_focus=VocalinuxEngine._focus_event.clear,
         )
 
     def do_focus_in(self) -> None:
-        """Called when the engine gains focus."""
+        """Called when the engine gains focus on a client input context."""
         logger.debug("VocalinuxEngine focus in")
         VocalinuxEngine._active_instance = self
+        VocalinuxEngine._focus_event.set()
 
     def do_focus_out(self) -> None:
-        """Called when the engine loses focus."""
+        """Called when the engine loses focus on a client input context."""
         logger.debug("VocalinuxEngine focus out")
+        VocalinuxEngine._focus_event.clear()
 
     def do_process_key_event(self, keyval: int, keycode: int, state: int) -> bool:
         """
@@ -849,14 +862,32 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
                             data = conn.recv(65536)  # Max text size
                             if data:
                                 if data == b"\x00PING":
-                                    if cls._active_instance:
-                                        conn.sendall(b"OK")
-                                    else:
+                                    # FOCUSED: bound to a client context (safe to commit).
+                                    # OK: engine instance exists but not focused yet.
+                                    # NO_ENGINE: no instance.
+                                    if not cls._active_instance:
                                         conn.sendall(b"NO_ENGINE")
+                                    elif cls._focus_event.is_set():
+                                        conn.sendall(b"FOCUSED")
+                                    else:
+                                        conn.sendall(b"OK")
                                     continue
 
                                 text = data.decode("utf-8")
-                                # Snapshot active instance to avoid TOCTOU race with do_destroy
+                                # Wait for FocusIn before commit. On cold first
+                                # activation, do_enable can set _active_instance
+                                # before mutter binds the client context; committing
+                                # then reports success while text is dropped (#523).
+                                if cls._active_instance and not cls._focus_event.is_set():
+                                    if not cls._focus_event.wait(timeout=cls._FOCUS_WAIT_TIMEOUT_S):
+                                        logger.warning(
+                                            "Timed out waiting for IBus FocusIn "
+                                            "before text commit"
+                                        )
+                                        conn.sendall(b"NO_FOCUS")
+                                        continue
+
+                                # Snapshot after focus wait (FocusIn may set a new instance)
                                 instance = cls._active_instance
                                 if instance:
                                     done = threading.Event()
@@ -1104,7 +1135,8 @@ class IBusTextInjector:
                     sock.sendall(b"\x00PING")
                     response = sock.recv(64).decode("utf-8")
 
-                if response == "OK":
+                # FOCUSED = client context ready; OK = instance exists (not yet focused).
+                if response in ("OK", "FOCUSED"):
                     logger.debug(f"IBus engine readiness probe succeeded on attempt {attempt + 1}")
                     return
 
@@ -1112,7 +1144,7 @@ class IBusTextInjector:
                     logger.debug("IBus engine socket is ready; active engine instance not required")
                     return
 
-                if response != "NO_ENGINE":
+                if response not in ("NO_ENGINE", "OK", "FOCUSED"):
                     logger.warning(f"Unexpected readiness probe response: {response}")
             except (socket.timeout, FileNotFoundError, ConnectionRefusedError, OSError) as e:
                 logger.debug(f"IBus readiness probe attempt {attempt + 1} failed: {e}")
@@ -1235,10 +1267,14 @@ class IBusTextInjector:
                         if response == "OK":
                             logger.debug("Text injection successful")
                             return True
-                        elif response == "NO_ENGINE" and attempt < max_attempts - 1:
-                            # Engine instance was destroyed (layout switch).
-                            # Re-activate to create a new instance and retry.
-                            logger.info("Engine instance not active, re-activating and retrying...")
+                        elif response in ("NO_ENGINE", "NO_FOCUS") and attempt < max_attempts - 1:
+                            # NO_ENGINE: instance destroyed (layout switch).
+                            # NO_FOCUS: selected but FocusIn never arrived (#523).
+                            # Re-activate and retry.
+                            logger.info(
+                                f"Engine not ready for commit ({response}); "
+                                "re-activating and retrying..."
+                            )
                             switch_engine(ENGINE_NAME)
                             time.sleep(0.3)
                             continue

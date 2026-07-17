@@ -322,6 +322,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         from vocalinux.text_injection.ibus_engine import VocalinuxEngine
 
         VocalinuxEngine._active_instance = None
+        VocalinuxEngine._focus_event.clear()
         VocalinuxEngine._socket_server = None
         VocalinuxEngine._server_socket = None
         VocalinuxEngine._server_running = False
@@ -367,6 +368,7 @@ class TestVocalinuxEngine(unittest.TestCase):
         engine = VocalinuxEngine()
         engine.do_focus_in()
         self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertTrue(VocalinuxEngine._focus_event.is_set())
 
     def test_vocalinux_engine_do_focus_out(self):
         """Test engine focus out signal handler."""
@@ -374,9 +376,21 @@ class TestVocalinuxEngine(unittest.TestCase):
 
         engine = VocalinuxEngine()
         VocalinuxEngine._active_instance = engine
+        engine.do_focus_in()
         engine.do_focus_out()
-        # Focus out should not clear the active instance
+        # Focus out should not clear the active instance, only client focus
         self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertFalse(VocalinuxEngine._focus_event.is_set())
+
+    def test_do_enable_does_not_mark_client_focused(self):
+        """Enable alone must not claim FocusIn readiness (#523)."""
+        from vocalinux.text_injection.ibus_engine import VocalinuxEngine
+
+        engine = VocalinuxEngine()
+        with patch.object(engine, "_start_socket_server"):
+            engine.do_enable()
+        self.assertEqual(VocalinuxEngine._active_instance, engine)
+        self.assertFalse(VocalinuxEngine._focus_event.is_set())
 
     def test_vocalinux_engine_do_process_key_event(self):
         """Test engine key event processing."""
@@ -876,6 +890,32 @@ class TestIBusTextInjectorRetry(unittest.TestCase):
         # 3 max_attempts: first 2 get NO_ENGINE and retry, 3rd gets NO_ENGINE and fails
         self.assertEqual(mock_sock.recv.call_count, 3)
 
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
+    @patch("socket.socket")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.time")
+    def test_retry_on_no_focus_then_succeeds(
+        self, mock_time, mock_socket_path, mock_socket_cls, mock_active, mock_switch, mock_ensure
+    ):
+        """NO_FOCUS (FocusIn timeout) should re-activate and succeed on retry (#523)."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        mock_socket_path.exists.return_value = True
+        mock_sock = MagicMock()
+        mock_sock.__enter__.return_value = mock_sock
+        mock_sock.__exit__.return_value = None
+        mock_sock.recv.side_effect = [b"NO_FOCUS", b"OK"]
+        mock_socket_cls.return_value = mock_sock
+
+        injector = IBusTextInjector(auto_activate=False)
+        result = injector.inject_text("hello")
+
+        self.assertTrue(result)
+        self.assertEqual(mock_sock.recv.call_count, 2)
+        self.assertGreaterEqual(mock_switch.call_count, 1)
+
 
 class TestIBusEngineStartupReadiness(unittest.TestCase):
     """Test startup readiness probe behavior in setup flow."""
@@ -945,6 +985,27 @@ class TestIBusEngineStartupReadiness(unittest.TestCase):
         mock_sock.__enter__.return_value = mock_sock
         mock_sock.__exit__.return_value = None
         mock_sock.recv.return_value = b"OK"
+        mock_socket_cls.return_value = mock_sock
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._wait_for_engine_ready(max_attempts=1)
+
+        mock_sock.sendall.assert_called_once_with(b"\x00PING")
+
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("socket.socket")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    def test_wait_for_engine_ready_accepts_focused(
+        self, mock_socket_path, mock_socket_cls, mock_ensure_dir
+    ):
+        """Readiness probe treats FOCUSED as success (#523)."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        mock_socket_path.exists.return_value = True
+        mock_sock = MagicMock()
+        mock_sock.__enter__.return_value = mock_sock
+        mock_sock.__exit__.return_value = None
+        mock_sock.recv.return_value = b"FOCUSED"
         mock_socket_cls.return_value = mock_sock
 
         injector = IBusTextInjector(auto_activate=False)
