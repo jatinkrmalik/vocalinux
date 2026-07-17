@@ -1799,18 +1799,19 @@ class SpeechRecognitionManager:
             if self._download_progress_callback:
                 self._download_progress_callback(1.0, 0, "Complete!")
 
-        except requests.exceptions.Timeout as e:
-            logger.error(f"Timed out downloading whisper.cpp model from {url}: {e}")
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-            raise RuntimeError(
-                "Model download timed out (Hugging Face may be slow or unavailable). "
-                "Check your network and try again."
-            ) from e
+        # Use RequestException when available; tests mock requests and set
+        # RequestException=Exception. Do not catch Timeout separately — under a
+        # MagicMock that is not a real exception type (TypeError in CI).
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to download whisper.cpp model from {url}: {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+            msg = str(e).lower()
+            if "timeout" in msg or type(e).__name__ == "Timeout":
+                raise RuntimeError(
+                    "Model download timed out (Hugging Face may be slow or unavailable). "
+                    "Check your network and try again."
+                ) from e
             raise RuntimeError(f"Failed to download whisper.cpp model: {e}") from e
         except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"An error occurred during whisper.cpp model download: {e}")
