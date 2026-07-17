@@ -15,9 +15,9 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
-    version: "v0.14.1-beta",
-    date: "2026-07-16",
-    type: "beta",
+    version: "v0.14.1",
+    date: "2026-07-17",
+    type: "stable",
     highlights: [
       "Flatpak packaging for universal distribution: whisper.cpp engine, XDG sandbox paths, global hotkeys via evdev, Wayland text injection via wl-copy + ydotool (PR #484, closes #167)",
       "AUR package and CI publish path for Arch Linux (PR #518)",

@@ -68,7 +68,7 @@ const homeJsonLd = [
     },
     description:
       "Offline voice dictation and speech-to-text for Linux with whisper.cpp and VOSK.",
-    softwareVersion: "0.14.1-beta",
+    softwareVersion: "0.14.1",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -341,7 +341,7 @@ export default function HomePage() {
             />
             <span className="text-lg font-bold sm:text-xl">Vocalinux</span>
             <span className="from-primary/20 border-primary/30 shadow-primary/20 hidden rounded-full border bg-gradient-to-r to-green-500/20 px-2.5 py-1 text-xs font-semibold text-primary shadow-sm sm:inline-block">
-              v0.14.1 Beta
+              v0.14.1
             </span>
           </Link>
 

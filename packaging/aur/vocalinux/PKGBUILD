@@ -3,8 +3,8 @@
 
 pkgname=vocalinux
 # AUR pkgver cannot contain hyphens (v0.14.0-beta -> 0.14.0beta).
-pkgver=0.14.1beta
-_tag=0.14.1-beta
+pkgver=0.14.1
+_tag=0.14.1
 pkgrel=1
 pkgdesc="Free, offline voice dictation for Linux"
 arch=('any')
