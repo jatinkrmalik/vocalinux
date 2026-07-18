@@ -1,4 +1,8 @@
 coverage:
+  # Badge colors: red below 50%, yellow 50–80%, green at 80%+ (matches project target)
+  range: 50..80
+  round: down
+  precision: 2
   status:
     project:
       default:
