@@ -574,25 +574,34 @@ def _prevent_scroll_on_hover(widget: Gtk.Widget):
     """
     Prevent scroll events from modifying widget values when hovering.
 
-    This fixes a common GTK UX issue where scrolling through a settings dialog
-    accidentally changes ComboBox or SpinButton values when the mouse happens
-    to be over them. The widget will only respond to scroll events after being
-    explicitly clicked/focused.
-
-    Args:
-        widget: The widget to prevent scroll events on (ComboBox, SpinButton, etc.)
+    Unfocused ComboBox/SpinButton widgets ignore wheel input so scrolling a
+    settings tab does not accidentally change values. The event is applied to
+    the nearest ancestor ScrolledWindow instead, so the page still scrolls.
     """
 
     def on_scroll(widget, event):
-        # Only process scroll if widget has explicit focus
-        if not widget.has_focus():
-            # Stop propagation to prevent value changes
-            return True
-        return False
+        if widget.has_focus():
+            return False
+
+        scrolled = widget.get_ancestor(Gtk.ScrolledWindow)
+        if scrolled is not None:
+            adj = scrolled.get_vadjustment()
+            if adj is not None:
+                step = adj.get_step_increment() or 20.0
+                if event.direction == Gdk.ScrollDirection.UP:
+                    delta = -step
+                elif event.direction == Gdk.ScrollDirection.DOWN:
+                    delta = step
+                elif event.direction == Gdk.ScrollDirection.SMOOTH:
+                    delta = event.delta_y * step
+                else:
+                    delta = 0.0
+                if delta:
+                    upper = max(adj.get_lower(), adj.get_upper() - adj.get_page_size())
+                    adj.set_value(max(adj.get_lower(), min(adj.get_value() + delta, upper)))
+        return True
 
     widget.connect("scroll-event", on_scroll)
-
-    # Also prevent focus-on-hover behavior
     widget.set_can_focus(True)
 
 
@@ -1100,6 +1109,7 @@ class SettingsDialog(Gtk.Dialog):
         def _scrollable(tab):
             scroller = Gtk.ScrolledWindow()
             scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scroller.set_shadow_type(Gtk.ShadowType.NONE)
             scroller.add(tab)
             return scroller
 
@@ -2107,14 +2117,10 @@ class SettingsDialog(Gtk.Dialog):
         opt_in_group.add_row(power_user_row)
         self.advanced_tab.pack_start(opt_in_group, False, False, 0)
 
-        # Revealer that hides/shows the actual advanced controls
+        # Revealer that hides/shows the actual advanced controls.
+        # No inner ScrolledWindow: the notebook tab already scrolls.
         self.advanced_revealer = Gtk.Revealer()
         self.advanced_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-
-        # Scrollable container for the controls
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_min_content_height(350)
 
         controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
 
@@ -2256,9 +2262,8 @@ class SettingsDialog(Gtk.Dialog):
         separator.set_margin_bottom(8)
         controls_box.pack_start(separator, False, False, 0)
 
-        scrolled.add(controls_box)
-        self.advanced_revealer.add(scrolled)
-        self.advanced_tab.pack_start(self.advanced_revealer, True, True, 0)
+        self.advanced_revealer.add(controls_box)
+        self.advanced_tab.pack_start(self.advanced_revealer, False, False, 0)
 
         self.advanced_no_timestamps_switch.connect("state-set", self._on_advanced_param_changed)
         self.advanced_no_context_switch.connect("state-set", self._on_advanced_param_changed)
