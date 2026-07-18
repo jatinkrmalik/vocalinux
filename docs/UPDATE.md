@@ -2,6 +2,32 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.14.2
+
+0.14.2 is a stability patch on the **0.14 series**. The feature set is the same as 0.14.x; this release fixes IBus reliability and settings dialog sizing.
+
+### 0.14 series highlights
+
+| Feature | Description |
+|---------|-------------|
+| **Configurable Shortcuts** | Bind any modifier combination to a key — e.g. `Alt+R`, `Ctrl+Shift+V`, or `Super+F10` |
+| **FunASR / SenseVoice Remote API** | Remote-API engine supports FunASR and SenseVoice via OpenAI-compatible endpoints |
+| **Flatpak packaging** | Universal Flatpak (whisper.cpp) with sandbox-aware paths, global hotkeys, and Wayland paste injection |
+| **AUR package** | Official Arch packaging and CI publish path |
+| **Layout-aware hotkeys** | Combo keys respect non-US layouts |
+| **Wayland / IBus reliability** | GNOME and KDE injection fixes, first-dictation FocusIn gate, engine process launch restored |
+| **Audio / hybrid-CPU** | Recording device-index crash fixed; whisper.cpp no longer defaults to all cores on hybrid CPUs |
+
+### Bug fixes in v0.14.2
+
+- **IBus**: Restore engine process launch after the Flatpak XDG path import change. `start_engine_process` and the IBus component exec run `ibus_engine.py` by path, so the relative import failed with `ImportError` and Vocalinux fell back to ydotool/clipboard paste (#534)
+- **IBus**: Wait for FocusIn before commit on scoped injection. Cold first activation on GNOME Wayland could commit before mutter bound a client context, so the first dictation of a session was dropped while logs still reported success (#533, fixes #523)
+- **Settings UI**: Wrap each notebook tab in a vertical ScrolledWindow so the dialog fits 1080p monitors instead of growing past the screen; forward wheel events from unfocused combos/spins to the tab scroller and drop nested Advanced ScrolledWindow shadows (#538, #541)
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2).
+
+---
+
 ## What's New in v0.14.1
 
 ### Highlights
@@ -305,7 +331,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.14.1
+git checkout v0.14.2
 ./install.sh
 ```
 

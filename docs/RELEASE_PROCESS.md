@@ -97,6 +97,17 @@ Change the Development Status classifier:
 "Development Status :: 5 - Production/Stable",
 ```
 
+### Patch releases within a minor line (e.g. 0.14.x)
+
+When shipping bug fixes only (PATCH bump, same MINOR):
+
+- **README / `docs/UPDATE.md` "What's New"** keeps the **minor-series feature list** (everything introduced in that 0.Y line) and adds a short **Bug fixes in this patch** subsection for the delta only. Do not make the marketing highlight table look featureless because this tag only contains fixes.
+- **Website changelog** (`web/src/app/changelog/page.tsx`) may list only the delta for the new entry; older entries stay historical.
+- **AppStream** (`packaging/flatpak/com.vocalinux.Vocalinux.metainfo.xml`): add a short `<release>` note for the patch delta only; leave the long product feature `<ul>` as series/product-level.
+- **SECURITY.md** supported versions table usually stays on the minor line (`0.14.x`) without a row per patch.
+- **AUR PKGBUILD**: bump `pkgver` / `_tag`; leave `sha256sums=('SKIP')` until the tag tarball exists. The release workflow runs `updpkgsums` when publishing to the AUR.
+- **Dates**: patch release dates must not predate the previous release in changelog / AppStream / version history.
+
 ### Step 3: Update Documentation
 
 #### 3.1 Update `README.md`
@@ -346,6 +357,7 @@ git push origin v0.5.1-beta
 | 0.13.0-beta | 2026-06-30 | Beta | Guided whisper.cpp model variants, Wayland text-injection reliability, hotplug keyboard support, dictation spacing fix, website docs refresh |
 | 0.14.0-beta | 2026-07-13 | Beta | Configurable modifier+key hotkeys, FunASR/SenseVoice remote-API support, GNOME/KDE Wayland IBus reliability fixes, audio crash fix, hybrid-CPU efficiency fix |
 | 0.14.1 | 2026-07-17 | Stable | Flatpak packaging, AUR package, layout-aware hotkeys, installer/text-injection fixes |
+| 0.14.2 | 2026-07-17 | Stable | IBus engine launch + FocusIn gate; settings tabs scroll to fit monitor |
 
 ## Questions?
 

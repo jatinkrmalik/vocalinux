@@ -32,24 +32,28 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.14.1
+## 📚 What's New in v0.14.2
 
-> **Release: Flatpak packaging, AUR package, layout-aware hotkeys, and installer/text-injection fixes.**
+> **0.14.2 is a stability patch on the 0.14 series.** Feature set is the same as 0.14.x; this release fixes IBus reliability and settings dialog sizing.
 
-### Highlights
+### 0.14 series highlights
 
 | Feature | Description |
 |---------|-------------|
-| **Flatpak packaging** | Distro-independent install with whisper.cpp, global hotkeys (evdev), and Wayland text injection (wl-copy + ydotool) |
+| **Configurable hotkeys** | Bind any modifier combination to a key (e.g. `Alt+R`, `Ctrl+Shift+V`) |
+| **FunASR / SenseVoice** | Remote-API engine supports FunASR and SenseVoice models |
+| **Flatpak packaging** | Distro-independent install with whisper.cpp, global hotkeys (evdev), and Wayland paste (wl-copy + ydotool) |
 | **AUR package** | Arch users can install via `yay -S vocalinux` |
 | **Layout-aware hotkeys** | Combo keys work correctly on non-US keyboard layouts |
-| **Installer / text injection** | `sg` fix for Ubuntu 26.04/Debian 13; treat XIM `none` as unset |
+| **Wayland / IBus reliability** | GNOME and KDE injection fixes, first-dictation FocusIn gate, engine process launch restored |
 
-See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.1).
+### Bug fixes in v0.14.2
 
-### Previous: v0.14.0-beta
+- **IBus**: Restore engine process launch after the Flatpak XDG path import change (no silent ydotool fallback when IBus should work) (#534)
+- **IBus**: Wait for FocusIn before commit on scoped injection so the first dictation of a session is not dropped on GNOME Wayland (#533, fixes #523)
+- **Settings UI**: Tabs scroll so the dialog fits the monitor; wheel events from unfocused combos/spins reach the tab scroller (#538, #541)
 
-Configurable shortcuts, FunASR/SenseVoice remote API, Wayland IBus reliability, audio crash fix, hybrid-CPU efficiency. Details in [UPDATE.md](docs/UPDATE.md).
+See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2). Earlier 0.14.x notes are in UPDATE.md.
 
 ---
 
@@ -426,7 +430,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Beta v0.14.1 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Stable v0.14.2 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 

@@ -18,6 +18,13 @@ class TestVersion(unittest.TestCase):
         parts = __version__.replace("-", ".").split(".")
         self.assertTrue(len(parts) >= 3)
 
+    def test_package_version_matches_version_module(self):
+        """Package root re-exports version.py so import vocalinux.__version__ is correct."""
+        import vocalinux
+        from vocalinux.version import __version__
+
+        self.assertEqual(vocalinux.__version__, __version__)
+
     def test_version_info_tuple(self):
         """Test that version info tuple exists and is valid."""
         from vocalinux.version import __version_info__

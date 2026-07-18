@@ -3,8 +3,8 @@
 
 pkgname=vocalinux
 # AUR pkgver cannot contain hyphens (v0.14.0-beta -> 0.14.0beta).
-pkgver=0.14.1
-_tag=0.14.1
+pkgver=0.14.2
+_tag=0.14.2
 pkgrel=1
 pkgdesc="Free, offline voice dictation for Linux"
 arch=('any')
@@ -48,7 +48,8 @@ optdepends=(
 )
 conflicts=('vocalinux-git')
 source=("${pkgname}-${_tag}.tar.gz::https://github.com/jatinkrmalik/vocalinux/archive/refs/tags/v${_tag}.tar.gz")
-sha256sums=('030dfe1ddbc51672c7bfb0f471c256a998fe871bd190028dd882e4507d00af58')
+# SKIP until the v${_tag} tarball exists. release.yml sets updpkgsums=true on publish.
+sha256sums=('SKIP')
 
 build() {
   cd "${pkgname}-${_tag}"

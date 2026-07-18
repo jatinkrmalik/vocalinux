@@ -23,6 +23,7 @@ from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_so
 from ..utils.paths import models_dir
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
+from ..version import __version__
 from .command_processor import CommandProcessor
 from .silero_vad import SILERO_CHUNK_SIZE, load_silero_vad
 
@@ -1700,7 +1701,7 @@ class SpeechRecognitionManager:
             url,
             stream=True,
             timeout=self._MODEL_DOWNLOAD_TIMEOUT,
-            headers={"User-Agent": "vocalinux/0.14.1"},
+            headers={"User-Agent": f"vocalinux/{__version__}"},
         )
         response.raise_for_status()
 
