@@ -165,3 +165,8 @@ opentree.toml
 
 # Sisyphus - local AI agent loop state (per-developer, not shared)
 .sisyphus/
+
+# Local AI agent skills (install per-developer; do not commit)
+.agents/
+skills-lock.json
+.omo/

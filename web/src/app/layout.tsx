@@ -1,6 +1,7 @@
 import "@/styles/globals.css";
 import React from "react";
 import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { type Metadata } from "next";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -176,7 +177,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} scroll-smooth`}
+      className={`${GeistSans.variable} ${GeistMono.variable} scroll-smooth`}
       suppressHydrationWarning
     >
       <head>

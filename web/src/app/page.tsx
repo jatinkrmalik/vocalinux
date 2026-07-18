@@ -1,49 +1,28 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import React, { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { LiveDemo } from "@/components/live-demo";
+import { motion, useReducedMotion } from "framer-motion";
 import {
-  Terminal,
-  Activity,
-  Lock,
-  Zap,
-  Laptop,
-  Keyboard,
-  Settings,
-  Github,
-  Star,
-  Download,
-  ChevronRight,
-  CheckCircle2,
-  Menu,
-  X,
-  Copy,
   Check,
-  Play,
-  Shield,
-  ShieldCheck,
-  Server,
-  Globe,
-  Cpu,
-  Volume2,
-  Sparkles,
-  Heart,
+  ChevronRight,
+  Copy,
+  Github,
+  Menu,
+  Star,
+  X,
 } from "lucide-react";
+import { LiveDemo } from "@/components/live-demo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { VocalinuxLogo } from "@/components/optimized-image";
-import { useInView } from "react-intersection-observer";
 
-// The one-liner install command (split into three lines for display)
-// Always uses main/install.sh. The installer dynamically resolves the latest release tag via GitHub API
 const installCommands = {
   interactiveInstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh && bash /tmp/vl.sh --interactive`,
   interactiveInstallDisplayCommand: `curl -fsSL \\
   https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh \\
   -o /tmp/vl.sh && \\
 bash /tmp/vl.sh --interactive`,
-
   uninstallCommand: `curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh -o /tmp/vul.sh && bash /tmp/vul.sh`,
   uninstallDisplayCommand: `curl -fsSL \\
   https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/uninstall.sh \\
@@ -147,7 +126,7 @@ const homeJsonLd = [
         name: "Does Vocalinux preserve my keyboard layout?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Yes! v0.10.1+ preserves your XKB keyboard layout when activating IBus, so you won't unexpectedly switch to US layout mid-dictation.",
+          text: "Yes. v0.10.1+ preserves your XKB keyboard layout when activating IBus, so you won't unexpectedly switch to US layout mid-dictation.",
         },
       },
     ],
@@ -181,140 +160,314 @@ const homeJsonLd = [
   },
 ];
 
-const FeatureCard = ({
-  icon,
-  title,
-  description,
-  href,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  href?: string;
-}) => {
-  const [ref, inView] = useInView({
-    triggerOnce: true,
-    threshold: 0.1,
-  });
-
-  const card = (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-      transition={{ duration: 0.5 }}
-      className={`flex h-full flex-col rounded-xl border border-zinc-100 bg-white p-6 shadow-md transition-all hover:shadow-xl dark:border-zinc-700 dark:bg-zinc-800 ${href ? "group cursor-pointer" : ""}`}
-    >
-      <div className="mb-4 flex items-center gap-4">
-        <div className="bg-primary/10 rounded-lg p-3">{icon}</div>
-        <h3 className="text-lg font-semibold sm:text-xl">{title}</h3>
-      </div>
-      <p className="flex-1 text-sm text-muted-foreground sm:text-base">
-        {description}
-      </p>
-      {href && (
-        <div className="mt-4 flex items-center gap-1 text-sm font-medium text-primary group-hover:underline">
-          Learn more{" "}
-          <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-        </div>
-      )}
-    </motion.div>
-  );
-
-  if (href) {
-    return <Link href={href}>{card}</Link>;
-  }
-  return card;
-};
-
-const CopyButton = ({
-  text,
-  className = "",
-}: {
-  text: string;
-  className?: string;
-}) => {
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
-
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard.writeText(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    window.setTimeout(() => setCopied(false), 2000);
   }, [text]);
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
-      className={`flex items-center gap-2 rounded bg-zinc-700 px-3 py-1.5 text-sm text-white transition-all hover:bg-zinc-600 ${className}`}
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 font-mono text-xs text-zinc-200 transition-colors hover:bg-white/10"
       aria-label={copied ? "Copied to clipboard" : "Copy to clipboard"}
     >
-      {copied ? (
-        <>
-          <Check className="h-4 w-4" />
-          Copied!
-        </>
-      ) : (
-        <>
-          <Copy className="h-4 w-4" />
-          Copy
-        </>
-      )}
+      {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? "Copied" : "Copy"}
     </button>
   );
-};
+}
 
-const FadeInSection = ({
+function TerminalBlock({
+  command,
+  display,
+  label,
+}: {
+  command: string;
+  display: string;
+  label: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-[10px] border border-zinc-800 bg-[#0a0a0c]">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1.5" aria-hidden>
+            <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
+            <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
+            <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
+          </div>
+          <span className="font-mono text-[11px] tracking-wide text-zinc-500">
+            {label}
+          </span>
+        </div>
+        <CopyButton text={command} />
+      </div>
+      <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed text-emerald-400 sm:p-5 sm:text-sm">
+        <span className="select-none text-zinc-600">$ </span>
+        {display}
+      </pre>
+    </div>
+  );
+}
+
+function Reveal({
   children,
+  className = "",
   delay = 0,
 }: {
   children: React.ReactNode;
+  className?: string;
   delay?: number;
-}) => {
-  const [ref, inView] = useInView({
-    triggerOnce: true,
-    threshold: 0.1,
-    rootMargin: "0px 0px -50px 0px",
-  });
+}) {
+  const reduce = useReducedMotion();
   return (
     <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-      transition={{ duration: 0.5, delay }}
-      className="w-full"
+      className={className}
+      initial={reduce ? false : { opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{
+        duration: 0.55,
+        delay,
+        ease: [0.16, 1, 0.3, 1],
+      }}
     >
       {children}
     </motion.div>
   );
-};
+}
+
+const navLinks = [
+  { href: "#demo", label: "Demo" },
+  { href: "#features", label: "Features" },
+  { href: "#install", label: "Install" },
+  { href: "#guides", label: "Guides" },
+  { href: "#faq", label: "FAQ" },
+];
+
+const featureRows = [
+  {
+    title: "Stays on your machine",
+    body: "Local engines process audio on-device. No cloud upload, no telemetry, no account.",
+    href: "/offline/",
+    link: "Offline privacy",
+  },
+  {
+    title: "Works where you type",
+    body: "Terminals, browsers, IDEs, office apps, and any focused text field on X11 or Wayland.",
+    href: "/use-cases/",
+    link: "Use cases",
+  },
+  {
+    title: "Fast by default",
+    body: "whisper.cpp with Vulkan acceleration on AMD, Intel, and NVIDIA. Tiny model is ~74MB.",
+    href: "/gpu-acceleration/",
+    link: "GPU acceleration",
+  },
+  {
+    title: "Your shortcuts",
+    body: "Toggle or push-to-talk. Bind modifiers the way your hands already work.",
+    href: "/shortcuts/",
+    link: "Shortcuts",
+  },
+  {
+    title: "Desktop reliability",
+    body: "Suspend recovery, IBus hardening, layout preservation, non-ASCII injection fallbacks.",
+    href: "/desktop-reliability/",
+    link: "Reliability notes",
+  },
+  {
+    title: "Neural silence filter",
+    body: "Silero VAD drops empty buffers before recognition, with amplitude fallback if needed.",
+    href: "/voice-activity-detection/",
+    link: "Voice activity detection",
+  },
+];
+
+const engines = [
+  {
+    name: "whisper.cpp",
+    badge: "Default",
+    summary: "C++ Whisper with Vulkan. Fast install, multi-vendor GPU.",
+    points: [
+      "About 1-2 min default setup",
+      "AMD / Intel / NVIDIA via Vulkan",
+      "Tiny model ~74MB",
+    ],
+  },
+  {
+    name: "Whisper",
+    summary: "Original OpenAI PyTorch path for NVIDIA CUDA workflows.",
+    points: [
+      "Same model family accuracy",
+      "CUDA when you already live in PyTorch",
+      "Larger install footprint",
+    ],
+  },
+  {
+    name: "VOSK",
+    summary: "Small footprint for older machines and tight RAM budgets.",
+    points: [
+      "CPU-friendly streaming",
+      "Models around ~40MB",
+      "Great on modest hardware",
+    ],
+  },
+  {
+    name: "Remote API",
+    summary: "Offload to a server you trust while keeping desktop injection local.",
+    points: [
+      "OpenAI-compatible endpoints",
+      "whisper.cpp server support",
+      "Local VAD still applies",
+    ],
+  },
+];
+
+const faqItems: { question: string; answer: React.ReactNode }[] = [
+  {
+    question: "Is Vocalinux really 100% offline?",
+    answer: (
+      <>
+        Yes for local engines: whisper.cpp, Whisper, and VOSK process speech on
+        your machine. An optional Remote API engine exists for servers you
+        configure yourself.{" "}
+        <Link href="/offline/" className="font-medium text-primary hover:underline">
+          Offline details
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    question: "Does Vocalinux collect usage telemetry?",
+    answer:
+      "No. The installed app does not send usage telemetry, analytics events, or background usage pings. Even the project maintainer cannot see how many people install or actively use Vocalinux.",
+  },
+  {
+    question: "Which Linux distributions are supported?",
+    answer: (
+      <>
+        Ubuntu 22.04+, Debian 11+, Fedora 39+, Arch, openSUSE Tumbleweed, and
+        most modern desktops on X11 or Wayland.{" "}
+        <Link href="/install/" className="font-medium text-primary hover:underline">
+          Installation guides
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    question: "How do I switch between speech engines?",
+    answer: (
+      <>
+        Settings dialog or CLI:{" "}
+        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]">
+          --engine whisper_cpp
+        </code>
+        ,{" "}
+        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]">
+          whisper
+        </code>
+        ,{" "}
+        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]">
+          vosk
+        </code>
+        , or{" "}
+        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]">
+          remote_api
+        </code>
+        .{" "}
+        <Link href="/compare/" className="font-medium text-primary hover:underline">
+          Compare engines
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    question: "Can Vocalinux use a remote transcription server?",
+    answer: (
+      <>
+        Yes. OpenAI-compatible Whisper servers and whisper.cpp server endpoints
+        are supported under Settings → Advanced → Remote Server.{" "}
+        <Link href="/remote-api/" className="font-medium text-primary hover:underline">
+          Remote API guide
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    question: "What happens when I close my laptop lid?",
+    answer: (
+      <>
+        v0.10.1+ recovers speech recognition and shortcuts after
+        suspend/resume.{" "}
+        <Link
+          href="/desktop-reliability/"
+          className="font-medium text-primary hover:underline"
+        >
+          Reliability notes
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    question: "Does Vocalinux preserve my keyboard layout?",
+    answer:
+      "Yes. v0.10.1+ preserves your XKB layout when activating IBus, so you will not get bounced to US layout mid-dictation.",
+  },
+  {
+    question: "What are the system requirements?",
+    answer: (
+      <>
+        Minimum: 4GB RAM, Python 3.9+, ~200MB disk for the default setup. 8GB+
+        recommended for larger Whisper models. Optional Vulkan GPU on AMD,
+        Intel, or NVIDIA.{" "}
+        <Link href="/install/" className="font-medium text-primary hover:underline">
+          Full requirements
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    question: "Can I use languages other than English?",
+    answer: (
+      <>
+        whisper.cpp and Whisper cover 99+ languages. VOSK ships models for major
+        languages including English, Hindi, Spanish, French, German, and more.{" "}
+        <Link href="/languages/" className="font-medium text-primary hover:underline">
+          Language support
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    question: "Is Vocalinux free?",
+    answer: (
+      <>
+        Completely free and open-source under GPL-3.0. No premium tiers, no
+        subscriptions.{" "}
+        <Link href="/open-source/" className="font-medium text-primary hover:underline">
+          About the project
+        </Link>
+        .
+      </>
+    ),
+  },
+];
 
 export default function HomePage() {
   const [stars, setStars] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    fetch("https://api.github.com/repos/jatinkrmalik/vocalinux")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.stargazers_count) {
-          setStars(data.stargazers_count);
-        }
-      })
-      .catch(() => {
-        // Fallback if API fails
-        setStars(null);
-      });
-  }, []);
-
-  const navLinks = [
-    { href: "#demo", label: "Demo" },
-    { href: "#features", label: "Features" },
-    { href: "/screenshots/", label: "Screenshots" },
-    { href: "#install", label: "Install" },
-    { href: "#guides", label: "Guides" },
-    { href: "#faq", label: "FAQ" },
-  ];
-
+  const reduce = useReducedMotion();
   const {
     interactiveInstallCommand,
     interactiveInstallDisplayCommand,
@@ -322,1804 +475,837 @@ export default function HomePage() {
     uninstallDisplayCommand,
   } = installCommands;
 
+  useEffect(() => {
+    fetch("https://api.github.com/repos/jatinkrmalik/vocalinux")
+      .then((res) => res.json())
+      .then((data: { stargazers_count?: number }) => {
+        if (data.stargazers_count) setStars(data.stargazers_count);
+      })
+      .catch(() => setStars(null));
+  }, []);
+
   return (
-    <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
+    <main className="min-h-[100dvh] bg-background text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }}
       />
 
-      {/* Header */}
-      <header className="bg-background/80 fixed left-0 right-0 top-0 z-50 border-b border-border backdrop-blur-md">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/" className="group flex items-center gap-2">
-            <VocalinuxLogo
-              width={32}
-              height={32}
-              className="h-7 w-7 transition-transform group-hover:scale-110 sm:h-8 sm:w-8"
-              priority
-            />
-            <span className="text-lg font-bold sm:text-xl">Vocalinux</span>
-            <span className="from-primary/20 border-primary/30 shadow-primary/20 hidden rounded-full border bg-gradient-to-r to-green-500/20 px-2.5 py-1 text-xs font-semibold text-primary shadow-sm sm:inline-block">
-              v0.14.2
+      {/* Nav */}
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/80 bg-background/85 backdrop-blur-md">
+        <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <VocalinuxLogo width={28} height={28} className="h-7 w-7" priority />
+            <span className="text-[15px] font-semibold tracking-tight">
+              Vocalinux
             </span>
           </Link>
 
-          {/* Desktop navigation */}
-          <div className="hidden items-center gap-6 md:flex">
-            {navLinks.map((link) =>
-              link.href.startsWith("/") ? (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </Link>
-              ) : (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </a>
-              ),
-            )}
+          <div className="hidden items-center gap-7 md:flex">
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </a>
+            ))}
             <a
               href="https://github.com/jatinkrmalik/vocalinux"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-              {stars !== null && (
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium dark:bg-zinc-800">
-                  {stars.toLocaleString()}
-                </span>
-              )}
+              <Star className="h-3.5 w-3.5 fill-current" />
+              {stars !== null ? stars.toLocaleString() : "GitHub"}
             </a>
             <ThemeToggle />
+            <a
+              href="#install"
+              className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]"
+            >
+              Install
+            </a>
           </div>
 
-          {/* Mobile navigation toggle */}
-          <div className="flex items-center gap-3 md:hidden">
+          <div className="flex items-center gap-2 md:hidden">
             <ThemeToggle />
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-foreground focus:outline-none"
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border"
               aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
         </nav>
 
-        {/* Mobile menu */}
-        <motion.div
-          initial={{ height: 0, opacity: 0 }}
-          animate={{
-            height: mobileMenuOpen ? "auto" : 0,
-            opacity: mobileMenuOpen ? 1 : 0,
-          }}
-          transition={{ duration: 0.3 }}
-          className="overflow-hidden border-b border-border bg-background md:hidden"
-        >
-          <div className="space-y-2 px-4 py-3">
-            {navLinks.map((link) =>
-              link.href.startsWith("/") ? (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="block py-2 text-foreground transition-colors hover:text-primary"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {link.label}
-                </Link>
-              ) : (
+        {mobileMenuOpen && (
+          <div className="border-t border-border bg-background px-4 py-3 md:hidden">
+            <div className="flex flex-col gap-1">
+              {navLinks.map((link) => (
                 <a
                   key={link.href}
                   href={link.href}
-                  className="block py-2 text-foreground transition-colors hover:text-primary"
                   onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-md px-2 py-2.5 text-sm font-medium"
                 >
                   {link.label}
                 </a>
-              ),
-            )}
-            <a
-              href="https://github.com/jatinkrmalik/vocalinux"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 py-2 text-foreground transition-colors hover:text-primary"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <Github className="h-5 w-5" />
-              GitHub
-            </a>
+              ))}
+              <a
+                href="https://github.com/jatinkrmalik/vocalinux"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium"
+              >
+                <Github className="h-4 w-4" />
+                GitHub
+              </a>
+            </div>
           </div>
-        </motion.div>
+        )}
       </header>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden px-4 pb-16 pt-28 sm:px-6 sm:pb-24 sm:pt-36">
-        <div className="from-primary/5 dark:from-primary/10 absolute inset-0 bg-gradient-to-br via-transparent to-cyan-500/5 dark:to-cyan-500/10" />
-
-        {/* Full-width shifting wave gradient */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_10%,black_84%,transparent)]">
-          <div className="absolute inset-0 bg-white/[0.015] backdrop-blur-[1px] dark:bg-white/[0.008]" />
+      {/* Hero: asymmetric split */}
+      <section className="relative overflow-hidden px-4 pb-16 pt-24 sm:px-6 sm:pb-20 sm:pt-28">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.55] dark:opacity-40"
+          aria-hidden
+          style={{
+            background:
+              "radial-gradient(60% 50% at 85% 20%, color-mix(in oklab, var(--primary) 18%, transparent), transparent 70%)",
+          }}
+        />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-12 lg:gap-12">
           <motion.div
-            className="absolute inset-x-[-18%] top-[-12%] h-[90%] mix-blend-multiply blur-3xl dark:hidden"
-            style={{
-              background:
-                "radial-gradient(70% 48% at 16% 46%, hsl(var(--primary) / 0.28), transparent 64%), radial-gradient(64% 44% at 82% 44%, rgb(6 182 212 / 0.3), transparent 66%), linear-gradient(105deg, transparent 8%, rgb(20 184 166 / 0.2) 36%, rgb(6 182 212 / 0.24) 55%, transparent 86%)",
-              backgroundSize: "170% 170%",
-            }}
-            animate={{
-              backgroundPosition: ["0% 46%", "100% 54%", "0% 46%"],
-              opacity: [0.82, 1, 0.82],
-            }}
-            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute inset-x-[-18%] top-[-12%] hidden h-[90%] blur-3xl dark:block"
-            style={{
-              background:
-                "radial-gradient(70% 48% at 16% 46%, hsl(var(--primary) / 0.13), transparent 68%), radial-gradient(64% 44% at 82% 44%, rgb(6 182 212 / 0.13), transparent 70%), linear-gradient(105deg, transparent 8%, rgb(20 184 166 / 0.08) 36%, rgb(6 182 212 / 0.1) 55%, transparent 86%)",
-              backgroundSize: "170% 170%",
-            }}
-            animate={{
-              backgroundPosition: ["0% 46%", "100% 54%", "0% 46%"],
-              opacity: [0.58, 0.82, 0.58],
-            }}
-            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute inset-x-[-12%] top-[16%] h-[52%] mix-blend-multiply blur-2xl dark:hidden"
-            style={{
-              background:
-                "linear-gradient(100deg, transparent 4%, hsl(var(--primary) / 0.34) 30%, rgb(20 184 166 / 0.3) 48%, rgb(6 182 212 / 0.34) 68%, transparent 94%)",
-              clipPath:
-                "polygon(0 44%, 10% 36%, 24% 43%, 39% 34%, 55% 42%, 72% 32%, 88% 39%, 100% 34%, 100% 72%, 86% 65%, 70% 73%, 54% 63%, 38% 72%, 22% 62%, 8% 69%, 0 64%)",
-            }}
-            animate={{
-              x: ["-4%", "4%", "-4%"],
-              y: [0, -16, 0],
-              opacity: [0.84, 1, 0.84],
-              scale: [1, 1.05, 1],
-            }}
-            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute inset-x-[-12%] top-[16%] hidden h-[52%] blur-3xl dark:block"
-            style={{
-              background:
-                "linear-gradient(100deg, transparent 4%, hsl(var(--primary) / 0.13) 30%, rgb(20 184 166 / 0.12) 48%, rgb(6 182 212 / 0.14) 68%, transparent 94%)",
-              clipPath:
-                "polygon(0 44%, 10% 36%, 24% 43%, 39% 34%, 55% 42%, 72% 32%, 88% 39%, 100% 34%, 100% 72%, 86% 65%, 70% 73%, 54% 63%, 38% 72%, 22% 62%, 8% 69%, 0 64%)",
-            }}
-            animate={{
-              x: ["-4%", "4%", "-4%"],
-              y: [0, -16, 0],
-              opacity: [0.54, 0.76, 0.54],
-              scale: [1, 1.05, 1],
-            }}
-            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-          />
-        </div>
-
-        <div className="relative mx-auto max-w-7xl">
-          <div className="mx-auto max-w-4xl text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              {/* Badge */}
-              <div className="bg-primary/10 mb-6 inline-flex items-center gap-2 rounded-full px-4 py-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-primary">
-                  Beta Release: Try it now!
-                </span>
-              </div>
-
-              <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-                Voice Dictation for Linux,{" "}
-                <motion.span
-                  className="inline-block bg-gradient-to-r from-primary via-teal-500 to-cyan-600 bg-clip-text text-transparent"
-                  style={{
-                    backgroundSize: "220% 100%",
-                  }}
-                  animate={{
-                    backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
-                  }}
-                  transition={{
-                    duration: 14,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                >
-                  Finally Done Right
-                </motion.span>
-              </h1>
-
-              <p className="mx-auto mb-2 max-w-3xl text-lg text-muted-foreground sm:text-xl md:text-2xl">
-                100% offline voice dictation for Linux.
-              </p>
-              <p className="mx-auto mb-8 max-w-3xl text-lg text-muted-foreground sm:text-xl md:text-2xl">
-                Use toggle mode or push-to-talk and start speaking.
-              </p>
-
-              {/* CTA Buttons */}
-              <div className="mb-12 flex flex-col justify-center gap-4 sm:flex-row">
-                <a
-                  href="#install"
-                  className="hover:bg-primary/90 shadow-primary/25 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:scale-105 dark:text-zinc-900"
-                >
-                  <Download className="h-5 w-5" />
-                  Install Now
-                </a>
-                <a
-                  href="https://github.com/jatinkrmalik/vocalinux"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="View Vocalinux source code on GitHub (opens in a new tab)"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-8 py-4 text-lg font-semibold text-white transition-all hover:scale-105 hover:bg-zinc-800 hover:shadow-md dark:border-zinc-300 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-                >
-                  <Github className="h-5 w-5" />
-                  We&apos;re Open Source
-                </a>
-                <a
-                  href="#ecosystem"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-300 px-8 py-4 text-lg font-semibold text-zinc-600 transition-all hover:border-zinc-500 hover:text-zinc-900 hover:shadow-sm dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-zinc-400 dark:hover:text-zinc-200"
-                >
-                  <Laptop className="h-5 w-5" />
-                  Use Windows or Mac?
-                </a>
-              </div>
-            </motion.div>
-
-            {/* One-Click Install Box - Redesigned */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="mx-auto w-full max-w-6xl px-4"
-            >
-              <div className="rounded-2xl border border-zinc-800/50 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 shadow-2xl backdrop-blur sm:p-8">
-                {/* Header */}
-                <div className="mb-5 flex items-center gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-green-500/20">
-                    <Terminal className="h-5 w-5 text-green-400" />
-                  </div>
-                  <div className="text-left">
-                    <h2 className="text-left text-lg font-semibold text-white">
-                      Quick Install (Interactive)
-                    </h2>
-                    <p className="text-left text-xs text-zinc-400">
-                      Guided installation with hardware detection
-                    </p>
-                  </div>
-                </div>
-
-                {/* Command box */}
-                <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80">
-                  <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-                    </div>
-                    <CopyButton text={interactiveInstallCommand} />
-                  </div>
-                  <div className="p-4 sm:p-5">
-                    <pre className="whitespace-pre-wrap text-left font-mono text-sm text-green-400 sm:text-base">
-                      <span className="select-none text-zinc-500">$ </span>
-                      {interactiveInstallDisplayCommand}
-                    </pre>
-                  </div>
-                </div>
-
-                {/* Bottom info */}
-                <div className="mt-5 flex flex-col gap-3 border-t border-zinc-800/50 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-zinc-400">
-                    <span className="text-zinc-500">Compatible:</span> Ubuntu,
-                    Fedora, Debian, Arch, openSUSE &amp; more
-                  </p>
-                  <div className="flex items-center gap-4 text-xs text-zinc-500">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                      Guided setup
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Zap className="h-3.5 w-3.5 text-green-500" />
-                      ~1-2 min default
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tech stack info */}
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-4 border-t border-zinc-800/30 pt-4 text-xs text-zinc-400 sm:gap-6">
-                  <span className="flex items-center gap-1.5">
-                    <Zap className="h-3.5 w-3.5 text-yellow-500" />
-                    <strong className="text-zinc-300">whisper.cpp</strong>{" "}
-                    default
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Cpu className="h-3.5 w-3.5 text-blue-500" />
-                    Vulkan GPU ready
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Settings className="h-3.5 w-3.5 text-purple-500" />
-                    Interactive engine choice
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Trust indicators */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="mt-12 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground sm:gap-10"
-            >
-              <div className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-green-500" />
-                <span>100% Offline</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Lock className="h-5 w-5 text-blue-500" />
-                <span>No Telemetry</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-purple-500" />
-                <span>Local Models</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Globe className="h-5 w-5 text-orange-500" />
-                <span>X11 &amp; Wayland</span>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Demo Section - Live Interactive Demo */}
-      <section
-        id="demo"
-        className="bg-zinc-50 px-4 py-16 dark:bg-zinc-900/50 sm:px-6 sm:py-24"
-      >
-        <div className="mx-auto max-w-6xl">
-          <FadeInSection>
-            <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">
-                Try a Speech-to-Text Preview in Your Browser
-              </h2>
-              <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
-                This preview runs when your browser exposes SpeechRecognition.
-                Vocalinux itself runs offline after install.
-              </p>
-            </div>
-          </FadeInSection>
-
-          <FadeInSection delay={0.1}>
-            <LiveDemo />
-          </FadeInSection>
-
-          {/* Key demo points */}
-          <FadeInSection delay={0.2}>
-            <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-              {[
-                {
-                  icon: <Keyboard className="h-6 w-6 text-primary" />,
-                  title: "Flexible Shortcut Modes",
-                  description:
-                    "Use toggle mode (double-tap) or push-to-talk mode to dictate anywhere",
-                  href: "/shortcuts/",
-                },
-                {
-                  icon: <Zap className="h-6 w-6 text-primary" />,
-                  title: "Real-time Transcription",
-                  description:
-                    "Compare engines and model choices for low-latency dictation",
-                  href: "/compare/",
-                },
-                {
-                  icon: <Volume2 className="h-6 w-6 text-primary" />,
-                  title: "Audio Feedback",
-                  description:
-                    "Use sound effects to know when recording starts and stops",
-                  href: "/shortcuts/",
-                },
-              ].map((item, i) => (
-                <Link
-                  key={i}
-                  href={item.href}
-                  className="hover:border-primary/50 hover:bg-primary/5 dark:hover:border-primary/50 dark:hover:bg-primary/10 group flex items-start gap-4 rounded-xl border border-zinc-200 bg-white p-4 transition-colors dark:border-zinc-700 dark:bg-zinc-800"
-                >
-                  <div className="bg-primary/10 rounded-lg p-2">
-                    {item.icon}
-                  </div>
-                  <div>
-                    <h3 className="mb-1 inline-flex items-center gap-1 font-semibold">
-                      {item.title}
-                      <ChevronRight className="h-4 w-4 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {item.description}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </FadeInSection>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-7xl">
-          <FadeInSection>
-            <div className="mb-16 text-center">
-              <h2 className="mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">
-                Offline Voice Dictation Features for Linux
-              </h2>
-              <p className="mx-auto max-w-3xl text-lg text-muted-foreground">
-                Finally, Linux users get the voice dictation experience they
-                deserve. no compromises on privacy, no cloud dependencies, just
-                pure productivity.
-              </p>
-            </div>
-          </FadeInSection>
-
-          <div className="mb-10 text-center">
-            <Link
-              href="/screenshots/"
-              className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors"
-            >
-              See screenshots of the app UI
-              <ChevronRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <FeatureCard
-              icon={<Shield className="h-6 w-6 text-primary" />}
-              title="100% Offline & Private"
-              description="All processing happens on your machine. Your voice data never leaves your computer. Complete privacy guaranteed."
-              href="/offline/"
-            />
-            <FeatureCard
-              icon={<Laptop className="h-6 w-6 text-primary" />}
-              title="Universal App Support"
-              description="Works everywhere: terminals, browsers, IDEs, office apps, and any text input field on your Linux system."
-              href="/use-cases/"
-            />
-            <FeatureCard
-              icon={<Zap className="h-6 w-6 text-primary" />}
-              title="Blazing Fast"
-              description="whisper.cpp brings C++ optimized inference with Vulkan GPU support. Works with AMD, Intel, and NVIDIA GPUs!"
-              href="/gpu-acceleration/"
-            />
-            <FeatureCard
-              icon={<Keyboard className="h-6 w-6 text-primary" />}
-              title="Simple Activation"
-              description="Choose toggle mode (double-tap) or push-to-talk mode (hold key). Simple, predictable control."
-              href="/shortcuts/"
-            />
-            <FeatureCard
-              icon={<Globe className="h-6 w-6 text-primary" />}
-              title="X11 & Wayland Support"
-              description="Works seamlessly with both display servers. Modern Wayland and traditional X11, fully supported."
-              href="/wayland/"
-            />
-            <FeatureCard
-              icon={<Settings className="h-6 w-6 text-primary" />}
-              title="Fully Configurable"
-              description="Adjust model size, language, activation mode, and voice command behavior. GUI settings panel or config file, your choice."
-              href="/advanced-settings/"
-            />
-            <FeatureCard
-              icon={<Server className="h-6 w-6 text-primary" />}
-              title="Remote API Engine"
-              description="Offload transcription to an OpenAI-compatible or whisper.cpp server while keeping the same Linux desktop workflow."
-              href="/remote-api/"
-            />
-            <FeatureCard
-              icon={<Activity className="h-6 w-6 text-primary" />}
-              title="Silero Voice Activity Detection"
-              description="Neural VAD drops silence-only buffers for cleaner dictation, with a safe amplitude fallback when ONNX Runtime is unavailable."
-              href="/voice-activity-detection/"
-            />
-            <FeatureCard
-              icon={<ShieldCheck className="h-6 w-6 text-primary" />}
-              title="Desktop Reliability"
-              description="Suspend/resume recovery, IBus runtime hardening, keyboard layout preservation, and non-ASCII text injection fallbacks."
-              href="/desktop-reliability/"
-            />
-          </div>
-
-          {/* Comparison highlight */}
-          <FadeInSection delay={0.2}>
-            <div className="from-primary/10 to-primary/10 mt-16 rounded-2xl bg-gradient-to-r via-cyan-500/10 p-8 sm:p-12">
-              <div className="grid items-center gap-8 md:grid-cols-2">
-                <div>
-                  <h3 className="mb-4 text-2xl font-bold sm:text-3xl">
-                    The Linux Voice Gap, Solved
-                  </h3>
-                  <p className="mb-6 text-muted-foreground">
-                    While macOS and Windows have had built-in voice dictation
-                    for years, Linux users have been left behind. Until now.
-                  </p>
-                  <ul className="space-y-3">
-                    {[
-                      "No more cloud services that compromise privacy",
-                      "No more janky solutions that only work in specific apps",
-                      "No more complicated setup processes",
-                      "Just install and start dictating",
-                    ].map((item, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="flex justify-center">
-                  <div className="relative">
-                    <div className="rounded-2xl bg-white p-8 shadow-xl dark:bg-zinc-800">
-                      <div className="mb-6 flex items-center gap-4">
-                        <VocalinuxLogo
-                          width={64}
-                          height={64}
-                          className="h-16 w-16"
-                        />
-                        <div>
-                          <div className="text-2xl font-bold">Vocalinux</div>
-                          <div className="text-sm text-muted-foreground">
-                            Voice dictation, finally
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-center">
-                        <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
-                          <div className="text-2xl font-bold text-primary">
-                            0
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Cloud calls
-                          </div>
-                        </div>
-                        <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
-                          <div className="text-2xl font-bold text-primary">
-                            ∞
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Privacy
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </FadeInSection>
-        </div>
-      </section>
-
-      {/* Installation Section */}
-      <section
-        id="install"
-        className="bg-zinc-50 px-4 py-16 dark:bg-zinc-900/50 sm:px-6 sm:py-24"
-      >
-        <div className="mx-auto max-w-4xl">
-          <FadeInSection>
-            <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">
-                How to Install Voice Dictation on Linux
-              </h2>
-              <p className="text-lg text-muted-foreground">
-                One command. That&apos;s all it takes.
-              </p>
-            </div>
-          </FadeInSection>
-
-          <FadeInSection delay={0.1}>
-            <div className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-800">
-              <div className="p-6 sm:p-8">
-                {/* Interactive install */}
-                <div>
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="rounded-lg bg-green-500/10 p-2">
-                      <Zap className="h-5 w-5 text-green-500" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-semibold">
-                        Recommended: interactive installer
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Detects your system, lets you choose an engine, and sets
-                        up the desktop app.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80">
-                    <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-                      </div>
-                      <CopyButton text={interactiveInstallCommand} />
-                    </div>
-                    <div className="p-4 sm:p-5">
-                      <pre className="overflow-x-auto whitespace-pre-wrap text-left font-mono text-sm text-green-400 sm:text-base">
-                        <span className="select-none text-zinc-500">$ </span>
-                        {interactiveInstallDisplayCommand}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h4 className="font-semibold">
-                        Choose your engine during setup
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        Start with the guided installer, then pick the runtime
-                        that fits your hardware.
-                      </p>
-                    </div>
-                    <Link
-                      href="/compare/"
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
-                    >
-                      Compare engines <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    {[
-                      {
-                        icon: <Zap className="h-4 w-4 text-green-500" />,
-                        title: "whisper.cpp",
-                        description: "Default, fast, Vulkan-capable",
-                      },
-                      {
-                        icon: <Cpu className="h-4 w-4 text-cyan-500" />,
-                        title: "Whisper",
-                        description: "PyTorch/CUDA workflow",
-                      },
-                      {
-                        icon: <Server className="h-4 w-4 text-orange-500" />,
-                        title: "VOSK",
-                        description: "Small footprint for older systems",
-                      },
-                    ].map((engine) => (
-                      <div
-                        key={engine.title}
-                        className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-800"
-                      >
-                        <div className="mb-2 flex items-center gap-2">
-                          <span className="rounded-md bg-zinc-100 p-1.5 dark:bg-zinc-700">
-                            {engine.icon}
-                          </span>
-                          <h5 className="font-semibold">{engine.title}</h5>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {engine.description}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* What the installer does */}
-                <div className="mt-8 rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900">
-                  <h4 className="mb-3 font-semibold">
-                    What the installer does:
-                  </h4>
-                  <ul className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                    {[
-                      "Installs system dependencies",
-                      "Creates isolated virtual environment",
-                      "Downloads speech recognition models",
-                      "Sets up desktop integration",
-                      "Adds vocalinux to your PATH",
-                      "Creates application launcher",
-                    ].map((item, i) => (
-                      <li key={i} className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* After install */}
-                <div className="bg-primary/5 border-primary/20 mt-6 rounded-lg border p-4">
-                  <h4 className="mb-2 flex items-center gap-2 font-semibold">
-                    <Play className="h-4 w-4 text-primary" />
-                    After Installation
-                  </h4>
-                  <p className="mb-3 text-sm text-muted-foreground">
-                    Launch Vocalinux from your terminal or application menu:
-                  </p>
-                  <code className="block rounded bg-zinc-900 px-4 py-2 text-sm text-green-400">
-                    vocalinux
-                  </code>
-                </div>
-              </div>
-            </div>
-          </FadeInSection>
-
-          {/* System requirements */}
-          <FadeInSection delay={0.2}>
-            <div className="mt-8 space-y-6">
-              <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <h4 className="mb-4 flex items-center gap-2 font-semibold">
-                  <Cpu className="h-5 w-5 text-primary" />
-                  System Requirements
-                </h4>
-                <ul className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                  <li>
-                    • Ubuntu, Debian, Fedora, Arch, openSUSE, or equivalent
-                  </li>
-                  <li>• Python 3.9+ with GTK 3/PyGObject dependencies</li>
-                  <li>• 4GB RAM minimum; 8GB+ recommended for larger models</li>
-                  <li>• Microphone plus X11 or Wayland desktop session</li>
-                  <li>• ~200MB disk for the default whisper.cpp setup</li>
-                  <li>
-                    • Optional Vulkan GPU for AMD, Intel, or NVIDIA acceleration
-                  </li>
-                </ul>
-              </div>
-              <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="rounded-lg bg-red-500/10 p-2">
-                    <Terminal className="h-5 w-5 text-red-500" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold">Uninstall</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Clean removal in one command
-                    </p>
-                  </div>
-                </div>
-                <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80">
-                  <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-                    </div>
-                    <CopyButton text={uninstallCommand} />
-                  </div>
-                  <div className="p-4 sm:p-5">
-                    <pre className="overflow-x-auto whitespace-pre-wrap text-left font-mono text-sm text-green-400 sm:text-base">
-                      <span className="select-none text-zinc-500">$ </span>
-                      {uninstallDisplayCommand}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </FadeInSection>
-        </div>
-      </section>
-
-      {/* SEO Guide Hub Section */}
-      <section id="guides" className="px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-6xl">
-          <FadeInSection>
-            <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">
-                Linux Voice Dictation Guides by Distribution
-              </h2>
-              <p className="mx-auto max-w-3xl text-lg text-muted-foreground">
-                Follow distro-specific setup instructions for Ubuntu, Fedora,
-                and Arch Linux. These pages are written for real desktop
-                workflows and include post-install checks.
-              </p>
-            </div>
-          </FadeInSection>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            {[
-              {
-                href: "/install/ubuntu/",
-                title: "Ubuntu Voice Typing Guide",
-                description:
-                  "Install offline speech-to-text on Ubuntu 22.04+ for GNOME, KDE, X11, and Wayland.",
-              },
-              {
-                href: "/install/fedora/",
-                title: "Fedora Speech-to-Text Guide",
-                description:
-                  "Set up Vocalinux on Fedora Workstation with distro-specific notes for a stable dictation flow.",
-              },
-              {
-                href: "/install/arch/",
-                title: "Arch Linux Dictation Guide",
-                description:
-                  "Lean setup for Arch, Manjaro, and EndeavourOS with hardware and injection sanity checks.",
-              },
-            ].map((guide) => (
-              <Link
-                key={guide.href}
-                href={guide.href}
-                className="group rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
-              >
-                <h3 className="mb-3 text-xl font-semibold">{guide.title}</h3>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  {guide.description}
-                </p>
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary group-hover:underline">
-                  Read guide <ChevronRight className="h-4 w-4" />
-                </span>
-              </Link>
-            ))}
-          </div>
-
-          <FadeInSection delay={0.15}>
-            <div className="border-primary/20 bg-primary/5 mt-8 rounded-2xl border p-6 sm:p-8">
-              <h3 className="mb-3 text-2xl font-bold">
-                Need help choosing an engine?
-              </h3>
-              <p className="mb-4 text-muted-foreground">
-                Compare whisper.cpp, Whisper, and VOSK for speed, hardware
-                support, and model size.
-              </p>
-              <Link
-                href="/compare/"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-              >
-                View speech engine comparison{" "}
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </FadeInSection>
-        </div>
-      </section>
-
-      {/* Speech Engines Section */}
-      <section className="bg-zinc-50 px-4 py-16 dark:bg-zinc-900/50 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-7xl">
-          <FadeInSection>
-            <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">
-                Choose Your Linux Speech Recognition Engine
-              </h2>
-              <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
-                Vocalinux supports local and remote speech recognition engines.
-                Pick the one that suits your hardware, privacy boundary, and
-                latency needs.
-              </p>
-            </div>
-          </FadeInSection>
-
-          <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-4">
-            <FadeInSection delay={0.1}>
-              <div className="h-full rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="rounded-lg bg-purple-500/10 p-3">
-                    <Sparkles className="h-6 w-6 text-purple-500" />
-                  </div>
-                  <h3 className="text-xl font-bold">Whisper (OpenAI)</h3>
-                </div>
-                <p className="mb-6 text-muted-foreground">
-                  OpenAI&apos;s original PyTorch-based Whisper model. NVIDIA GPU
-                  only.
-                </p>
-                <ul className="mb-6 space-y-2">
-                  {[
-                    "PyTorch-based implementation",
-                    "NVIDIA GPU support (CUDA)",
-                    "Same accuracy as whisper.cpp",
-                    "Larger download (~2.3GB)",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-purple-500" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="text-sm text-muted-foreground">
-                  <strong>Install time:</strong> ~5-10 minutes with PyTorch
-                </div>
-              </div>
-            </FadeInSection>
-
-            <FadeInSection delay={0.2}>
-              <div className="flex h-full flex-col overflow-hidden rounded-xl border-2 border-primary bg-white p-6 dark:bg-zinc-800">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="bg-primary/10 rounded-lg p-3">
-                    <Zap className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-bold">whisper.cpp</h3>
-                </div>
-                <p className="mb-6 text-muted-foreground">
-                  High-performance C++ port of Whisper with Vulkan GPU support.
-                  Our new default!
-                </p>
-                <ul className="mb-6 space-y-2">
-                  {[
-                    "10x faster installation (~1-2 min)",
-                    "Universal GPU support (AMD/Intel/NVIDIA)",
-                    "C++ optimized, true multi-threading",
-                    "Tiny model only ~74MB",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="text-sm text-muted-foreground">
-                  <strong>Model sizes:</strong> Tiny (74MB) • Base (141MB) •
-                  Small (465MB) • Medium (1.5GB) • Large (3.0GB)
-                </div>
-                <div className="mt-auto flex justify-center pt-6">
-                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground dark:text-black">
-                    Default engine
-                  </span>
-                </div>
-              </div>
-            </FadeInSection>
-
-            <FadeInSection delay={0.3}>
-              <div className="h-full rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="rounded-lg bg-blue-500/10 p-3">
-                    <Cpu className="h-6 w-6 text-blue-500" />
-                  </div>
-                  <h3 className="text-xl font-bold">VOSK</h3>
-                </div>
-                <p className="mb-6 text-muted-foreground">
-                  Lightweight, fast speech recognition engine perfect for
-                  lower-powered systems.
-                </p>
-                <ul className="mb-6 space-y-2">
-                  {[
-                    "Very lightweight and fast",
-                    "Low memory footprint",
-                    "Great for real-time streaming",
-                    "CPU only, minimal resources",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-blue-500" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="text-sm text-muted-foreground">
-                  <strong>Footprint:</strong> ~40MB model, minimal CPU/RAM usage
-                </div>
-              </div>
-            </FadeInSection>
-
-            <FadeInSection delay={0.4}>
-              <div className="h-full rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="rounded-lg bg-green-500/10 p-3">
-                    <Server className="h-6 w-6 text-green-500" />
-                  </div>
-                  <h3 className="text-xl font-bold">Remote API</h3>
-                </div>
-                <p className="mb-6 text-muted-foreground">
-                  Send utterances to a trusted OpenAI-compatible or whisper.cpp
-                  server when another machine should handle transcription.
-                </p>
-                <ul className="mb-6 space-y-2">
-                  {[
-                    "OpenAI-compatible endpoint support",
-                    "whisper.cpp server support",
-                    "Optional bearer token authentication",
-                    "Local VAD and text injection remain active",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="text-sm text-muted-foreground">
-                  <strong>Best for:</strong> powerful LAN servers and shared
-                  Whisper backends
-                </div>
-              </div>
-            </FadeInSection>
-          </div>
-
-          <FadeInSection delay={0.5}>
-            <div className="mt-10 text-center">
-              <Link
-                href="/compare/"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-              >
-                Compare all engines <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </FadeInSection>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section id="faq" className="px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-3xl">
-          <FadeInSection>
-            <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">
-                Frequently Asked Questions
-              </h2>
-            </div>
-          </FadeInSection>
-
-          <div className="space-y-4">
-            {(
-              [
-                {
-                  question: "Is Vocalinux really 100% offline?",
-                  answer: (
-                    <>
-                      Yes for local engines: whisper.cpp, Whisper, and VOSK
-                      process speech on your machine. Vocalinux also includes an
-                      optional Remote API engine for trusted servers you
-                      configure yourself.{" "}
-                      <Link
-                        href="/offline/"
-                        className="text-primary hover:underline"
-                      >
-                        Read more about offline voice dictation
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "Does Vocalinux collect usage telemetry?",
-                  answer:
-                    "No. The installed app does not send usage telemetry, analytics events, or background usage pings. Even the project maintainer cannot see how many people have installed or actively use Vocalinux, and you can verify this by watching for external network calls after installation.",
-                },
-                {
-                  question: "Which Linux distributions are supported?",
-                  answer: (
-                    <>
-                      Vocalinux works on most modern Linux distributions
-                      including Ubuntu 22.04+, Debian 11+, Fedora 39+, Arch
-                      Linux, and openSUSE Tumbleweed. Experimental support is
-                      available for Gentoo, Alpine, Void, Solus, and more. It
-                      supports both X11 and Wayland display servers.{" "}
-                      <Link
-                        href="/install/"
-                        className="text-primary hover:underline"
-                      >
-                        See installation guides
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "How do I switch between speech engines?",
-                  answer: (
-                    <>
-                      You can switch engines in the Settings dialog or via the
-                      command line. The options are whisper.cpp (default),
-                      OpenAI Whisper, VOSK, and Remote API. From the CLI, use
-                      &quot;--engine whisper_cpp&quot;, &quot;--engine
-                      whisper&quot;, &quot;--engine vosk&quot;, or
-                      &quot;--engine remote_api&quot;.{" "}
-                      <Link
-                        href="/compare/"
-                        className="text-primary hover:underline"
-                      >
-                        Compare all engines
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "Can Vocalinux use a remote transcription server?",
-                  answer: (
-                    <>
-                      Yes. v0.12.0 adds Remote API recognition for
-                      OpenAI-compatible Whisper servers and the whisper.cpp
-                      server endpoint. Configure it from Settings → Advanced →
-                      Remote Server.{" "}
-                      <Link
-                        href="/remote-api/"
-                        className="text-primary hover:underline"
-                      >
-                        Read the Remote API guide
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "What is Silero VAD?",
-                  answer: (
-                    <>
-                      Silero VAD is neural voice activity detection. Vocalinux
-                      uses it when ONNX Runtime support is available to drop
-                      silence-only buffers before recognition, with
-                      amplitude-based VAD as a fallback.{" "}
-                      <Link
-                        href="/voice-activity-detection/"
-                        className="text-primary hover:underline"
-                      >
-                        Learn about VAD
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "What happens when I close my laptop lid?",
-                  answer: (
-                    <>
-                      Vocalinux v0.10.1+ automatically recovers speech
-                      recognition and keyboard shortcuts after system
-                      suspend/resume. No manual restart needed.{" "}
-                      <Link
-                        href="/desktop-reliability/"
-                        className="text-primary hover:underline"
-                      >
-                        See reliability improvements
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "Does Vocalinux preserve my keyboard layout?",
-                  answer:
-                    "Yes! v0.10.1+ preserves your XKB keyboard layout when activating IBus, so you won't unexpectedly switch to US layout mid-dictation.",
-                },
-                {
-                  question: "What are the system requirements?",
-                  answer: (
-                    <>
-                      Minimum: 4GB RAM, Python 3.9+, ~200MB disk space. 8GB+ RAM
-                      recommended for larger Whisper models. The default
-                      whisper.cpp tiny model (~74MB) works great on modest
-                      hardware. GPU acceleration is available via Vulkan for
-                      AMD, Intel, and NVIDIA GPUs.{" "}
-                      <Link
-                        href="/install/"
-                        className="text-primary hover:underline"
-                      >
-                        View full installation requirements
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "Can I use it in languages other than English?",
-                  answer: (
-                    <>
-                      Yes! whisper.cpp and OpenAI Whisper support 99+ languages
-                      with varying accuracy levels. VOSK includes models for 10
-                      languages out of the box (English, Hindi, Spanish, French,
-                      German, Italian, Portuguese, Russian, Chinese, and more).
-                      Additional language models can be downloaded as needed.{" "}
-                      <Link
-                        href="/languages/"
-                        className="text-primary hover:underline"
-                      >
-                        See supported languages
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "How do I customize the activation shortcut?",
-                  answer: (
-                    <>
-                      The default is toggle mode with double-tap Ctrl. You can
-                      switch to push-to-talk in Settings, and choose between
-                      Left Ctrl, Right Ctrl, Alt, Shift, and other modifier
-                      keys. Configuration is also available by editing
-                      ~/.config/vocalinux/config.json.{" "}
-                      <Link
-                        href="/shortcuts/"
-                        className="text-primary hover:underline"
-                      >
-                        View shortcut options
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "Can I disable voice commands?",
-                  answer: (
-                    <>
-                      Yes. Voice commands can be toggled on or off in the
-                      Settings dialog. By default, commands are automatically
-                      enabled for VOSK and disabled for Whisper/whisper.cpp, but
-                      you can override this at any time.{" "}
-                      <Link
-                        href="/shortcuts/"
-                        className="text-primary hover:underline"
-                      >
-                        Learn about voice commands
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-                {
-                  question: "Is Vocalinux free?",
-                  answer: (
-                    <>
-                      Yes, Vocalinux is completely free and open-source,
-                      licensed under GPL-3.0. No premium tiers, no
-                      subscriptions, no tracking. Just free software.{" "}
-                      <Link
-                        href="/open-source/"
-                        className="text-primary hover:underline"
-                      >
-                        Learn about the project
-                      </Link>
-                      .
-                    </>
-                  ),
-                },
-              ] as { question: string; answer: React.ReactNode }[]
-            ).map((item, i) => (
-              <FadeInSection key={i} delay={i * 0.05}>
-                <details className="group rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-                  <summary className="flex cursor-pointer list-none items-center justify-between p-6">
-                    <h3 className="pr-4 font-semibold">{item.question}</h3>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-open:rotate-90" />
-                  </summary>
-                  <div className="px-6 pb-6 text-muted-foreground">
-                    {item.answer}
-                  </div>
-                </details>
-              </FadeInSection>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* The Voca Family - Ecosystem Section */}
-      <section
-        id="ecosystem"
-        className="bg-zinc-50 px-4 py-16 dark:bg-zinc-900/50 sm:px-6 sm:py-24"
-      >
-        <div className="mx-auto max-w-7xl">
-          <FadeInSection>
-            <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">
-                The Voca Family
-              </h2>
-              <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
-                Voice dictation, done right, on every platform.
-              </p>
-            </div>
-          </FadeInSection>
-
-          <div className="grid gap-8 md:grid-cols-3">
-            {/* VocaMac Card */}
-            <FadeInSection delay={0.1}>
-              <div className="group relative h-full overflow-hidden rounded-xl border border-zinc-300/80 bg-gradient-to-br from-zinc-50 via-white to-zinc-200 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-zinc-400 hover:shadow-xl hover:shadow-zinc-500/10 dark:border-zinc-600 dark:from-zinc-800 dark:via-zinc-800 dark:to-zinc-700/70">
-                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-70 dark:via-white/20" />
-                <div className="absolute right-4 top-4">
-                  <span className="rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground dark:text-black">
-                    Beta
-                  </span>
-                </div>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex items-center justify-center rounded-lg bg-gradient-to-br from-zinc-100 to-zinc-300 p-3 shadow-inner transition-transform duration-300 group-hover:scale-105 dark:from-zinc-700 dark:to-zinc-500">
-                    <img
-                      src="https://cdn.simpleicons.org/apple/000000"
-                      alt="macOS"
-                      width={24}
-                      height={24}
-                      className="dark:invert"
-                    />
-                  </div>
-                  <h3 className="text-xl font-bold">VocaMac</h3>
-                </div>
-                <p className="mb-4 text-muted-foreground">
-                  Native macOS menu bar app. 100% offline voice-to-text powered
-                  by WhisperKit and CoreML with Apple Silicon acceleration.
-                </p>
-                <div className="mb-6 flex flex-wrap gap-2">
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    WhisperKit
-                  </span>
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    CoreML
-                  </span>
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    Apple Silicon
-                  </span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
-                    AGPL-3.0
-                  </span>
-                </div>
-                <div className="flex gap-3">
-                  <a
-                    href="https://vocamac.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all dark:text-black"
-                  >
-                    <Globe className="h-4 w-4" />
-                    Website
-                  </a>
-                  <a
-                    href="https://github.com/jatinkrmalik/vocamac"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-all hover:bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
-                  >
-                    <Github className="h-4 w-4" />
-                    GitHub
-                  </a>
-                </div>
-              </div>
-            </FadeInSection>
-
-            {/* VocaLinux Card (center) */}
-            <FadeInSection delay={0.2}>
-              <div className="from-primary/10 shadow-primary/10 hover:shadow-primary/20 group relative h-full overflow-hidden rounded-xl border-2 border-primary bg-gradient-to-br via-white to-emerald-500/10 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:via-zinc-800 dark:to-emerald-500/15">
-                <div className="via-primary/70 pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent to-transparent" />
-                <div className="absolute right-4 top-4">
-                  <span className="rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground dark:text-black">
-                    Beta
-                  </span>
-                </div>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="from-primary/15 dark:from-primary/20 flex items-center justify-center rounded-lg bg-gradient-to-br to-emerald-500/20 p-3 shadow-inner transition-transform duration-300 group-hover:scale-105 dark:to-emerald-500/20">
-                    <img
-                      src="https://cdn.simpleicons.org/linux/000000"
-                      alt="Linux"
-                      width={24}
-                      height={24}
-                      className="dark:invert"
-                    />
-                  </div>
-                  <h3 className="text-xl font-bold">VocaLinux</h3>
-                </div>
-                <p className="mb-4 text-muted-foreground">
-                  Voice dictation for Linux. System tray app with whisper.cpp,
-                  Vulkan GPU acceleration, and full offline support.
-                </p>
-                <div className="mb-6 flex flex-wrap gap-2">
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    whisper.cpp
-                  </span>
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    Vulkan GPU
-                  </span>
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    GTK
-                  </span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
-                    GPL-3.0
-                  </span>
-                </div>
-                <div className="flex gap-3">
-                  <a
-                    href="#install"
-                    className="hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all dark:text-black"
-                  >
-                    <Download className="h-4 w-4" />
-                    Install
-                  </a>
-                  <a
-                    href="https://github.com/jatinkrmalik/vocalinux"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-all hover:bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
-                  >
-                    <Github className="h-4 w-4" />
-                    GitHub
-                  </a>
-                </div>
-              </div>
-            </FadeInSection>
-
-            {/* VocaWin Card */}
-            <FadeInSection delay={0.3}>
-              <div className="group relative h-full overflow-hidden rounded-xl border border-sky-300/60 bg-gradient-to-br from-sky-50 via-white to-blue-100 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-sky-400 hover:shadow-xl hover:shadow-sky-500/10 dark:border-sky-900/80 dark:from-zinc-800 dark:via-zinc-800 dark:to-blue-950/50">
-                <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/70 to-transparent dark:via-sky-500/40" />
-                <div className="absolute right-4 top-4">
-                  <span className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                    Coming Soon
-                  </span>
-                </div>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex items-center justify-center rounded-lg bg-gradient-to-br from-sky-100 to-blue-200 p-3 shadow-inner transition-transform duration-300 group-hover:scale-105 dark:from-blue-950 dark:to-sky-900">
-                    <svg
-                      viewBox="0 0 88 88"
-                      width={24}
-                      height={24}
-                      aria-label="Windows"
-                    >
-                      <path
-                        d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314.0v41.527l-47.318.376zm47.329 39.349-.011 41.34-47.318-6.678-.066-34.739z"
-                        fill="#0078D4"
-                      />
-                    </svg>
-                  </div>
-                  <h3 className="text-xl font-bold">VocaWin</h3>
-                </div>
-                <p className="mb-4 text-muted-foreground">
-                  Voice dictation for Windows. Native system tray app with
-                  offline-first architecture. Currently in planning.
-                </p>
-                <div className="mb-6 flex flex-wrap gap-2">
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    whisper.cpp
-                  </span>
-                  <span className="bg-primary/10 rounded-full px-2 py-1 text-xs font-medium text-primary">
-                    Native Tray
-                  </span>
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                    Planned
-                  </span>
-                </div>
-                <div className="flex gap-3">
-                  <a
-                    href="https://vocawin.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all dark:text-black"
-                  >
-                    <Globe className="h-4 w-4" />
-                    Website
-                  </a>
-                  <a
-                    href="https://github.com/jatinkrmalik/vocawin"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-all hover:bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
-                  >
-                    <Github className="h-4 w-4" />
-                    GitHub
-                  </a>
-                </div>
-              </div>
-            </FadeInSection>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="from-primary/10 to-primary/10 bg-gradient-to-br via-cyan-500/10 px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-4xl text-center">
-          <FadeInSection>
-            <h2 className="mb-6 text-3xl font-bold sm:text-4xl md:text-5xl">
-              Ready to Ditch Your Keyboard?
-            </h2>
-            <p className="mx-auto mb-8 max-w-2xl text-lg text-muted-foreground">
-              Join the growing community of Linux users who have discovered the
-              power of voice dictation. It&apos;s free, it&apos;s private, and
-              it just works.
+            className="lg:col-span-6"
+            initial={reduce ? false : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <p className="mb-5 font-mono text-[12px] uppercase tracking-[0.16em] text-primary">
+              Offline on Linux
             </p>
-            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+            <h1 className="max-w-[14ch] text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-[3.35rem]">
+              Dictate into any app. Keep the audio home.
+            </h1>
+            <p className="mt-5 max-w-[36ch] text-base leading-relaxed text-muted-foreground sm:text-lg">
+              System-wide voice typing with local models. X11 and Wayland. One
+              install command.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <a
                 href="#install"
-                className="hover:bg-primary/90 shadow-primary/25 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:scale-105 dark:text-zinc-900"
+                className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
               >
-                <Download className="h-5 w-5" />
                 Install Vocalinux
               </a>
               <a
                 href="https://github.com/jatinkrmalik/vocalinux"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-8 py-4 text-lg font-semibold text-white transition-all hover:bg-zinc-800"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border bg-background px-5 text-sm font-medium transition-colors hover:bg-muted"
               >
-                <Star className="h-5 w-5" />
-                Star on GitHub
+                <Github className="h-4 w-4" />
+                Source
               </a>
             </div>
-          </FadeInSection>
+            <dl className="mt-10 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border pt-6 sm:grid-cols-4">
+              {[
+                ["Offline", "Local engines"],
+                ["Display", "X11 + Wayland"],
+                ["Default", "whisper.cpp"],
+                ["License", "GPL-3.0"],
+              ].map(([k, v]) => (
+                <div key={k}>
+                  <dt className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {k}
+                  </dt>
+                  <dd className="mt-1 text-sm font-medium">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </motion.div>
+
+          <motion.div
+            className="lg:col-span-6"
+            initial={reduce ? false : { opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.7,
+              delay: 0.08,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+          >
+            <div className="relative">
+              <div className="absolute -inset-3 rounded-2xl bg-primary/10 blur-2xl dark:bg-primary/15" aria-hidden />
+              <figure className="relative overflow-hidden rounded-[12px] border border-border bg-card shadow-[0_24px_60px_-28px_rgba(0,0,0,0.45)]">
+                <Image
+                  src="/screenshots/00-transcription.png"
+                  alt="Vocalinux tray overlay showing live speech transcription on Linux"
+                  width={1280}
+                  height={800}
+                  priority
+                  className="h-auto w-full"
+                />
+                <figcaption className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                  <span>Live transcription overlay</span>
+                  <Link
+                    href="/screenshots/"
+                    className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary"
+                  >
+                    More shots
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                </figcaption>
+              </figure>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Install strip */}
+      <section id="install" className="border-y border-border bg-[#0a0a0c] px-4 py-14 text-zinc-100 sm:px-6 sm:py-16">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-8 grid gap-4 lg:grid-cols-12 lg:items-end">
+            <div className="lg:col-span-7">
+              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                Install in one command
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-400 sm:text-base">
+                Interactive installer detects hardware, lets you pick an engine,
+                and wires the desktop app.
+              </p>
+            </div>
+            <p className="font-mono text-xs text-zinc-500 lg:col-span-5 lg:text-right">
+              Ubuntu · Fedora · Debian · Arch · openSUSE
+            </p>
+          </div>
+          <TerminalBlock
+            command={interactiveInstallCommand}
+            display={interactiveInstallDisplayCommand}
+            label="install.sh --interactive"
+          />
+          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-400">
+            <span>Then launch: <code className="font-mono text-emerald-400">vocalinux</code></span>
+            <Link href="/compare/" className="text-zinc-200 underline-offset-4 hover:underline">
+              Compare engines
+            </Link>
+            <Link href="/install/" className="text-zinc-200 underline-offset-4 hover:underline">
+              Distro notes
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Demo */}
+      <section id="demo" className="px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <div className="mb-8 max-w-2xl">
+              <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                Try speech-to-text in the browser
+              </h2>
+              <p className="mt-3 text-muted-foreground">
+                Browser preview when SpeechRecognition is available. The
+                installed app runs offline on your machine.
+              </p>
+            </div>
+          </Reveal>
+          <Reveal delay={0.06}>
+            <LiveDemo />
+          </Reveal>
+          <Reveal delay={0.1}>
+            <div className="mt-10 grid gap-px overflow-hidden rounded-[12px] border border-border bg-border sm:grid-cols-3">
+              {[
+                {
+                  title: "Toggle or push-to-talk",
+                  body: "Double-tap or hold. Predictable control.",
+                  href: "/shortcuts/",
+                },
+                {
+                  title: "Engine choice",
+                  body: "whisper.cpp, Whisper, VOSK, or Remote API.",
+                  href: "/compare/",
+                },
+                {
+                  title: "Audio cues",
+                  body: "Optional tones when recording starts and stops.",
+                  href: "/shortcuts/",
+                },
+              ].map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className="group bg-background p-5 transition-colors hover:bg-muted/60"
+                >
+                  <h3 className="text-sm font-semibold group-hover:text-primary">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1.5 text-sm text-muted-foreground">{item.body}</p>
+                </Link>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Features bento */}
+      <section id="features" className="border-t border-border bg-card/40 px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                  Built for real Linux desktops
+                </h2>
+                <p className="mt-3 max-w-xl text-muted-foreground">
+                  Privacy, injection reliability, and engines that match your
+                  hardware - not a cloud dashboard with a mic icon.
+                </p>
+              </div>
+              <Link
+                href="/screenshots/"
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                App screenshots
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </Reveal>
+
+          <div className="grid gap-4 lg:grid-cols-12">
+            <Reveal className="lg:col-span-7">
+              <figure className="overflow-hidden rounded-[12px] border border-border bg-background">
+                <Image
+                  src="/screenshots/settings-speech-engine.png"
+                  alt="Vocalinux settings dialog showing speech engine options"
+                  width={1200}
+                  height={800}
+                  className="h-auto w-full"
+                />
+                <figcaption className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+                  Engine and model controls in the settings GUI
+                </figcaption>
+              </figure>
+            </Reveal>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:col-span-5 lg:grid-cols-1">
+              {featureRows.slice(0, 3).map((f, i) => (
+                <Reveal key={f.title} delay={0.04 * i}>
+                  <Link
+                    href={f.href}
+                    className="group flex h-full flex-col justify-between rounded-[12px] border border-border bg-background p-5 transition-colors hover:border-primary/40"
+                  >
+                    <div>
+                      <h3 className="text-base font-semibold">{f.title}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        {f.body}
+                      </p>
+                    </div>
+                    <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                      {f.link}
+                      <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </Link>
+                </Reveal>
+              ))}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3 lg:col-span-12">
+              {featureRows.slice(3).map((f, i) => (
+                <Reveal key={f.title} delay={0.04 * i}>
+                  <Link
+                    href={f.href}
+                    className="group block h-full rounded-[12px] border border-border bg-background p-5 transition-colors hover:border-primary/40"
+                  >
+                    <h3 className="text-base font-semibold">{f.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {f.body}
+                    </p>
+                    <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                      {f.link}
+                      <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </Link>
+                </Reveal>
+              ))}
+            </div>
+
+            <Reveal className="lg:col-span-5">
+              <figure className="h-full overflow-hidden rounded-[12px] border border-border bg-background">
+                <Image
+                  src="/screenshots/02-system-tray.png"
+                  alt="Vocalinux system tray icon and menu"
+                  width={900}
+                  height={700}
+                  className="h-auto w-full object-cover"
+                />
+                <figcaption className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+                  Tray status while you work
+                </figcaption>
+              </figure>
+            </Reveal>
+            <Reveal className="lg:col-span-7" delay={0.06}>
+              <div className="flex h-full flex-col justify-between rounded-[12px] border border-border bg-background p-6 sm:p-8">
+                <div>
+                  <h3 className="text-2xl font-semibold tracking-tight">
+                    The Linux voice gap, closed
+                  </h3>
+                  <p className="mt-3 max-w-prose text-muted-foreground">
+                    macOS and Windows shipped system dictation years ago. Linux
+                    users got fragments. Vocalinux is the full desktop path:
+                    tray, hotkeys, injection, and local models.
+                  </p>
+                </div>
+                <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+                  {[
+                    "No cloud dependency for local engines",
+                    "Works across apps, not one editor",
+                    "Guided install, not a research project",
+                    "Open source you can audit",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2 text-sm">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* How it works - real sequence, numbers ok */}
+      <section className="px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              From install to first sentence
+            </h2>
+          </Reveal>
+          <ol className="mt-10 grid gap-0 border-t border-border md:grid-cols-3">
+            {[
+              {
+                n: "1",
+                title: "Run the installer",
+                body: "One curl. It pulls dependencies, models, and desktop integration.",
+              },
+              {
+                n: "2",
+                title: "Pick an engine",
+                body: "Default whisper.cpp, or Whisper, VOSK, or a remote server you control.",
+              },
+              {
+                n: "3",
+                title: "Hold or toggle",
+                body: "Activate the shortcut, speak, and text lands in the focused field.",
+              },
+            ].map((step, i) => (
+              <Reveal key={step.n} delay={0.05 * i}>
+                <li className="border-b border-border py-8 md:border-b-0 md:border-r md:px-6 md:py-10 md:first:pl-0 md:last:border-r-0 md:last:pr-0">
+                  <span className="font-mono text-sm text-primary">{step.n}</span>
+                  <h3 className="mt-3 text-xl font-semibold">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {step.body}
+                  </p>
+                </li>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* Install details */}
+      <section className="border-t border-border bg-card/40 px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-10 lg:grid-cols-12">
+            <Reveal className="lg:col-span-5">
+              <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                What the installer does
+              </h2>
+              <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
+                {[
+                  "Installs system dependencies",
+                  "Creates an isolated virtual environment",
+                  "Downloads speech models for your choice",
+                  "Sets up desktop integration and PATH",
+                  "Creates an application launcher",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-8 rounded-[12px] border border-border bg-background p-5">
+                <h3 className="text-sm font-semibold">System requirements</h3>
+                <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+                  <li>Ubuntu, Debian, Fedora, Arch, openSUSE, or equivalent</li>
+                  <li>Python 3.9+ with GTK 3 / PyGObject</li>
+                  <li>4GB RAM min · 8GB+ for larger models</li>
+                  <li>Microphone + X11 or Wayland session</li>
+                  <li>Optional Vulkan GPU for acceleration</li>
+                </ul>
+              </div>
+            </Reveal>
+            <Reveal className="space-y-6 lg:col-span-7" delay={0.06}>
+              <div>
+                <h3 className="mb-3 text-sm font-semibold">Uninstall</h3>
+                <TerminalBlock
+                  command={uninstallCommand}
+                  display={uninstallDisplayCommand}
+                  label="uninstall.sh"
+                />
+              </div>
+              <div className="overflow-hidden rounded-[12px] border border-border bg-background">
+                <Image
+                  src="/screenshots/settings-general.png"
+                  alt="Vocalinux general settings panel"
+                  width={1100}
+                  height={720}
+                  className="h-auto w-full"
+                />
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* Guides */}
+      <section id="guides" className="px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Distro guides
+            </h2>
+            <p className="mt-3 max-w-2xl text-muted-foreground">
+              Setup notes written for real desktop sessions, with post-install
+              checks.
+            </p>
+          </Reveal>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {[
+              {
+                href: "/install/ubuntu/",
+                title: "Ubuntu",
+                body: "GNOME, KDE, X11, and Wayland on 22.04+.",
+              },
+              {
+                href: "/install/fedora/",
+                title: "Fedora",
+                body: "Workstation-focused notes for a stable dictation flow.",
+              },
+              {
+                href: "/install/arch/",
+                title: "Arch",
+                body: "Arch, Manjaro, EndeavourOS with injection checks.",
+              },
+            ].map((g, i) => (
+              <Reveal key={g.href} delay={0.04 * i}>
+                <Link
+                  href={g.href}
+                  className="group flex h-full flex-col rounded-[12px] border border-border p-6 transition-colors hover:border-primary/40 hover:bg-card/60"
+                >
+                  <h3 className="text-lg font-semibold">{g.title}</h3>
+                  <p className="mt-2 flex-1 text-sm text-muted-foreground">
+                    {g.body}
+                  </p>
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                    Read guide
+                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </Link>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Engines - dense list, one accent */}
+      <section className="border-t border-border bg-card/40 px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                  Speech engines
+                </h2>
+                <p className="mt-3 max-w-xl text-muted-foreground">
+                  Match latency, footprint, and privacy boundary to your
+                  hardware.
+                </p>
+              </div>
+              <Link
+                href="/compare/"
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                Full comparison
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </Reveal>
+          <div className="mt-10 divide-y divide-border border-y border-border">
+            {engines.map((engine, i) => (
+              <Reveal key={engine.name} delay={0.03 * i}>
+                <div className="grid gap-4 py-7 md:grid-cols-12 md:items-start">
+                  <div className="md:col-span-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-semibold">{engine.name}</h3>
+                      {engine.badge && (
+                        <span className="rounded-full bg-primary/15 px-2 py-0.5 font-mono text-[11px] font-medium text-primary">
+                          {engine.badge}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground md:col-span-4">
+                    {engine.summary}
+                  </p>
+                  <ul className="space-y-1.5 text-sm md:col-span-5">
+                    {engine.points.map((p) => (
+                      <li key={p} className="flex items-start gap-2">
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-3xl">
+          <Reveal>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Questions
+            </h2>
+          </Reveal>
+          <div className="mt-8 divide-y divide-border border-y border-border">
+            {faqItems.map((item) => (
+              <details key={item.question} className="group py-1">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-left font-medium">
+                  <span>{item.question}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+                </summary>
+                <div className="pb-5 pr-8 text-sm leading-relaxed text-muted-foreground">
+                  {item.answer}
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Ecosystem */}
+      <section id="ecosystem" className="border-t border-border bg-card/40 px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              The Voca family
+            </h2>
+            <p className="mt-3 text-muted-foreground">
+              Same privacy idea, platform-native implementations.
+            </p>
+          </Reveal>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {[
+              {
+                name: "VocaMac",
+                status: "Beta",
+                body: "Native macOS menu bar app with WhisperKit and CoreML on Apple Silicon.",
+                primary: { href: "https://vocamac.com", label: "Website" },
+                secondary: {
+                  href: "https://github.com/jatinkrmalik/vocamac",
+                  label: "GitHub",
+                },
+                current: false,
+              },
+              {
+                name: "VocaLinux",
+                status: "You are here",
+                body: "Tray app for Linux with whisper.cpp, Vulkan, and full offline support.",
+                primary: { href: "#install", label: "Install" },
+                secondary: {
+                  href: "https://github.com/jatinkrmalik/vocalinux",
+                  label: "GitHub",
+                },
+                current: true,
+              },
+              {
+                name: "VocaWin",
+                status: "Coming soon",
+                body: "Windows port of the same offline dictation approach.",
+                primary: null,
+                secondary: null,
+                current: false,
+              },
+            ].map((p, i) => (
+              <Reveal key={p.name} delay={0.04 * i}>
+                <div
+                  className={`flex h-full flex-col rounded-[12px] border p-6 ${
+                    p.current
+                      ? "border-primary bg-background"
+                      : "border-border bg-background"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-lg font-semibold">{p.name}</h3>
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {p.status}
+                    </span>
+                  </div>
+                  <p className="mt-3 flex-1 text-sm text-muted-foreground">
+                    {p.body}
+                  </p>
+                  {(p.primary || p.secondary) && (
+                    <div className="mt-5 flex gap-2">
+                      {p.primary && (
+                        <a
+                          href={p.primary.href}
+                          target={
+                            p.primary.href.startsWith("http")
+                              ? "_blank"
+                              : undefined
+                          }
+                          rel={
+                            p.primary.href.startsWith("http")
+                              ? "noopener noreferrer"
+                              : undefined
+                          }
+                          className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground"
+                        >
+                          {p.primary.label}
+                        </a>
+                      )}
+                      {p.secondary && (
+                        <a
+                          href={p.secondary.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-9 items-center rounded-full border border-border px-4 text-sm font-medium"
+                        >
+                          {p.secondary.label}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-zinc-900 px-4 py-12 text-white sm:px-6">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-6">
-            <div className="col-span-2 mb-4 lg:col-span-1 lg:mb-0">
-              <Link href="/" className="mb-4 flex items-center gap-2">
-                <VocalinuxLogo width={32} height={32} className="h-8 w-8" />
-                <span className="text-xl font-bold">Vocalinux</span>
-              </Link>
-              <p className="mb-4 max-w-xs text-sm text-zinc-400">
-                Free, open-source voice dictation for Linux. 100% offline and
-                privacy-focused.
-              </p>
-              <div className="flex items-center gap-4">
-                <a
-                  href="https://github.com/jatinkrmalik/vocalinux"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-zinc-400 transition-colors hover:text-white"
-                  aria-label="GitHub"
-                >
-                  <Github className="h-6 w-6" />
-                </a>
-              </div>
+      <footer className="border-t border-border px-4 py-12 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <VocalinuxLogo width={24} height={24} className="h-6 w-6" />
+              <span className="font-semibold">Vocalinux</span>
             </div>
-
+            <p className="mt-3 max-w-xs text-sm text-muted-foreground">
+              Offline voice dictation for Linux. Free and open source.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-8 text-sm sm:grid-cols-3">
             <div>
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Get Started
-              </h3>
-              <ul className="space-y-2.5 text-sm">
+              <p className="font-medium">Product</p>
+              <ul className="mt-3 space-y-2 text-muted-foreground">
                 <li>
-                  <a
-                    href="#features"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Features
+                  <a href="#install" className="hover:text-foreground">
+                    Install
                   </a>
                 </li>
                 <li>
-                  <Link
-                    href="/install/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Install Guide
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/screenshots/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
+                  <Link href="/screenshots/" className="hover:text-foreground">
                     Screenshots
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    href="/changelog/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
+                  <Link href="/compare/" className="hover:text-foreground">
+                    Engines
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/changelog/" className="hover:text-foreground">
                     Changelog
                   </Link>
                 </li>
-                <li>
-                  <Link
-                    href="/autostart/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Autostart
-                  </Link>
-                </li>
               </ul>
             </div>
-
             <div>
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Recognition
-              </h3>
-              <ul className="space-y-2.5 text-sm">
+              <p className="font-medium">Guides</p>
+              <ul className="mt-3 space-y-2 text-muted-foreground">
                 <li>
-                  <Link
-                    href="/compare/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Engine Comparison
+                  <Link href="/install/ubuntu/" className="hover:text-foreground">
+                    Ubuntu
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    href="/remote-api/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Remote API
+                  <Link href="/wayland/" className="hover:text-foreground">
+                    Wayland
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    href="/whisper-model-guide/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Whisper Models
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/advanced-settings/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Advanced Settings
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/voice-activity-detection/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Silero VAD
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/vs-nerd-dictation/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    vs Nerd Dictation
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Desktop
-              </h3>
-              <ul className="space-y-2.5 text-sm">
-                <li>
-                  <Link
-                    href="/wayland/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Wayland Support
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/gpu-acceleration/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    GPU Acceleration
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/desktop-reliability/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Desktop Reliability
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/shortcuts/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Voice Commands
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/offline/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    100% Offline
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Use Cases
-              </h3>
-              <ul className="space-y-2.5 text-sm">
-                <li>
-                  <Link
-                    href="/for-developers/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    For Developers
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/writers/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    For Writers
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/voice-typing-vscode/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    VS Code
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/gnome-kde/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    GNOME vs KDE
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/rsi-prevention/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    RSI Prevention
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Support
-              </h3>
-              <ul className="space-y-2.5 text-sm">
-                <li>
-                  <Link
-                    href="/faq/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    FAQ
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/troubleshooting/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
+                  <Link href="/troubleshooting/" className="hover:text-foreground">
                     Troubleshooting
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    href="/alternatives/"
-                    className="text-zinc-400 transition-colors hover:text-white"
+                  <Link href="/faq/" className="hover:text-foreground">
+                    FAQ
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium">Project</p>
+              <ul className="mt-3 space-y-2 text-muted-foreground">
+                <li>
+                  <a
+                    href="https://github.com/jatinkrmalik/vocalinux"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-foreground"
                   >
-                    Alternatives
+                    GitHub
+                  </a>
+                </li>
+                <li>
+                  <Link href="/open-source/" className="hover:text-foreground">
+                    Open source
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    href="/privacy/"
-                    className="text-zinc-400 transition-colors hover:text-white"
-                  >
-                    Privacy Policy
+                  <Link href="/privacy/" className="hover:text-foreground">
+                    Privacy
                   </Link>
                 </li>
               </ul>
             </div>
           </div>
-
-          <div className="flex flex-col items-center justify-between gap-4 border-t border-zinc-800 pt-8 sm:flex-row">
-            <p className="text-sm text-zinc-400">
-              © {new Date().getFullYear()} Vocalinux. Open-source under GPL-3.0
-              License.
-            </p>
-            <p className="flex items-center gap-1 text-sm text-zinc-400">
-              Made with <Heart className="h-4 w-4 text-red-500" /> by{" "}
-              <a
-                href="https://x.com/intent/user?screen_name=jatinkrmalik"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-zinc-400 transition-colors hover:text-white"
-              >
-                Jatin K Malik
-              </a>
-            </p>
-          </div>
+        </div>
+        <div className="mx-auto mt-10 max-w-6xl border-t border-border pt-6 text-xs text-muted-foreground">
+          GPL-3.0 · Maintained by{" "}
+          <a
+            href="https://github.com/jatinkrmalik"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground hover:underline"
+          >
+            Jatin K Malik
+          </a>
         </div>
       </footer>
     </main>
