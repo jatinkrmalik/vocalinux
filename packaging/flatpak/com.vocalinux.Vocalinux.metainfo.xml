@@ -107,7 +107,7 @@
   <releases>
     <release version="0.14.2" date="2026-07-17">
       <description>
-        <p>IBus stability: restore engine process launch after XDG path import; do not drop the first dictation of a session on GNOME Wayland (FocusIn gate).</p>
+        <p>IBus stability (engine process launch after XDG path import; first-dictation FocusIn gate on GNOME Wayland) and settings dialog tabs that scroll so the window fits the monitor.</p>
       </description>
     </release>
     <release version="0.14.1" date="2026-07-16">

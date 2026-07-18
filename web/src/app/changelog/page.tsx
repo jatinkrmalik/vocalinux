@@ -21,6 +21,7 @@ const releases = [
     highlights: [
       "IBus: restore engine process launch after Flatpak XDG path import so the engine no longer dies with ImportError and falls back to ydotool/clipboard paste (PR #534)",
       "IBus: wait for FocusIn before commit on scoped injection so the first dictation of a session is not dropped on GNOME Wayland (PR #533, fixes #523)",
+      "Settings UI: notebook tabs scroll so the dialog fits the monitor; wheel events from unfocused combos/spins reach the tab scroller (PR #538, #541)",
     ],
   },
   {

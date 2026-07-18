@@ -34,7 +34,7 @@ No internet required. No data leaves your machine. Just speak and type.
 
 ## 📚 What's New in v0.14.2
 
-> **0.14.2 is a stability patch on the 0.14 series.** Feature set is the same as 0.14.x; this release fixes two IBus reliability bugs.
+> **0.14.2 is a stability patch on the 0.14 series.** Feature set is the same as 0.14.x; this release fixes IBus reliability and settings dialog sizing.
 
 ### 0.14 series highlights
 
@@ -51,6 +51,7 @@ No internet required. No data leaves your machine. Just speak and type.
 
 - **IBus**: Restore engine process launch after the Flatpak XDG path import change (no silent ydotool fallback when IBus should work) (#534)
 - **IBus**: Wait for FocusIn before commit on scoped injection so the first dictation of a session is not dropped on GNOME Wayland (#533, fixes #523)
+- **Settings UI**: Tabs scroll so the dialog fits the monitor; wheel events from unfocused combos/spins reach the tab scroller (#538, #541)
 
 See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2). Earlier 0.14.x notes are in UPDATE.md.
 

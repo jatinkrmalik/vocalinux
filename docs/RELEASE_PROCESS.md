@@ -357,7 +357,7 @@ git push origin v0.5.1-beta
 | 0.13.0-beta | 2026-06-30 | Beta | Guided whisper.cpp model variants, Wayland text-injection reliability, hotplug keyboard support, dictation spacing fix, website docs refresh |
 | 0.14.0-beta | 2026-07-13 | Beta | Configurable modifier+key hotkeys, FunASR/SenseVoice remote-API support, GNOME/KDE Wayland IBus reliability fixes, audio crash fix, hybrid-CPU efficiency fix |
 | 0.14.1 | 2026-07-17 | Stable | Flatpak packaging, AUR package, layout-aware hotkeys, installer/text-injection fixes |
-| 0.14.2 | 2026-07-17 | Stable | IBus engine process launch restore after XDG import; first-dictation FocusIn gate on GNOME Wayland |
+| 0.14.2 | 2026-07-17 | Stable | IBus engine launch + FocusIn gate; settings tabs scroll to fit monitor |
 
 ## Questions?
 
