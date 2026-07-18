@@ -30,7 +30,9 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
-from ..utils.faster_whisper_model_info import FASTER_WHISPER_MODEL_INFO
+from ..utils.faster_whisper_model_info import (
+    FASTER_WHISPER_MODEL_INFO,
+)
 from ..utils.faster_whisper_model_info import (
     get_recommended_model as get_recommended_faster_whisper_model,
 )
