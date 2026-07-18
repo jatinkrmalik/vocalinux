@@ -59,6 +59,9 @@ whisper = [
     "torch>=2.0.0",
     "torchaudio>=2.0.0",
 ]
+faster_whisper = [
+    "faster-whisper>=1.0.0",
+]
 vad = [
     "onnxruntime>=1.16.0",
 ]
@@ -92,7 +95,7 @@ Issues = "https://github.com/jatinkrmalik/vocalinux/issues"
 Changelog = "https://github.com/jatinkrmalik/vocalinux/releases"
 
 [tool.setuptools]
-packages = ["vocalinux", "vocalinux.resources", "vocalinux.speech_recognition", "vocalinux.text_injection", "vocalinux.ui", "vocalinux.ui.keyboard_backends", "vocalinux.utils"]
+packages = ["vocalinux", "vocalinux.resources", "vocalinux.speech_recognition", "vocalinux.speech_recognition.engines", "vocalinux.text_injection", "vocalinux.ui", "vocalinux.ui.keyboard_backends", "vocalinux.utils"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.dynamic]

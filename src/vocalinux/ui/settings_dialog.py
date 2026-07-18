@@ -30,6 +30,13 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from ..common_types import RecognitionState  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
+from ..utils.faster_whisper_model_info import FASTER_WHISPER_MODEL_INFO
+from ..utils.faster_whisper_model_info import (
+    get_recommended_model as get_recommended_faster_whisper_model,
+)
+from ..utils.faster_whisper_model_info import (
+    is_model_downloaded as is_faster_whisper_model_downloaded,
+)
 from ..utils.paths import models_dir  # noqa: E402
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 from ..utils.whispercpp_model_info import MODEL_SIZES as WHISPERCPP_MODEL_SIZES
@@ -78,6 +85,13 @@ ENGINE_MODELS = {
     "whisper_cpp": [
         *WHISPERCPP_MODEL_SIZES,
     ],  # whisper.cpp top-level size buckets; variants are selected separately
+    "faster_whisper": [
+        "tiny",
+        "base",
+        "small",
+        "medium",
+        "large-v3",
+    ],  # faster-whisper models mirror OpenAI Whisper sizes
     "remote_api": [],  # Remote API does not need local models
 }
 
@@ -86,6 +100,7 @@ ENGINE_DISPLAY_NAMES = {
     "vosk": "Vosk",
     "whisper": "Whisper",
     "whisper_cpp": "Whisper_cpp",
+    "faster_whisper": "Faster Whisper",
     "remote_api": "Remote API",
 }
 
@@ -277,7 +292,13 @@ def get_available_engines():
     Detect which speech recognition engines are available/installed.
     Returns a dictionary of engine_name -> availability (bool).
     """
-    engines = {"vosk": False, "whisper": False, "whisper_cpp": False, "remote_api": False}
+    engines = {
+        "vosk": False,
+        "whisper": False,
+        "whisper_cpp": False,
+        "faster_whisper": False,
+        "remote_api": False,
+    }
 
     # Check VOSK
     try:
@@ -300,6 +321,13 @@ def get_available_engines():
         from pywhispercpp.model import Model
 
         engines["whisper_cpp"] = True
+    except ImportError:
+        pass
+
+    try:
+        from faster_whisper import WhisperModel
+
+        engines["faster_whisper"] = True
     except ImportError:
         pass
 
@@ -2734,6 +2762,8 @@ class SettingsDialog(Gtk.Dialog):
             smallest_model = None
             if engine == "whisper":
                 recommended_model, _ = _get_recommended_whisper_model()
+            elif engine == "faster_whisper":
+                recommended_model, _ = get_recommended_faster_whisper_model()
             else:
                 recommended_model, _ = _get_recommended_vosk_model()
 
@@ -2742,6 +2772,9 @@ class SettingsDialog(Gtk.Dialog):
                     if engine == "whisper" and size in WHISPER_MODEL_INFO:
                         info = WHISPER_MODEL_INFO[size]
                         is_downloaded = _is_whisper_model_downloaded(size)
+                    elif engine == "faster_whisper" and size in FASTER_WHISPER_MODEL_INFO:
+                        info = FASTER_WHISPER_MODEL_INFO[size]
+                        is_downloaded = is_faster_whisper_model_downloaded(size)
                     elif engine == "vosk" and size in VOSK_MODEL_INFO:
                         info = VOSK_MODEL_INFO[size]
                         is_downloaded = _is_vosk_model_downloaded(size, self.language)
