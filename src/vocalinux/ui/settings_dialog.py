@@ -582,23 +582,9 @@ def _prevent_scroll_on_hover(widget: Gtk.Widget):
     def on_scroll(widget, event):
         if widget.has_focus():
             return False
-
         scrolled = widget.get_ancestor(Gtk.ScrolledWindow)
         if scrolled is not None:
-            adj = scrolled.get_vadjustment()
-            if adj is not None:
-                step = adj.get_step_increment() or 20.0
-                if event.direction == Gdk.ScrollDirection.UP:
-                    delta = -step
-                elif event.direction == Gdk.ScrollDirection.DOWN:
-                    delta = step
-                elif event.direction == Gdk.ScrollDirection.SMOOTH:
-                    delta = event.delta_y * step
-                else:
-                    delta = 0.0
-                if delta:
-                    upper = max(adj.get_lower(), adj.get_upper() - adj.get_page_size())
-                    adj.set_value(max(adj.get_lower(), min(adj.get_value() + delta, upper)))
+            scrolled.event(event)
         return True
 
     widget.connect("scroll-event", on_scroll)
