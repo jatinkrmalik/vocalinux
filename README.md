@@ -21,7 +21,7 @@
 [![Vocalinux CI](https://github.com/jatinkrmalik/vocalinux/actions/workflows/unified-pipeline.yml/badge.svg?branch=main)](https://github.com/jatinkrmalik/vocalinux/actions/workflows/unified-pipeline.yml?query=branch%3Amain)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![codecov](https://codecov.io/gh/jatinkrmalik/vocalinux/branch/main/graph/badge.svg)](https://codecov.io/gh/jatinkrmalik/vocalinux)
-[![Follow on X](https://img.shields.io/twitter/follow/jatinkrmalik?style=flat&logo=x&logoColor=white&labelColor=000000&color=000000&label=Follow)](https://x.com/intent/user?screen_name=jatinkrmalik)
+[![Follow on X](https://img.shields.io/badge/Follow%20%40jatinkrmalik-000000?style=flat&logo=x&logoColor=white)](https://x.com/intent/user?screen_name=jatinkrmalik)
 
 <!-- Distros (widest; base plate above the hero) -->
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04+-E95420?logo=ubuntu&logoColor=white)](docs/DISTRO_COMPATIBILITY.md)
