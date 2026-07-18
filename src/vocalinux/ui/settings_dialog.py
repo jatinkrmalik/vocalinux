@@ -1041,7 +1041,7 @@ class SettingsDialog(Gtk.Dialog):
         else:
             screen_height = 1080  # Default fallback
             screen_width = 1920
-        dialog_height = min(600, int(screen_height * 0.4))
+        dialog_height = min(800, int(screen_height * 0.75))
         dialog_width = min(700, int(screen_width * 0.8))
         self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
@@ -1093,38 +1093,49 @@ class SettingsDialog(Gtk.Dialog):
         self.advanced_tab.set_margin_start(16)
         self.advanced_tab.set_margin_end(16)
 
-        # Add tabs to notebook (ordered by importance)
+        # Add tabs to notebook (ordered by importance). Each tab is wrapped in a
+        # vertical ScrolledWindow: without one, the notebook's minimum height is
+        # the tallest tab's full content (~1000px), which overrides
+        # set_default_size and makes the dialog taller than the monitor.
+        def _scrollable(tab):
+            scroller = Gtk.ScrolledWindow()
+            scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scroller.add(tab)
+            return scroller
+
         # Speech Engine tab - most important (what model/language to use)
         speech_engine_label = Gtk.Label(label="Speech Engine")
         speech_engine_label.set_tooltip_text("Speech recognition engine and model settings")
-        notebook.append_page(self.speech_engine_tab, speech_engine_label)
+        notebook.append_page(_scrollable(self.speech_engine_tab), speech_engine_label)
 
         # Recognition Settings tab - second most important (how to recognize)
         recognition_label = Gtk.Label(label="Recognition")
         recognition_label.set_tooltip_text("Recognition behavior and test settings")
-        notebook.append_page(self.recognition_settings_tab, recognition_label)
+        notebook.append_page(_scrollable(self.recognition_settings_tab), recognition_label)
 
         # Audio tab - third (hardware configuration)
         audio_label = Gtk.Label(label="Audio")
         audio_label.set_tooltip_text("Microphone and audio settings")
-        notebook.append_page(self.audio_tab, audio_label)
+        notebook.append_page(_scrollable(self.audio_tab), audio_label)
 
         # Shortcuts tab
         shortcuts_label = Gtk.Label(label="Shortcuts")
         shortcuts_label.set_tooltip_text("Keyboard shortcuts")
-        notebook.append_page(self.shortcuts_tab, shortcuts_label)
+        notebook.append_page(_scrollable(self.shortcuts_tab), shortcuts_label)
 
         # General tab - least important (application behavior)
         general_label = Gtk.Label(label="General")
         general_label.set_tooltip_text("General settings")
-        notebook.append_page(self.general_tab, general_label)
+        notebook.append_page(_scrollable(self.general_tab), general_label)
 
         # Advanced tab - whisper.cpp parameters and power-user features (remote API, etc.)
         advanced_label = Gtk.Label(label="Advanced")
         advanced_label.set_tooltip_text(
             "Advanced whisper.cpp parameters and settings for power users"
         )
-        self.advanced_page_num = notebook.append_page(self.advanced_tab, advanced_label)
+        self.advanced_page_num = notebook.append_page(
+            _scrollable(self.advanced_tab), advanced_label
+        )
         notebook.connect("switch-page", self._on_settings_page_switched)
 
         self.get_content_area().pack_start(notebook, True, True, 0)
