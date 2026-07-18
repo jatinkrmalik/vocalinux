@@ -6,20 +6,18 @@
 
 <!-- Badge rows ordered narrowest → widest (steps out into the hero) -->
 
-<!-- Values (narrow) -->
+<!-- Values + packaging (narrow) -->
 [![Privacy: 100% offline](https://img.shields.io/badge/privacy-100%25%20offline-success)](https://github.com/jatinkrmalik/vocalinux#features)
 [![X11 & Wayland](https://img.shields.io/badge/display-X11%20%7C%20Wayland-lightgrey)](https://github.com/jatinkrmalik/vocalinux#features)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-
-<!-- Identity -->
-[![GitHub release](https://img.shields.io/github/v/release/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+
+<!-- Identity + quality (medium) -->
+[![GitHub release](https://img.shields.io/github/v/release/jatinkrmalik/vocalinux)](https://github.com/jatinkrmalik/vocalinux/releases)
 [![PyPI](https://img.shields.io/pypi/v/vocalinux)](https://pypi.org/project/vocalinux/)
 [![AUR](https://img.shields.io/aur/version/vocalinux)](https://aur.archlinux.org/packages/vocalinux)
-
-<!-- Quality + social -->
 [![Vocalinux CI](https://github.com/jatinkrmalik/vocalinux/actions/workflows/unified-pipeline.yml/badge.svg?branch=main)](https://github.com/jatinkrmalik/vocalinux/actions/workflows/unified-pipeline.yml?query=branch%3Amain)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![codecov](https://codecov.io/gh/jatinkrmalik/vocalinux/branch/main/graph/badge.svg)](https://codecov.io/gh/jatinkrmalik/vocalinux)
 [![Follow on X](https://img.shields.io/badge/Follow%20%40jatinkrmalik-000000?style=flat&logo=x&logoColor=white)](https://x.com/intent/user?screen_name=jatinkrmalik)
 
