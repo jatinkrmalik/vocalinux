@@ -1824,6 +1824,13 @@ class SpeechRecognitionManager:
         """Get the path to the VOSK model based on the selected size and language."""
         model_name = self.vosk_model_map.get(self.model_size, self.vosk_model_map["small"])
 
+        if not model_name:
+            vosk_language = "en-us" if self.language == "auto" else self.language
+            raise ValueError(
+                f"No VOSK '{self.model_size}' model available for language '{vosk_language}'. "
+                "Try the 'small' model size or a different language."
+            )
+
         # First, check user's local models directory
         user_model_path = os.path.join(MODELS_DIR, model_name)
         if os.path.exists(user_model_path):
