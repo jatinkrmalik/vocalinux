@@ -508,7 +508,35 @@ class TextInjector:
             tools.append("wl-copy")
         return tools
 
-    def _run_clipboard_command(self, tool: str, text: str) -> bool:
+    def _wl_copy_supports_sensitive(self) -> bool:
+        """Return True if the installed wl-copy understands ``--sensitive``.
+
+        The flag was added in wl-clipboard 2.2 (2023); older builds error out on
+        it. Probe ``wl-copy --help`` once and cache the result so we never pass an
+        unsupported flag on older systems.
+        """
+        cached = getattr(self, "_wl_copy_sensitive_supported", None)
+        if cached is not None:
+            return cached
+
+        supported = False
+        if shutil.which("wl-copy"):
+            try:
+                result = subprocess.run(
+                    ["wl-copy", "--help"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                help_text = f"{result.stdout or ''}{result.stderr or ''}"
+                supported = "--sensitive" in help_text
+            except (OSError, subprocess.SubprocessError) as e:
+                logger.debug(f"Could not probe wl-copy --help for --sensitive: {e}")
+
+        self._wl_copy_sensitive_supported = supported
+        return supported
+
+    def _run_clipboard_command(self, tool: str, text: str, sensitive: bool = False) -> bool:
         # NB: wl-copy/xclip/xsel fork a background process that keeps owning the
         # selection in order to serve it. That child inherits our pipes, so
         # capturing stderr via subprocess.PIPE makes run() block until the child
@@ -516,8 +544,14 @@ class TextInjector:
         # — even though the copy itself succeeded. Redirect to DEVNULL so run()
         # only waits for the short-lived foreground process.
         if tool == "wl-copy":
+            cmd = ["wl-copy"]
+            # --sensitive is wl-copy-only and version-gated; xclip/xsel have no
+            # equivalent, so the hint simply does not apply there.
+            if sensitive and self._wl_copy_supports_sensitive():
+                cmd.append("--sensitive")
+            cmd.append(text)
             subprocess.run(
-                ["wl-copy", text],
+                cmd,
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -692,7 +726,7 @@ class TextInjector:
         logger.debug("No better tools available, continuing with xdotool fallback")
         return False
 
-    def _copy_to_clipboard(self, text: str) -> bool:
+    def _copy_to_clipboard(self, text: str, sensitive: bool = False) -> bool:
         """
         Copy text to clipboard.
 
@@ -702,6 +736,9 @@ class TextInjector:
 
         Args:
             text: The text to copy to clipboard
+            sensitive: When True, hint (via wl-copy --sensitive, where supported)
+                that clipboard managers should not keep the text in history. Used
+                for the transient clipboard-paste injection copy.
 
         Returns:
             True if clipboard copy was successful, False otherwise
@@ -713,7 +750,7 @@ class TextInjector:
                 continue
 
             try:
-                if self._run_clipboard_command(tool, text):
+                if self._run_clipboard_command(tool, text, sensitive=sensitive):
                     self._clipboard_tool_health[tool] = True
                     logger.info(f"Text copied to clipboard using {tool}")
                     return True
@@ -744,6 +781,82 @@ class TextInjector:
         except Exception as e:
             logger.debug(f"Could not read copy_to_clipboard setting: {e}")
         return False
+
+    def _should_restore_clipboard(self) -> bool:
+        """Check if the restore-clipboard-after-paste setting is enabled."""
+        try:
+            import json
+
+            config_path = os.path.join(config_dir(), "config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                return config.get("text_injection", {}).get("restore_clipboard_after_paste", False)
+        except Exception as e:
+            logger.debug(f"Could not read restore_clipboard_after_paste setting: {e}")
+        return False
+
+    def _read_clipboard(self) -> Optional[str]:
+        """Read the current clipboard so it can be restored after a paste.
+
+        Returns the clipboard text, ``""`` when the clipboard is known to be
+        empty, or ``None`` when it could not be read (in which case the caller
+        skips restoring, to avoid wiping content it never captured). Reading is
+        short-lived, so capturing stdout here does not hit the wl-copy fork/serve
+        hang that ``_run_clipboard_command`` guards against.
+        """
+        if shutil.which("wl-paste"):
+            try:
+                result = subprocess.run(
+                    ["wl-paste", "--no-newline"],
+                    capture_output=True,
+                    text=True,
+                    timeout=self._clipboard_timeout,
+                )
+                if result.returncode == 0:
+                    return result.stdout
+                # wl-paste exits non-zero with this message on an empty clipboard.
+                if "nothing is copied" in (result.stderr or "").lower():
+                    return ""
+            except (OSError, subprocess.SubprocessError) as e:
+                logger.debug(f"Could not read clipboard via wl-paste: {e}")
+
+        for reader in (
+            ["xclip", "-selection", "clipboard", "-o"],
+            ["xsel", "--clipboard", "--output"],
+        ):
+            if not shutil.which(reader[0]):
+                continue
+            try:
+                result = subprocess.run(
+                    reader,
+                    capture_output=True,
+                    text=True,
+                    timeout=self._clipboard_timeout,
+                )
+                if result.returncode == 0:
+                    return result.stdout
+            except (OSError, subprocess.SubprocessError) as e:
+                logger.debug(f"Could not read clipboard via {reader[0]}: {e}")
+
+        return None
+
+    def _restore_clipboard(self, saved: Optional[str]) -> None:
+        """Restore a clipboard value captured before a paste injection.
+
+        ``None`` means the previous clipboard could not be read, so we leave the
+        clipboard as-is rather than risk clearing content we never captured.
+        """
+        if saved is None:
+            return
+
+        # Give the target app a moment to consume the paste before we overwrite
+        # the clipboard again, otherwise the restore can race the Ctrl+V.
+        time.sleep(0.15)
+        try:
+            self._copy_to_clipboard(saved)
+        except Exception as e:
+            logger.debug(f"Could not restore previous clipboard: {e}")
 
     def _show_clipboard_fallback_notification(self):
         """Show a desktop notification when text is copied to clipboard as fallback."""
@@ -1035,19 +1148,26 @@ class TextInjector:
         characters (accented letters, CJK, etc.) because ydotool simulates evdev
         key events which only cover US ASCII keycodes. See issue #362.
 
-        Note: this temporarily overwrites the user's clipboard. There is no
-        attempt to restore it afterward, as there is no safe race-free way to
-        do so on Wayland.
+        Note: this temporarily overwrites the user's clipboard. By default it is
+        left overwritten, as there is no fully race-free way to restore it on
+        Wayland. When the ``text_injection.restore_clipboard_after_paste`` option
+        is enabled, Vocalinux marks the dictation copy as sensitive (so clipboard
+        managers skip storing it) and restores the previous clipboard afterward.
 
         Returns:
             True if successful, False otherwise
         """
+        # Only preserve the clipboard when the user opted in and is not also
+        # asking to keep recognized text on the clipboard (copy_to_clipboard).
+        restore = self._should_restore_clipboard() and not self._should_copy_to_clipboard()
+        saved_clipboard = self._read_clipboard() if restore else None
+
         logger.debug(
-            "Using clipboard-paste injection for non-ASCII text "
-            "(user clipboard will be temporarily overwritten)"
+            "Using clipboard-paste injection (user clipboard will be %s)",
+            "saved and restored" if restore else "temporarily overwritten",
         )
 
-        if not self._copy_to_clipboard(text):
+        if not self._copy_to_clipboard(text, sensitive=restore):
             logger.warning("Could not copy text to clipboard for paste injection")
             return False
 
@@ -1070,6 +1190,11 @@ class TextInjector:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.warning(f"Paste simulation failed: {e}")
             return False
+        finally:
+            # Runs after the copy succeeded, on both the success and paste-failure
+            # paths, so the dictation never lingers on the clipboard when enabled.
+            if restore:
+                self._restore_clipboard(saved_clipboard)
 
     # ydotool 1.x (Flatpak pins v1.0.4): KEY_LEFTCTRL=29, KEY_V=47 press/release.
     _YDOTOOL_V1_CTRL_V = ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
