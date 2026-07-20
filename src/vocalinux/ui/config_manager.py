@@ -61,6 +61,7 @@ DEFAULT_CONFIG = {
     },
     "text_injection": {
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
+        "auto_capitalize": True,  # Capitalize first letter of each sentence
     },
     "advanced": {
         "power_user_mode": False,

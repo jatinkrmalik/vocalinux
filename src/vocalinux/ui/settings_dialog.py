@@ -1280,11 +1280,24 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(copy_to_clipboard_row)
 
+        self.auto_capitalize_switch = Gtk.Switch()
+        self.auto_capitalize_switch.set_tooltip_text(
+            "Automatically capitalize the first letter of each sentence. "
+            "Works after sentence-ending punctuation (period, exclamation, question mark)."
+        )
+        auto_capitalize_row = PreferenceRow(
+            title="Auto-Capitalize Sentences",
+            subtitle="Capitalize the first letter after sentence-ending punctuation",
+            widget=self.auto_capitalize_switch,
+        )
+        group.add_row(auto_capitalize_row)
+
         self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
+        self.auto_capitalize_switch.connect("state-set", self._on_auto_capitalize_toggled)
 
     def _on_autostart_toggled(self, widget, state):
         """Handle toggle of the autostart switch."""
@@ -1326,6 +1339,18 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("text_injection", "copy_to_clipboard", enabled)
         self.config_manager.save_settings()
         logger.info(f"Copy to clipboard {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_auto_capitalize_toggled(self, widget, state):
+        """Handle toggle of the auto-capitalize switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Auto-capitalize toggled: {enabled}")
+        self.config_manager.set("text_injection", "auto_capitalize", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Auto-capitalize {'enabled' if enabled else 'disabled'}")
         return False
 
     def _on_sound_effects_toggled(self, widget, state):
@@ -2490,10 +2515,12 @@ class SettingsDialog(Gtk.Dialog):
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
+        auto_capitalize = text_injection_settings.get("auto_capitalize", True)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
+        self.auto_capitalize_switch.set_active(auto_capitalize)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
 
         available_engines = get_available_engines()
