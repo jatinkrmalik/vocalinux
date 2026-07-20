@@ -78,8 +78,10 @@ VOSK_MODEL_INFO = {
         "desc": "Balanced accuracy/speed",
         "languages": {
             "en-us": "vosk-model-en-us-0.22",
+            "en-in": "vosk-model-en-in-0.5",
             "fr": "vosk-model-fr-0.22",
             "de": "vosk-model-de-0.21",
+            "it": "vosk-model-it-0.22",
             "ru": "vosk-model-ru-0.22",
             "hi": "vosk-model-hi-0.22",
             "es": "vosk-model-es-0.42",
@@ -92,8 +94,10 @@ VOSK_MODEL_INFO = {
         "desc": "Same as medium (best available)",
         "languages": {
             "en-us": "vosk-model-en-us-0.22",
+            "en-in": "vosk-model-en-in-0.5",
             "fr": "vosk-model-fr-0.22",
             "de": "vosk-model-de-0.21",
+            "it": "vosk-model-it-0.22",
             "ru": "vosk-model-ru-0.22",
             "hi": "vosk-model-hi-0.22",
             "es": "vosk-model-es-0.42",

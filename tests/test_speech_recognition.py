@@ -69,6 +69,7 @@ from conftest import mock_audio_feedback  # noqa: E402
 # Update import paths to use the new package structure
 from vocalinux.common_types import RecognitionState  # noqa: E402
 from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager  # noqa: E402
+from vocalinux.utils.vosk_model_info import VOSK_MODEL_INFO  # noqa: E402
 
 
 class TestSpeechRecognition(unittest.TestCase):
@@ -250,6 +251,62 @@ class TestSpeechRecognition(unittest.TestCase):
 
             # Verify the large model path is constructed correctly
             mock_get_path.assert_called_with()
+
+    def test_vosk_medium_and_large_cover_all_small_languages(self):
+        """Regression test for issue #550.
+
+        The 'medium' and 'large' VOSK model tables must map every language
+        that 'small' supports. Italian ('it') and English-India ('en-in')
+        were previously missing from 'medium'/'large', which caused
+        vosk_model_map[size] to resolve to None and crash later with
+        "join() argument must be str, bytes, or os.PathLike object, not
+        'NoneType'" instead of downloading the (existing) big model.
+        """
+        small_languages = set(VOSK_MODEL_INFO["small"]["languages"])
+        for size in ("medium", "large"):
+            size_languages = set(VOSK_MODEL_INFO[size]["languages"])
+            missing = small_languages - size_languages
+            self.assertEqual(
+                missing,
+                set(),
+                f"VOSK_MODEL_INFO['{size}']['languages'] is missing languages "
+                f"that 'small' supports: {missing}. Any language present in "
+                "'small' must also resolve to a model for 'medium'/'large', "
+                "otherwise initialization crashes with a NoneType path error.",
+            )
+
+    def test_vosk_init_italian_medium_model_resolves_correctly(self):
+        """Selecting Italian + the 'medium' VOSK model must not crash (issue #550)."""
+        manager = SpeechRecognitionManager(engine="vosk", language="it", model_size="medium")
+
+        self.assertEqual(
+            manager.vosk_model_map["medium"],
+            VOSK_MODEL_INFO["medium"]["languages"]["it"],
+        )
+        self.assertIn("vosk-model-it-0.22", manager.vosk_model_path)
+
+    def test_get_vosk_model_path_raises_clear_error_for_unmapped_language(self):
+        """An unmapped (size, language) combination should raise a clear,
+        actionable error instead of crashing deep inside os.path.join with a
+        cryptic TypeError (the actual failure mode reported in issue #550,
+        before the VOSK_MODEL_INFO data gap was fixed)."""
+        manager = SpeechRecognitionManager(engine="vosk", language="en-us", model_size="small")
+
+        # Simulate a language that has no mapping for the requested size,
+        # mirroring what happened for "it"/"medium" prior to the data fix.
+        manager.model_size = "medium"
+        manager.language = "it"
+        manager.vosk_model_map = {
+            "small": "vosk-model-small-it-0.22",
+            "medium": None,
+            "large": None,
+        }
+
+        with self.assertRaises(ValueError) as ctx:
+            manager._get_vosk_model_path()
+
+        self.assertIn("medium", str(ctx.exception))
+        self.assertIn("it", str(ctx.exception))
 
     def test_download_vosk_model(self):
         """Test downloading VOSK model."""
