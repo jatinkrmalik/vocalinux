@@ -1910,6 +1910,18 @@ class SettingsDialog(Gtk.Dialog):
         logger.info(f"Copy to clipboard {'enabled' if enabled else 'disabled'}")
         return False
 
+    def _on_auto_capitalize_toggled(self, widget, state):
+        """Handle toggle of the auto-capitalize switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Auto-capitalize toggled: {enabled}")
+        self.config_manager.set("text_injection", "auto_capitalize", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Auto-capitalize {'enabled' if enabled else 'disabled'}")
+        return False
+
     def _on_sound_effects_toggled(self, widget, state):
         if self._initializing or self._applying_settings:
             return False
@@ -2161,6 +2173,20 @@ class SettingsDialog(Gtk.Dialog):
         )
         output_group.add_row(voice_commands_row)
 
+        self.auto_capitalize_switch = Gtk.Switch()
+        self.auto_capitalize_switch.set_tooltip_text(
+            "Automatically capitalize the first letter of each sentence. "
+            "Works after sentence-ending punctuation (period, exclamation, question mark). "
+            "Only applies to Vosk engine - Whisper models output proper capitalization automatically."
+        )
+        auto_capitalize_row = PreferenceRow(
+            title="Auto-Capitalize Sentences",
+            subtitle="Capitalize first letter after punctuation (Vosk only)",
+            widget=self.auto_capitalize_switch,
+            keywords=("capitalization", "casing", "sentence"),
+        )
+        output_group.add_row(auto_capitalize_row)
+
         self.copy_to_clipboard_switch = Gtk.Switch()
         self.copy_to_clipboard_switch.set_tooltip_text(
             "Copy recognized text to clipboard after each transcription. "
@@ -2176,6 +2202,7 @@ class SettingsDialog(Gtk.Dialog):
 
         self.recognition_settings_tab.pack_start(output_group, False, False, 0)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
+        self.auto_capitalize_switch.connect("state-set", self._on_auto_capitalize_toggled)
 
         if not silero_active:
             vad_info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -3102,10 +3129,12 @@ class SettingsDialog(Gtk.Dialog):
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
+        auto_capitalize = text_injection_settings.get("auto_capitalize", True)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
+        self.auto_capitalize_switch.set_active(auto_capitalize)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
 
         auto_pause_settings = self.config_manager.get_settings().get("auto_pause", {})
