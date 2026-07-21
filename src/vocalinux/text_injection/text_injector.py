@@ -26,6 +26,34 @@ from .ibus_engine import (
 
 logger = logging.getLogger(__name__)
 
+_GLOBAL_YDOTOOL_UNIT = "/etc/systemd/user/default.target.wants/ydotool.service"
+
+
+def _ydotool_install_guidance() -> str:
+    """Return package- and source-specific ydotool service instructions."""
+    return (
+        "Ubuntu package setup for ydotool:\n"
+        "  sudo apt install ydotool\n"
+        "  sudo usermod -aG input $USER  # then log out and back in\n"
+        "  systemctl --user enable --now ydotool.service\n"
+        "  Do NOT use 'systemctl --global enable ydotool.service'; it also starts "
+        "ydotool in display-manager greeter sessions.\n"
+        "If ydotool was built from source and installed a system unit, use instead:\n"
+        "  sudo systemctl enable --now ydotoold.service"
+    )
+
+
+def _warn_if_ydotool_globally_enabled() -> None:
+    """Warn when ydotool's user unit is enabled for every account, including greeters."""
+    if os.path.lexists(_GLOBAL_YDOTOOL_UNIT):
+        logger.warning(
+            "ydotool.service is enabled globally at %s. This can start an input-injection "
+            "daemon in display-manager greeter sessions. Disable it with "
+            "'sudo systemctl --global disable ydotool.service', then enable it only for "
+            "this user with 'systemctl --user enable --now ydotool.service'.",
+            _GLOBAL_YDOTOOL_UNIT,
+        )
+
 
 def _is_kde_plasma_session() -> bool:
     """Return True when the current desktop session appears to be KDE Plasma."""
@@ -404,6 +432,9 @@ class TextInjector:
             ydotool_available = shutil.which("ydotool") is not None
             xdotool_available = shutil.which("xdotool") is not None
 
+            if ydotool_available:
+                _warn_if_ydotool_globally_enabled()
+
             # Prefer ydotool when the daemon is (or can be) ready. Flatpak ships
             # ydotool for native Wayland typing; wtype needs a Wayland socket.
             if ydotool_available and self._ensure_ydotoold():
@@ -437,9 +468,7 @@ class TextInjector:
                     "\n"
                     "For KDE Plasma Wayland users: wtype is not supported. "
                     f"{_kde_wayland_ibus_hint()}\n"
-                    "Or install ydotool/wl-copy for fallback:\n"
-                    "  sudo apt install ydotool\n"
-                    "  sudo systemctl enable --now ydotoold\n"
+                    f"Or install ydotool/wl-copy for fallback:\n{_ydotool_install_guidance()}\n"
                     "Or for clipboard fallback: sudo apt install wl-copy"
                 )
                 raise RuntimeError("Missing required dependencies for text injection")
