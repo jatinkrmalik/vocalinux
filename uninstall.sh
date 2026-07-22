@@ -55,8 +55,10 @@ get_vocalinux_pids() {
 safe_remove() {
     local path="$1"
     local description="$2"
-    
-    if [ -e "$path" ]; then
+
+    # -e follows symlinks (false for a broken link), so also test -L to catch
+    # dangling symlinks left behind by an install.
+    if [ -e "$path" ] || [ -L "$path" ]; then
         print_info "Removing $description: $path"
         rm -rf "$path" && {
             print_success "Successfully removed $description"
@@ -244,12 +246,10 @@ remove_curl_install_files() {
     
     # Remove cloned repository
     safe_remove "$CURL_INSTALL_DIR" "cloned repository"
-    
-    # Remove symlink in ~/.local/bin
-    if [ -L "$CURL_BIN_DIR/vocalinux" ]; then
-        safe_remove "$CURL_BIN_DIR/vocalinux" "vocalinux symlink"
-    fi
-    
+
+    # Launcher scripts/symlinks in ~/.local/bin are removed in
+    # remove_application_files() (they exist for both curl and repo installs).
+
     # Remove activation script in ~/.local/bin
     safe_remove "$CURL_BIN_DIR/activate-vocalinux.sh" "activation script in ~/.local/bin"
 }
@@ -258,7 +258,13 @@ remove_curl_install_files() {
 remove_application_files() {
     # Remove local activation script (if running from repo)
     safe_remove "activate-vocalinux.sh" "local activation script"
-    
+
+    # Remove launcher wrappers in ~/.local/bin created by install.sh. These are
+    # regular files in a repo/dev install and may be symlinks in a curl install;
+    # safe_remove handles both (and dangling symlinks).
+    safe_remove "$CURL_BIN_DIR/vocalinux" "vocalinux launcher script"
+    safe_remove "$CURL_BIN_DIR/vocalinux-gui" "vocalinux-gui launcher script"
+
     # Remove desktop entry
     safe_remove "$DESKTOP_DIR/vocalinux.desktop" "desktop entry"
 
@@ -356,11 +362,13 @@ verify_uninstallation() {
         ((ISSUES++))
     fi
     
-    # Check if symlink still exists
-    if [ -L "$CURL_BIN_DIR/vocalinux" ]; then
-        print_warning "Vocalinux symlink still exists: $CURL_BIN_DIR/vocalinux"
-        ((ISSUES++))
-    fi
+    # Check if launcher wrappers (files or symlinks) still exist
+    for launcher in vocalinux vocalinux-gui; do
+        if [ -e "$CURL_BIN_DIR/$launcher" ] || [ -L "$CURL_BIN_DIR/$launcher" ]; then
+            print_warning "Launcher script still exists: $CURL_BIN_DIR/$launcher"
+            ((ISSUES++))
+        fi
+    done
     
     # Check if desktop entry still exists
     if [ -f "$DESKTOP_DIR/vocalinux.desktop" ]; then
