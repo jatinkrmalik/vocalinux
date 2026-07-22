@@ -180,3 +180,17 @@ def test_send_command_rejects_unknown():
     """An unknown command name raises ValueError."""
     with pytest.raises(ValueError):
         dbus_service.send_command("explode")
+
+
+def test_send_command_returns_false_without_session_bus():
+    """A generic failure (e.g. no session bus) yields False, not a traceback."""
+    # GLib.Error is a MagicMock under the test harness, so patch it to a real
+    # exception class; the raised error is a different type and must fall
+    # through to the generic handler.
+    with patch.object(dbus_service.GLib, "Error", RuntimeError):
+        with patch.object(
+            dbus_service.Gio.DBusProxy,
+            "new_for_bus_sync",
+            side_effect=ValueError("no session bus"),
+        ):
+            assert dbus_service.send_command("toggle") is False

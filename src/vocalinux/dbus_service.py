@@ -186,3 +186,9 @@ def send_command(command: str) -> bool:
     except GLib.Error as exc:
         logger.error("Failed to send '%s' command via D-Bus: %s", command, exc)
         return False
+    except Exception as exc:
+        # e.g. no session bus available (DBUS_SESSION_BUS_ADDRESS unset in an
+        # SSH/systemd context). Guarantee a deterministic non-zero CLI exit
+        # instead of an unhandled traceback.
+        logger.error("Failed to send '%s' command (no session bus?): %s", command, exc)
+        return False
