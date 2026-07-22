@@ -523,6 +523,7 @@ class TrayIndicator:
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
             shortcut_update_callback=self.update_shortcut,
+            hotkey_listener_update_callback=self._setup_keyboard_shortcuts,
         )
 
         # Connect to the response signal

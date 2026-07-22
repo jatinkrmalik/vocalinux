@@ -982,6 +982,7 @@ class SettingsDialog(Gtk.Dialog):
         config_manager: "ConfigManager",
         speech_engine: "SpeechRecognitionManager",
         shortcut_update_callback: callable = None,
+        hotkey_listener_update_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         self.set_decorated(True)  # Force window decorations (close button) on all WMs
@@ -1006,6 +1007,7 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
+        self.hotkey_listener_update_callback = hotkey_listener_update_callback
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -1621,6 +1623,22 @@ class SettingsDialog(Gtk.Dialog):
             description="Configure the shortcut to control voice recognition",
         )
 
+        # External activation: drive start/stop from a desktop/compositor global
+        # shortcut (bound to `vocalinux --toggle`) instead of the built-in key
+        # listener. Avoids reading /dev/input (no keylogging, no `input` group).
+        self.disable_internal_hotkey_switch = Gtk.Switch()
+        self.disable_internal_hotkey_switch.set_tooltip_text(
+            "Turn off the built-in key listener and trigger voice typing from a "
+            "desktop global shortcut bound to 'vocalinux --toggle'. Avoids reading "
+            "/dev/input (no keylogging, no 'input' group needed)."
+        )
+        external_row = PreferenceRow(
+            title="External Activation (Desktop Shortcut)",
+            subtitle="Use a compositor global shortcut instead of the built-in key listener",
+            widget=self.disable_internal_hotkey_switch,
+        )
+        group.add_row(external_row)
+
         # Mode selection (Toggle vs Push-to-Talk)
         self.shortcut_mode_combo = Gtk.ComboBoxText()
         self.shortcut_mode_combo.set_size_request(200, -1)
@@ -1638,12 +1656,12 @@ class SettingsDialog(Gtk.Dialog):
         if not self.shortcut_mode_combo.set_active_id(current_mode):
             self.shortcut_mode_combo.set_active_id("toggle")
 
-        mode_row = PreferenceRow(
+        self.mode_row = PreferenceRow(
             title="Shortcut Mode",
             subtitle="How the shortcut behaves",
             widget=self.shortcut_mode_combo,
         )
-        group.add_row(mode_row)
+        group.add_row(self.mode_row)
 
         # Shortcut selection combo
         self.shortcut_combo = Gtk.ComboBoxText()
@@ -1735,9 +1753,46 @@ class SettingsDialog(Gtk.Dialog):
         # Connect signals
         self.shortcut_combo.connect("changed", self._on_shortcut_changed)
         self.shortcut_mode_combo.connect("changed", self._on_shortcut_mode_changed)
+        self.disable_internal_hotkey_switch.connect(
+            "state-set", self._on_disable_internal_hotkey_toggled
+        )
 
         # Update UI based on initial mode
         self._update_shortcut_ui_for_mode(current_mode)
+
+    def _update_internal_hotkey_sensitivity(self, disabled: bool):
+        """Grey out the built-in shortcut controls when external activation is on."""
+        for row in (self.mode_row, self.shortcut_row, self.custom_shortcut_row):
+            row.set_sensitive(not disabled)
+
+        if disabled:
+            self.shortcut_info_label.set_text(
+                "External activation is on: the built-in key listener is off. "
+                "Bind a desktop global shortcut to 'vocalinux --toggle' to start/stop."
+            )
+        else:
+            # Restore the mode-appropriate hint.
+            self._update_shortcut_ui_for_mode(
+                self.config_manager.get_str("shortcuts", "mode", "toggle")
+            )
+
+    def _on_disable_internal_hotkey_toggled(self, widget, state):
+        """Handle toggle of the external-activation switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        disabled = bool(state)
+        logger.info(f"External activation (internal hotkey disabled) toggled: {disabled}")
+        self.config_manager.set("shortcuts", "disable_internal_hotkey", disabled)
+        self.config_manager.save_settings()
+
+        self._update_internal_hotkey_sensitivity(disabled)
+
+        # Live-apply: start or stop the built-in listener without a restart.
+        if self.hotkey_listener_update_callback:
+            self.hotkey_listener_update_callback()
+
+        return False
 
     def _is_preset_shortcut(self, shortcut: str) -> bool:
         """Return True if shortcut is one of the built-in double-tap presets."""
@@ -2495,6 +2550,12 @@ class SettingsDialog(Gtk.Dialog):
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
+
+        disable_internal_hotkey = self.config_manager.get_bool(
+            "shortcuts", "disable_internal_hotkey", False
+        )
+        self.disable_internal_hotkey_switch.set_active(disable_internal_hotkey)
+        self._update_internal_hotkey_sensitivity(disable_internal_hotkey)
 
         available_engines = get_available_engines()
         available_count = 0
