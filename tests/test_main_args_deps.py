@@ -8,6 +8,8 @@ Covers normal startup, debug mode, version flag, keyboard interrupt, and excepti
 import os
 import sys
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -49,6 +51,20 @@ class TestParseArguments(unittest.TestCase):
 
             args = parse_arguments()
             assert args.debug is True
+
+    def test_parse_args_version_flag(self):
+        """Test that --version prints the package version and exits."""
+        from vocalinux.version import __version__
+
+        output = StringIO()
+        with patch.object(sys, "argv", ["vocalinux", "--version"]):
+            from vocalinux.main import parse_arguments
+
+            with redirect_stdout(output), self.assertRaises(SystemExit) as exit_context:
+                parse_arguments()
+
+        assert exit_context.exception.code == 0
+        assert output.getvalue() == f"vocalinux {__version__}\n"
 
     def test_parse_args_model_argument(self):
         """Test parsing with model argument."""

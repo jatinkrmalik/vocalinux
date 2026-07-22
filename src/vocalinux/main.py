@@ -8,6 +8,8 @@ import atexit
 import logging
 import sys
 
+from .version import __version__
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -21,7 +23,13 @@ logger = logging.getLogger(__name__)
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Vocalinux")
+    parser = argparse.ArgumentParser(prog="vocalinux", description="Vocalinux")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show the installed Vocalinux version and exit",
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     # default model, language and engine are loaded from default config
     # due to priority of args over config
