@@ -1141,6 +1141,32 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
                 if env_backup is not None:
                     os.environ["DISPLAY"] = env_backup
 
+    def test_inject_with_xdotool_releases_modifiers_without_escape(self):
+        """The xdotool path must keep the target input focused after injection."""
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.X11
+
+        injector._inject_with_xdotool("test")
+
+        commands = [call.args[0] for call in self.mock_subprocess.call_args_list]
+        self.assertIn(
+            [
+                "xdotool",
+                "keyup",
+                "--clearmodifiers",
+                "Control_L",
+                "Control_R",
+                "Shift_L",
+                "Shift_R",
+                "Alt_L",
+                "Alt_R",
+                "Super_L",
+                "Super_R",
+            ],
+            commands,
+        )
+        self.assertFalse(any("Escape" in command for command in commands))
+
     def test_inject_with_wayland_tool_ydotool(self):
         """Test text injection with ydotool."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
