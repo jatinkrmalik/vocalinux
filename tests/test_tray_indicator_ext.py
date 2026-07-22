@@ -513,5 +513,42 @@ class TestTrayIndicatorSignalHandling(unittest.TestCase):
             assert isinstance(result, bool)
 
 
+class TestExternalActivationGate(unittest.TestCase):
+    """Tests for the D-Bus external-activation config gate.
+
+    These live here (and not in test_dbus_activation.py) so that the real
+    tray_indicator module is imported late in the session -- after the tests
+    that swap sys.modules["gi.repository"] at runtime. Importing it earlier
+    would freeze tray_indicator.GLib against a stale mock and break unrelated
+    GLib-identity assertions (e.g. in test_suspend_handler.py).
+    """
+
+    @staticmethod
+    def _fake_indicator(disable_internal_hotkey):
+        """Minimal stand-in for calling _setup_keyboard_shortcuts in isolation."""
+        fake = MagicMock()
+        fake.shortcut_manager.active = False
+        fake.config_manager.get_bool.return_value = disable_internal_hotkey
+        fake.config_manager.get_str.return_value = "toggle"
+        return fake
+
+    def test_external_mode_skips_listener_start(self):
+        """With the option enabled, the evdev/pynput listener is not started."""
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        fake = self._fake_indicator(disable_internal_hotkey=True)
+        TrayIndicator._setup_keyboard_shortcuts(fake)
+        fake.shortcut_manager.start.assert_not_called()
+        fake.shortcut_manager.register_toggle_callback.assert_called_once_with(None)
+
+    def test_default_mode_starts_listener(self):
+        """With the option disabled (default), the listener starts as before."""
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        fake = self._fake_indicator(disable_internal_hotkey=False)
+        TrayIndicator._setup_keyboard_shortcuts(fake)
+        fake.shortcut_manager.start.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,10 +12,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# gi is mocked globally by conftest, so these imports are safe headless.
-from vocalinux import dbus_service
-from vocalinux.main import main
-from vocalinux.ui.tray_indicator import TrayIndicator
+# gi is mocked globally by conftest. All vocalinux imports are done lazily
+# inside the individual tests. Importing them at module level would bind their
+# `gi.repository` references at collection time and clash with test_main.py,
+# which replaces sys.modules["gi"] / sys.modules["gi.repository"] wholesale --
+# leading to MagicMock identity mismatches (e.g. GLib.SOURCE_REMOVE) in
+# unrelated tests that run in the same session.
 
 # -- CLI dispatch ----------------------------------------------------------
 
@@ -26,6 +28,8 @@ from vocalinux.ui.tray_indicator import TrayIndicator
 )
 def test_cli_flag_sends_matching_command(flag, command):
     """Each trigger flag forwards the matching command and exits with 0."""
+    from vocalinux.main import main
+
     with patch("vocalinux.dbus_service.send_command", return_value=True) as mock_send:
         with patch.object(sys, "argv", ["vocalinux", flag]):
             with pytest.raises(SystemExit) as exc_info:
@@ -36,6 +40,8 @@ def test_cli_flag_sends_matching_command(flag, command):
 
 def test_cli_flag_exits_nonzero_when_no_instance():
     """When no instance answers, the trigger exits with a non-zero code."""
+    from vocalinux.main import main
+
     with patch("vocalinux.dbus_service.send_command", return_value=False):
         with patch.object(sys, "argv", ["vocalinux", "--toggle"]):
             with pytest.raises(SystemExit) as exc_info:
@@ -45,42 +51,28 @@ def test_cli_flag_exits_nonzero_when_no_instance():
 
 def test_no_trigger_flag_does_not_dispatch():
     """Without a trigger flag, main() proceeds past the dispatch shortcut."""
+    from vocalinux.main import main
+
+    # Mock single_instance via sys.modules (not patch("...acquire_lock")) so we
+    # don't import the real module and set it as a vocalinux package attribute,
+    # which would defeat patch.dict-based single-instance tests elsewhere.
+    mock_single_instance = MagicMock()
+    mock_single_instance.acquire_lock.return_value = True
     with patch("vocalinux.dbus_service.send_command") as mock_send:
         # check_dependencies returns False so main() exits early after dispatch.
-        with patch("vocalinux.main.check_dependencies", return_value=False):
-            with patch("vocalinux.single_instance.acquire_lock", return_value=True):
+        with patch.dict(sys.modules, {"vocalinux.single_instance": mock_single_instance}):
+            with patch("vocalinux.main.check_dependencies", return_value=False):
                 with patch.object(sys, "argv", ["vocalinux"]):
                     with pytest.raises(SystemExit):
                         main()
     mock_send.assert_not_called()
 
 
-# -- Config gate -----------------------------------------------------------
-
-
-def _fake_indicator(disable_internal_hotkey):
-    """Minimal stand-in for calling _setup_keyboard_shortcuts in isolation."""
-    fake = MagicMock()
-    fake.shortcut_manager.active = False
-    fake.config_manager.get_bool.return_value = disable_internal_hotkey
-    fake.config_manager.get_str.return_value = "toggle"
-    return fake
-
-
-def test_external_mode_skips_listener_start():
-    """With the option enabled, the evdev/pynput listener is not started."""
-    fake = _fake_indicator(disable_internal_hotkey=True)
-    TrayIndicator._setup_keyboard_shortcuts(fake)
-    fake.shortcut_manager.start.assert_not_called()
-    fake.shortcut_manager.register_toggle_callback.assert_called_once_with(None)
-
-
-def test_default_mode_starts_listener():
-    """With the option disabled (default), the listener starts as before."""
-    fake = _fake_indicator(disable_internal_hotkey=False)
-    TrayIndicator._setup_keyboard_shortcuts(fake)
-    fake.shortcut_manager.start.assert_called_once()
-
+# Config-gate tests for TrayIndicator._setup_keyboard_shortcuts live in
+# test_tray_indicator_ext.py (TestExternalActivationGate). They require the real
+# tray_indicator module, which must not be imported this early in the session --
+# doing so freezes tray_indicator.GLib against a stale gi.repository mock and
+# breaks unrelated GLib-identity assertions elsewhere.
 
 # -- D-Bus handlers --------------------------------------------------------
 
@@ -91,6 +83,8 @@ def test_default_mode_starts_listener():
 )
 def test_method_call_routes_to_callback(method, expected):
     """A D-Bus method call invokes the matching callback on the main thread."""
+    from vocalinux import dbus_service
+
     callbacks = {
         "on_toggle": MagicMock(),
         "on_start": MagicMock(),
@@ -124,6 +118,8 @@ def test_method_call_routes_to_callback(method, expected):
 
 def test_unknown_method_returns_error():
     """An unknown method name returns a D-Bus error and no callback runs."""
+    from vocalinux import dbus_service
+
     on_toggle = MagicMock()
     service = dbus_service.VocalinuxDBusService(
         on_toggle=on_toggle, on_start=MagicMock(), on_stop=MagicMock()
@@ -144,6 +140,8 @@ def test_unknown_method_returns_error():
 
 def test_shutdown_releases_name_and_object():
     """shutdown() unregisters the object and unowns the bus name, idempotently."""
+    from vocalinux import dbus_service
+
     service = dbus_service.VocalinuxDBusService(
         on_toggle=MagicMock(), on_start=MagicMock(), on_stop=MagicMock()
     )
@@ -168,6 +166,8 @@ def test_shutdown_releases_name_and_object():
 
 def test_send_command_uses_proxy_call():
     """send_command forwards the mapped method name through a D-Bus proxy."""
+    from vocalinux import dbus_service
+
     mock_proxy = MagicMock()
     with patch.object(dbus_service.Gio.DBusProxy, "new_for_bus_sync", return_value=mock_proxy):
         result = dbus_service.send_command("toggle")
@@ -178,12 +178,16 @@ def test_send_command_uses_proxy_call():
 
 def test_send_command_rejects_unknown():
     """An unknown command name raises ValueError."""
+    from vocalinux import dbus_service
+
     with pytest.raises(ValueError):
         dbus_service.send_command("explode")
 
 
 def test_send_command_returns_false_without_session_bus():
     """A generic failure (e.g. no session bus) yields False, not a traceback."""
+    from vocalinux import dbus_service
+
     # GLib.Error is a MagicMock under the test harness, so patch it to a real
     # exception class; the raised error is a different type and must fall
     # through to the generic handler.
