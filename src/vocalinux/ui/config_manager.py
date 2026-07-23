@@ -21,12 +21,13 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 # Default configuration
 DEFAULT_CONFIG = {
     "speech_recognition": {  # Changed section name
-        "engine": "whisper_cpp",  # "vosk", "whisper", or "whisper_cpp" - whisper_cpp is default for best performance
+        "engine": "whisper_cpp",  # "vosk", "whisper", "whisper_cpp", or "faster_whisper" - whisper_cpp is default for best performance
         "language": "auto",  # Auto-detect language (Whisper/whisper.cpp only)
         "model_size": "tiny",  # Current model size (for backward compatibility)
         "vosk_model_size": "small",  # Default model for VOSK engine
         "whisper_model_size": "tiny",  # Default model for Whisper engine
         "whisper_cpp_model_size": "tiny",  # Default model for whisper.cpp engine
+        "faster_whisper_model_size": "tiny",  # Default model for faster-whisper engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
         "silence_timeout": 2.0,  # Seconds of silence before stopping
         "stop_sound_guard_ms": 200,  # Small tail trim to avoid the stop sound without clipping speech
@@ -297,7 +298,7 @@ class ConfigManager:
         """Get the saved model size for a specific engine.
 
         Args:
-            engine: The engine name ("vosk", "whisper", or "whisper_cpp")
+            engine: The engine name ("vosk", "whisper", "whisper_cpp", or "faster_whisper")
 
         Returns:
             The model size for the engine, or the default if not found
