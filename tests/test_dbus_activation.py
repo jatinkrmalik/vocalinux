@@ -198,3 +198,102 @@ def test_send_command_returns_false_without_session_bus():
             side_effect=ValueError("no session bus"),
         ):
             assert dbus_service.send_command("toggle") is False
+
+
+def test_send_command_returns_false_on_glib_error():
+    """A GLib.Error from the proxy call is caught and yields False."""
+    from vocalinux import dbus_service
+
+    # Patch GLib.Error to a real class so both the raise and the `except` clause
+    # reference the same type and the GLib.Error branch is exercised.
+    with patch.object(dbus_service.GLib, "Error", RuntimeError):
+        with patch.object(
+            dbus_service.Gio.DBusProxy,
+            "new_for_bus_sync",
+            side_effect=RuntimeError("bus error"),
+        ):
+            assert dbus_service.send_command("toggle") is False
+
+
+# -- Service lifecycle & error paths --------------------------------------
+
+
+def _make_service():
+    from vocalinux import dbus_service
+
+    return dbus_service.VocalinuxDBusService(
+        on_toggle=MagicMock(), on_start=MagicMock(), on_stop=MagicMock()
+    )
+
+
+def test_register_handles_bus_own_name_failure():
+    """A failure while requesting the bus name is logged, not raised."""
+    from vocalinux import dbus_service
+
+    with patch.object(dbus_service.Gio, "bus_own_name", side_effect=RuntimeError("no bus")):
+        # __init__ calls _register(); it must not propagate the error.
+        service = _make_service()
+    assert service._owner_id == 0
+
+
+def test_on_bus_acquired_registers_object():
+    """_on_bus_acquired stores the connection and registers the control object."""
+    from vocalinux import dbus_service
+
+    service = _make_service()
+    connection = MagicMock()
+    connection.register_object.return_value = 99
+
+    service._on_bus_acquired(connection, dbus_service.BUS_NAME)
+
+    assert service._connection is connection
+    assert service._registration_id == 99
+    connection.register_object.assert_called_once()
+
+
+def test_on_bus_acquired_handles_register_failure():
+    """A failed object registration is caught and leaves the id unset."""
+    service = _make_service()
+    connection = MagicMock()
+    connection.register_object.side_effect = RuntimeError("register failed")
+
+    service._on_bus_acquired(connection, "com.vocalinux.Vocalinux")
+
+    assert service._registration_id == 0
+
+
+def test_name_acquired_and_lost_are_safe_to_call():
+    """The name-acquired/lost callbacks only log and never raise."""
+    service = _make_service()
+    connection = MagicMock()
+    service._on_name_acquired(connection, "com.vocalinux.Vocalinux")
+    service._on_name_lost(connection, "com.vocalinux.Vocalinux")
+
+
+def test_invoke_swallows_callback_errors():
+    """_invoke logs a raising callback and still returns SOURCE_REMOVE."""
+    from vocalinux import dbus_service
+
+    failing = MagicMock(side_effect=RuntimeError("boom"))
+    result = dbus_service.VocalinuxDBusService._invoke(failing)
+    failing.assert_called_once_with()
+    assert result == dbus_service.GLib.SOURCE_REMOVE
+
+
+def test_shutdown_swallows_unregister_and_unown_errors():
+    """shutdown() ignores failures from unregister_object and bus_unown_name."""
+    from vocalinux import dbus_service
+
+    service = _make_service()
+    connection = MagicMock()
+    connection.unregister_object.side_effect = RuntimeError("unregister failed")
+    service._connection = connection
+    service._registration_id = 42
+    service._owner_id = 7
+
+    with patch.object(dbus_service.Gio, "bus_unown_name", side_effect=RuntimeError("unown failed")):
+        # Must not raise despite both cleanup calls failing.
+        service.shutdown()
+
+    assert service._registration_id == 0
+    assert service._owner_id == 0

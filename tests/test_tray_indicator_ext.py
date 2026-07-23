@@ -550,5 +550,54 @@ class TestExternalActivationGate(unittest.TestCase):
         fake.shortcut_manager.start.assert_called_once()
 
 
+class TestExternalTriggerHandlers(unittest.TestCase):
+    """Tests for the D-Bus external Start/Stop handlers on TrayIndicator.
+
+    These use normal (non push-to-talk) start semantics and guard on the
+    current recognition state, so repeated `vocalinux --start`/`--stop` calls
+    are idempotent.
+    """
+
+    def test_external_start_starts_when_idle(self):
+        """_external_start starts recognition only when currently idle."""
+        from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        fake = MagicMock()
+        fake.speech_engine.state = RecognitionState.IDLE
+        TrayIndicator._external_start(fake)
+        fake.speech_engine.start_recognition.assert_called_once_with()
+
+    def test_external_start_noop_when_already_running(self):
+        """_external_start does nothing if recognition is already active."""
+        from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        fake = MagicMock()
+        fake.speech_engine.state = RecognitionState.LISTENING
+        TrayIndicator._external_start(fake)
+        fake.speech_engine.start_recognition.assert_not_called()
+
+    def test_external_stop_stops_when_active(self):
+        """_external_stop stops recognition when it is not idle."""
+        from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        fake = MagicMock()
+        fake.speech_engine.state = RecognitionState.LISTENING
+        TrayIndicator._external_stop(fake)
+        fake.speech_engine.stop_recognition.assert_called_once_with()
+
+    def test_external_stop_noop_when_idle(self):
+        """_external_stop does nothing if recognition is already idle."""
+        from vocalinux.common_types import RecognitionState
+        from vocalinux.ui.tray_indicator import TrayIndicator
+
+        fake = MagicMock()
+        fake.speech_engine.state = RecognitionState.IDLE
+        TrayIndicator._external_stop(fake)
+        fake.speech_engine.stop_recognition.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
