@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { LiveDemo } from "@/components/live-demo";
 import {
   Terminal,
   Activity,
@@ -26,7 +25,6 @@ import {
   Server,
   Globe,
   Cpu,
-  Volume2,
   Heart,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -336,7 +334,6 @@ export default function HomePage() {
   }, []);
 
   const navLinks = [
-    { href: "#demo", label: "Demo" },
     { href: "#features", label: "Features" },
     { href: "/screenshots/", label: "Screenshots" },
     { href: "#install", label: "Install" },
@@ -537,64 +534,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Demo */}
-      <section id="demo" className="border-t border-border bg-card px-4 py-16 sm:px-6 sm:py-20">
+      {/* Features as editorial rows — primary proof after hero install */}
+      <section id="features" className="border-t border-border px-4 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-10 max-w-2xl">
-            <h2 className="section-heading">Browser speech preview</h2>
-            <p className="section-lede">
-              This demo uses the browser SpeechRecognition API when available.
-              After install, Vocalinux runs offline on your Linux desktop.
-            </p>
-          </div>
-
-          <LiveDemo />
-
-          <div className="mt-10 grid gap-px overflow-hidden rounded-[10px] border border-border bg-border sm:grid-cols-3">
-            {[
-              {
-                icon: Keyboard,
-                title: "Shortcut modes",
-                description: "Toggle (double-tap) or push-to-talk (hold).",
-                href: "/shortcuts/",
-              },
-              {
-                icon: Zap,
-                title: "Engine choices",
-                description: "Compare latency and model size per engine.",
-                href: "/compare/",
-              },
-              {
-                icon: Volume2,
-                title: "Audio feedback",
-                description: "Optional sounds when recording starts and stops.",
-                href: "/shortcuts/",
-              },
-            ].map((item) => (
-              <Link
-                key={item.title}
-                href={item.href}
-                className="group flex gap-3 bg-card p-5 transition-colors hover:bg-secondary/60"
-              >
-                <item.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <div>
-                  <h3 className="font-semibold text-foreground group-hover:text-primary">
-                    {item.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {item.description}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features as editorial rows */}
-      <section id="features" className="px-4 py-16 sm:px-6 sm:py-20">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-4 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-4 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-2xl">
               <h2 className="section-heading">What you get on the desktop</h2>
               <p className="section-lede">
@@ -608,6 +551,29 @@ export default function HomePage() {
             >
               Screenshots of the UI
               <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          <div className="mb-8 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            <Link
+              href="/shortcuts/"
+              className="inline-flex items-center gap-1.5 font-medium text-muted-foreground transition-colors hover:text-primary"
+            >
+              <Keyboard className="h-4 w-4 text-primary" aria-hidden />
+              Shortcut modes
+            </Link>
+            <Link
+              href="/compare/"
+              className="inline-flex items-center gap-1.5 font-medium text-muted-foreground transition-colors hover:text-primary"
+            >
+              <Zap className="h-4 w-4 text-primary" aria-hidden />
+              Engine comparison
+            </Link>
+            <Link
+              href="/shortcuts/"
+              className="inline-flex items-center gap-1.5 font-medium text-muted-foreground transition-colors hover:text-primary"
+            >
+              Audio feedback
             </Link>
           </div>
 
