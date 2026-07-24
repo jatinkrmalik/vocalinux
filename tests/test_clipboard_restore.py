@@ -31,7 +31,10 @@ def _make_injector() -> Any:
 
 
 class TestReadClipboard(unittest.TestCase):
-    """Unit tests for the _read_clipboard() helper."""
+    """Unit tests for the _read_clipboard() helper.
+
+    subprocess.run is called with text=True so stdout is always a str.
+    """
 
     def test_wl_paste_used_first_on_wayland(self):
         """On Wayland, wl-paste is the first candidate and its output is returned."""
@@ -42,7 +45,7 @@ class TestReadClipboard(unittest.TestCase):
                     "/usr/bin/wl-paste" if cmd == "wl-paste" else None
                 )
                 with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=0, stdout=b"copied text")
+                    mock_run.return_value = MagicMock(returncode=0, stdout="copied text")
                     result = obj._read_clipboard()
         self.assertEqual(result, "copied text")
 
@@ -52,7 +55,7 @@ class TestReadClipboard(unittest.TestCase):
         with patch("vocalinux.text_injection.text_injector.shutil.which") as mock_which:
             mock_which.side_effect = lambda cmd: ("/usr/bin/xclip" if cmd == "xclip" else None)
             with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0, stdout=b"xclip text")
+                mock_run.return_value = MagicMock(returncode=0, stdout="xclip text")
                 result = obj._read_clipboard()
         self.assertEqual(result, "xclip text")
 
@@ -62,7 +65,7 @@ class TestReadClipboard(unittest.TestCase):
         with patch("vocalinux.text_injection.text_injector.shutil.which") as mock_which:
             mock_which.side_effect = lambda cmd: ("/usr/bin/xsel" if cmd == "xsel" else None)
             with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0, stdout=b"xsel text")
+                mock_run.return_value = MagicMock(returncode=0, stdout="xsel text")
                 result = obj._read_clipboard()
         self.assertEqual(result, "xsel text")
 
@@ -82,7 +85,7 @@ class TestReadClipboard(unittest.TestCase):
                 return_value="/usr/bin/wl-paste",
             ):
                 with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=1, stdout=b"")
+                    mock_run.return_value = MagicMock(returncode=1, stdout="")
                     result = obj._read_clipboard()
         self.assertIsNone(result)
 
@@ -125,14 +128,14 @@ class TestReadClipboard(unittest.TestCase):
             )
             with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
                 mock_run.side_effect = [
-                    MagicMock(returncode=1, stdout=b""),  # wl-paste fails
-                    MagicMock(returncode=0, stdout=b"via xclip"),  # xclip succeeds
+                    MagicMock(returncode=1, stdout=""),  # wl-paste fails
+                    MagicMock(returncode=0, stdout="via xclip"),  # xclip succeeds
                 ]
                 result = obj._read_clipboard()
         self.assertEqual(result, "via xclip")
 
-    def test_decodes_utf8_arabic(self):
-        """Correctly decodes multi-byte UTF-8 content such as Arabic text."""
+    def test_returns_arabic_text(self):
+        """Correctly returns multi-byte UTF-8 content such as Arabic text."""
         obj = _make_injector()
         arabic = "مرحبا بالعالم"
         with patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}):
@@ -141,7 +144,7 @@ class TestReadClipboard(unittest.TestCase):
                 return_value="/usr/bin/wl-paste",
             ):
                 with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=0, stdout=arabic.encode("utf-8"))
+                    mock_run.return_value = MagicMock(returncode=0, stdout=arabic)
                     result = obj._read_clipboard()
         self.assertEqual(result, arabic)
 
@@ -155,26 +158,22 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         obj.wayland_tool = "ydotool"
         copy_calls: list[str] = []
 
-        def fake_read() -> str:
-            return "original clipboard"
-
-        def fake_copy(t: str) -> bool:
-            copy_calls.append(t)
-            return True
-
-        with patch.object(obj, "_read_clipboard", side_effect=fake_read):
-            with patch.object(obj, "_copy_to_clipboard", side_effect=fake_copy):
+        with patch.object(obj, "_read_clipboard", return_value="original clipboard"):
+            with patch.object(
+                obj, "_copy_to_clipboard", side_effect=lambda t: copy_calls.append(t) or True
+            ):
                 with patch.object(
                     obj,
                     "_ydotool_ctrl_v_command",
                     return_value=["ydotool", "key", "ctrl+v"],
                 ):
-                    with patch(
-                        "vocalinux.text_injection.text_injector.subprocess.run",
-                        return_value=MagicMock(returncode=0),
-                    ):
-                        result = obj._inject_via_clipboard_paste("injected text")
-                        time.sleep(0.5)  # wait for the 300ms restore thread
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            result = obj._inject_via_clipboard_paste("injected text")
+                            time.sleep(0.5)  # wait for the 300ms restore thread
 
         self.assertTrue(result)
         self.assertEqual(copy_calls[0], "injected text")
@@ -201,12 +200,13 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
                     "_ydotool_ctrl_v_command",
                     return_value=["ydotool", "key", "ctrl+v"],
                 ):
-                    with patch(
-                        "vocalinux.text_injection.text_injector.subprocess.run",
-                        return_value=MagicMock(returncode=0),
-                    ):
-                        obj._inject_via_clipboard_paste("text")
-                        time.sleep(0.5)
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            obj._inject_via_clipboard_paste("text")
+                            time.sleep(0.5)
 
         self.assertEqual(call_order[0], "read", "read must happen before any copy")
         self.assertIn("copy:text", call_order)
@@ -228,16 +228,51 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
                     "_ydotool_ctrl_v_command",
                     return_value=["ydotool", "key", "ctrl+v"],
                 ):
-                    with patch(
-                        "vocalinux.text_injection.text_injector.subprocess.run",
-                        return_value=MagicMock(returncode=0),
-                    ):
-                        result = obj._inject_via_clipboard_paste("text")
-                        time.sleep(0.5)
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            result = obj._inject_via_clipboard_paste("text")
+                            time.sleep(0.5)
 
         self.assertTrue(result)
         # Only one call: the injection. No second call for restore.
         self.assertEqual(copy_calls, ["text"])
+
+    def test_no_restore_when_copy_to_clipboard_setting_enabled(self):
+        """No restore when the user has opted-in to keeping dictated text in clipboard.
+
+        When copy_to_clipboard=true, the user explicitly wants the dictated text
+        to stay in the clipboard after injection. Restoring the old content would
+        silently undo that preference.
+        """
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        copy_calls: list[str] = []
+
+        with patch.object(obj, "_read_clipboard", return_value="old clipboard"):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: copy_calls.append(t) or True,
+            ):
+                with patch.object(
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
+                ):
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=True):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            result = obj._inject_via_clipboard_paste("dictated text")
+                            time.sleep(0.5)
+
+        self.assertTrue(result)
+        # Only one copy call — the injection. The old content must NOT be restored.
+        self.assertEqual(copy_calls, ["dictated text"])
 
     def test_no_restore_when_ctrl_v_fails(self):
         """No restore thread is started when the Ctrl+V simulation itself fails."""
@@ -285,12 +320,13 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
                     "_ydotool_ctrl_v_command",
                     return_value=["ydotool", "key", "ctrl+v"],
                 ):
-                    with patch(
-                        "vocalinux.text_injection.text_injector.subprocess.run",
-                        return_value=MagicMock(returncode=0),
-                    ):
-                        with patch.object(threading.Thread, "start", capture_start):
-                            obj._inject_via_clipboard_paste("text")
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            with patch.object(threading.Thread, "start", capture_start):
+                                obj._inject_via_clipboard_paste("text")
 
         self.assertEqual(len(started), 1, "exactly one restore thread should start")
         self.assertTrue(started[0].daemon, "restore thread must be a daemon")
@@ -313,12 +349,13 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
                     "_ydotool_ctrl_v_command",
                     return_value=["ydotool", "key", "ctrl+v"],
                 ):
-                    with patch(
-                        "vocalinux.text_injection.text_injector.subprocess.run",
-                        return_value=MagicMock(returncode=0),
-                    ):
-                        obj._inject_via_clipboard_paste("مرحبا")
-                        time.sleep(0.5)
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            obj._inject_via_clipboard_paste("مرحبا")
+                            time.sleep(0.5)
 
         self.assertEqual(copy_calls[-1], arabic_previous)
 

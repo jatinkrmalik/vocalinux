@@ -1070,9 +1070,12 @@ class TextInjector:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     timeout=1.0,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 if result.returncode == 0:
-                    return result.stdout.decode("utf-8", errors="replace")
+                    return result.stdout
             except (subprocess.TimeoutExpired, OSError, UnicodeDecodeError):
                 continue
 
@@ -1125,7 +1128,9 @@ class TextInjector:
 
         # Restore the previous clipboard content after a short delay so the
         # Ctrl+V paste has time to land before the clipboard changes.
-        if previous_clipboard is not None:
+        # Skip restore when the user has opted in to keeping dictated text in
+        # the clipboard (copy_to_clipboard setting) — restoring would undo that.
+        if previous_clipboard is not None and not self._should_copy_to_clipboard():
 
             def _restore() -> None:
                 time.sleep(0.3)
