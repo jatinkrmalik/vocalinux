@@ -30,9 +30,6 @@ depends=(
   'python-pydub'
   'python-evdev'
   'python-xlib'
-  'xclip'
-  'wl-clipboard'
-  'wtype'
   'hicolor-icon-theme'
 )
 makedepends=(
@@ -47,6 +44,9 @@ optdepends=(
   'python-pywhispercpp-rocm: AMD GPU whisper.cpp backend'
   'python-onnxruntime: Silero VAD'
   'xdotool: X11 injection fallback'
+  'xclip: X11 clipboard tools (copy/paste injection fallbacks)'
+  'wl-clipboard: Wayland clipboard (wl-copy/wl-paste) injection fallbacks'
+  'wtype: Wayland keystroke injection fallback'
 )
 conflicts=('vocalinux-git')
 source=("${pkgname}-${_tag}.tar.gz::https://github.com/jatinkrmalik/vocalinux/archive/refs/tags/v${_tag}.tar.gz")
