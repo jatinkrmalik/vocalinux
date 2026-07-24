@@ -2,20 +2,20 @@
 name: Vocalinux
 description: Offline Linux voice dictation marketing site — workstation craft, not SaaS chrome
 colors:
-  ink: "#121916"
-  paper: "#f1f4f2"
-  paper-raised: "#ffffff"
-  surface-muted: "#e4ebe6"
-  primary: "#2f9a6a"
+  ink: "#09090b"
+  paper: "#ffffff"
+  paper-raised: "#f4f4f5"
+  surface-muted: "#f4f4f5"
+  primary: "#2f9e5f"
   primary-deep: "#1f6f4c"
-  primary-soft: "#d8f0e4"
-  terminal: "#0d1411"
-  terminal-fg: "#8fdfb5"
-  muted: "#4a5750"
-  border: "#c8d4cc"
-  dark-bg: "#0c1210"
-  dark-raised: "#151c19"
-  dark-muted: "#8a9a91"
+  primary-soft: "#ecfdf3"
+  terminal: "#0a0a0c"
+  terminal-fg: "#6ee7a8"
+  muted: "#52525b"
+  border: "#e4e4e7"
+  dark-bg: "#0c0c0e"
+  dark-raised: "#16161a"
+  dark-muted: "#a1a1aa"
 typography:
   display:
     fontFamily: "var(--font-display), ui-sans-serif, system-ui, sans-serif"
