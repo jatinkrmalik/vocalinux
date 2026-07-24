@@ -44,8 +44,8 @@ const workflows = [
       "Great when context-switching between keyboard and voice.",
     ],
     icon: ToggleLeft,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Push-to-talk for continuous coding (recommended)",
@@ -57,8 +57,8 @@ const workflows = [
       "Preferred by many developers for precise control.",
     ],
     icon: Mic,
-    iconColor: "text-emerald-500",
-    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Voice commands for code editing",
@@ -70,8 +70,8 @@ const workflows = [
       "Use keyboard for dense syntax-heavy sections.",
     ],
     icon: MessageSquare,
-    iconColor: "text-purple-500",
-    iconBg: "bg-purple-100 dark:bg-purple-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
 ];
 
@@ -135,11 +135,11 @@ export default function VoiceTypingVsCodePage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Code2 className="h-4 w-4" />
           VS Code Workflow
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           How to Dictate in VS Code on Linux (Voice Coding Workflow)
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -148,9 +148,9 @@ export default function VoiceTypingVsCodePage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-3 flex items-center gap-2 text-2xl font-bold">
-          <Lightbulb className="h-5 w-5 text-amber-500" />
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-3 flex items-center gap-2 font-display text-2xl font-semibold">
+          <Lightbulb className="h-5 w-5 text-primary" />
           Why use voice coding in VS Code?
         </h2>
         <p className="text-muted-foreground">
@@ -161,14 +161,14 @@ export default function VoiceTypingVsCodePage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Setup in 2 steps</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Setup in 2 steps</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {setupSteps.map((step) => {
             const Icon = step.icon;
             return (
               <article
                 key={step.title}
-                className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+                className="rounded-[12px] border border-border bg-background p-5"
               >
                 <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2">
                   <Icon className="h-4 w-4 text-primary" />
@@ -185,7 +185,7 @@ export default function VoiceTypingVsCodePage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Recommended workflows</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Recommended workflows</h2>
         <div className="space-y-4">
           {workflows.map((workflow) => {
             const Icon = workflow.icon;
@@ -193,7 +193,7 @@ export default function VoiceTypingVsCodePage() {
             return (
               <article
                 key={workflow.title}
-                className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+                className="rounded-[12px] border border-border bg-background p-5"
               >
                 <h3 className="mb-2 flex items-center gap-3 text-lg font-semibold">
                   <span className={`rounded-lg p-2 ${workflow.iconBg}`}>
@@ -216,8 +216,8 @@ export default function VoiceTypingVsCodePage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">VS Code-specific tips</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-muted p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">VS Code-specific tips</h2>
         <ul className="space-y-3 text-sm text-muted-foreground">
           {vscodeTips.map((tip) => (
             <li key={tip} className="flex items-start gap-2">
@@ -228,12 +228,12 @@ export default function VoiceTypingVsCodePage() {
         </ul>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-orange-200 bg-orange-50 p-6 dark:border-orange-800 dark:bg-orange-900/20">
-        <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-orange-800 dark:text-orange-300">
+      <section className="mb-12 rounded-[12px] border border-border bg-muted p-6 dark:border-border">
+        <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold text-muted-foreground">
           <Bug className="h-5 w-5" />
           Troubleshooting
         </h2>
-        <ul className="space-y-3 text-sm text-orange-700 dark:text-orange-300">
+        <ul className="space-y-3 text-sm text-muted-foreground">
           {troubleshootingTips.map((tip) => (
             <li key={tip} className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
@@ -254,15 +254,15 @@ export default function VoiceTypingVsCodePage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-primary/20 bg-primary/5 p-8">
-        <h2 className="mb-4 text-2xl font-bold">Ready to voice-type in VS Code?</h2>
+      <section className="rounded-[12px] border border-primary/20 bg-primary/5 p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Ready to voice-type in VS Code?</h2>
         <p className="mb-6 max-w-3xl text-muted-foreground">
           Install Vocalinux and use a hybrid keyboard + voice workflow that fits real-world Linux
           development.
         </p>
         <Link
           href="/install/"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
         >
           Install Vocalinux
           <ChevronRight className="h-4 w-4" />

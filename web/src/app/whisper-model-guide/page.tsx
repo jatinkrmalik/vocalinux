@@ -106,11 +106,11 @@ export default function WhisperModelGuidePage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Sparkles className="h-4 w-4" />
           Whisper Model Guide
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Whisper Model Sizes Explained: Tiny, Base, Small, Medium, Large for Linux
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -120,10 +120,10 @@ export default function WhisperModelGuidePage() {
         </p>
       </section>
 
-      <section className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+      <section className="overflow-x-auto rounded-[12px] border border-border bg-background">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-700">
+            <tr className="border-b border-border">
               <th className="px-4 py-3 text-sm font-semibold">Model</th>
               <th className="px-4 py-3 text-sm font-semibold">Size</th>
               <th className="px-4 py-3 text-sm font-semibold">RAM (CPU)</th>
@@ -137,7 +137,7 @@ export default function WhisperModelGuidePage() {
             {modelComparison.map((row) => (
               <tr
                 key={row.model}
-                className="border-b border-zinc-100 align-top dark:border-zinc-700/70"
+                className="border-b border-border align-top"
               >
                 <td className="px-4 py-4 font-semibold">{row.model}</td>
                 <td className="px-4 py-4 text-sm text-muted-foreground">{row.size}</td>
@@ -153,71 +153,71 @@ export default function WhisperModelGuidePage() {
       </section>
 
       <section className="mt-12">
-        <h2 className="mb-6 text-2xl font-bold">Which model should you choose?</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Which model should you choose?</h2>
         <div className="grid gap-6 md:grid-cols-2">
-          <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+          <article className="rounded-[12px] border border-border bg-background p-6">
             <h3 className="mb-3 inline-flex items-center gap-2 text-xl font-semibold">
-              <Zap className="h-5 w-5 text-amber-500" />
+              <Zap className="h-5 w-5 text-primary" />
               Tiny or Base
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Best if you care about low latency over absolute transcription quality.
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Great for older CPUs, battery-conscious laptops, and quick chat replies.
               </li>
             </ul>
           </article>
 
-          <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+          <article className="rounded-[12px] border border-border bg-background p-6">
             <h3 className="mb-3 inline-flex items-center gap-2 text-xl font-semibold">
-              <Gauge className="h-5 w-5 text-blue-500" />
+              <Gauge className="h-5 w-5 text-primary" />
               Small (recommended default)
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Best balance for most Linux dictation workflows.
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Better punctuation and proper nouns while staying near real-time.
               </li>
             </ul>
           </article>
 
-          <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+          <article className="rounded-[12px] border border-border bg-background p-6">
             <h3 className="mb-3 inline-flex items-center gap-2 text-xl font-semibold">
-              <Cpu className="h-5 w-5 text-violet-500" />
+              <Cpu className="h-5 w-5 text-primary" />
               Medium
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Use when accuracy is more important than response time.
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Ideal for technical dictation, multilingual speech, and noisy environments.
               </li>
             </ul>
           </article>
 
-          <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+          <article className="rounded-[12px] border border-border bg-background p-6">
             <h3 className="mb-3 inline-flex items-center gap-2 text-xl font-semibold">
-              <Rocket className="h-5 w-5 text-rose-500" />
+              <Rocket className="h-5 w-5 text-primary" />
               Large
             </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Choose only if you have strong GPU hardware and want maximum quality.
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Best for polished long-form writing where errors are costly.
               </li>
             </ul>
@@ -226,7 +226,7 @@ export default function WhisperModelGuidePage() {
       </section>
 
       <section className="mt-12 grid gap-6 md:grid-cols-3">
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-xl font-semibold">Need more speed?</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Enable GPU acceleration to run larger models faster, especially medium and large.
@@ -236,7 +236,7 @@ export default function WhisperModelGuidePage() {
           </Link>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-xl font-semibold">Comparing engines?</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             See whisper.cpp vs Whisper vs VOSK before deciding your full dictation stack.
@@ -246,7 +246,7 @@ export default function WhisperModelGuidePage() {
           </Link>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-xl font-semibold">Ready to install?</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Use the install guide to get Vocalinux running with the model size that fits your hardware.
@@ -257,8 +257,8 @@ export default function WhisperModelGuidePage() {
         </article>
       </section>
 
-      <section className="mt-12 rounded-2xl border border-primary/30 bg-primary/10 p-8">
-        <h2 className="mb-4 text-2xl font-bold">Install Vocalinux and start dictating today</h2>
+      <section className="mt-12 rounded-[12px] border border-primary/30 bg-primary/10 p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Install Vocalinux and start dictating today</h2>
         <p className="mb-6 max-w-3xl text-muted-foreground">
           Start with <strong>small</strong> if unsure, then move up or down after a day of use.
           Vocalinux makes model changes simple, so you can tune for your exact speed/accuracy
@@ -266,7 +266,7 @@ export default function WhisperModelGuidePage() {
         </p>
         <Link
           href="/install/"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
         >
           Install Vocalinux
           <ArrowRight className="h-4 w-4" />

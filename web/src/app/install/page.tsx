@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Metadata } from "next";
-import { ChevronRight, Cpu, Laptop, Sparkles, Terminal } from "lucide-react";
+import { ChevronRight, Cpu, Laptop, Terminal } from "lucide-react";
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { buildPageMetadata } from "@/lib/seo";
 
@@ -14,17 +14,13 @@ const distroGuides = [
     description:
       "Install offline voice dictation on Ubuntu 22.04+ with GNOME, KDE, X11, or Wayland.",
     icon: Laptop,
-    accent: "from-orange-500/15 to-amber-500/10",
-    iconColor: "text-orange-500",
   },
   {
     name: "Fedora",
     href: "/install/fedora/",
     description:
       "Set up speech-to-text on Fedora Workstation and Silverblue with distro-specific notes.",
-    icon: Sparkles,
-    accent: "from-blue-500/15 to-cyan-500/10",
-    iconColor: "text-blue-500",
+    icon: Terminal,
   },
   {
     name: "Arch Linux",
@@ -32,8 +28,6 @@ const distroGuides = [
     description:
       "Install Vocalinux on Arch, Manjaro, and EndeavourOS with package prerequisites and tips.",
     icon: Cpu,
-    accent: "from-emerald-500/15 to-teal-500/10",
-    iconColor: "text-emerald-500",
   },
 ];
 
@@ -54,71 +48,75 @@ export const metadata: Metadata = buildPageMetadata({
 export default function InstallGuidesPage() {
   return (
     <SeoSubpageShell>
-      <section className="text-center">
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-          <Sparkles className="h-4 w-4" />
-          Linux Installation Guides
-        </p>
-        <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          Install Voice Dictation on Linux
-        </h1>
-        <p className="mx-auto mb-8 max-w-3xl text-lg text-muted-foreground">
-          Pick your distro guide and follow a proven setup flow for offline speech-to-text on Linux.
-          Every guide is optimized for real desktop usage, not just terminal demos.
+      <section>
+        <p className="subpage-kicker">Linux installation</p>
+        <h1>Install Voice Dictation on Linux</h1>
+        <p className="subpage-lede">
+          Pick your distro guide and follow a proven setup flow for offline
+          speech-to-text on Linux. Every guide is written for real desktop usage.
         </p>
 
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-950 p-6 text-left shadow-lg dark:border-zinc-700">
-          <p className="mb-3 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-            <Terminal className="h-4 w-4 text-green-400" />
-            Recommended interactive install
+        <div className="subpage-terminal mt-8 p-5 sm:p-6">
+          <p className="mb-3 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-zinc-500">
+            <Terminal className="h-3.5 w-3.5 text-[color:var(--terminal-fg)]" />
+            install.sh --interactive
           </p>
-          <code className="block overflow-x-auto whitespace-pre-wrap break-all text-sm text-green-400 sm:text-base">
+          <code className="block overflow-x-auto break-all text-sm sm:text-base">
             {installCommand}
           </code>
         </div>
       </section>
 
-      <section className="mt-14 grid gap-6 md:grid-cols-3">
+      <section className="mt-12 grid gap-4 md:grid-cols-3">
         {distroGuides.map((guide) => {
           const Icon = guide.icon;
           return (
             <Link
               key={guide.href}
               href={guide.href}
-              className="group rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+              className="subpage-card group p-5"
             >
-              <div
-                className={`mb-4 inline-flex rounded-xl bg-gradient-to-br p-3 ${guide.accent}`}
-              >
-                <Icon className={`h-6 w-6 ${guide.iconColor}`} />
+              <div className="mb-3 inline-flex rounded-[10px] bg-primary/10 p-2.5">
+                <Icon className="h-5 w-5 text-primary" />
               </div>
-              <h2 className="mb-3 text-2xl font-semibold">{guide.name}</h2>
-              <p className="mb-5 text-sm text-muted-foreground">{guide.description}</p>
-              <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary group-hover:underline">
+              <h2 className="mb-2 text-xl font-semibold">{guide.name}</h2>
+              <p className="mb-4 text-sm text-muted-foreground">
+                {guide.description}
+              </p>
+              <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
                 Read {guide.name} guide
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </span>
             </Link>
           );
         })}
       </section>
 
-      <section className="mt-16 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">After Installation</h2>
+      <section className="subpage-panel mt-12 p-6 sm:p-8">
+        <h2 className="mb-4">After installation</h2>
         <ul className="space-y-3 text-muted-foreground">
           <li>
-            Launch with
-            <code className="ml-1.5 rounded bg-zinc-200 px-1.5 py-0.5 dark:bg-zinc-800">vocalinux</code>.
+            Launch with{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm text-foreground">
+              vocalinux
+            </code>
+            .
           </li>
-          <li>Use toggle mode (double-tap Ctrl) or push-to-talk mode to control dictation in any text field.</li>
           <li>
-            Choose whisper.cpp for speed, Whisper for maximum model compatibility, or VOSK for
-            low-RAM systems.
+            Use toggle mode (double-tap Ctrl) or push-to-talk to control
+            dictation in any text field.
+          </li>
+          <li>
+            Choose whisper.cpp for speed, Whisper for maximum model
+            compatibility, or VOSK for low-RAM systems.
           </li>
         </ul>
         <p className="mt-6 text-sm text-muted-foreground">
-          Need help choosing an engine? See the
-          <Link href="/compare/" className="ml-1 font-semibold text-primary hover:underline">
+          Need help choosing an engine? See the{" "}
+          <Link
+            href="/compare/"
+            className="font-semibold text-primary hover:underline"
+          >
             speech engine comparison
           </Link>
           .

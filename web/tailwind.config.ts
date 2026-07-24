@@ -10,8 +10,19 @@ export default {
 		extend: {
 			fontFamily: {
 				sans: [
-					'var(--font-geist-sans)',
+					'var(--font-body)',
 					...defaultTheme.fontFamily.sans
+				],
+				display: [
+					'var(--font-display)',
+					...defaultTheme.fontFamily.sans
+				],
+				mono: [
+					'ui-monospace',
+					'SFMono-Regular',
+					'Menlo',
+					'Consolas',
+					...defaultTheme.fontFamily.mono
 				]
 			},
 			borderRadius: {

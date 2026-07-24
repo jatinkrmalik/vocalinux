@@ -1,6 +1,6 @@
 import "@/styles/globals.css";
 import React from "react";
-import { GeistSans } from "geist/font/sans";
+import { Bricolage_Grotesque, Source_Sans_3 } from "next/font/google";
 import { type Metadata } from "next";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -13,13 +13,25 @@ import {
   TWITTER_HANDLE,
 } from "@/lib/seo";
 
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const body = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+});
+
 export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#18181b" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0c0e" },
   ],
 };
 
@@ -176,7 +188,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} scroll-smooth`}
+      className={`${display.variable} ${body.variable} scroll-smooth`}
       suppressHydrationWarning
     >
       <head>

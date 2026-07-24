@@ -20,16 +20,16 @@ const writingModes = [
     description:
       "Use toggle mode for long-form drafting. Start dictation, speak continuously, and stay in creative flow while writing chapters, essays, and long notes.",
     icon: ToggleLeft,
-    iconColor: "text-violet-500",
-    iconBg: "bg-violet-100 dark:bg-violet-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Push-to-talk for structured writing",
     description:
       "Use push-to-talk when precision matters: outlines, headlines, bullet lists, or source notes. Hold to speak, release to review and edit.",
     icon: Mic,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
 ];
 
@@ -115,11 +115,11 @@ export default function WritersPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <PenLine className="h-4 w-4" />
           For Writers
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Voice Dictation for Writers on Linux: Dictate Novels, Articles & Notes
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -128,12 +128,12 @@ export default function WritersPage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">Why Writers Should Use Voice Dictation</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Why Writers Should Use Voice Dictation</h2>
         <div className="grid gap-6 md:grid-cols-2">
           <div>
             <h3 className="mb-3 inline-flex items-center gap-2 font-semibold">
-              <Heart className="h-5 w-5 text-rose-500" /> RSI prevention and comfort
+              <Heart className="h-5 w-5 text-primary" /> RSI prevention and comfort
             </h3>
             <p className="text-sm text-muted-foreground">
               Long writing sessions can strain wrists and fingers. Dictating reduces repetitive
@@ -142,7 +142,7 @@ export default function WritersPage() {
           </div>
           <div>
             <h3 className="mb-3 inline-flex items-center gap-2 font-semibold">
-              <FileText className="h-5 w-5 text-emerald-500" /> More words, less friction
+              <FileText className="h-5 w-5 text-primary" /> More words, less friction
             </h3>
             <p className="text-sm text-muted-foreground">
               Most people speak faster than they type. Voice dictation helps produce first drafts,
@@ -153,14 +153,14 @@ export default function WritersPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Recommended Workflow for Writers</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Recommended Workflow for Writers</h2>
         <div className="grid gap-6 md:grid-cols-2">
           {writingModes.map((mode) => {
             const Icon = mode.icon;
             return (
               <article
                 key={mode.title}
-                className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+                className="rounded-[12px] border border-border bg-background p-6"
               >
                 <div className={`mb-3 inline-flex rounded-lg p-2.5 ${mode.iconBg}`}>
                   <Icon className={`h-5 w-5 ${mode.iconColor}`} />
@@ -173,8 +173,8 @@ export default function WritersPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">Voice Commands Useful for Writing</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Voice Commands Useful for Writing</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           These commands help maintain writing rhythm while dictating punctuation and formatting.
         </p>
@@ -182,7 +182,7 @@ export default function WritersPage() {
           {writingCommands.map((cmd) => (
             <kbd
               key={cmd}
-              className="rounded-lg border border-zinc-300 bg-zinc-100 px-2 py-1 text-xs font-mono dark:border-zinc-600 dark:bg-zinc-900"
+              className="rounded-lg border border-border bg-muted px-2 py-1 text-xs font-mono"
             >
               "{cmd}"
             </kbd>
@@ -191,12 +191,12 @@ export default function WritersPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">App Integrations for Writing Workflows</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">App Integrations for Writing Workflows</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {integrations.map((integration) => (
             <article
               key={integration.app}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <h3 className="mb-2 font-semibold">{integration.app}</h3>
               <p className="text-sm text-muted-foreground">{integration.description}</p>
@@ -208,50 +208,50 @@ export default function WritersPage() {
       <section className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href="/languages/"
-          className="rounded-xl border border-zinc-200 bg-white p-5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          className="rounded-[12px] border border-border bg-background p-5 transition-colors hover:bg-muted hover:bg-muted"
         >
-          <Globe className="mb-3 h-6 w-6 text-blue-500" />
+          <Globe className="mb-3 h-6 w-6 text-primary" />
           <h3 className="mb-1 font-semibold">Multilingual Writing</h3>
           <p className="text-sm text-muted-foreground">See supported languages for dictation.</p>
         </Link>
 
         <Link
           href="/rsi-prevention/"
-          className="rounded-xl border border-zinc-200 bg-white p-5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          className="rounded-[12px] border border-border bg-background p-5 transition-colors hover:bg-muted hover:bg-muted"
         >
-          <Heart className="mb-3 h-6 w-6 text-rose-500" />
+          <Heart className="mb-3 h-6 w-6 text-primary" />
           <h3 className="mb-1 font-semibold">Health Benefits</h3>
           <p className="text-sm text-muted-foreground">Learn how dictation helps prevent RSI.</p>
         </Link>
 
         <Link
           href="/offline/"
-          className="rounded-xl border border-zinc-200 bg-white p-5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          className="rounded-[12px] border border-border bg-background p-5 transition-colors hover:bg-muted hover:bg-muted"
         >
-          <Lock className="mb-3 h-6 w-6 text-emerald-500" />
+          <Lock className="mb-3 h-6 w-6 text-primary" />
           <h3 className="mb-1 font-semibold">Privacy Benefits</h3>
           <p className="text-sm text-muted-foreground">Keep drafts private with offline dictation.</p>
         </Link>
 
         <Link
           href="/use-cases/"
-          className="rounded-xl border border-zinc-200 bg-white p-5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          className="rounded-[12px] border border-border bg-background p-5 transition-colors hover:bg-muted hover:bg-muted"
         >
-          <BookOpen className="mb-3 h-6 w-6 text-violet-500" />
+          <BookOpen className="mb-3 h-6 w-6 text-primary" />
           <h3 className="mb-1 font-semibold">More Use Cases</h3>
           <p className="text-sm text-muted-foreground">Explore all workflows powered by Vocalinux.</p>
         </Link>
       </section>
 
-      <section className="rounded-2xl border border-primary/30 bg-primary/10 p-8">
-        <h2 className="mb-3 text-2xl font-bold">Start Writing with Your Voice</h2>
+      <section className="rounded-[12px] border border-primary/30 bg-primary/10 p-8">
+        <h2 className="mb-3 font-display text-2xl font-semibold">Start Writing with Your Voice</h2>
         <p className="mb-6 max-w-3xl text-muted-foreground">
           Install Vocalinux and start dictating novels, blog posts, academic notes, and newsroom
           drafts directly on Linux - without cloud lock-in.
         </p>
         <Link
           href="/install/"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
         >
           Install Vocalinux
           <ChevronRight className="h-4 w-4" />

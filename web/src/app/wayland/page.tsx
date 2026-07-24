@@ -158,7 +158,7 @@ export default function WaylandPage() {
           <Monitor className="h-4 w-4" />
           Wayland Support
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Voice Dictation on Wayland
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -173,7 +173,7 @@ export default function WaylandPage() {
           return (
             <div
               key={feature.title}
-              className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
               <Icon className="mb-3 h-8 w-8 text-primary" />
               <h3 className="mb-2 font-semibold">{feature.title}</h3>
@@ -185,14 +185,14 @@ export default function WaylandPage() {
         })}
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-6 text-2xl font-bold">
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-6 font-display text-2xl font-semibold">
           Supported Wayland Compositors
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+              <tr className="border-b border-border">
                 <th className="pb-3 pr-4 text-sm font-semibold">Compositor</th>
                 <th className="pb-3 pr-4 text-sm font-semibold">Method</th>
                 <th className="pb-3 pr-4 text-sm font-semibold">Status</th>
@@ -203,14 +203,14 @@ export default function WaylandPage() {
               {compositorSupport.map((item) => (
                 <tr
                   key={item.name}
-                  className="border-b border-zinc-100 dark:border-zinc-700/70"
+                  className="border-b border-border"
                 >
                   <td className="py-3 pr-4 font-medium">{item.name}</td>
                   <td className="py-3 pr-4 text-muted-foreground">
                     {item.method}
                   </td>
                   <td className="py-3 pr-4">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary dark:text-[color:var(--terminal-fg)]">
                       <CheckCircle2 className="h-3 w-3" />
                       {item.status}
                     </span>
@@ -224,15 +224,15 @@ export default function WaylandPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Quick Setup Guide</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Quick Setup Guide</h2>
         <div className="space-y-4">
           {setupSteps.map((step) => (
             <div
               key={step.step}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <div className="mb-2 flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                   {step.step}
                 </span>
                 <h3 className="font-semibold">{step.title}</h3>
@@ -240,8 +240,8 @@ export default function WaylandPage() {
               <p className="mb-3 ml-10 text-sm text-muted-foreground">
                 {step.description}
               </p>
-              <div className="ml-10 rounded-lg bg-zinc-950 p-3">
-                <code className="text-sm text-green-400">{step.command}</code>
+              <div className="ml-10 rounded-lg bg-[color:var(--terminal)] p-3">
+                <code className="text-sm text-[color:var(--terminal-fg)]">{step.command}</code>
               </div>
             </div>
           ))}
@@ -252,16 +252,16 @@ export default function WaylandPage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900/20">
-        <h2 className="mb-3 text-xl font-bold text-blue-800 dark:text-blue-300">
+      <section className="mb-12 rounded-[12px] border border-border bg-primary/5 p-6">
+        <h2 className="mb-3 text-xl font-semibold text-foreground">
           How Wayland Text Injection Works
         </h2>
-        <p className="mb-4 text-sm text-blue-700 dark:text-blue-400">
+        <p className="mb-4 text-sm text-muted-foreground">
           Unlike X11 where applications can simulate keyboard input globally,
           Wayland&apos;s security model requires a different approach. Vocalinux
           uses:
         </p>
-        <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-400">
+        <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <strong>IBus Engine</strong> - A custom IBus input method that
@@ -278,20 +278,20 @@ export default function WaylandPage() {
             <strong>X11 Fallback</strong> - xdotool for XWayland applications
           </li>
         </ul>
-        <p className="mt-4 text-sm text-blue-700 dark:text-blue-400">
+        <p className="mt-4 text-sm text-muted-foreground">
           v0.9.0+ includes clipboard fallback for Wayland compositors without
           virtual keyboard support. Copy-to-clipboard is now disabled by default
           for privacy - enable in Settings if needed.
         </p>
-        <p className="mt-3 text-sm text-blue-700 dark:text-blue-400">
+        <p className="mt-3 text-sm text-muted-foreground">
           v0.10.2+ also improves IBus detection without legacy environment
           variables and handles non-ASCII ydotool paths with clipboard paste
           fallback.
         </p>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Start Dictating on Wayland</h2>
+      <section className="rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Start Dictating on Wayland</h2>
         <p className="mb-6 text-muted-foreground">
           Vocalinux automatically detects your display server and configures the
           appropriate text injection method. Just install and run.
@@ -299,20 +299,20 @@ export default function WaylandPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="hover:bg-primary/90 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/troubleshooting/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             Troubleshooting Guide
           </Link>
           <Link
             href="/desktop-reliability/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             Reliability Improvements
           </Link>

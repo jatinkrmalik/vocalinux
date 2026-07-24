@@ -62,12 +62,16 @@ describe("Screenshots page and assets", () => {
     }
   });
 
-  it("does not embed a full homepage gallery (link-only on home)", () => {
-    // Homepage should link to the gallery, not list every settings shot.
+  it("links to the gallery and only embeds a few product shots on home", () => {
+    // Craft home shows a handful of real app shots, then /screenshots/ for the rest.
     expect(homeSource).toContain('href: "/screenshots/"');
     expect(homeSource).toContain('href="/screenshots/"');
-    expect(homeSource).not.toContain("/screenshots/settings-speech-engine.png");
+    expect(homeSource).toContain("/screenshots/00-transcription.png");
     expect(homeSource).not.toContain("/screenshots/05-about-view.png");
+    expect(homeSource).not.toContain("/screenshots/settings-recognition.png");
+    expect(homeSource).not.toContain("/screenshots/settings-audio.png");
+    expect(homeSource).not.toContain("/screenshots/settings-shortcuts.png");
+    expect(homeSource).not.toContain("/screenshots/settings-advanced.png");
   });
 
   it("exposes Screenshots in the shared subpage shell nav", () => {
