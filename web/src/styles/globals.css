@@ -165,33 +165,76 @@
     @apply relative overflow-hidden rounded-[12px] border border-border bg-card shadow-[0_24px_60px_-28px_rgba(0,0,0,0.35)];
   }
 
-  /* Shared craft language for SEO / child pages */
+  /* Shared craft language for SEO / child pages (plain CSS: @apply rejects opacity modifiers) */
   .subpage-content {
-    @apply min-w-0;
+    min-width: 0;
   }
 
   .subpage-content h1 {
-    @apply font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl;
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 2.25rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    color: var(--foreground);
+  }
+
+  @media (min-width: 640px) {
+    .subpage-content h1 {
+      font-size: 3rem;
+    }
   }
 
   .subpage-content h2 {
-    @apply font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl;
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: var(--foreground);
+  }
+
+  @media (min-width: 640px) {
+    .subpage-content h2 {
+      font-size: 1.875rem;
+    }
   }
 
   .subpage-content h3 {
-    @apply text-lg font-semibold tracking-tight text-foreground;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
   }
 
   .subpage-kicker {
-    @apply mb-4 font-mono text-[12px] font-medium uppercase tracking-[0.16em] text-primary;
+    margin-bottom: 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--primary);
   }
 
   .subpage-lede {
-    @apply mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg;
+    margin-top: 1rem;
+    max-width: 42rem;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: var(--muted-foreground);
+  }
+
+  @media (min-width: 640px) {
+    .subpage-lede {
+      font-size: 1.125rem;
+    }
   }
 
   .subpage-card {
-    @apply rounded-[12px] border border-border bg-background transition-colors;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--background);
+    transition: border-color 0.15s ease;
   }
 
   .subpage-card:hover {
@@ -199,19 +242,34 @@
   }
 
   .subpage-panel {
-    @apply rounded-[12px] border border-border bg-card/40;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: color-mix(in oklab, var(--card) 40%, transparent);
   }
 
   .subpage-terminal {
-    @apply overflow-hidden rounded-[12px] border border-zinc-800 bg-[color:var(--terminal)] shadow-[0_24px_60px_-28px_rgba(0,0,0,0.55)];
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: var(--terminal);
+    box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.55);
   }
 
   .subpage-terminal code,
   .subpage-terminal pre {
-    @apply font-mono text-sm text-[color:var(--terminal-fg)] sm:text-[0.9375rem];
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.875rem;
+    color: var(--terminal-fg);
     overflow-wrap: anywhere;
     word-break: break-word;
     white-space: pre-wrap;
+  }
+
+  @media (min-width: 640px) {
+    .subpage-terminal code,
+    .subpage-terminal pre {
+      font-size: 0.9375rem;
+    }
   }
 }
 
