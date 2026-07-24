@@ -33,7 +33,13 @@ jobs:
             portaudio19-dev \
             python3-dev \
             libgirepository1.0-dev \
-            pkg-config
+            libgirepository-2.0-dev \
+            pkg-config \
+            libcairo2-dev \
+            gobject-introspection \
+            gir1.2-gtk-3.0 \
+            gir1.2-appindicator3-0.1 \
+            gir1.2-ibus-1.0
 
       - name: Install build dependencies
         run: |
@@ -79,6 +85,11 @@ jobs:
             fi
           done
           ls -la dist/
+
+      - name: Build AppImage
+        run: |
+          bash packaging/appimage/build.sh dist/*.whl "${{ steps.version.outputs.version }}" dist
+          ls -la dist/*.AppImage
 
       - name: Cleanup old nightly releases
         env:
@@ -166,6 +177,14 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
           \`\`\`
 
+          #### AppImage (no install, no root)
+          Download \`Vocalinux-${{ steps.version.outputs.version }}-x86_64.AppImage\` below:
+          \`\`\`bash
+          chmod +x Vocalinux-${{ steps.version.outputs.version }}-x86_64.AppImage
+          ./Vocalinux-${{ steps.version.outputs.version }}-x86_64.AppImage
+          \`\`\`
+          Requires \`xdotool\`/\`wtype\`/\`ydotool\` on the host for text injection, same as the PyPI install path.
+
           ---
 
           ### Build Information
@@ -184,6 +203,7 @@ jobs:
 
           - **\`vocalinux-${{ steps.version.outputs.version }}-py3-none-any.whl\`** - Python wheel (recommended)
           - **\`vocalinux-${{ steps.version.outputs.version }}.tar.gz\`** - Source distribution
+          - **\`Vocalinux-${{ steps.version.outputs.version }}-x86_64.AppImage\`** - Self-contained, no install
 
           ---
 
