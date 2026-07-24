@@ -70,6 +70,12 @@ vocalinux --debug
 
 ### Website (Next.js)
 
+Website-specific agent notes, product truth, and design system live under `web/`:
+
+- `web/AGENTS.md` — commands and layout map
+- `web/PRODUCT.md` — product claims / audience for the site
+- `web/DESIGN.md` — visual system for marketing UI
+
 ```bash
 cd web
 npm install
