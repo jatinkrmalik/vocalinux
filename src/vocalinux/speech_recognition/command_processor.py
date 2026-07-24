@@ -327,6 +327,8 @@ def capitalize_sentences(text: str) -> str:
     result = text[0].upper() + text[1:]
 
     # Capitalize after sentence-ending punctuation + whitespace
-    result = re.sub(r"([.!?])(\s+)([a-z])", lambda m: m.group(1) + m.group(2) + m.group(3).upper(), result)
+    result = re.sub(
+        r"([.!?])(\s+)([a-z])", lambda m: m.group(1) + m.group(2) + m.group(3).upper(), result
+    )
 
     return result
