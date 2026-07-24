@@ -360,14 +360,14 @@ export function LiveDemo() {
     }
 
     return (
-        <div className="overflow-hidden rounded-[10px] border border-zinc-800 bg-[color:var(--terminal)]">
+        <div className="min-w-0 max-w-full overflow-hidden rounded-[10px] border border-zinc-800 bg-[color:var(--terminal)]">
             {/* Header */}
-            <div className="px-4 sm:px-6 py-3 bg-zinc-900/80 border-b border-zinc-800 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <span className="text-sm text-zinc-400 font-medium">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/80 px-4 py-3 sm:px-6">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+                    <span className="text-sm font-medium text-zinc-400">
                         Browser speech preview
                     </span>
-                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                    <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-primary">
                         SpeechRecognition API
                     </span>
                     {(() => {

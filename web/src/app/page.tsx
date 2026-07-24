@@ -308,8 +308,8 @@ function TerminalBlock({
         </div>
         <CopyButton text={command} />
       </div>
-      <div className="p-4 sm:p-5">
-        <pre className="whitespace-pre-wrap text-left font-mono text-sm text-[color:var(--terminal-fg)] sm:text-[0.9375rem]">
+      <div className="min-w-0 max-w-full overflow-x-auto p-4 sm:p-5">
+        <pre className="max-w-full whitespace-pre-wrap break-all text-left font-mono text-[0.8125rem] leading-relaxed text-[color:var(--terminal-fg)] sm:text-sm">
           <span className="select-none text-zinc-500">$ </span>
           {displayCommand}
         </pre>
@@ -352,7 +352,7 @@ export default function HomePage() {
   } = installCommands;
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen max-w-[100vw] overflow-x-clip bg-background text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }}
@@ -467,23 +467,23 @@ export default function HomePage() {
 
       {/* Hero: asymmetric offer + install proof */}
       <section className="px-4 pb-16 pt-28 sm:px-6 sm:pb-20 sm:pt-32">
-        <div className="mx-auto grid max-w-6xl items-start gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-14">
-          <div>
+        <div className="mx-auto grid max-w-6xl min-w-0 items-start gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-14">
+          <div className="min-w-0 max-w-full">
             <p className="mb-4 text-sm font-medium text-primary">
               Offline voice typing for Linux
             </p>
-            <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
+            <h1 className="font-display text-[1.875rem] font-semibold leading-tight tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
               Speak. It types into the app you are using.
             </h1>
-            <p className="mt-5 max-w-xl text-lg text-muted-foreground sm:text-xl">
+            <p className="mt-5 max-w-xl text-base text-muted-foreground sm:text-lg md:text-xl">
               Free, open-source dictation that runs on your machine with
               whisper.cpp, Whisper, or VOSK. Toggle mode or push-to-talk. X11 and
               Wayland.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <a href="#install" className="btn-primary">
-                <Download className="h-5 w-5" />
+            <div className="mt-8 flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <a href="#install" className="btn-primary w-full justify-center sm:w-auto">
+                <Download className="h-5 w-5 shrink-0" />
                 Install on Linux
               </a>
               <a
@@ -491,38 +491,38 @@ export default function HomePage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="View Vocalinux source code on GitHub (opens in a new tab)"
-                className="btn-ink"
+                className="btn-ink w-full justify-center sm:w-auto"
               >
-                <Github className="h-5 w-5" />
+                <Github className="h-5 w-5 shrink-0" />
                 Source on GitHub
               </a>
-              <a href="#ecosystem" className="btn-ghost">
-                <Laptop className="h-5 w-5" />
+              <a href="#ecosystem" className="btn-ghost w-full justify-center sm:w-auto">
+                <Laptop className="h-5 w-5 shrink-0" />
                 macOS / Windows
               </a>
             </div>
 
-            <ul className="mt-10 grid max-w-lg grid-cols-2 gap-x-6 gap-y-3 text-sm text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" aria-hidden />
-                Local engines offline
+            <ul className="mt-10 grid max-w-lg grid-cols-1 gap-y-3 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-6">
+              <li className="flex min-w-0 items-center gap-2">
+                <Shield className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0">Local engines offline</span>
               </li>
-              <li className="flex items-center gap-2">
-                <Lock className="h-4 w-4 text-primary" aria-hidden />
-                No usage telemetry
+              <li className="flex min-w-0 items-center gap-2">
+                <Lock className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0">No usage telemetry</span>
               </li>
-              <li className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-primary" aria-hidden />
-                On-device models
+              <li className="flex min-w-0 items-center gap-2">
+                <Activity className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0">On-device models</span>
               </li>
-              <li className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-primary" aria-hidden />
-                X11 and Wayland
+              <li className="flex min-w-0 items-center gap-2">
+                <Globe className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0">X11 and Wayland</span>
               </li>
             </ul>
           </div>
 
-          <div className="lg:pt-2">
+          <div className="min-w-0 max-w-full lg:pt-2">
             <TerminalBlock
               command={interactiveInstallCommand}
               displayCommand={interactiveInstallDisplayCommand}
@@ -611,18 +611,18 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="rounded-[10px] border border-border bg-card px-5 sm:px-6">
+          <div className="min-w-0 overflow-hidden rounded-[10px] border border-border bg-card px-4 sm:px-6">
             {features.map((feature) => (
               <Link
                 key={feature.href}
                 href={feature.href}
-                className="feature-row group items-start transition-colors hover:bg-secondary/40 sm:items-center"
+                className="feature-row group min-w-0 items-start transition-colors hover:bg-secondary/40 sm:items-center"
               >
                 <feature.icon
                   className="mt-0.5 h-5 w-5 shrink-0 text-primary sm:mt-0"
                   aria-hidden
                 />
-                <div className="min-w-0 flex-1 sm:grid sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-6">
+                <div className="min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:gap-6">
                   <h3 className="font-semibold text-foreground group-hover:text-primary">
                     {feature.title}
                   </h3>
@@ -630,7 +630,7 @@ export default function HomePage() {
                     {feature.description}
                   </p>
                 </div>
-                <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 sm:mt-0" />
+                <ChevronRight className="mt-0.5 hidden h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 sm:mt-0 sm:block" />
               </Link>
             ))}
           </div>
@@ -779,7 +779,7 @@ export default function HomePage() {
             <p className="mb-3 text-sm text-muted-foreground">
               Launch from a terminal or your application menu:
             </p>
-            <code className="block rounded-md bg-[color:var(--terminal)] px-4 py-2 font-mono text-sm text-[color:var(--terminal-fg)]">
+            <code className="block max-w-full overflow-x-auto rounded-md bg-[color:var(--terminal)] px-4 py-2 font-mono text-sm text-[color:var(--terminal-fg)]">
               vocalinux
             </code>
           </div>

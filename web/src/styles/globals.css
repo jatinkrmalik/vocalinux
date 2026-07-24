@@ -99,6 +99,12 @@
     text-rendering: optimizeLegibility;
   }
 
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
@@ -119,19 +125,25 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground transition-colors hover:bg-[color:var(--primary-deep,#1f6f4c)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[color:var(--primary-deep,#1f6f4c)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6 sm:py-3.5 sm:text-base;
   }
 
   .btn-ink {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-foreground px-6 py-3.5 text-base font-semibold text-background transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6 sm:py-3.5 sm:text-base;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-6 py-3.5 text-base font-semibold text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6 sm:py-3.5 sm:text-base;
   }
 
   .terminal-panel {
-    @apply overflow-hidden rounded-[10px] border border-zinc-800 bg-[color:var(--terminal)] shadow-[0_12px_32px_rgba(12,18,16,0.18)];
+    @apply w-full max-w-full min-w-0 overflow-hidden rounded-[10px] border border-zinc-800 bg-[color:var(--terminal)] shadow-[0_12px_32px_rgba(12,18,16,0.18)];
+  }
+
+  .terminal-panel pre {
+    @apply max-w-full whitespace-pre-wrap break-all font-mono;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .section-heading {
