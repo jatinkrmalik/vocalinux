@@ -4,7 +4,6 @@ Final execution-based tests for FirstRunDialog.
 These tests focus on actually exercising the code with proper mocking.
 """
 
-import importlib
 import sys
 import unittest
 from types import SimpleNamespace
@@ -21,28 +20,6 @@ mock_repo.Gtk = mock_gtk
 sys.modules["gi"] = mock_gi
 sys.modules["gi.repository"] = mock_repo
 sys.modules["gi.repository.Gtk"] = mock_gtk
-
-
-def _install_gi_mocks():
-    """Ensure Gtk.Dialog is a real base type for FirstRunDialog."""
-    mock_gi_local = MagicMock()
-    mock_gtk_local = MagicMock()
-    mock_gtk_local.Dialog = type("GtkDialog", (), {})
-    mock_repo_local = MagicMock()
-    mock_repo_local.Gtk = mock_gtk_local
-    sys.modules["gi"] = mock_gi_local
-    sys.modules["gi.repository"] = mock_repo_local
-    sys.modules["gi.repository.Gtk"] = mock_gtk_local
-
-
-def _first_run_dialog_class():
-    """Return FirstRunDialog as a real class (reload if suite left a MagicMock)."""
-    import vocalinux.ui.first_run_dialog as mod
-
-    if not isinstance(mod.FirstRunDialog, type):
-        _install_gi_mocks()
-        mod = importlib.reload(mod)
-    return mod.FirstRunDialog
 
 
 class TestFirstRunDialogConstants(unittest.TestCase):
@@ -77,10 +54,11 @@ class TestFirstRunDialogConstants(unittest.TestCase):
 class TestFirstRunDialogResponseHandler(unittest.TestCase):
     """Tests for _on_response mapping without constructing Gtk.Dialog."""
 
-    def _handler_target(self):
-        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES
+    def test_on_response_maps_yes(self):
+        """YES response maps to 'yes'."""
+        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
 
-        return SimpleNamespace(
+        obj = SimpleNamespace(
             _response_map={
                 RESPONSE_YES: "yes",
                 RESPONSE_NO: "no",
@@ -88,36 +66,52 @@ class TestFirstRunDialogResponseHandler(unittest.TestCase):
             },
             result=None,
         )
-
-    def test_on_response_maps_yes(self):
-        """YES response maps to 'yes'."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_YES
-
-        obj = self._handler_target()
-        _first_run_dialog_class()._on_response(obj, obj, RESPONSE_YES)
+        FirstRunDialog._on_response(obj, obj, RESPONSE_YES)
         self.assertEqual(obj.result, "yes")
 
     def test_on_response_maps_no(self):
         """NO response maps to 'no'."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_NO
+        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
 
-        obj = self._handler_target()
-        _first_run_dialog_class()._on_response(obj, obj, RESPONSE_NO)
+        obj = SimpleNamespace(
+            _response_map={
+                RESPONSE_YES: "yes",
+                RESPONSE_NO: "no",
+                RESPONSE_LATER: "later",
+            },
+            result=None,
+        )
+        FirstRunDialog._on_response(obj, obj, RESPONSE_NO)
         self.assertEqual(obj.result, "no")
 
     def test_on_response_maps_later(self):
         """LATER response maps to 'later'."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_LATER
+        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
 
-        obj = self._handler_target()
-        _first_run_dialog_class()._on_response(obj, obj, RESPONSE_LATER)
+        obj = SimpleNamespace(
+            _response_map={
+                RESPONSE_YES: "yes",
+                RESPONSE_NO: "no",
+                RESPONSE_LATER: "later",
+            },
+            result=None,
+        )
+        FirstRunDialog._on_response(obj, obj, RESPONSE_LATER)
         self.assertEqual(obj.result, "later")
 
     def test_on_response_unknown_id_is_none(self):
         """Unknown response IDs map to None via dict.get default."""
-        obj = self._handler_target()
-        obj.result = "yes"
-        _first_run_dialog_class()._on_response(obj, obj, 99999)
+        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
+
+        obj = SimpleNamespace(
+            _response_map={
+                RESPONSE_YES: "yes",
+                RESPONSE_NO: "no",
+                RESPONSE_LATER: "later",
+            },
+            result="yes",
+        )
+        FirstRunDialog._on_response(obj, obj, 99999)
         self.assertIsNone(obj.result)
 
 
