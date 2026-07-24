@@ -37,10 +37,18 @@ class TestReadClipboard(unittest.TestCase):
         """On Wayland, wl-paste is the first candidate and its output is returned."""
         obj = _make_injector()
         with patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}):
-            with patch("vocalinux.text_injection.text_injector.shutil.which") as mock_which:
-                mock_which.side_effect = lambda cmd: "/usr/bin/wl-paste" if cmd == "wl-paste" else None
-                with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=0, stdout=b"copied text")
+            with patch(
+                "vocalinux.text_injection.text_injector.shutil.which"
+            ) as mock_which:
+                mock_which.side_effect = lambda cmd: (
+                    "/usr/bin/wl-paste" if cmd == "wl-paste" else None
+                )
+                with patch(
+                    "vocalinux.text_injection.text_injector.subprocess.run"
+                ) as mock_run:
+                    mock_run.return_value = MagicMock(
+                        returncode=0, stdout=b"copied text"
+                    )
                     result = obj._read_clipboard()
         self.assertEqual(result, "copied text")
 
@@ -48,8 +56,12 @@ class TestReadClipboard(unittest.TestCase):
         """Falls back to xclip when wl-paste is not installed."""
         obj = _make_injector()
         with patch("vocalinux.text_injection.text_injector.shutil.which") as mock_which:
-            mock_which.side_effect = lambda cmd: "/usr/bin/xclip" if cmd == "xclip" else None
-            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+            mock_which.side_effect = lambda cmd: (
+                "/usr/bin/xclip" if cmd == "xclip" else None
+            )
+            with patch(
+                "vocalinux.text_injection.text_injector.subprocess.run"
+            ) as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout=b"xclip text")
                 result = obj._read_clipboard()
         self.assertEqual(result, "xclip text")
@@ -58,8 +70,12 @@ class TestReadClipboard(unittest.TestCase):
         """Falls back to xsel when wl-paste and xclip are both not installed."""
         obj = _make_injector()
         with patch("vocalinux.text_injection.text_injector.shutil.which") as mock_which:
-            mock_which.side_effect = lambda cmd: "/usr/bin/xsel" if cmd == "xsel" else None
-            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+            mock_which.side_effect = lambda cmd: (
+                "/usr/bin/xsel" if cmd == "xsel" else None
+            )
+            with patch(
+                "vocalinux.text_injection.text_injector.subprocess.run"
+            ) as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout=b"xsel text")
                 result = obj._read_clipboard()
         self.assertEqual(result, "xsel text")
@@ -67,7 +83,9 @@ class TestReadClipboard(unittest.TestCase):
     def test_returns_none_when_no_tool_installed(self):
         """Returns None when no clipboard read tool is available."""
         obj = _make_injector()
-        with patch("vocalinux.text_injection.text_injector.shutil.which", return_value=None):
+        with patch(
+            "vocalinux.text_injection.text_injector.shutil.which", return_value=None
+        ):
             result = obj._read_clipboard()
         self.assertIsNone(result)
 
@@ -79,7 +97,9 @@ class TestReadClipboard(unittest.TestCase):
                 "vocalinux.text_injection.text_injector.shutil.which",
                 return_value="/usr/bin/wl-paste",
             ):
-                with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                with patch(
+                    "vocalinux.text_injection.text_injector.subprocess.run"
+                ) as mock_run:
                     mock_run.return_value = MagicMock(returncode=1, stdout=b"")
                     result = obj._read_clipboard()
         self.assertIsNone(result)
@@ -121,9 +141,11 @@ class TestReadClipboard(unittest.TestCase):
             mock_which.side_effect = lambda cmd: (
                 "/usr/bin/" + cmd if cmd in ("wl-paste", "xclip") else None
             )
-            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+            with patch(
+                "vocalinux.text_injection.text_injector.subprocess.run"
+            ) as mock_run:
                 mock_run.side_effect = [
-                    MagicMock(returncode=1, stdout=b""),   # wl-paste fails
+                    MagicMock(returncode=1, stdout=b""),  # wl-paste fails
                     MagicMock(returncode=0, stdout=b"via xclip"),  # xclip succeeds
                 ]
                 result = obj._read_clipboard()
@@ -138,7 +160,9 @@ class TestReadClipboard(unittest.TestCase):
                 "vocalinux.text_injection.text_injector.shutil.which",
                 return_value="/usr/bin/wl-paste",
             ):
-                with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                with patch(
+                    "vocalinux.text_injection.text_injector.subprocess.run"
+                ) as mock_run:
                     mock_run.return_value = MagicMock(
                         returncode=0, stdout=arabic.encode("utf-8")
                     )
@@ -165,7 +189,9 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         with patch.object(obj, "_read_clipboard", side_effect=fake_read):
             with patch.object(obj, "_copy_to_clipboard", side_effect=fake_copy):
                 with patch.object(
-                    obj, "_ydotool_ctrl_v_command", return_value=["ydotool", "key", "ctrl+v"]
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
                 ):
                     with patch(
                         "vocalinux.text_injection.text_injector.subprocess.run",
@@ -184,10 +210,20 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         obj.wayland_tool = "ydotool"
         call_order: list[str] = []
 
-        with patch.object(obj, "_read_clipboard", side_effect=lambda: call_order.append("read") or "prev"):
-            with patch.object(obj, "_copy_to_clipboard", side_effect=lambda t: call_order.append(f"copy:{t}") or True):
+        with patch.object(
+            obj,
+            "_read_clipboard",
+            side_effect=lambda: call_order.append("read") or "prev",
+        ):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: call_order.append(f"copy:{t}") or True,
+            ):
                 with patch.object(
-                    obj, "_ydotool_ctrl_v_command", return_value=["ydotool", "key", "ctrl+v"]
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
                 ):
                     with patch(
                         "vocalinux.text_injection.text_injector.subprocess.run",
@@ -206,9 +242,15 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         copy_calls: list[str] = []
 
         with patch.object(obj, "_read_clipboard", return_value=None):
-            with patch.object(obj, "_copy_to_clipboard", side_effect=lambda t: copy_calls.append(t) or True):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: copy_calls.append(t) or True,
+            ):
                 with patch.object(
-                    obj, "_ydotool_ctrl_v_command", return_value=["ydotool", "key", "ctrl+v"]
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
                 ):
                     with patch(
                         "vocalinux.text_injection.text_injector.subprocess.run",
@@ -228,13 +270,21 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         copy_calls: list[str] = []
 
         with patch.object(obj, "_read_clipboard", return_value="prev"):
-            with patch.object(obj, "_copy_to_clipboard", side_effect=lambda t: copy_calls.append(t) or True):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: copy_calls.append(t) or True,
+            ):
                 with patch.object(
-                    obj, "_ydotool_ctrl_v_command", return_value=["ydotool", "key", "ctrl+v"]
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
                 ):
                     with patch(
                         "vocalinux.text_injection.text_injector.subprocess.run",
-                        side_effect=subprocess.CalledProcessError(1, ["ydotool", "key"]),
+                        side_effect=subprocess.CalledProcessError(
+                            1, ["ydotool", "key"]
+                        ),
                     ):
                         result = obj._inject_via_clipboard_paste("text")
                         time.sleep(0.5)
@@ -257,7 +307,9 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         with patch.object(obj, "_read_clipboard", return_value="prev"):
             with patch.object(obj, "_copy_to_clipboard", return_value=True):
                 with patch.object(
-                    obj, "_ydotool_ctrl_v_command", return_value=["ydotool", "key", "ctrl+v"]
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
                 ):
                     with patch(
                         "vocalinux.text_injection.text_injector.subprocess.run",
@@ -277,9 +329,15 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         arabic_previous = "نص عربي سابق"
 
         with patch.object(obj, "_read_clipboard", return_value=arabic_previous):
-            with patch.object(obj, "_copy_to_clipboard", side_effect=lambda t: copy_calls.append(t) or True):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: copy_calls.append(t) or True,
+            ):
                 with patch.object(
-                    obj, "_ydotool_ctrl_v_command", return_value=["ydotool", "key", "ctrl+v"]
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
                 ):
                     with patch(
                         "vocalinux.text_injection.text_injector.subprocess.run",
