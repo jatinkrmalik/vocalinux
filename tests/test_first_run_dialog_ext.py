@@ -4,15 +4,21 @@ Final execution-based tests for FirstRunDialog.
 These tests focus on actually exercising the code with proper mocking.
 """
 
+import importlib.util
 import sys
+import types
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Mock gi and Gtk before importing first_run_dialog.
-# Gtk.Dialog must be a real type so FirstRunDialog can subclass it and so
-# __init__ / _on_response can be exercised under mocks (codecov/patch).
+# Mock gi and Gtk before importing first_run_dialog (constants / show_* tests).
+# Response-handler tests reinstall a real Dialog base and reload the module so
+# they stay correct even when earlier tests left FirstRunDialog as a MagicMock.
 mock_gi = MagicMock()
 mock_gtk = MagicMock()
+sys.modules["gi"] = mock_gi
+sys.modules["gi.repository"] = MagicMock()
+sys.modules["gi.repository.Gtk"] = mock_gtk
 
 
 class _FakeGtkDialog:
@@ -41,22 +47,55 @@ class _FakeGtkDialog:
         pass
 
 
-mock_gtk.Dialog = _FakeGtkDialog
-mock_gtk.DialogFlags.MODAL = 1
-mock_gtk.ResponseType.DELETE_EVENT = -4
-mock_gtk.Justification.CENTER = 0
-mock_gtk.Justification.LEFT = 1
-mock_gtk.Orientation.HORIZONTAL = 0
-mock_gtk.Align.CENTER = 0
-mock_gtk.Label = MagicMock
-mock_gtk.Box = MagicMock
-mock_gtk.Window = MagicMock
+_ISOLATED_MODULE_NAME = "vocalinux_test_first_run_dialog_isolated"
 
-mock_repo = MagicMock()
-mock_repo.Gtk = mock_gtk
-sys.modules["gi"] = mock_gi
-sys.modules["gi.repository"] = mock_repo
-sys.modules["gi.repository.Gtk"] = mock_gtk
+
+def _load_first_run_dialog_with_fake_gtk():
+    """Load first_run_dialog.py under an isolated module name with a real Dialog base.
+
+    Other test modules often leave gi/Gtk/FirstRunDialog as MagicMocks. Loading
+    the source file under a unique name (and restoring gi afterward) lets
+    __init__ / _on_response run without clobbering the suite's import graph.
+    Coverage still attributes execution to first_run_dialog.py by file path.
+    """
+    mock_gi_local = MagicMock()
+    mock_gtk_local = MagicMock()
+    mock_gtk_local.Dialog = _FakeGtkDialog
+    mock_gtk_local.DialogFlags.MODAL = 1
+    mock_gtk_local.ResponseType.DELETE_EVENT = -4
+    mock_gtk_local.Justification.CENTER = 0
+    mock_gtk_local.Justification.LEFT = 1
+    mock_gtk_local.Orientation.HORIZONTAL = 0
+    mock_gtk_local.Align.CENTER = 0
+    mock_gtk_local.Label = MagicMock
+    mock_gtk_local.Box = MagicMock
+    mock_gtk_local.Window = MagicMock
+
+    mock_repo = types.ModuleType("gi.repository")
+    mock_repo.Gtk = mock_gtk_local
+
+    gi_keys = ("gi", "gi.repository", "gi.repository.Gtk")
+    saved = {key: sys.modules.get(key) for key in gi_keys}
+    try:
+        sys.modules["gi"] = mock_gi_local
+        sys.modules["gi.repository"] = mock_repo
+        sys.modules["gi.repository.Gtk"] = mock_gtk_local
+
+        path = (
+            Path(__file__).resolve().parents[1] / "src" / "vocalinux" / "ui" / "first_run_dialog.py"
+        )
+        spec = importlib.util.spec_from_file_location(_ISOLATED_MODULE_NAME, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[_ISOLATED_MODULE_NAME] = module
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        for key, previous in saved.items():
+            if previous is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = previous
 
 
 class TestFirstRunDialogConstants(unittest.TestCase):
@@ -91,20 +130,17 @@ class TestFirstRunDialogConstants(unittest.TestCase):
 class TestFirstRunDialogResponseHandler(unittest.TestCase):
     """Tests for response signal wiring and _on_response mapping."""
 
-    def setUp(self):
-        from vocalinux.ui import first_run_dialog
-        from vocalinux.ui.first_run_dialog import (
-            RESPONSE_LATER,
-            RESPONSE_NO,
-            RESPONSE_YES,
-            FirstRunDialog,
-        )
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_first_run_dialog_with_fake_gtk()
+        cls.FirstRunDialog = cls.mod.FirstRunDialog
+        cls.RESPONSE_YES = cls.mod.RESPONSE_YES
+        cls.RESPONSE_NO = cls.mod.RESPONSE_NO
+        cls.RESPONSE_LATER = cls.mod.RESPONSE_LATER
 
-        self.mod = first_run_dialog
-        self.FirstRunDialog = FirstRunDialog
-        self.RESPONSE_YES = RESPONSE_YES
-        self.RESPONSE_NO = RESPONSE_NO
-        self.RESPONSE_LATER = RESPONSE_LATER
+    @classmethod
+    def tearDownClass(cls):
+        sys.modules.pop(_ISOLATED_MODULE_NAME, None)
 
     def test_connects_response_signal_to_handler(self):
         """Constructor wires the response signal instead of do_response."""
