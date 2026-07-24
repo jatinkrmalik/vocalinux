@@ -818,6 +818,138 @@ class TestTextInjector(unittest.TestCase):
         injector._clipboard_timeout = 0.35
         self.assertEqual(injector._read_clipboard(), "")
 
+    def test_should_restore_clipboard_reads_config(self):
+        """_should_restore_clipboard reflects the on-disk config, defaulting to
+        False when the file is missing, disabled, or unreadable."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            cfg = os.path.join(d, "config.json")
+            with patch("vocalinux.text_injection.text_injector.config_dir", return_value=d):
+                inj = TextInjector.__new__(TextInjector)
+
+                # No config file -> default False
+                self.assertFalse(inj._should_restore_clipboard())
+
+                # Enabled
+                with open(cfg, "w") as f:
+                    f.write('{"text_injection": {"restore_clipboard_after_paste": true}}')
+                self.assertTrue(inj._should_restore_clipboard())
+
+                # Disabled
+                with open(cfg, "w") as f:
+                    f.write('{"text_injection": {"restore_clipboard_after_paste": false}}')
+                self.assertFalse(inj._should_restore_clipboard())
+
+                # Malformed JSON -> exception path -> False
+                with open(cfg, "w") as f:
+                    f.write("{ not valid json")
+                self.assertFalse(inj._should_restore_clipboard())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_wl_copy_supports_sensitive_absent_and_cached(self, mock_run, mock_which):
+        """No wl-copy -> False without probing; result is cached on the instance."""
+        mock_which.return_value = None
+        inj = TextInjector.__new__(TextInjector)
+        self.assertFalse(inj._wl_copy_supports_sensitive())
+        mock_run.assert_not_called()
+
+        # Cached: even though wl-copy now "exists", no re-probe happens.
+        mock_which.side_effect = lambda x: x == "wl-copy"
+        self.assertFalse(inj._wl_copy_supports_sensitive())
+        mock_run.assert_not_called()
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_wl_copy_supports_sensitive_probe_exception(self, mock_run, mock_which):
+        """A failing `wl-copy --help` probe degrades to False, not an exception."""
+        mock_which.side_effect = lambda x: x == "wl-copy"
+        mock_run.side_effect = OSError("boom")
+        inj = TextInjector.__new__(TextInjector)
+        self.assertFalse(inj._wl_copy_supports_sensitive())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_wl_paste_success(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "wl-paste"
+        mock_run.return_value = MagicMock(returncode=0, stdout="hello", stderr="")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertEqual(inj._read_clipboard(), "hello")
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_xclip_fallback(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "xclip"
+        mock_run.return_value = MagicMock(returncode=0, stdout="clip-x", stderr="")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertEqual(inj._read_clipboard(), "clip-x")
+        calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+        self.assertTrue(any(c[0] == "xclip" for c in calls))
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_xsel_fallback(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "xsel"
+        mock_run.return_value = MagicMock(returncode=0, stdout="clip-s", stderr="")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertEqual(inj._read_clipboard(), "clip-s")
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_none_when_no_readers(self, mock_run, mock_which):
+        mock_which.return_value = None
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertIsNone(inj._read_clipboard())
+        mock_run.assert_not_called()
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_reader_exception_returns_none(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "xclip"
+        mock_run.side_effect = OSError("no display")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertIsNone(inj._read_clipboard())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_wl_paste_exception_falls_through(self, mock_run, mock_which):
+        """A wl-paste timeout/error is swallowed; with no other reader -> None."""
+        mock_which.side_effect = lambda x: x == "wl-paste"
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="wl-paste", timeout=0.35)
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertIsNone(inj._read_clipboard())
+
+    def test_restore_clipboard_none_is_noop(self):
+        inj = TextInjector.__new__(TextInjector)
+        copied = []
+        inj._copy_to_clipboard = lambda text, sensitive=False: copied.append(text) or True
+        inj._restore_clipboard(None)
+        self.assertEqual(copied, [])
+
+    def test_restore_clipboard_copies_saved(self):
+        inj = TextInjector.__new__(TextInjector)
+        copied = []
+        inj._copy_to_clipboard = lambda text, sensitive=False: copied.append(text) or True
+        inj._restore_clipboard("prev-value")
+        self.assertEqual(copied, ["prev-value"])
+
+    def test_restore_clipboard_swallows_errors(self):
+        inj = TextInjector.__new__(TextInjector)
+
+        def boom(text, sensitive=False):
+            raise RuntimeError("copy failed")
+
+        inj._copy_to_clipboard = boom
+        # Must not raise.
+        inj._restore_clipboard("prev-value")
+
     @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
     @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
     @patch("vocalinux.text_injection.text_injector.shutil.which")

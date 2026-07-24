@@ -807,6 +807,9 @@ class TextInjector:
         """
         if shutil.which("wl-paste"):
             try:
+                # --no-newline is byte-faithful: it returns the selection exactly.
+                # Plain `wl-paste` APPENDS a trailing newline (and doubles an
+                # existing one), which would corrupt the clipboard on restore.
                 result = subprocess.run(
                     ["wl-paste", "--no-newline"],
                     capture_output=True,
@@ -846,6 +849,10 @@ class TextInjector:
 
         ``None`` means the previous clipboard could not be read, so we leave the
         clipboard as-is rather than risk clearing content we never captured.
+
+        The pre-restore delay is best-effort timing, not a guarantee: on Wayland
+        there is no synchronous signal that the paste target has consumed the
+        clipboard, so a very slow target could still race the restore.
         """
         if saved is None:
             return

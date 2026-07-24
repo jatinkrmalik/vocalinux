@@ -1287,7 +1287,8 @@ class SettingsDialog(Gtk.Dialog):
             "normally overwrites whatever you had copied. When enabled, Vocalinux "
             "restores your previous clipboard after pasting and marks the dictation "
             "as sensitive so clipboard managers like KDE Klipper keep it out of "
-            "history. Has no effect on X11 or when 'Copy to Clipboard' is on."
+            "history. Restore timing is best-effort. Has no effect on X11 or when "
+            "'Copy to Clipboard' is on."
         )
         restore_clipboard_row = PreferenceRow(
             title="Preserve Clipboard",
