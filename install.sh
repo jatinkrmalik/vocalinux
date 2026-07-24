@@ -3201,6 +3201,8 @@ install_whisper_model() {
     # Whisper tiny model URL and path
     local TINY_MODEL_URL="https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
     local TINY_MODEL_PATH="$WHISPER_DIR/tiny.pt"
+    # SHA256 hash for supply chain security (see SECURITY.md)
+    local TINY_MODEL_HASH="65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9"
 
     # Check if model already exists
     if [ -f "$TINY_MODEL_PATH" ]; then
@@ -3249,6 +3251,22 @@ install_whisper_model() {
         return 1
     fi
 
+    # Verify SHA256 hash for supply chain security
+    if command -v sha256sum >/dev/null 2>&1; then
+        local ACTUAL_HASH=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
+        if [ "$ACTUAL_HASH" != "$TINY_MODEL_HASH" ]; then
+            print_error "Hash verification failed for Whisper tiny model"
+            print_error "Expected: $TINY_MODEL_HASH"
+            print_error "Got: $ACTUAL_HASH"
+            print_error "The downloaded file may be corrupted or tampered with"
+            rm -f "$TEMP_FILE"
+            return 1
+        fi
+        print_info "Hash verification passed for Whisper tiny model"
+    else
+        print_warning "sha256sum not available, skipping hash verification"
+    fi
+
     # Move to final location
     mv "$TEMP_FILE" "$TINY_MODEL_PATH"
 
@@ -3279,6 +3297,9 @@ install_vosk_models() {
     local SMALL_MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
     local SMALL_MODEL_NAME="vosk-model-small-en-us-0.15"
     local SMALL_MODEL_PATH="$MODELS_DIR/$SMALL_MODEL_NAME"
+    # SHA256 hash for supply chain security (see SECURITY.md)
+    # TODO: Compute and add hash after first verified download
+    local SMALL_MODEL_HASH=""
 
     # Check if small model already exists
     if [ -d "$SMALL_MODEL_PATH" ]; then
@@ -3327,6 +3348,20 @@ install_vosk_models() {
         return 1
     fi
 
+    # Verify SHA256 hash for supply chain security (if hash is set)
+    if [ -n "$SMALL_MODEL_HASH" ] && command -v sha256sum >/dev/null 2>&1; then
+        local ACTUAL_HASH=$(sha256sum "$TEMP_ZIP" | cut -d' ' -f1)
+        if [ "$ACTUAL_HASH" != "$SMALL_MODEL_HASH" ]; then
+            print_error "Hash verification failed for VOSK small model"
+            print_error "Expected: $SMALL_MODEL_HASH"
+            print_error "Got: $ACTUAL_HASH"
+            print_error "The downloaded file may be corrupted or tampered with"
+            rm -f "$TEMP_ZIP"
+            return 1
+        fi
+        print_info "Hash verification passed for VOSK small model"
+    fi
+
     print_info "Extracting VOSK model..."
 
     # Extract the model
@@ -3373,6 +3408,8 @@ install_whispercpp_model() {
     # whisper.cpp tiny model URL and path
     local TINY_MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
     local TINY_MODEL_PATH="$WHISPERCPP_DIR/ggml-tiny.bin"
+    # SHA256 hash for supply chain security (see SECURITY.md)
+    local TINY_MODEL_HASH="be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
 
     # Check if model already exists
     if [ -f "$TINY_MODEL_PATH" ]; then
@@ -3419,6 +3456,22 @@ install_whispercpp_model() {
         print_error "Downloaded model file is empty or missing"
         rm -f "$TEMP_FILE"
         return 1
+    fi
+
+    # Verify SHA256 hash for supply chain security
+    if command -v sha256sum >/dev/null 2>&1; then
+        local ACTUAL_HASH=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
+        if [ "$ACTUAL_HASH" != "$TINY_MODEL_HASH" ]; then
+            print_error "Hash verification failed for whisper.cpp tiny model"
+            print_error "Expected: $TINY_MODEL_HASH"
+            print_error "Got: $ACTUAL_HASH"
+            print_error "The downloaded file may be corrupted or tampered with"
+            rm -f "$TEMP_FILE"
+            return 1
+        fi
+        print_info "Hash verification passed for whisper.cpp tiny model"
+    else
+        print_warning "sha256sum not available, skipping hash verification"
     fi
 
     # Move to final location
