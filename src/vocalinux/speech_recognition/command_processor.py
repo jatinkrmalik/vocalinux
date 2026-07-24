@@ -304,3 +304,31 @@ class CommandProcessor:
                         processed_text = ""
 
         return processed_text, actions
+
+
+def capitalize_sentences(text: str) -> str:
+    """Capitalize the first letter of each sentence.
+
+    Uppercases the first character of the string and any lowercase letter
+    that follows sentence-ending punctuation (``.``, ``!``, ``?``) plus
+    whitespace.  Leaves URLs, decimals, and abbreviations without trailing
+    space untouched.
+
+    Args:
+        text: The text to capitalize.
+
+    Returns:
+        The text with sentence-initial letters uppercased.
+    """
+    if not text:
+        return text
+
+    # Capitalize first character
+    result = text[0].upper() + text[1:]
+
+    # Capitalize after sentence-ending punctuation + whitespace
+    result = re.sub(
+        r"([.!?])(\s+)([a-z])", lambda m: m.group(1) + m.group(2) + m.group(3).upper(), result
+    )
+
+    return result

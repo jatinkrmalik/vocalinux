@@ -443,6 +443,13 @@ def main():
                 text_to_inject = " " + text_to_inject
                 logger.debug("Added space separator before new segment")
 
+            # Auto-capitalize sentences if enabled
+            auto_capitalize = config_manager.get("text_injection", "auto_capitalize")
+            if auto_capitalize:
+                from vocalinux.speech_recognition.command_processor import capitalize_sentences
+
+                text_to_inject = capitalize_sentences(text_to_inject)
+
             success = text_system.inject_text(text_to_inject)
             if success:
                 action_handler.set_last_injected_text(text_to_inject)
