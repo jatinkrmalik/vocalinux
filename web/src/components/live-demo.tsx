@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, AlertCircle, Volume2, Sparkles, Keyboard } from "lucide-react";
+import { Mic, MicOff, AlertCircle, Volume2, Keyboard } from "lucide-react";
 
 // Define types for Web Speech API
 interface SpeechRecognitionEvent {
@@ -360,17 +360,12 @@ export function LiveDemo() {
     }
 
     return (
-        <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-2xl overflow-hidden border border-zinc-800">
+        <div className="overflow-hidden rounded-[10px] border border-zinc-800 bg-[color:var(--terminal)]">
             {/* Header */}
-            <div className="px-4 sm:px-6 py-3 bg-zinc-800/50 border-b border-zinc-800 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-3 bg-zinc-900/80 border-b border-zinc-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="flex gap-1.5">
-                        <div className="h-3 w-3 rounded-full bg-red-500/70" />
-                        <div className="h-3 w-3 rounded-full bg-yellow-500/70" />
-                        <div className="h-3 w-3 rounded-full bg-green-500/70" />
-                    </div>
                     <span className="text-sm text-zinc-400 font-medium">
-                        Live Browser Demo
+                        Browser speech preview
                     </span>
                     <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
                         SpeechRecognition API
@@ -523,17 +518,19 @@ export function LiveDemo() {
                 </div>
 
                 {/* Info banner */}
-                <div className="mt-6 flex items-start gap-3 p-4 bg-primary/5 rounded-lg border border-primary/10">
-                    <Sparkles className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <div className="mt-6 flex items-start gap-3 p-4 rounded-md border border-zinc-800 bg-zinc-900/50">
+                    <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                     <div className="text-sm">
                         <p className="text-zinc-300">
-                            <strong>This is just a preview!</strong> The browser demo uses browser
-                            SpeechRecognition, which is cloud-based in many browsers.
+                            Preview only. Many browsers send SpeechRecognition audio to a cloud
+                            service.
                         </p>
                         <p className="text-zinc-500 mt-1">
-                            Vocalinux runs <strong>100% offline</strong> using Whisper AI - no cloud, no data sharing,
-                            complete privacy. <a href="#install" className="text-primary hover:underline">Install it</a> to
-                            experience the real deal!
+                            Vocalinux uses local engines (whisper.cpp by default) after install.{" "}
+                            <a href="#install" className="text-primary hover:underline">
+                                Install for offline dictation
+                            </a>
+                            .
                         </p>
                     </div>
                 </div>

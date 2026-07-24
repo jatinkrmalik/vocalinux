@@ -277,14 +277,14 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950">
+    <div className="min-h-screen bg-background">
       <header className="bg-background/95 sticky top-0 z-50 border-b border-zinc-200/80 backdrop-blur-md dark:border-zinc-800/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <Link href="/" className="group flex items-center gap-2">
             <VocalinuxLogo
               width={30}
               height={30}
-              className="h-7 w-7 transition-transform group-hover:scale-110"
+              className="h-7 w-7"
             />
             <span className="text-base font-bold sm:text-lg">Vocalinux</span>
           </Link>
