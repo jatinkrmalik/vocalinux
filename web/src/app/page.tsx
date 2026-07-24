@@ -258,19 +258,16 @@ const CopyButton = ({
     <button
       type="button"
       onClick={handleCopy}
-      className={`flex items-center gap-2 rounded-md bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 transition-colors hover:bg-zinc-700 ${className}`}
+      title={copied ? "Copied" : "Copy"}
+      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600 ${
+        copied ? "text-[color:var(--terminal-fg)] hover:text-[color:var(--terminal-fg)]" : ""
+      } ${className}`}
       aria-label={copied ? "Copied to clipboard" : "Copy to clipboard"}
     >
       {copied ? (
-        <>
-          <Check className="h-4 w-4" />
-          Copied
-        </>
+        <Check className="h-4 w-4" strokeWidth={2} />
       ) : (
-        <>
-          <Copy className="h-4 w-4" />
-          Copy
-        </>
+        <Copy className="h-4 w-4" strokeWidth={1.75} />
       )}
     </button>
   );
