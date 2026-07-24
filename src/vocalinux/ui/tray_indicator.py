@@ -29,6 +29,7 @@ from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
+from ..dbus_service import VocalinuxDBusService
 from ..suspend_handler import SuspendHandler
 from ..utils.resource_manager import ResourceManager
 from .config_manager import ConfigManager
@@ -133,6 +134,15 @@ class TrayIndicator:
         # Set up keyboard shortcuts with mode support
         self._setup_keyboard_shortcuts()
 
+        # Register the session-bus service so external triggers (e.g. a KDE
+        # Plasma global shortcut running `vocalinux --toggle`) can control this
+        # running instance. Handlers marshal onto the GTK main thread.
+        self._dbus_service = VocalinuxDBusService(
+            on_toggle=self._toggle_recognition,
+            on_start=self._external_start,
+            on_stop=self._external_stop,
+        )
+
     def _setup_keyboard_shortcuts(self):
         """Set up keyboard shortcuts based on configured mode."""
         # Stop existing shortcut manager if running
@@ -144,6 +154,13 @@ class TrayIndicator:
         self.shortcut_manager.register_toggle_callback(None)
         self.shortcut_manager.register_press_callback(None)
         self.shortcut_manager.register_release_callback(None)
+
+        # External-activation mode: skip the internal evdev/pynput listener
+        # entirely so no /dev/input access is required. Activation then comes
+        # in over D-Bus (see VocalinuxDBusService).
+        if self.config_manager.get_bool("shortcuts", "disable_internal_hotkey", False):
+            logger.info("Internal hotkey listener disabled (external activation via D-Bus)")
+            return
 
         # Get configured mode from config
         mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
@@ -343,6 +360,21 @@ class TrayIndicator:
         if self.speech_engine.state == RecognitionState.IDLE:
             self.speech_engine.start_recognition(mode="push_to_talk")
 
+    def _external_start(self):
+        """Start recognition for an external (D-Bus) trigger.
+
+        Uses normal start semantics — not push-to-talk — so a single
+        `vocalinux --start` transcribes immediately/with silence detection
+        rather than deferring until a Stop.
+        """
+        if self.speech_engine.state == RecognitionState.IDLE:
+            self.speech_engine.start_recognition()
+
+    def _external_stop(self):
+        """Stop recognition for an external (D-Bus) trigger."""
+        if self.speech_engine.state != RecognitionState.IDLE:
+            self.speech_engine.stop_recognition()
+
     def _stop_recognition(self):
         """Stop voice recognition (for push-to-talk mode)."""
         if self.speech_engine.state != RecognitionState.IDLE:
@@ -491,6 +523,7 @@ class TrayIndicator:
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
             shortcut_update_callback=self.update_shortcut,
+            hotkey_listener_update_callback=self._setup_keyboard_shortcuts,
         )
 
         # Connect to the response signal
@@ -651,6 +684,9 @@ class TrayIndicator:
 
         if self._suspend_handler is not None:
             self._suspend_handler.shutdown()
+
+        if getattr(self, "_dbus_service", None) is not None:
+            self._dbus_service.shutdown()
 
         self._cleanup_input_monitor()
 
