@@ -62,12 +62,17 @@ describe("Screenshots page and assets", () => {
     }
   });
 
-  it("does not embed a full homepage gallery (link-only on home)", () => {
-    // Homepage should link to the gallery, not list every settings shot.
-    expect(homeSource).toContain('href: "/screenshots/"');
+  it("links to the gallery and only embeds a few hero shots on home", () => {
+    // Redesign shows a handful of product shots on the home page, then
+    // points people at /screenshots/ for the full set.
     expect(homeSource).toContain('href="/screenshots/"');
-    expect(homeSource).not.toContain("/screenshots/settings-speech-engine.png");
+    expect(homeSource).toContain("/screenshots/00-transcription.png");
+    // Not a dump of every settings/about shot from the gallery page.
     expect(homeSource).not.toContain("/screenshots/05-about-view.png");
+    expect(homeSource).not.toContain("/screenshots/settings-recognition.png");
+    expect(homeSource).not.toContain("/screenshots/settings-audio.png");
+    expect(homeSource).not.toContain("/screenshots/settings-shortcuts.png");
+    expect(homeSource).not.toContain("/screenshots/settings-advanced.png");
   });
 
   it("exposes Screenshots in the shared subpage shell nav", () => {
