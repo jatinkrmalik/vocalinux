@@ -10,7 +10,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Update import path to use the new package structure
-from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+from vocalinux.text_injection.text_injector import (
+    DesktopEnvironment,
+    TextInjector,
+    _warn_if_ydotool_globally_enabled,
+    _ydotool_install_guidance,
+)
 
 # Create a mock for audio feedback module
 mock_audio_feedback = MagicMock()
@@ -935,6 +940,30 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
             with self.assertRaises(RuntimeError):
                 TextInjector()
+
+    def test_ydotool_package_guidance_uses_user_service(self):
+        """Package and source routes must clearly use their distinct unit scopes."""
+        guidance = _ydotool_install_guidance()
+
+        self.assertIn("sudo apt install ydotool", guidance)
+        self.assertIn("systemctl --user enable --now ydotool.service", guidance)
+        self.assertIn("sudo usermod -aG input $USER", guidance)
+        self.assertIn("sudo systemctl enable --now ydotoold.service", guidance)
+        self.assertIn("Do NOT use 'systemctl --global enable ydotool.service'", guidance)
+
+    @patch("vocalinux.text_injection.text_injector.logger.warning")
+    @patch("vocalinux.text_injection.text_injector.os.path.lexists", return_value=True)
+    def test_globally_enabled_ydotool_warns_with_remediation(self, mock_lexists, mock_warning):
+        """A persistent global unit should produce an actionable greeter warning."""
+        _warn_if_ydotool_globally_enabled()
+
+        mock_lexists.assert_called_once_with(
+            "/etc/systemd/user/default.target.wants/ydotool.service"
+        )
+        warning = mock_warning.call_args.args[0]
+        self.assertIn("display-manager greeter sessions", warning)
+        self.assertIn("systemctl --global disable ydotool.service", warning)
+        self.assertIn("systemctl --user enable --now ydotool.service", warning)
 
     def test_detect_environment_unknown(self):
         """Test environment detection when session type is unknown and no display vars set."""
