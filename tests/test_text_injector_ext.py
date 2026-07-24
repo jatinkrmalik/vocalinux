@@ -225,6 +225,8 @@ class TestCheckDependencies(unittest.TestCase):
                 "vocalinux.text_injection.text_injector.IBusTextInjector",
                 return_value=mock_ibus,
             ),
+            # KDE Wayland also needs KWin VirtualKeyboard enabled (#574).
+            patch.object(obj, "_kde_virtual_keyboard_enabled", return_value=True),
             patch.object(obj, "_start_ibus_initialization") as mock_start,
             patch(
                 "shutil.which",

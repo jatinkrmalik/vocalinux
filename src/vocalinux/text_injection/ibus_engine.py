@@ -269,14 +269,21 @@ def start_ibus_daemon():
     """
     Start the IBus daemon if it's not already running.
 
-    This is useful for desktop environments where IBus doesn't start automatically,
-    such as some KDE Plasma installations or minimal window managers.
+    X11 only. On Wayland we must not spawn ``ibus-daemon -x -d -r``: that XIM-mode
+    daemon is not bridged to the compositor, but still makes
+    ``is_ibus_daemon_running()`` return True and leads to silent no-op injection
+    (issue #574). The compositor/DE must own the Wayland-bridged IBus instance.
 
     Returns:
         True if daemon was started or already running, False on failure
     """
     if is_ibus_daemon_running():
         return True
+
+    if _is_wayland_session():
+        # XIM -x is not compositor-bridged; spawning it only fools the pgrep check (#574).
+        logger.debug("Not starting ibus-daemon on Wayland (see #574)")
+        return False
 
     if not is_ibus_available():
         return False

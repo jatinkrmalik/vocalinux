@@ -188,6 +188,37 @@ class TestStartIBusDaemon(unittest.TestCase):
         result = start_ibus_daemon()
         self.assertFalse(result)
 
+    @patch("vocalinux.text_injection.ibus_engine.subprocess.Popen")
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=False)
+    def test_start_ibus_daemon_noop_on_wayland(self, mock_is_running, mock_available, mock_popen):
+        """On Wayland, never spawn XIM ibus-daemon -x -d -r (#574)."""
+        from vocalinux.text_injection.ibus_engine import start_ibus_daemon
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
+            result = start_ibus_daemon()
+
+        self.assertFalse(result)
+        mock_popen.assert_not_called()
+
+    @patch("vocalinux.text_injection.ibus_engine.time.sleep")
+    @patch("vocalinux.text_injection.ibus_engine.subprocess.Popen")
+    @patch("vocalinux.text_injection.ibus_engine.is_ibus_available", return_value=True)
+    def test_start_ibus_daemon_still_starts_on_x11(self, mock_available, mock_popen, mock_sleep):
+        """X11 sessions may still auto-start ibus-daemon with XIM flags."""
+        from vocalinux.text_injection.ibus_engine import start_ibus_daemon
+
+        with patch(
+            "vocalinux.text_injection.ibus_engine.is_ibus_daemon_running",
+            side_effect=[False, True],
+        ):
+            with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11"}, clear=False):
+                result = start_ibus_daemon()
+
+        self.assertTrue(result)
+        mock_popen.assert_called_once()
+        self.assertEqual(mock_popen.call_args[0][0], ["ibus-daemon", "-x", "-d", "-r"])
+
 
 class TestIsEngineActive(unittest.TestCase):
     """Tests for is_engine_active function."""

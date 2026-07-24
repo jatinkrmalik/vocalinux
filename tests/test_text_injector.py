@@ -1780,16 +1780,21 @@ class TestCompositorIBusBridging(unittest.TestCase):
         return injector
 
     def test_bridged_desktops_prefer_ibus(self):
-        """GNOME/KDE/Cinnamon and unknown desktops should keep using IBus."""
+        """GNOME/Cinnamon and unknown desktops should keep using IBus.
+
+        KDE is covered separately: bridging also requires KWin VirtualKeyboard.
+        """
         injector = self._bare_injector()
-        for desktop in ("GNOME", "ubuntu:GNOME", "KDE", "X-Cinnamon", ""):
+        for desktop in ("GNOME", "ubuntu:GNOME", "X-Cinnamon", ""):
             with patch.dict(
                 "os.environ",
                 {
                     "XDG_CURRENT_DESKTOP": desktop,
                     "XDG_SESSION_DESKTOP": desktop,
                     "DESKTOP_SESSION": desktop,
+                    "KDE_FULL_SESSION": "",
                 },
+                clear=False,
             ):
                 self.assertTrue(injector._wayland_compositor_bridges_ibus(), desktop)
 
@@ -1812,6 +1817,148 @@ class TestCompositorIBusBridging(unittest.TestCase):
         injector = self._bare_injector(DesktopEnvironment.X11)
         with patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "COSMIC"}):
             self.assertTrue(injector._wayland_compositor_bridges_ibus())
+
+    def test_kde_wayland_virtual_keyboard_disabled_skips_ibus(self):
+        """KDE Wayland with KWin VirtualKeyboard disabled must not use IBus (#574)."""
+        injector = self._bare_injector()
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(injector, "_kde_virtual_keyboard_enabled", return_value=False):
+                self.assertFalse(injector._wayland_compositor_bridges_ibus())
+
+    def test_kde_wayland_virtual_keyboard_enabled_allows_ibus(self):
+        """KDE Wayland with KWin VirtualKeyboard enabled may still use IBus (#574)."""
+        injector = self._bare_injector()
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(injector, "_kde_virtual_keyboard_enabled", return_value=True):
+                self.assertTrue(injector._wayland_compositor_bridges_ibus())
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_kde_virtual_keyboard_enabled_parses_gdbus_true(self, mock_run):
+        """gdbus (<<true>>,) means VirtualKeyboard is enabled."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<true>>,)\n", stderr="")
+        injector = self._bare_injector()
+        self.assertTrue(injector._kde_virtual_keyboard_enabled())
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        self.assertEqual(args[0], "gdbus")
+        self.assertIn("org.kde.KWin", args)
+        self.assertIn("/VirtualKeyboard", args)
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_kde_virtual_keyboard_enabled_parses_gdbus_false(self, mock_run):
+        """gdbus (<<false>>,) means VirtualKeyboard is disabled."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<false>>,)\n", stderr="")
+        injector = self._bare_injector()
+        self.assertFalse(injector._kde_virtual_keyboard_enabled())
+
+    @patch(
+        "vocalinux.text_injection.text_injector.subprocess.run",
+        side_effect=FileNotFoundError("gdbus"),
+    )
+    def test_kde_virtual_keyboard_enabled_false_when_gdbus_missing(self, _mock_run):
+        """Missing gdbus → treat as unbridged (conservative)."""
+        injector = self._bare_injector()
+        self.assertFalse(injector._kde_virtual_keyboard_enabled())
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_kde_wayland_vk_disabled_picks_ydotool_not_ibus(
+        self,
+        mock_which,
+        mock_run,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """Full path: KDE Wayland + VK disabled → ydotool, not IBus (#574)."""
+        mock_which.side_effect = lambda cmd: {
+            "ydotool": "/usr/bin/ydotool",
+            "ydotoold": "/usr/bin/ydotoold",
+        }.get(cmd)
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<false>>,)\n", stderr="")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "WAYLAND_DISPLAY": "wayland-0",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(TextInjector, "_is_ydotoold_running", return_value=True):
+                injector = TextInjector()
+
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
+        self.assertEqual(injector.wayland_tool, "ydotool")
+        mock_ibus_class.assert_not_called()
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_kde_wayland_vk_enabled_allows_ibus(
+        self,
+        mock_which,
+        mock_run,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """Full path: KDE Wayland + VK enabled → IBus still selected when ready (#574)."""
+        mock_which.side_effect = lambda cmd: {
+            "ydotool": "/usr/bin/ydotool",
+            "ydotoold": "/usr/bin/ydotoold",
+        }.get(cmd)
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<true>>,)\n", stderr="")
+        mock_ibus_class.return_value = MagicMock()
+
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "WAYLAND_DISPLAY": "wayland-0",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(TextInjector, "_is_ydotoold_running", return_value=True):
+                injector = TextInjector()
+            if injector._ibus_init_thread is not None:
+                injector._ibus_init_thread.join(timeout=5)
+
+        mock_ibus_class.assert_called_once()
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
 
     @patch("vocalinux.text_injection.text_injector.socket.socket")
     @patch("os.path.exists", return_value=True)

@@ -205,6 +205,57 @@ class TextInjector:
         "weston",
     )
 
+    def _kde_virtual_keyboard_enabled(self) -> bool:
+        """Return True when KWin VirtualKeyboard / input method is enabled.
+
+        On KDE Plasma Wayland, IBus only reaches native apps when this is on
+        (issue #574). Disabled or unqueryable → treat IBus as unbridged.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "gdbus",
+                    "call",
+                    "--session",
+                    "--dest",
+                    "org.kde.KWin",
+                    "--object-path",
+                    "/VirtualKeyboard",
+                    "--method",
+                    "org.freedesktop.DBus.Properties.Get",
+                    "org.kde.kwin.VirtualKeyboard",
+                    "enabled",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            logger.info(
+                "Could not query KWin VirtualKeyboard (%s); treating IBus as unbridged.",
+                e,
+            )
+            return False
+
+        out = (result.stdout or "").strip().lower() if result.returncode == 0 else ""
+        # gdbus prints variant wrappers like: (<<true>>,) or (<<false>>,)
+        if "true" in out:
+            return True
+        if "false" in out:
+            logger.info(
+                "KWin Virtual Keyboard is disabled; IBus commits will not reach "
+                "native apps. Falling back to ydotool/wtype. Enable: System "
+                "Settings → Keyboard → Virtual Keyboard → IBus Wayland."
+            )
+            return False
+
+        logger.info(
+            "KWin VirtualKeyboard not confirmed (rc=%s out=%r); treating IBus as unbridged.",
+            result.returncode,
+            result.stdout,
+        )
+        return False
+
     def _wayland_compositor_bridges_ibus(self) -> bool:
         """Whether native Wayland clients receive IBus commits on this compositor.
 
@@ -214,6 +265,10 @@ class TextInjector:
         those we must use a virtual-keyboard tool (wtype/ydotool) instead. We use
         a denylist rather than an allowlist so that unrecognised desktops keep the
         previous IBus-preferred behaviour.
+
+        On KDE Plasma Wayland, bridging also requires KWin VirtualKeyboard to be
+        enabled (issue #574); otherwise commit_text succeeds at the IBus layer
+        but never reaches apps.
         """
         if self.environment != DesktopEnvironment.WAYLAND:
             # X11 / XWayland: IBus reaches apps through XIM regardless of DE.
@@ -222,7 +277,11 @@ class TextInjector:
             os.environ.get(var, "")
             for var in ("XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION")
         ).lower()
-        return not any(name in desktop for name in self._IBUS_UNBRIDGED_COMPOSITORS)
+        if any(name in desktop for name in self._IBUS_UNBRIDGED_COMPOSITORS):
+            return False
+        if _is_kde_plasma_session():
+            return self._kde_virtual_keyboard_enabled()
+        return True
 
     def _ydotool_socket_paths(self) -> list:
         """Return candidate Unix socket paths used by ydotoold."""
