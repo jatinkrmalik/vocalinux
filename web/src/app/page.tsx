@@ -859,19 +859,19 @@ export default function HomePage() {
             {engines.map((engine) => (
               <div
                 key={engine.name}
-                className="grid gap-3 p-5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-6"
+                className="grid gap-3 p-5 sm:grid-cols-[13rem_minmax(0,1fr)] sm:items-center sm:gap-8"
               >
-                <div className="flex items-start gap-2">
-                  <h3 className="font-semibold">{engine.name}</h3>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <h3 className="font-semibold leading-none">{engine.name}</h3>
                   {engine.badge ? (
-                    <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+                    <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-primary">
                       {engine.badge}
                     </span>
                   ) : null}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm text-muted-foreground">{engine.summary}</p>
-                  <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                  <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     {engine.points.map((p) => (
                       <li key={p} className="inline-flex items-center gap-1.5">
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
