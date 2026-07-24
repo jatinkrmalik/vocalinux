@@ -208,6 +208,20 @@ XWayland on Wayland sessions. See [`packaging/flatpak/README.md`](packaging/flat
 for build details, permissions, and Flathub submission notes. Flathub publishing
 is in progress.
 
+### AppImage (portable)
+
+Download a self-contained AppImage from
+[GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases) (new tags
+and nightlies after the packaging merge; see asset names on each release):
+
+```bash
+chmod +x Vocalinux-<version>-x86_64.AppImage   # or ...-aarch64.AppImage
+./Vocalinux-<version>-x86_64.AppImage
+```
+
+Host still needs text-injection tools (`xdotool` / `wtype` / `ydotool`), same as
+PyPI. Full notes: [docs/INSTALL.md](docs/INSTALL.md#appimage).
+
 ### Alternative: Install from Source
 
 ```bash
@@ -426,6 +440,7 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [ ] In-app update mechanism
 - [ ] Application-specific commands
 - [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
+- [x] ~~AppImage packaging~~ ✅ (x86_64 + aarch64 on tags and nightlies)
 - [ ] Debian/Ubuntu package (.deb)
 - [x] ~~Wayland support via IBus~~ ✅
 - [ ] Voice command customization

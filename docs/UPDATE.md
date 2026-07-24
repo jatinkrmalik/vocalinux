@@ -26,6 +26,15 @@ This guide explains how to update Vocalinux to the latest version.
 
 See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2).
 
+### Packaging note (after v0.14.2)
+
+AppImage builds are produced by the release and nightly workflows
+([#573](https://github.com/jatinkrmalik/vocalinux/pull/573)). They appear on
+**new tags** and **nightlies** as `Vocalinux-<version>-x86_64.AppImage` and
+`Vocalinux-<version>-aarch64.AppImage`. Download from
+[GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases); see
+[INSTALL.md](INSTALL.md#appimage) for run steps and host text-injection tools.
+
 ---
 
 ## What's New in v0.14.1
