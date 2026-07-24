@@ -49,6 +49,12 @@ Use this checklist for every release:
 - [ ] Push branch and create PR
 - [ ] After PR merge, create tag: `git tag -a vX.Y.Z-PHASE -m "Release X.Y.Z-PHASE"`
 - [ ] Push tag: `git push origin vX.Y.Z-PHASE`
+
+### Release assets (automatic)
+- [ ] Confirm GitHub Release includes wheel + sdist
+- [ ] Confirm AppImages attached by `.github/workflows/release.yml`:
+  - `Vocalinux-X.Y.Z[-PHASE]-x86_64.AppImage` (main job)
+  - `Vocalinux-X.Y.Z[-PHASE]-aarch64.AppImage` (arm64 job; may appear shortly after publish)
 ```
 
 ## Detailed Release Steps
@@ -299,16 +305,21 @@ git push origin v0.5.0-beta
 After pushing the tag, the GitHub Actions workflow will automatically:
 
 1. Build the Python package (wheel and sdist)
-2. Create a GitHub Release with auto-generated notes
-3. Publish to PyPI
-4. Deploy the website to vocalinux.com
-5. Mark as pre-release if version contains alpha/beta/rc
+2. Build the x86_64 AppImage and attach it (plus wheel/sdist) to the GitHub Release
+3. Build and attach the aarch64 AppImage from a separate arm64 job
+4. Publish to PyPI
+5. Publish the AUR package when AUR secrets are configured
+6. Mark as pre-release if the version contains alpha/beta/rc
+
+Nightlies (`.github/workflows/nightly.yml`) also attach AppImages with the same
+`Vocalinux-<version>-<arch>.AppImage` naming.
 
 Monitor at: https://github.com/jatinkrmalik/vocalinux/actions
 
 ### Step 9: Post-Release Tasks
 
 - [ ] Verify GitHub Release was created correctly
+- [ ] Verify release assets: wheel, sdist, `Vocalinux-*-x86_64.AppImage`, and `Vocalinux-*-aarch64.AppImage`
 - [ ] Verify PyPI package was published (if applicable)
 - [ ] Verify website was deployed (check vocalinux.com)
 - [ ] Announce on social media/communities

@@ -111,6 +111,38 @@ model during setup.
 On Ubuntu 24.04+ or Pop!_OS, install `libgirepository-2.0-dev` if
 `libgirepository1.0-dev` is not available.
 
+### AppImage
+
+Portable build with no installer and no root required. Download from
+[GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases): AppImage
+assets ship on **new tags** and **nightlies** after the AppImage packaging
+landed ([#573](https://github.com/jatinkrmalik/vocalinux/pull/573)). Older
+release tags may only have the Python wheel and sdist.
+
+Assets are named:
+
+| Architecture | File |
+|--------------|------|
+| Intel/AMD 64-bit | `Vocalinux-<version>-x86_64.AppImage` |
+| ARM64 | `Vocalinux-<version>-aarch64.AppImage` |
+
+```bash
+# Example for x86_64 (use the version string from the release asset name)
+chmod +x Vocalinux-<version>-x86_64.AppImage
+./Vocalinux-<version>-x86_64.AppImage
+```
+
+The AppImage bundles the Python runtime, Vocalinux, GTK, and related libraries.
+It does **not** bundle text-injection tools. Install those on the host the same
+way as for the PyPI path:
+
+- **X11:** `xdotool`
+- **Wayland:** `wtype` (and often `wl-clipboard` / `xclip` / `xsel`)
+- Some setups use `ydotool`
+
+See [Text Injection Not Working](#text-injection-not-working) if dictated text
+does not appear in apps.
+
 ## System Requirements
 
 | Requirement | Details |

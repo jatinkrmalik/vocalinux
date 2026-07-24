@@ -76,6 +76,59 @@ export default function InstallGuidesPage() {
             {installCommand}
           </code>
         </div>
+
+        <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 text-left shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+          <h2 className="mb-2 text-xl font-semibold">AppImage (portable)</h2>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Prefer a single file with no installer? Download{" "}
+            <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-900">
+              Vocalinux-&lt;version&gt;-x86_64.AppImage
+            </code>{" "}
+            or{" "}
+            <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-900">
+              Vocalinux-&lt;version&gt;-aarch64.AppImage
+            </code>{" "}
+            from{" "}
+            <a
+              href="https://github.com/jatinkrmalik/vocalinux/releases"
+              className="font-semibold text-primary hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              GitHub Releases
+            </a>{" "}
+            (new tags and nightlies). Then:
+          </p>
+          <code className="mb-3 block overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-green-400">
+            chmod +x Vocalinux-&lt;version&gt;-x86_64.AppImage
+            {"\n"}
+            ./Vocalinux-&lt;version&gt;-x86_64.AppImage
+          </code>
+          <p className="text-sm text-muted-foreground">
+            The host still needs text-injection tools (
+            <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-900">
+              xdotool
+            </code>
+            ,{" "}
+            <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-900">
+              wtype
+            </code>
+            , or{" "}
+            <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-900">
+              ydotool
+            </code>
+            ), same as a PyPI install. Full guide:{" "}
+            <a
+              href="https://github.com/jatinkrmalik/vocalinux/blob/main/docs/INSTALL.md#appimage"
+              className="font-semibold text-primary hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              INSTALL.md
+            </a>
+            .
+          </p>
+        </div>
       </section>
 
       <section className="mt-14 grid gap-6 md:grid-cols-3">

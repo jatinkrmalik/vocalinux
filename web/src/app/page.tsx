@@ -1022,6 +1022,69 @@ export default function HomePage() {
                   </div>
                 </div>
 
+                {/* Other install options */}
+                <div className="mt-8 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900">
+                  <h4 className="mb-2 font-semibold">Other install options</h4>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    <li>
+                      <strong className="text-foreground">AppImage:</strong>{" "}
+                      portable{" "}
+                      <code className="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-800">
+                        Vocalinux-&lt;version&gt;-x86_64.AppImage
+                      </code>{" "}
+                      /{" "}
+                      <code className="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-800">
+                        …-aarch64.AppImage
+                      </code>{" "}
+                      on{" "}
+                      <a
+                        href="https://github.com/jatinkrmalik/vocalinux/releases"
+                        className="font-semibold text-primary hover:underline"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        GitHub Releases
+                      </a>{" "}
+                      (new tags and nightlies).{" "}
+                      <code className="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-800">
+                        chmod +x
+                      </code>{" "}
+                      and run. Host still needs{" "}
+                      <code className="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-800">
+                        xdotool
+                      </code>
+                      /{" "}
+                      <code className="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-800">
+                        wtype
+                      </code>
+                      /{" "}
+                      <code className="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-800">
+                        ydotool
+                      </code>
+                      .
+                    </li>
+                    <li>
+                      <strong className="text-foreground">Arch (AUR):</strong>{" "}
+                      <code className="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-800">
+                        yay -S vocalinux
+                      </code>
+                    </li>
+                    <li>
+                      <strong className="text-foreground">Flatpak / PyPI:</strong>{" "}
+                      see the{" "}
+                      <a
+                        href="https://github.com/jatinkrmalik/vocalinux/blob/main/docs/INSTALL.md"
+                        className="font-semibold text-primary hover:underline"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        installation guide
+                      </a>
+                      .
+                    </li>
+                  </ul>
+                </div>
+
                 {/* What the installer does */}
                 <div className="mt-8 rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900">
                   <h4 className="mb-3 font-semibold">
