@@ -171,10 +171,18 @@ jobs:
           fail_ci_if_error: false
 
   appimage-smoke-test:
-    name: 📦 Build AppImage (smoke test)
-    runs-on: ubuntu-latest
+    name: 📦 Build AppImage (smoke test, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     needs: changes
     if: needs.changes.outputs.python == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -221,7 +229,7 @@ jobs:
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vocalinux-appimage
+          name: vocalinux-appimage-${{ matrix.arch }}
           path: dist/*.AppImage
           retention-days: 7
 

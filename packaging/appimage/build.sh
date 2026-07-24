@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build a relocatable x86_64 AppImage for Vocalinux.
+# Build a relocatable AppImage for Vocalinux, natively for whichever
+# architecture this script runs on (x86_64 or aarch64) - no cross-compiling.
 #
 # Usage: build.sh <path-to-wheel> <version> [output-dir]
 #
@@ -19,6 +20,12 @@ WHEEL="$1"
 VERSION="$2"
 OUTDIR="${3:-dist}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ARCH="$(uname -m)"
+
+case "$ARCH" in
+  x86_64|aarch64) ;;
+  *) echo "Unsupported architecture: $ARCH (need x86_64 or aarch64)" >&2; exit 1 ;;
+esac
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -26,13 +33,13 @@ APPDIR="$WORKDIR/AppDir"
 TOOLDIR="$WORKDIR/tools"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$TOOLDIR" "$OUTDIR"
 
-echo "== Fetching AppImage tooling =="
+echo "== Fetching AppImage tooling ($ARCH) =="
 curl -fsSL -o "$TOOLDIR/linuxdeploy" \
-  https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+  "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH}.AppImage"
 curl -fsSL -o "$TOOLDIR/linuxdeploy-plugin-gtk.sh" \
   https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh
 curl -fsSL -o "$TOOLDIR/appimagetool" \
-  https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+  "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${ARCH}.AppImage"
 chmod +x "$TOOLDIR/linuxdeploy" "$TOOLDIR/linuxdeploy-plugin-gtk.sh" "$TOOLDIR/appimagetool"
 
 echo "== Bundling Python runtime =="
@@ -86,6 +93,6 @@ export DEPLOY_GTK_VERSION=3
   -i "$APPDIR/usr/share/icons/hicolor/scalable/apps/vocalinux.svg"
 
 echo "== Packaging AppImage =="
-OUTPUT="$OUTDIR/Vocalinux-${VERSION}-x86_64.AppImage"
-ARCH=x86_64 "$TOOLDIR/appimagetool" "$APPDIR" "$OUTPUT"
+OUTPUT="$OUTDIR/Vocalinux-${VERSION}-${ARCH}.AppImage"
+ARCH="$ARCH" "$TOOLDIR/appimagetool" "$APPDIR" "$OUTPUT"
 echo "Built $OUTPUT"

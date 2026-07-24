@@ -74,7 +74,7 @@ jobs:
           echo "Built packages:"
           ls -la dist/
 
-      - name: Build AppImage
+      - name: Build AppImage (x86_64)
         run: |
           bash packaging/appimage/build.sh dist/*.whl "${{ steps.get_version.outputs.VERSION }}" dist
           ls -la dist/*.AppImage
@@ -125,7 +125,8 @@ jobs:
             ```
 
             ### AppImage (no install, no root)
-            Download `Vocalinux-${{ steps.get_version.outputs.VERSION }}-x86_64.AppImage` below:
+            Download the `.AppImage` matching your CPU (`x86_64` or `aarch64`, the latter attached
+            shortly after this release is published) below:
             ```bash
             chmod +x Vocalinux-${{ steps.get_version.outputs.VERSION }}-x86_64.AppImage
             ./Vocalinux-${{ steps.get_version.outputs.VERSION }}-x86_64.AppImage
@@ -134,6 +135,65 @@ jobs:
 
             ---
             See [CHANGELOG](https://github.com/jatinkrmalik/vocalinux/releases) for detailed changes.
+
+  build-appimage-arm64:
+    name: Build and Attach AppImage (aarch64)
+    needs: build-and-release
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            portaudio19-dev \
+            python3-dev \
+            libgirepository1.0-dev \
+            libgirepository-2.0-dev \
+            pkg-config \
+            libcairo2-dev \
+            gobject-introspection \
+            gir1.2-gtk-3.0 \
+            gir1.2-appindicator3-0.1 \
+            gir1.2-ibus-1.0
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel setuptools
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build package
+        run: |
+          python -m build
+          ls -la dist/
+
+      - name: Build AppImage (aarch64)
+        run: |
+          bash packaging/appimage/build.sh dist/*.whl "${{ steps.get_version.outputs.VERSION }}" dist
+          ls -la dist/*.AppImage
+
+      - name: Attach to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/*.AppImage \
+            --repo ${{ github.repository }} \
+            --clobber
 
   publish-pypi:
     name: Publish to PyPI
