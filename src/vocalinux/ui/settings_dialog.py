@@ -1280,11 +1280,29 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(copy_to_clipboard_row)
 
+        self.restore_clipboard_switch = Gtk.Switch()
+        self.restore_clipboard_switch.set_tooltip_text(
+            "On Wayland with a non-US keyboard layout, Vocalinux pastes dictation "
+            "via the clipboard (ydotool cannot type your layout directly), which "
+            "normally overwrites whatever you had copied. When enabled, Vocalinux "
+            "restores your previous clipboard after pasting and marks the dictation "
+            "as sensitive so clipboard managers like KDE Klipper keep it out of "
+            "history. Restore timing is best-effort. Has no effect on X11 or when "
+            "'Copy to Clipboard' is on."
+        )
+        restore_clipboard_row = PreferenceRow(
+            title="Preserve Clipboard",
+            subtitle="Restore your clipboard after dictation is pasted (Wayland paste only)",
+            widget=self.restore_clipboard_switch,
+        )
+        group.add_row(restore_clipboard_row)
+
         self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
+        self.restore_clipboard_switch.connect("state-set", self._on_restore_clipboard_toggled)
 
     def _on_autostart_toggled(self, widget, state):
         """Handle toggle of the autostart switch."""
@@ -1326,6 +1344,18 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("text_injection", "copy_to_clipboard", enabled)
         self.config_manager.save_settings()
         logger.info(f"Copy to clipboard {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_restore_clipboard_toggled(self, widget, state):
+        """Handle toggle of the preserve-clipboard switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Preserve clipboard toggled: {enabled}")
+        self.config_manager.set("text_injection", "restore_clipboard_after_paste", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Preserve clipboard {'enabled' if enabled else 'disabled'}")
         return False
 
     def _on_sound_effects_toggled(self, widget, state):
@@ -2490,10 +2520,12 @@ class SettingsDialog(Gtk.Dialog):
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
+        restore_clipboard = text_injection_settings.get("restore_clipboard_after_paste", False)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
+        self.restore_clipboard_switch.set_active(restore_clipboard)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
 
         available_engines = get_available_engines()

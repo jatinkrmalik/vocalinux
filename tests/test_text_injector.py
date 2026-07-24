@@ -659,6 +659,297 @@ class TestTextInjector(unittest.TestCase):
             self.assertEqual(kwargs.get("stderr"), subprocess.DEVNULL)
             self.assertNotEqual(kwargs.get("stderr"), subprocess.PIPE)
 
+    def _make_wayland_ydotool_injector(self):
+        """Build a TextInjector wired for the Wayland ydotool clipboard-paste path."""
+        injector = TextInjector()
+        injector.wayland_tool = "ydotool"
+        injector.environment = DesktopEnvironment.WAYLAND
+        return injector
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_paste_default_leaves_clipboard_untouched(self, mock_run, mock_which):
+        """With preserve-clipboard OFF (default), the paste copy is a plain
+        wl-copy: no --sensitive flag, no clipboard read, no restore. This guards
+        the unchanged legacy behavior for existing users."""
+        mock_which.side_effect = lambda x: x in ("ydotool", "wl-copy", "wl-paste")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = self._make_wayland_ydotool_injector()
+            with (
+                patch.object(injector, "_should_restore_clipboard", return_value=False),
+                patch.object(injector, "_should_copy_to_clipboard", return_value=False),
+            ):
+                mock_run.reset_mock()
+                self.assertTrue(injector._inject_via_clipboard_paste("Hello world"))
+
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            wl_copy_calls = [c for c in calls if c and c[0] == "wl-copy"]
+            self.assertTrue(wl_copy_calls, "Should copy text to clipboard")
+            self.assertFalse(
+                any("--sensitive" in c for c in wl_copy_calls),
+                "Default path must not pass --sensitive",
+            )
+            self.assertFalse(
+                any(c[0] == "wl-paste" for c in calls),
+                "Default path must not read the clipboard for restore",
+            )
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_paste_preserve_marks_sensitive_and_restores(self, mock_run, mock_which):
+        """With preserve-clipboard ON and wl-copy supporting --sensitive, the
+        dictation copy is marked sensitive, the previous clipboard is read, and
+        it is restored afterward (a second, plain wl-copy)."""
+        mock_which.side_effect = lambda x: x in ("ydotool", "wl-copy", "wl-paste")
+        mock_run.return_value = MagicMock(returncode=0, stdout="prev-clip", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = self._make_wayland_ydotool_injector()
+            with (
+                patch.object(injector, "_should_restore_clipboard", return_value=True),
+                patch.object(injector, "_should_copy_to_clipboard", return_value=False),
+                patch.object(injector, "_wl_copy_supports_sensitive", return_value=True),
+            ):
+                mock_run.reset_mock()
+                self.assertTrue(injector._inject_via_clipboard_paste("dictation"))
+
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            wl_copy_calls = [c for c in calls if c and c[0] == "wl-copy"]
+            self.assertTrue(
+                any("--sensitive" in c for c in wl_copy_calls),
+                "Dictation copy should be marked --sensitive",
+            )
+            self.assertTrue(
+                any(c[0] == "wl-paste" for c in calls),
+                "Should read the clipboard before overwriting it",
+            )
+            self.assertGreaterEqual(
+                len(wl_copy_calls), 2, "Should copy the dictation and then restore the clipboard"
+            )
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_paste_preserve_without_sensitive_support_still_restores(self, mock_run, mock_which):
+        """Compatibility: on an older wl-clipboard that lacks --sensitive, the flag
+        is never passed (would error), but the clipboard is still restored."""
+        mock_which.side_effect = lambda x: x in ("ydotool", "wl-copy", "wl-paste")
+        mock_run.return_value = MagicMock(returncode=0, stdout="prev-clip", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = self._make_wayland_ydotool_injector()
+            with (
+                patch.object(injector, "_should_restore_clipboard", return_value=True),
+                patch.object(injector, "_should_copy_to_clipboard", return_value=False),
+                patch.object(injector, "_wl_copy_supports_sensitive", return_value=False),
+            ):
+                mock_run.reset_mock()
+                self.assertTrue(injector._inject_via_clipboard_paste("dictation"))
+
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            wl_copy_calls = [c for c in calls if c and c[0] == "wl-copy"]
+            self.assertFalse(
+                any("--sensitive" in c for c in wl_copy_calls),
+                "Must not pass --sensitive to a wl-copy that does not support it",
+            )
+            self.assertGreaterEqual(
+                len(wl_copy_calls), 2, "Should still restore the clipboard on older wl-clipboard"
+            )
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_paste_preserve_skipped_when_copy_to_clipboard_on(self, mock_run, mock_which):
+        """When 'Copy to Clipboard' is enabled the user wants the text kept, so
+        preserve-clipboard is a no-op even if its own toggle is on."""
+        mock_which.side_effect = lambda x: x in ("ydotool", "wl-copy", "wl-paste")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = self._make_wayland_ydotool_injector()
+            with (
+                patch.object(injector, "_should_restore_clipboard", return_value=True),
+                patch.object(injector, "_should_copy_to_clipboard", return_value=True),
+                patch.object(injector, "_wl_copy_supports_sensitive", return_value=True),
+            ):
+                mock_run.reset_mock()
+                self.assertTrue(injector._inject_via_clipboard_paste("dictation"))
+
+            calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+            wl_copy_calls = [c for c in calls if c and c[0] == "wl-copy"]
+            self.assertFalse(
+                any("--sensitive" in c for c in wl_copy_calls),
+                "Should not mark sensitive when copy_to_clipboard keeps the text",
+            )
+            self.assertFalse(
+                any(c[0] == "wl-paste" for c in calls),
+                "Should not read/restore the clipboard when copy_to_clipboard is on",
+            )
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_wl_copy_supports_sensitive_probe(self, mock_run, mock_which):
+        """_wl_copy_supports_sensitive reflects whether --sensitive is in help."""
+        mock_which.side_effect = lambda x: x == "wl-copy"
+
+        injector = TextInjector.__new__(TextInjector)
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="Usage:\n    --sensitive  Hint sensitive\n", stderr=""
+        )
+        self.assertTrue(injector._wl_copy_supports_sensitive())
+
+        injector_old = TextInjector.__new__(TextInjector)
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="Usage:\n    -o paste once\n", stderr=""
+        )
+        self.assertFalse(injector_old._wl_copy_supports_sensitive())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_empty_returns_empty_string(self, mock_run, mock_which):
+        """An empty clipboard (wl-paste 'Nothing is copied') reads as '' so it can
+        still be restored (clearing the transient dictation), not skipped."""
+        mock_which.side_effect = lambda x: x == "wl-paste"
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="Nothing is copied to clipboard.\n"
+        )
+
+        injector = TextInjector.__new__(TextInjector)
+        injector._clipboard_timeout = 0.35
+        self.assertEqual(injector._read_clipboard(), "")
+
+    def test_should_restore_clipboard_reads_config(self):
+        """_should_restore_clipboard reflects the on-disk config, defaulting to
+        False when the file is missing, disabled, or unreadable."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            cfg = os.path.join(d, "config.json")
+            with patch("vocalinux.text_injection.text_injector.config_dir", return_value=d):
+                inj = TextInjector.__new__(TextInjector)
+
+                # No config file -> default False
+                self.assertFalse(inj._should_restore_clipboard())
+
+                # Enabled
+                with open(cfg, "w") as f:
+                    f.write('{"text_injection": {"restore_clipboard_after_paste": true}}')
+                self.assertTrue(inj._should_restore_clipboard())
+
+                # Disabled
+                with open(cfg, "w") as f:
+                    f.write('{"text_injection": {"restore_clipboard_after_paste": false}}')
+                self.assertFalse(inj._should_restore_clipboard())
+
+                # Malformed JSON -> exception path -> False
+                with open(cfg, "w") as f:
+                    f.write("{ not valid json")
+                self.assertFalse(inj._should_restore_clipboard())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_wl_copy_supports_sensitive_absent_and_cached(self, mock_run, mock_which):
+        """No wl-copy -> False without probing; result is cached on the instance."""
+        mock_which.return_value = None
+        inj = TextInjector.__new__(TextInjector)
+        self.assertFalse(inj._wl_copy_supports_sensitive())
+        mock_run.assert_not_called()
+
+        # Cached: even though wl-copy now "exists", no re-probe happens.
+        mock_which.side_effect = lambda x: x == "wl-copy"
+        self.assertFalse(inj._wl_copy_supports_sensitive())
+        mock_run.assert_not_called()
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_wl_copy_supports_sensitive_probe_exception(self, mock_run, mock_which):
+        """A failing `wl-copy --help` probe degrades to False, not an exception."""
+        mock_which.side_effect = lambda x: x == "wl-copy"
+        mock_run.side_effect = OSError("boom")
+        inj = TextInjector.__new__(TextInjector)
+        self.assertFalse(inj._wl_copy_supports_sensitive())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_wl_paste_success(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "wl-paste"
+        mock_run.return_value = MagicMock(returncode=0, stdout="hello", stderr="")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertEqual(inj._read_clipboard(), "hello")
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_xclip_fallback(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "xclip"
+        mock_run.return_value = MagicMock(returncode=0, stdout="clip-x", stderr="")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertEqual(inj._read_clipboard(), "clip-x")
+        calls = [c.args[0] for c in mock_run.call_args_list if c.args]
+        self.assertTrue(any(c[0] == "xclip" for c in calls))
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_xsel_fallback(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "xsel"
+        mock_run.return_value = MagicMock(returncode=0, stdout="clip-s", stderr="")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertEqual(inj._read_clipboard(), "clip-s")
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_none_when_no_readers(self, mock_run, mock_which):
+        mock_which.return_value = None
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertIsNone(inj._read_clipboard())
+        mock_run.assert_not_called()
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_reader_exception_returns_none(self, mock_run, mock_which):
+        mock_which.side_effect = lambda x: x == "xclip"
+        mock_run.side_effect = OSError("no display")
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertIsNone(inj._read_clipboard())
+
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_read_clipboard_wl_paste_exception_falls_through(self, mock_run, mock_which):
+        """A wl-paste timeout/error is swallowed; with no other reader -> None."""
+        mock_which.side_effect = lambda x: x == "wl-paste"
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="wl-paste", timeout=0.35)
+        inj = TextInjector.__new__(TextInjector)
+        inj._clipboard_timeout = 0.35
+        self.assertIsNone(inj._read_clipboard())
+
+    def test_restore_clipboard_none_is_noop(self):
+        inj = TextInjector.__new__(TextInjector)
+        copied = []
+        inj._copy_to_clipboard = lambda text, sensitive=False: copied.append(text) or True
+        inj._restore_clipboard(None)
+        self.assertEqual(copied, [])
+
+    def test_restore_clipboard_copies_saved(self):
+        inj = TextInjector.__new__(TextInjector)
+        copied = []
+        inj._copy_to_clipboard = lambda text, sensitive=False: copied.append(text) or True
+        inj._restore_clipboard("prev-value")
+        self.assertEqual(copied, ["prev-value"])
+
+    def test_restore_clipboard_swallows_errors(self):
+        inj = TextInjector.__new__(TextInjector)
+
+        def boom(text, sensitive=False):
+            raise RuntimeError("copy failed")
+
+        inj._copy_to_clipboard = boom
+        # Must not raise.
+        inj._restore_clipboard("prev-value")
+
     @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=False)
     @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=False)
     @patch("vocalinux.text_injection.text_injector.shutil.which")
