@@ -4,89 +4,90 @@
 
 @layer base {
   :root {
-    /* Cool paper workstation palette — DESIGN.md */
-    --background: #f1f4f2;
-    --foreground: #121916;
-    --card: #ffffff;
-    --card-foreground: #121916;
+    /* PR #546 craft language: pure iron surfaces + committed emerald */
+    --background: #ffffff;
+    --foreground: #09090b;
+    --card: #f4f4f5;
+    --card-foreground: #09090b;
     --popover: #ffffff;
-    --popover-foreground: #121916;
-    --primary: #2f9a6a;
+    --popover-foreground: #09090b;
+    --primary: #2f9e5f;
     --primary-deep: #1f6f4c;
     --primary-foreground: #ffffff;
-    --secondary: #e4ebe6;
-    --secondary-foreground: #121916;
-    --muted: #e4ebe6;
-    --muted-foreground: #4a5750;
-    --accent: #d8f0e4;
-    --accent-foreground: #1f6f4c;
-    --destructive: #c23b3b;
+    --secondary: #f4f4f5;
+    --secondary-foreground: #18181b;
+    --muted: #f4f4f5;
+    --muted-foreground: #52525b;
+    --accent: #ecfdf3;
+    --accent-foreground: #14532d;
+    --destructive: #ef4444;
     --destructive-foreground: #fafafa;
-    --border: #c8d4cc;
-    --input: #c8d4cc;
-    --ring: #2f9a6a;
-    --chart-1: #2f9a6a;
-    --chart-2: #1f6f4c;
-    --chart-3: #2f3f4a;
-    --chart-4: #c4a35a;
-    --chart-5: #d97745;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    --ring: #2f9e5f;
+    --chart-1: #2f9e5f;
+    --chart-2: #3f3f46;
+    --chart-3: #71717a;
+    --chart-4: #a1a1aa;
+    --chart-5: #d4d4d8;
     --radius: 0.625rem;
 
-    --sidebar-background: #eef2ef;
-    --sidebar-foreground: #3a4540;
-    --sidebar-primary: #2f9a6a;
+    --sidebar-background: #fafafa;
+    --sidebar-foreground: #3f3f46;
+    --sidebar-primary: #2f9e5f;
     --sidebar-primary-foreground: #fafafa;
-    --sidebar-accent: #e4ebe6;
-    --sidebar-accent-foreground: #121916;
-    --sidebar-border: #c8d4cc;
-    --sidebar-ring: #2f9a6a;
+    --sidebar-accent: #f4f4f5;
+    --sidebar-accent-foreground: #18181b;
+    --sidebar-border: #e5e7eb;
+    --sidebar-ring: #2f9e5f;
 
-    --terminal: #0d1411;
-    --terminal-fg: #8fdfb5;
-    --ink: #121916;
-    --paper: #f1f4f2;
+    --terminal: #0a0a0c;
+    --terminal-fg: #6ee7a8;
+    --ink: #09090b;
+    --paper: #ffffff;
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .dark {
-    --background: #0c1210;
-    --foreground: #e8efe9;
-    --card: #151c19;
-    --card-foreground: #e8efe9;
-    --popover: #151c19;
-    --popover-foreground: #e8efe9;
-    --primary: #3cb371;
-    --primary-deep: #2f9a6a;
-    --primary-foreground: #0c1210;
-    --secondary: #1c2621;
-    --secondary-foreground: #e8efe9;
-    --muted: #1c2621;
-    --muted-foreground: #8a9a91;
-    --accent: #1c3328;
-    --accent-foreground: #a8e0c4;
+    --background: #0c0c0e;
+    --foreground: #fafafa;
+    --card: #16161a;
+    --card-foreground: #fafafa;
+    --popover: #16161a;
+    --popover-foreground: #fafafa;
+    --primary: #50c878;
+    --primary-deep: #3cb371;
+    --primary-foreground: #052e16;
+    --secondary: #1c1c21;
+    --secondary-foreground: #fafafa;
+    --muted: #1c1c21;
+    --muted-foreground: #a1a1aa;
+    --accent: #0f291a;
+    --accent-foreground: #86efac;
     --destructive: #7f1d1d;
     --destructive-foreground: #fafafa;
-    --border: #2a3530;
-    --input: #2a3530;
-    --ring: #3cb371;
-    --chart-1: #3cb371;
-    --chart-2: #5ecf9a;
-    --chart-3: #fb923c;
-    --chart-4: #86efac;
-    --chart-5: #f87171;
+    --border: #27272a;
+    --input: #27272a;
+    --ring: #50c878;
+    --chart-1: #50c878;
+    --chart-2: #a1a1aa;
+    --chart-3: #71717a;
+    --chart-4: #52525b;
+    --chart-5: #3f3f46;
 
-    --sidebar-background: #101714;
-    --sidebar-foreground: #e4ebe6;
-    --sidebar-primary: #3cb371;
-    --sidebar-primary-foreground: #0c1210;
-    --sidebar-accent: #1c2621;
-    --sidebar-accent-foreground: #e4ebe6;
-    --sidebar-border: #2a3530;
-    --sidebar-ring: #3cb371;
+    --sidebar-background: #16161a;
+    --sidebar-foreground: #f4f4f5;
+    --sidebar-primary: #50c878;
+    --sidebar-primary-foreground: #052e16;
+    --sidebar-accent: #1c1c21;
+    --sidebar-accent-foreground: #f4f4f5;
+    --sidebar-border: #27272a;
+    --sidebar-ring: #50c878;
 
-    --terminal: #060a08;
-    --terminal-fg: #8fdfb5;
-    --ink: #e8efe9;
-    --paper: #0c1210;
+    --terminal: #060608;
+    --terminal-fg: #6ee7a8;
+    --ink: #fafafa;
+    --paper: #0c0c0e;
   }
 }
 
@@ -115,29 +116,34 @@
   h3,
   .font-display {
     font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+    @apply outline-2 outline-offset-2 outline-primary;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[color:var(--primary-deep,#1f6f4c)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6 sm:py-3.5 sm:text-base;
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   }
 
-  .btn-ink {
-    @apply inline-flex items-center justify-center gap-2 rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6 sm:py-3.5 sm:text-base;
+  .btn-secondary {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border bg-background px-5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-6 sm:py-3.5 sm:text-base;
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-full border border-border bg-transparent px-5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   }
 
   .terminal-panel {
-    @apply w-full max-w-full min-w-0 overflow-hidden rounded-[10px] border border-zinc-800 bg-[color:var(--terminal)] shadow-[0_12px_32px_rgba(12,18,16,0.18)];
+    @apply w-full max-w-full min-w-0 overflow-hidden rounded-[12px] border border-zinc-800 bg-[color:var(--terminal)] shadow-[0_24px_60px_-28px_rgba(0,0,0,0.55)];
   }
 
   .terminal-panel pre {
@@ -151,15 +157,14 @@
   }
 
   .section-lede {
-    @apply mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg;
+    @apply mt-3 max-w-xl text-base text-muted-foreground sm:text-lg;
   }
 
-  .feature-row {
-    @apply flex gap-4 border-b border-border py-5 last:border-b-0;
+  .shot-frame {
+    @apply relative overflow-hidden rounded-[12px] border border-border bg-card shadow-[0_24px_60px_-28px_rgba(0,0,0,0.35)];
   }
 }
 
-/* Hide scrollbars but keep scroll functionality */
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -168,9 +173,16 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .text-measure {
+    max-width: 65ch;
+  }
+
+  .ease-out-expo {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
 }
 
-/* Hide scrollbars on syntax highlighter code blocks */
 pre[class*="language-"],
 code {
   -ms-overflow-style: none;
@@ -185,7 +197,6 @@ nextjs-portal {
   display: none;
 }
 
-/* Respect user's motion preferences for accessibility */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

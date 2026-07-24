@@ -75,37 +75,37 @@ components:
 
 **Creative North Star: "The Linux desk utility"**
 
-This site should feel like a carefully made utility page for a tool that lives in your system tray: quiet paper and ink, one green signal color, a real terminal install block, and proof from the desktop. It refuses the generic AI SaaS landing template (purple gradients, floating orbs, icon-card feature grids, gradient headlines, "finally done right" hype).
+Hybrid of the deslop pass and closed PR #546 craft language: pure white / near-black iron surfaces, committed emerald, real app screenshots as proof, full-bleed install strip, asymmetric hero. Refuses generic AI SaaS (purple mesh, gradient text, icon-card grids, browser SpeechRecognition demos).
 
-Marketing surfaces (home and guides) use **Persuade** mode with craft restraint: show the install path and what the app does, then secondary guides. Subpages inherit the same type, color, and shell language.
+Marketing surfaces use **Persuade** mode: first viewport shows product + screenshot; conversion lives in the install strip; then desktop proof.
 
 **Key Characteristics:**
-- Cool green-gray paper surfaces (not cream/beige, not purple)
-- Display + body pairing with mono reserved for commands and paths
-- Terminal install as a first-class artifact, not a decorative code chip
-- Features as readable rows or tight lists, not identical icon tiles
-- Motion only where it helps (menu open, copy feedback); content visible by default
+- Pure white / zinc iron surfaces (not cream, not purple)
+- Display (Bricolage Grotesque) + body (Source Sans 3); mono for install only
+- Real `/public/screenshots/` in hero and feature bento
+- Full-bleed dark install strip as primary conversion
+- Spec rail + dense engine list instead of rainbow icon cards
 
 ## Colors
 
-Restrained strategy: neutrals carry the page; emerald signal is the only accent family.
+Committed emerald on pure iron neutrals (from PR #546 palette).
 
 ### Primary
-- **Signal Green** (#2f9a6a): primary buttons, focus rings, success marks, key links
+- **Signal Green** (#2f9e5f light / #50c878 dark): buttons, focus, success marks, key links
 - **Deep Canopy** (#1f6f4c): hover/pressed primary
 
 ### Neutral
-- **Ink** (#121916): primary text
-- **Cool Paper** (#f1f4f2): page background
-- **Raised Paper** (#ffffff): elevated panels
-- **Moss Mute** (#4a5750): secondary text (tinted, not pure gray)
-- **Seam** (#c8d4cc): borders
-- **Terminal Night** (#0d1411) / **Terminal Leaf** (#8fdfb5): install command surfaces only
+- **Ink** (#09090b / #fafafa dark): primary text
+- **Iron White** (#ffffff): page background (light)
+- **Surface** (#f4f4f5 / #16161a): elevated panels
+- **Muted** (#52525b / #a1a1aa): secondary text
+- **Seam** (#e4e4e7 / #27272a): borders
+- **Terminal Night** (#0a0a0c) / **Terminal Leaf** (#6ee7a8): install command surfaces
 
 ### Named Rules
-**The One Signal Rule.** Emerald is the only chromatic accent on marketing pages. Do not introduce purple, cyan glow pairs, multi-colored metric chips, or rainbow icon tiles.
+**The One Signal Rule.** Emerald is the only chromatic accent. No purple, cyan glow pairs, multi-colored metric chips, or rainbow icon tiles.
 
-**The Cool Paper Rule.** Backgrounds stay cool green-gray paper or ink. Never warm cream/beige as the "tasteful" default, and never purple-to-blue AI gradients.
+**The Iron Surface Rule.** Backgrounds stay pure white or near-black iron. Never warm cream/beige as the tasteful default, and never purple-to-blue AI gradients.
 
 ## Typography
 
