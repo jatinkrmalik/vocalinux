@@ -6,7 +6,7 @@ colors:
   paper: "#ffffff"
   paper-raised: "#f4f4f5"
   surface-muted: "#f4f4f5"
-  primary: "#2f9e5f"
+  primary: "#1a7f4e"
   primary-deep: "#1f6f4c"
   primary-soft: "#ecfdf3"
   terminal: "#0a0a0c"

@@ -551,7 +551,7 @@ export default function HomePage() {
                 and wires the desktop app.
               </p>
             </div>
-            <p className="font-mono text-xs text-zinc-500 lg:col-span-5 lg:text-right">
+            <p className="font-mono text-xs text-zinc-400 lg:col-span-5 lg:text-right">
               Ubuntu · Fedora · Debian · Arch · openSUSE
             </p>
           </div>
@@ -560,20 +560,20 @@ export default function HomePage() {
             displayCommand={interactiveInstallDisplayCommand}
             label="install.sh --interactive"
           />
-          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-400">
+          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-300">
             <span>
               Then launch:{" "}
               <code className="font-mono text-emerald-400">vocalinux</code>
             </span>
             <Link
               href="/compare/"
-              className="text-zinc-200 underline-offset-4 hover:underline"
+              className="text-zinc-100 underline-offset-4 hover:underline"
             >
               Compare engines
             </Link>
             <Link
               href="/install/"
-              className="text-zinc-200 underline-offset-4 hover:underline"
+              className="text-zinc-100 underline-offset-4 hover:underline"
             >
               Distro notes
             </Link>
@@ -1113,14 +1113,14 @@ export default function HomePage() {
                   Vocalinux
                 </span>
               </Link>
-              <p className="mb-4 max-w-xs text-sm text-zinc-500">
+              <p className="mb-4 max-w-xs text-sm text-zinc-400">
                 Free open-source voice dictation for Linux. Offline by default.
               </p>
               <a
                 href="https://github.com/jatinkrmalik/vocalinux"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-zinc-500 transition-colors hover:text-white"
+                className="text-zinc-400 transition-colors hover:text-white"
                 aria-label="GitHub"
               >
                 <Github className="h-6 w-6" />
@@ -1185,14 +1185,14 @@ export default function HomePage() {
                       {link.href.startsWith("#") ? (
                         <a
                           href={link.href}
-                          className="text-zinc-500 transition-colors hover:text-white"
+                          className="text-zinc-400 transition-colors hover:text-white"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="text-zinc-500 transition-colors hover:text-white"
+                          className="text-zinc-400 transition-colors hover:text-white"
                         >
                           {link.label}
                         </Link>
@@ -1204,10 +1204,10 @@ export default function HomePage() {
             ))}
           </div>
           <div className="flex flex-col items-center justify-between gap-4 border-t border-zinc-800 pt-8 sm:flex-row">
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-zinc-400">
               © {new Date().getFullYear()} Vocalinux. Open-source under GPL-3.0.
             </p>
-            <p className="flex items-center gap-1 text-sm text-zinc-500">
+            <p className="flex items-center gap-1 text-sm text-zinc-400">
               Made with <Heart className="h-4 w-4 text-primary" /> by{" "}
               <a
                 href="https://x.com/intent/user?screen_name=jatinkrmalik"

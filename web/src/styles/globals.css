@@ -11,8 +11,9 @@
     --card-foreground: #09090b;
     --popover: #ffffff;
     --popover-foreground: #09090b;
-    --primary: #2f9e5f;
-    --primary-deep: #1f6f4c;
+    /* Darker emerald so white button text clears ~4.5:1 (was 3.4 on #2f9e5f) */
+    --primary: #1a7f4e;
+    --primary-deep: #14663e;
     --primary-foreground: #ffffff;
     --secondary: #f4f4f5;
     --secondary-foreground: #18181b;
