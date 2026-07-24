@@ -1126,6 +1126,7 @@ class TextInjector:
         # Restore the previous clipboard content after a short delay so the
         # Ctrl+V paste has time to land before the clipboard changes.
         if previous_clipboard is not None:
+
             def _restore() -> None:
                 time.sleep(0.3)
                 if self._copy_to_clipboard(previous_clipboard):
