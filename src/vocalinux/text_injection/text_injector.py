@@ -206,12 +206,10 @@ class TextInjector:
     )
 
     def _kde_virtual_keyboard_enabled(self) -> bool:
-        """Return True when KWin's VirtualKeyboard / input method is enabled.
+        """Return True when KWin VirtualKeyboard / input method is enabled.
 
-        On KDE Plasma Wayland, IBus commits only reach native apps when KWin
-        has its virtual keyboard (input method) enabled, typically "IBus
-        Wayland" in System Settings. If disabled or unqueryable, treat IBus as
-        unbridged (issue #574).
+        On KDE Plasma Wayland, IBus only reaches native apps when this is on
+        (issue #574). Disabled or unqueryable → treat IBus as unbridged.
         """
         try:
             result = subprocess.run(
@@ -234,20 +232,12 @@ class TextInjector:
             )
         except (subprocess.SubprocessError, FileNotFoundError) as e:
             logger.info(
-                "Could not query KWin VirtualKeyboard (%s); treating IBus as "
-                "unbridged on KDE Plasma Wayland.",
+                "Could not query KWin VirtualKeyboard (%s); treating IBus as unbridged.",
                 e,
             )
             return False
 
-        if result.returncode != 0:
-            logger.info(
-                "KWin VirtualKeyboard query failed; treating IBus as unbridged "
-                "on KDE Plasma Wayland."
-            )
-            return False
-
-        out = (result.stdout or "").strip().lower()
+        out = (result.stdout or "").strip().lower() if result.returncode == 0 else ""
         # gdbus prints variant wrappers like: (<<true>>,) or (<<false>>,)
         if "true" in out:
             return True
@@ -260,8 +250,8 @@ class TextInjector:
             return False
 
         logger.info(
-            "Unexpected KWin VirtualKeyboard response %r; treating IBus as "
-            "unbridged on KDE Plasma Wayland.",
+            "KWin VirtualKeyboard not confirmed (rc=%s out=%r); treating IBus as unbridged.",
+            result.returncode,
             result.stdout,
         )
         return False
