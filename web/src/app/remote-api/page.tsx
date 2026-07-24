@@ -109,7 +109,7 @@ export default function RemoteApiPage() {
           <Server className="h-4 w-4" />
           v0.12.0 Remote Engine
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Remote API Speech Recognition for Linux
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -144,9 +144,9 @@ export default function RemoteApiPage() {
           return (
             <article
               key={item.title}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
-              <span className="bg-primary/10 mb-4 inline-flex rounded-xl p-3">
+              <span className="bg-primary/10 mb-4 inline-flex rounded-[12px] p-3">
                 <Icon className="h-6 w-6 text-primary" />
               </span>
               <h2 className="mb-2 text-xl font-semibold">{item.title}</h2>
@@ -158,21 +158,21 @@ export default function RemoteApiPage() {
         })}
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-5 text-2xl font-bold">
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-5 font-display text-2xl font-semibold">
           Supported Remote API Formats
         </h2>
         <div className="grid gap-4 md:grid-cols-2">
           {protocolOptions.map((option) => (
             <article
               key={option.endpoint}
-              className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/60"
+              className="rounded-[12px] border border-border bg-muted p-5"
             >
               <h3 className="mb-2 text-lg font-semibold">{option.name}</h3>
               <p className="mb-3 text-sm text-muted-foreground">
                 {option.description}
               </p>
-              <code className="rounded-md bg-zinc-950 px-2.5 py-1.5 text-sm text-green-400">
+              <code className="rounded-md bg-[color:var(--terminal)] px-2.5 py-1.5 text-sm text-[color:var(--terminal-fg)]">
                 {option.endpoint}
               </code>
             </article>
@@ -181,15 +181,15 @@ export default function RemoteApiPage() {
       </section>
 
       <section className="mb-12 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
-            <Terminal className="h-5 w-5 text-green-500" />
+        <div className="rounded-[12px] border border-border bg-muted p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
+            <Terminal className="h-5 w-5 text-primary" />
             How the Request Flows
           </h2>
           <ol className="space-y-3 text-sm text-muted-foreground">
             {workflowSteps.map((step, index) => (
               <li key={step} className="flex gap-3">
-                <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground dark:text-black">
+                <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                   {index + 1}
                 </span>
                 <span>{step}</span>
@@ -198,22 +198,22 @@ export default function RemoteApiPage() {
           </ol>
         </div>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
-            <Lock className="h-5 w-5 text-blue-500" />
+        <div className="rounded-[12px] border border-border bg-background p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
+            <Lock className="h-5 w-5 text-primary" />
             Privacy and Security Notes
           </h2>
           <ul className="space-y-3 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
               Audio is not written to disk before upload.
             </li>
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
               Use HTTPS and an API key outside a trusted local network.
             </li>
             <li className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
               Remote API is not the same as fully offline mode because audio is
               sent to the server you configure.
             </li>
@@ -222,14 +222,14 @@ export default function RemoteApiPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-5 text-2xl font-bold">Remote API Setup Path</h2>
+        <h2 className="mb-5 font-display text-2xl font-semibold">Remote API Setup Path</h2>
         <div className="grid gap-5 md:grid-cols-2">
           {setupSteps.map((step, index) => (
             <article
               key={step.title}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
-              <span className="mb-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground dark:text-black">
+              <span className="mb-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                 {index + 1}
               </span>
               <h3 className="mb-2 text-xl font-semibold">{step.title}</h3>
@@ -241,8 +241,8 @@ export default function RemoteApiPage() {
         </div>
       </section>
 
-      <section className="border-primary/20 bg-primary/5 rounded-2xl border p-8">
-        <h2 className="mb-4 text-2xl font-bold">Next Steps</h2>
+      <section className="border-primary/20 bg-primary/5 rounded-[12px] border p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Next Steps</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <Link href="/advanced-settings/" className="group">
             <h3 className="font-semibold">Open advanced settings</h3>

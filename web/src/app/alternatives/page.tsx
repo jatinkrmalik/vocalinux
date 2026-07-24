@@ -101,11 +101,11 @@ export default function AlternativesPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Zap className="h-4 w-4" />
           Comparison
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Vocalinux vs The Alternatives
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -114,8 +114,8 @@ export default function AlternativesPage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-primary/20 bg-primary/5 p-6">
-        <h2 className="mb-4 text-xl font-bold">Why Vocalinux for Linux?</h2>
+      <section className="mb-12 rounded-[12px] border border-primary/20 bg-primary/5 p-6">
+        <h2 className="mb-4 text-xl font-semibold">Why Vocalinux for Linux?</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex items-center gap-3">
             <Lock className="h-5 w-5 text-primary" />
@@ -136,11 +136,11 @@ export default function AlternativesPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 overflow-x-auto dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-6 text-2xl font-bold">Feature Comparison</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6 overflow-x-auto">
+        <h2 className="mb-6 font-display text-2xl font-semibold">Feature Comparison</h2>
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-700">
+            <tr className="border-b border-border">
               <th className="pb-3 text-sm font-semibold">Feature</th>
               <th className="pb-3 text-sm font-semibold">Vocalinux</th>
               <th className="pb-3 text-sm font-semibold">Dragon</th>
@@ -150,34 +150,34 @@ export default function AlternativesPage() {
           </thead>
           <tbody className="text-sm">
             {comparisonTable.map((row) => (
-              <tr key={row.feature} className="border-b border-zinc-100 dark:border-zinc-700/70">
+              <tr key={row.feature} className="border-b border-border">
                 <td className="py-3 font-medium">{row.feature}</td>
                 <td className="py-3">
                   {row.vocalinux ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-500" />
+                    <XCircle className="h-5 w-5 text-primary" />
                   )}
                 </td>
                 <td className="py-3">
                   {row.dragon ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-500" />
+                    <XCircle className="h-5 w-5 text-primary" />
                   )}
                 </td>
                 <td className="py-3">
                   {row.otter ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-500" />
+                    <XCircle className="h-5 w-5 text-primary" />
                   )}
                 </td>
                 <td className="py-3">
                   {row.google ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-500" />
+                    <XCircle className="h-5 w-5 text-primary" />
                   )}
                 </td>
               </tr>
@@ -187,28 +187,28 @@ export default function AlternativesPage() {
       </section>
 
       <section className="space-y-6">
-        <h2 className="text-2xl font-bold">Detailed Comparison</h2>
+        <h2 className="font-display text-2xl font-semibold">Detailed Comparison</h2>
         {alternatives.map((alt) => (
           <article
             key={alt.name}
-            className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-[12px] border border-border bg-background p-6"
           >
             <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold">{alt.name}</h3>
+                <h3 className="text-xl font-semibold">{alt.name}</h3>
                 <p className="text-sm text-muted-foreground">{alt.type}</p>
               </div>
-              <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium dark:bg-zinc-700">
+              <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium bg-muted">
                 {alt.pricing}
               </span>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-                <p className="mb-2 text-sm font-semibold text-green-700 dark:text-green-400">Pros</p>
+              <div className="rounded-lg bg-primary/10 p-4 dark:bg-primary/10">
+                <p className="mb-2 text-sm font-semibold text-primary dark:text-[color:var(--terminal-fg)]">Pros</p>
                 <ul className="space-y-1">
                   {alt.pros.map((pro) => (
-                    <li key={pro} className="flex items-center gap-2 text-sm text-green-600 dark:text-green-300">
+                    <li key={pro} className="flex items-center gap-2 text-sm text-primary">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       {pro}
                     </li>
@@ -216,11 +216,11 @@ export default function AlternativesPage() {
                 </ul>
               </div>
 
-              <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-                <p className="mb-2 text-sm font-semibold text-red-700 dark:text-red-400">Cons</p>
+              <div className="rounded-lg bg-primary/10 p-4 dark:bg-primary/10">
+                <p className="mb-2 text-sm font-semibold text-primary">Cons</p>
                 <ul className="space-y-1">
                   {alt.cons.map((con) => (
-                    <li key={con} className="flex items-center gap-2 text-sm text-red-600 dark:text-red-300">
+                    <li key={con} className="flex items-center gap-2 text-sm text-primary">
                       <XCircle className="h-3.5 w-3.5" />
                       {con}
                     </li>
@@ -232,8 +232,8 @@ export default function AlternativesPage() {
         ))}
       </section>
 
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-3 text-2xl font-bold">Read the Nerd Dictation comparison</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-3 font-display text-2xl font-semibold">Read the Nerd Dictation comparison</h2>
         <p className="mb-5 text-muted-foreground">
           Want a direct Linux-focused breakdown of CLI vs GUI workflows, Wayland behavior, and GPU
           support? Read our dedicated page.
@@ -241,22 +241,22 @@ export default function AlternativesPage() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/vs-nerd-dictation/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Read the Nerd Dictation comparison
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/compare/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             Engine comparison
           </Link>
         </div>
       </section>
 
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">The Bottom Line</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">The Bottom Line</h2>
         <p className="mb-6 text-muted-foreground">
           If you're on Linux and need voice dictation, Vocalinux is the only option that offers
           offline processing, privacy, and full desktop integration at no cost.
@@ -264,14 +264,14 @@ export default function AlternativesPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Vocalinux
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/privacy/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             <Lock className="h-4 w-4" />
             Our Privacy Commitment

@@ -160,11 +160,11 @@ export default function LanguagesPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Languages className="h-4 w-4" />
           9+ Languages
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Multilingual Voice Dictation for Linux
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -179,7 +179,7 @@ export default function LanguagesPage() {
           return (
             <div
               key={feature.title}
-              className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
               <Icon className="mb-3 h-8 w-8 text-primary" />
               <h3 className="mb-2 font-semibold">{feature.title}</h3>
@@ -190,12 +190,12 @@ export default function LanguagesPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Supported Languages</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Supported Languages</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {supportedLanguages.map((lang) => (
             <article
               key={lang.code}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <div className="mb-3 flex items-center gap-3">
                 <span className="text-3xl">{lang.flag}</span>
@@ -209,7 +209,7 @@ export default function LanguagesPage() {
                 {lang.engines.map((engine) => (
                   <span
                     key={engine}
-                    className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium dark:bg-zinc-700"
+                    className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium bg-muted"
                   >
                     {engine}
                   </span>
@@ -220,22 +220,22 @@ export default function LanguagesPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">How Language Support Works</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">How Language Support Works</h2>
         <div className="grid gap-6 md:grid-cols-2">
           <div>
             <h3 className="mb-3 font-semibold">Language Selection</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Select your language in Settings → Speech Engine → Language
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Use "Auto" for automatic language detection (whisper.cpp/Whisper)
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Switch languages on-the-fly without restarting
               </li>
             </ul>
@@ -244,15 +244,15 @@ export default function LanguagesPage() {
             <h3 className="mb-3 font-semibold">Model Selection</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Larger models provide better accuracy for all languages
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 "tiny" model works for all supported languages
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Models are downloaded automatically on first use
               </li>
             </ul>
@@ -260,8 +260,8 @@ export default function LanguagesPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Ready to Dictate in Your Language?</h2>
+      <section className="rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Ready to Dictate in Your Language?</h2>
         <p className="mb-6 text-muted-foreground">
           Install Vocalinux and start dictating in your preferred language. All processing happens
           locally on your Linux machine.
@@ -269,14 +269,14 @@ export default function LanguagesPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/compare/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             Compare Engines
           </Link>

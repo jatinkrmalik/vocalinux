@@ -19,32 +19,32 @@ const benefits = [
     description:
       "Works on airplanes, in tunnels, on remote farms. Your voice never needs to leave your machine.",
     icon: WifiOff,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Zero Data Collection",
     description:
       "No telemetry, no analytics, no usage tracking. There's no server to send data to even if we wanted to.",
     icon: Database,
-    iconColor: "text-emerald-500",
-    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "No Account Required",
     description:
       "No signup, no login, no password to forget. Download and run - that's it.",
     icon: Lock,
-    iconColor: "text-violet-500",
-    iconBg: "bg-violet-100 dark:bg-violet-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Your Voice Stays Yours",
     description:
       "Voice data is biometric. Your voice patterns, accent, and speech habits are yours alone.",
     icon: Shield,
-    iconColor: "text-rose-500",
-    iconBg: "bg-rose-100 dark:bg-rose-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
 ];
 
@@ -135,11 +135,11 @@ export default function OfflinePage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <CloudOff className="h-4 w-4" />
           100% Offline
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Offline Voice Dictation
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -155,7 +155,7 @@ export default function OfflinePage() {
           return (
             <article
               key={benefit.title}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <div className={`mb-3 inline-flex rounded-lg p-2 ${benefit.iconBg}`}>
                 <Icon className={`h-5 w-5 ${benefit.iconColor}`} />
@@ -167,12 +167,12 @@ export default function OfflinePage() {
         })}
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-6 text-2xl font-bold">Offline vs Cloud Dictation</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-6 font-display text-2xl font-semibold">Offline vs Cloud Dictation</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+              <tr className="border-b border-border">
                 <th className="pb-3 pr-4 font-semibold">Feature</th>
                 <th className="pb-3 pr-4 font-semibold text-center">Vocalinux (Offline)</th>
                 <th className="pb-3 font-semibold text-center">Cloud Dictation</th>
@@ -180,20 +180,20 @@ export default function OfflinePage() {
             </thead>
             <tbody>
               {vsCloud.map((row) => (
-                <tr key={row.feature} className="border-b border-zinc-100 dark:border-zinc-700/70">
+                <tr key={row.feature} className="border-b border-border">
                   <td className="py-3 pr-4">{row.feature}</td>
                   <td className="py-3 pr-4 text-center">
                     {row.offline ? (
-                      <CheckCircle2 className="mx-auto h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="mx-auto h-5 w-5 text-primary" />
                     ) : (
-                      <XCircle className="mx-auto h-5 w-5 text-red-500" />
+                      <XCircle className="mx-auto h-5 w-5 text-muted-foreground/50" />
                     )}
                   </td>
                   <td className="py-3 text-center">
                     {row.cloud ? (
-                      <CheckCircle2 className="mx-auto h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="mx-auto h-5 w-5 text-primary" />
                     ) : (
-                      <XCircle className="mx-auto h-5 w-5 text-red-500" />
+                      <XCircle className="mx-auto h-5 w-5 text-muted-foreground/50" />
                     )}
                   </td>
                 </tr>
@@ -204,12 +204,12 @@ export default function OfflinePage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">When Offline Matters Most</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">When Offline Matters Most</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sensitiveUseCases.map((useCase) => (
             <div
               key={useCase.title}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <h3 className="mb-2 font-semibold">{useCase.title}</h3>
               <p className="text-sm text-muted-foreground">{useCase.description}</p>
@@ -218,14 +218,14 @@ export default function OfflinePage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-800 dark:bg-emerald-900/20">
-        <h2 className="mb-3 text-xl font-bold text-emerald-800 dark:text-emerald-300">
+      <section className="mb-12 rounded-[12px] border border-border bg-primary/5 p-6">
+        <h2 className="mb-3 text-xl font-semibold text-foreground">
           How Offline Processing Works
         </h2>
-        <p className="mb-4 text-sm text-emerald-700 dark:text-emerald-400">
+        <p className="mb-4 text-sm text-muted-foreground">
           Vocalinux uses speech recognition models that run entirely on your CPU or GPU:
         </p>
-        <ul className="space-y-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <strong>whisper.cpp</strong> - C++ port of OpenAI Whisper, runs locally with GPU
@@ -240,20 +240,20 @@ export default function OfflinePage() {
             <strong>OpenAI Whisper</strong> - PyTorch-based, runs on NVIDIA GPU or CPU
           </li>
         </ul>
-        <p className="mt-4 text-sm text-emerald-700 dark:text-emerald-400">
+        <p className="mt-4 text-sm text-muted-foreground">
           Models are downloaded once (74MB-3.0GB depending on size), then all processing happens
           locally. No network requests during dictation.
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-900/20">
-        <h2 className="mb-3 text-xl font-bold text-amber-800 dark:text-amber-300">
+      <section className="mb-12 rounded-[12px] border border-border bg-muted p-6">
+        <h2 className="mb-3 text-xl font-semibold text-foreground">
           Verify It Yourself
         </h2>
-        <p className="mb-3 text-sm text-amber-700 dark:text-amber-400">
+        <p className="mb-3 text-sm text-muted-foreground">
           Don&apos;t trust - verify. Vocalinux is open source. You can:
         </p>
-        <ul className="space-y-2 text-sm text-amber-700 dark:text-amber-400">
+        <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
             Read every line of code on{" "}
@@ -268,12 +268,12 @@ export default function OfflinePage() {
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            Run with <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">--debug</code> to see all network activity (there is none)
+            Run with <code className="rounded bg-muted px-1 dark:bg-muted">--debug</code> to see all network activity (there is none)
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            Monitor with <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">tcpdump</code> or{" "}
-            <code className="rounded bg-amber-200 px-1 dark:bg-amber-900">wireshark</code> - you&apos;ll see silence
+            Monitor with <code className="rounded bg-muted px-1 dark:bg-muted">tcpdump</code> or{" "}
+            <code className="rounded bg-muted px-1 dark:bg-muted">wireshark</code> - you&apos;ll see silence
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -282,8 +282,8 @@ export default function OfflinePage() {
         </ul>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Truly Private Voice Dictation</h2>
+      <section className="rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Truly Private Voice Dictation</h2>
         <p className="mb-6 text-muted-foreground">
           Install Vocalinux and take control of your voice data. No cloud, no tracking, no
           compromises.
@@ -291,14 +291,14 @@ export default function OfflinePage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/open-source/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             View Source Code
           </Link>

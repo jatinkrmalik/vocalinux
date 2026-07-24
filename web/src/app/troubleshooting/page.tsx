@@ -211,11 +211,11 @@ export default function TroubleshootingPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-sm font-medium text-amber-600 dark:text-amber-400">
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-muted px-4 py-1.5 text-sm font-medium text-muted-foreground">
           <Wrench className="h-4 w-4" />
           Support Guide
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Troubleshooting Guide
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -224,16 +224,16 @@ export default function TroubleshootingPage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 flex items-center gap-2 text-xl font-bold">
-          <Terminal className="h-5 w-5 text-green-500" />
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+          <Terminal className="h-5 w-5 text-primary" />
           Quick Debug Command
         </h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Run Vocalinux with debug output to see detailed logs:
         </p>
-        <div className="rounded-lg bg-zinc-950 p-4">
-          <code className="text-sm text-green-400">vocalinux --debug</code>
+        <div className="rounded-lg bg-[color:var(--terminal)] p-4">
+          <code className="text-sm text-[color:var(--terminal-fg)]">vocalinux --debug</code>
         </div>
       </section>
 
@@ -241,16 +241,16 @@ export default function TroubleshootingPage() {
         {troubleshootingItems.map((item) => (
           <article
             key={item.title}
-            className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-[12px] border border-border bg-background p-6"
           >
-            <h2 className="mb-4 text-xl font-bold">{item.title}</h2>
+            <h2 className="mb-4 text-xl font-semibold">{item.title}</h2>
 
-            <div className="mb-4 rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
-              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400">
+            <div className="mb-4 rounded-lg bg-muted p-4 dark:bg-muted">
+              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                 <AlertTriangle className="h-4 w-4" />
                 Symptoms
               </p>
-              <ul className="ml-6 list-disc text-sm text-amber-600 dark:text-amber-300">
+              <ul className="ml-6 list-disc text-sm text-muted-foreground">
                 {item.symptoms.map((symptom) => (
                   <li key={symptom} className="break-words">
                     {symptom}
@@ -259,12 +259,12 @@ export default function TroubleshootingPage() {
               </ul>
             </div>
 
-            <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-400">
+            <div className="rounded-lg bg-primary/10 p-4 dark:bg-primary/10">
+              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-primary dark:text-[color:var(--terminal-fg)]">
                 <CheckCircle2 className="h-4 w-4" />
                 Solutions
               </p>
-              <ul className="ml-6 list-disc text-sm text-green-600 dark:text-green-300">
+              <ul className="ml-6 list-disc text-sm text-primary">
                 {item.solutions.map((solution) => (
                   <li key={solution} className="break-words">
                     {solution}
@@ -276,9 +276,9 @@ export default function TroubleshootingPage() {
         ))}
       </section>
 
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
-          <Lightbulb className="h-5 w-5 text-amber-500" />
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
+          <Lightbulb className="h-5 w-5 text-primary" />
           Still having issues?
         </h2>
         <ul className="space-y-3 text-muted-foreground">

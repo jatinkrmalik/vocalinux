@@ -10,32 +10,32 @@ const benefits = [
     description:
       "Give your hands, wrists, and fingers a break. Voice dictation lets you type without the physical toll of keyboard use.",
     icon: Heart,
-    iconColor: "text-rose-500",
-    iconBg: "bg-rose-100 dark:bg-rose-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Prevent Repetitive Stress",
     description:
       "RSI develops from thousands of repeated motions. Dictating breaks the cycle and allows recovery.",
     icon: Keyboard,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-100 dark:bg-amber-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Privacy for Health",
     description:
       "Your health data stays private. All voice processing happens locally - no cloud uploads, no third parties.",
     icon: Shield,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Independence",
     description:
       "For those with mobility limitations, voice dictation provides computer independence without relying on others.",
     icon: User,
-    iconColor: "text-emerald-500",
-    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
 ];
 
@@ -137,11 +137,11 @@ export default function RsiPreventionPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-1.5 text-sm font-medium text-rose-600 dark:text-rose-400">
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
           <Heart className="h-4 w-4" />
           Health & Accessibility
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Voice Dictation for RSI Prevention
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -155,23 +155,23 @@ export default function RsiPreventionPage() {
         {statistics.map((stat) => (
           <div
             key={stat.label}
-            className="rounded-xl border border-zinc-200 bg-white p-5 text-center dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-[12px] border border-border bg-background p-5 text-center"
           >
-            <p className="mb-1 text-3xl font-bold text-primary">{stat.value}</p>
+            <p className="mb-1 font-display text-3xl font-semibold text-primary">{stat.value}</p>
             <p className="text-sm text-muted-foreground">{stat.label}</p>
           </div>
         ))}
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Why Voice Dictation Helps</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Why Voice Dictation Helps</h2>
         <div className="grid gap-6 sm:grid-cols-2">
           {benefits.map((benefit) => {
             const Icon = benefit.icon;
             return (
               <article
                 key={benefit.title}
-                className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+                className="rounded-[12px] border border-border bg-background p-6"
               >
                 <div className="mb-4 flex items-center gap-3">
                   <div className={`rounded-lg p-2.5 ${benefit.iconBg}`}>
@@ -187,17 +187,17 @@ export default function RsiPreventionPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Conditions Helped by Voice Dictation</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Conditions Helped by Voice Dictation</h2>
         <div className="space-y-4">
           {conditions.map((condition) => (
             <article
               key={condition.name}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <h3 className="mb-2 font-semibold">{condition.name}</h3>
               <p className="mb-3 text-sm text-muted-foreground">{condition.description}</p>
-              <div className="rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
-                <p className="text-sm text-green-700 dark:text-green-400">
+              <div className="rounded-lg bg-primary/10 p-3 dark:bg-primary/10">
+                <p className="text-sm text-primary dark:text-[color:var(--terminal-fg)]">
                   <strong>How dictation helps:</strong> {condition.howDictationHelps}
                 </p>
               </div>
@@ -206,26 +206,26 @@ export default function RsiPreventionPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">Getting Started with Hands-Free Typing</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Getting Started with Hands-Free Typing</h2>
         <div className="grid gap-6 md:grid-cols-2">
           <div>
             <h3 className="mb-3 font-semibold">Tips for Transitioning</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Start by dictating emails and documents, then expand to other tasks
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Use voice commands for punctuation to maintain natural speech flow
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Take breaks - voice dictation is still work, and vocal rest matters too
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Combine with ergonomic equipment for maximum benefit
               </li>
             </ul>
@@ -234,19 +234,19 @@ export default function RsiPreventionPage() {
             <h3 className="mb-3 font-semibold">Vocalinux Advantages</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Toggle mode or push-to-talk control - no mouse required
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 System tray indicator shows recording status
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Pleasant audio feedback confirms start/stop
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Works in ALL Linux applications - universal compatibility
               </li>
             </ul>
@@ -254,11 +254,11 @@ export default function RsiPreventionPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-rose-200 bg-rose-50 p-8 dark:border-rose-800 dark:bg-rose-900/20">
-        <h2 className="mb-4 text-2xl font-bold text-rose-800 dark:text-rose-300">
+      <section className="rounded-[12px] border border-border bg-primary/10 p-8 dark:border-border">
+        <h2 className="mb-4 font-display text-2xl font-semibold text-primary">
           Take Care of Your Hands
         </h2>
-        <p className="mb-6 text-rose-700 dark:text-rose-400">
+        <p className="mb-6 text-primary">
           Your health matters. If you&apos;re experiencing pain, numbness, or tingling, consult a
           healthcare professional. Voice dictation is a tool to help, not a substitute for proper
           medical care.
@@ -266,14 +266,14 @@ export default function RsiPreventionPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Vocalinux
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/use-cases/"
-            className="inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:bg-rose-900/50 dark:text-rose-300 dark:hover:bg-rose-900/70"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10 dark:bg-primary/10 dark:hover:bg-primary/10"
           >
             See Other Use Cases
           </Link>

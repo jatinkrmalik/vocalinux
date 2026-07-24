@@ -164,6 +164,51 @@
   .shot-frame {
     @apply relative overflow-hidden rounded-[12px] border border-border bg-card shadow-[0_24px_60px_-28px_rgba(0,0,0,0.35)];
   }
+
+  /* Shared craft language for SEO / child pages */
+  .subpage-content {
+    @apply min-w-0;
+  }
+
+  .subpage-content h1 {
+    @apply font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl;
+  }
+
+  .subpage-content h2 {
+    @apply font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl;
+  }
+
+  .subpage-content h3 {
+    @apply text-lg font-semibold tracking-tight text-foreground;
+  }
+
+  .subpage-kicker {
+    @apply mb-4 font-mono text-[12px] font-medium uppercase tracking-[0.16em] text-primary;
+  }
+
+  .subpage-lede {
+    @apply mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg;
+  }
+
+  .subpage-card {
+    @apply rounded-[12px] border border-border bg-background transition-colors hover:border-primary/40;
+  }
+
+  .subpage-panel {
+    @apply rounded-[12px] border border-border bg-card/40;
+  }
+
+  .subpage-terminal {
+    @apply overflow-hidden rounded-[12px] border border-zinc-800 bg-[color:var(--terminal)] shadow-[0_24px_60px_-28px_rgba(0,0,0,0.55)];
+  }
+
+  .subpage-terminal code,
+  .subpage-terminal pre {
+    @apply font-mono text-sm text-[color:var(--terminal-fg)] sm:text-[0.9375rem];
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
 }
 
 @layer utilities {

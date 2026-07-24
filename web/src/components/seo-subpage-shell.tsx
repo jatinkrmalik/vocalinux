@@ -22,13 +22,12 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Shield,
-  Sun,
   X,
   Zap,
-  Moon,
+  Github,
 } from "lucide-react";
 import { VocalinuxLogo } from "@/components/optimized-image";
-import { useTheme } from "next-themes";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface SeoSubpageShellProps {
   children: React.ReactNode;
@@ -116,22 +115,22 @@ function DropdownMenu({ category }: { category: (typeof navCategories)[0] }) {
     <div className="group relative">
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground focus:bg-zinc-100 focus:text-foreground focus:outline-none dark:hover:bg-zinc-800 dark:focus:bg-zinc-800"
+        className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground focus:outline-none"
       >
         {category.label}
         <ChevronDown className="h-3.5 w-3.5 transition-transform group-focus-within:rotate-180 group-hover:rotate-180" />
       </button>
 
-      <div className="pointer-events-none invisible absolute left-0 top-full z-50 mt-0 w-56 rounded-xl border border-zinc-200 bg-white p-2 opacity-0 shadow-lg transition-all duration-150 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 dark:border-zinc-700 dark:bg-zinc-800">
+      <div className="pointer-events-none invisible absolute left-0 top-full z-50 mt-0 w-56 rounded-[12px] border border-border bg-background p-1.5 opacity-0 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.35)] transition-all duration-150 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
         {category.items.map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-700"
+              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 text-primary" />
               {item.label}
             </Link>
           );
@@ -173,13 +172,13 @@ function Breadcrumbs() {
   };
 
   return (
-    <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+    <nav className="mb-8 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
       <Link href="/" className="transition-colors hover:text-foreground">
         Home
       </Link>
       {breadcrumbs.map((crumb, index) => (
         <React.Fragment key={crumb.href}>
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 shrink-0" />
           {index === breadcrumbs.length - 1 ? (
             <span className="font-medium text-foreground">
               {getPageTitle(crumb.href)}
@@ -200,11 +199,13 @@ function Breadcrumbs() {
 
 export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
-    setMounted(true);
+    const onResize = () => {
+      if (window.innerWidth >= 1024) setMobileMenuOpen(false);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const mainNavCategories = [
@@ -277,67 +278,58 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-background/95 sticky top-0 z-50 border-b border-zinc-200/80 backdrop-blur-md dark:border-zinc-800/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/" className="group flex items-center gap-2">
-            <VocalinuxLogo
-              width={30}
-              height={30}
-              className="h-7 w-7"
-            />
-            <span className="text-base font-bold sm:text-lg">Vocalinux</span>
+    <div className="min-h-screen max-w-[100vw] overflow-x-clip bg-background text-foreground">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/80 bg-background/85 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <VocalinuxLogo width={28} height={28} className="h-7 w-7" />
+            <span className="font-display text-[15px] font-semibold tracking-tight">
+              Vocalinux
+            </span>
           </Link>
 
-          {/* Desktop nav with dropdowns */}
           <nav className="hidden items-center gap-1 lg:flex">
             {mainNavCategories.map((category) => (
               <DropdownMenu key={category.label} category={category} />
             ))}
           </nav>
 
-          {/* Theme toggle and mobile menu */}
           <div className="flex items-center gap-2">
-            {mounted && (
-              <button
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="hover:bg-muted/80 flex h-8 w-8 items-center justify-center rounded-md bg-muted transition-all sm:h-9 sm:w-9"
-                aria-label="Toggle theme"
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4 text-yellow-400" />
-                ) : (
-                  <Moon className="h-4 w-4 text-slate-700" />
-                )}
-              </button>
-            )}
+            <ThemeToggle />
+            <a
+              href="/#install"
+              className="hidden h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground sm:inline-flex"
+            >
+              Install
+            </a>
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setMobileMenuOpen(!mobileMenuOpen);
               }}
-              className="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800 lg:hidden"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
+                <X className="h-5 w-5" />
               ) : (
-                <Menu className="h-6 w-6" />
+                <Menu className="h-5 w-5" />
               )}
             </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="border-t border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900 lg:hidden">
+        {mobileMenuOpen ? (
+          <div className="border-t border-border bg-background lg:hidden">
             <nav className="max-h-[calc(100vh-4rem)] overflow-y-auto px-4 py-4">
               {mainNavCategories.map((category) => (
                 <div key={category.label} className="mb-4">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <h3 className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     {category.label}
                   </h3>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {category.items.map((item) => {
                       const Icon = item.icon;
                       return (
@@ -345,9 +337,9 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
                           key={item.href}
                           href={item.href}
                           onClick={() => setMobileMenuOpen(false)}
-                          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800"
+                          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         >
-                          <Icon className="h-4 w-4" />
+                          <Icon className="h-4 w-4 text-primary" />
                           {item.label}
                         </Link>
                       );
@@ -355,41 +347,65 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
                   </div>
                 </div>
               ))}
+              <a
+                href="/#install"
+                onClick={() => setMobileMenuOpen(false)}
+                className="mt-2 flex items-center justify-center rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+              >
+                Install Vocalinux
+              </a>
             </nav>
           </div>
-        )}
+        ) : null}
       </header>
 
-      <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-24 sm:px-6 sm:pt-28">
         <Breadcrumbs />
-        {children}
+        <div className="subpage-content min-w-0">{children}</div>
       </div>
 
-      <footer className="border-t border-zinc-200 bg-white/70 dark:border-zinc-800 dark:bg-zinc-900/60">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-          <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+      <footer className="border-t border-border bg-[#0a0a0c] text-zinc-300">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+          <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <p className="text-sm font-semibold">
+              <p className="text-sm font-semibold text-zinc-100">
                 Want the full product overview?
               </p>
-              <p className="text-sm text-muted-foreground">
-                Go back to the homepage for the live demo and one-command
-                installer.
+              <p className="mt-1 text-sm text-zinc-400">
+                Homepage has the install command, app screenshots, and engine
+                guide.
               </p>
             </div>
-            <Link
-              href="/"
-              className="hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black"
-            >
-              Home Page
-              <ChevronRight className="h-4 w-4" />
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Home
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+              <a
+                href="/#install"
+                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-500"
+              >
+                Install
+              </a>
+              <a
+                href="https://github.com/jatinkrmalik/vocalinux"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-500"
+              >
+                <Github className="h-4 w-4" />
+                GitHub
+              </a>
+            </div>
           </div>
 
-          <div className="grid gap-6 border-t border-zinc-200 pt-6 dark:border-zinc-700 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-6 border-t border-zinc-800 pt-8 sm:grid-cols-2 lg:grid-cols-5">
             {mainNavCategories.map((category) => (
               <div key={category.label}>
-                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h4 className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                   {category.label}
                 </h4>
                 <ul className="space-y-1.5">
@@ -397,7 +413,7 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                        className="text-sm text-zinc-400 transition-colors hover:text-white"
                       >
                         {item.label}
                       </Link>

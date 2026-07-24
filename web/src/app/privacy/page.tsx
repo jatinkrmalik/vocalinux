@@ -49,11 +49,11 @@ export default function PrivacyPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-green-500/30 bg-green-500/10 px-4 py-1.5 text-sm font-medium text-green-600 dark:text-green-400">
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary dark:text-[color:var(--terminal-fg)]">
           <Shield className="h-4 w-4" />
           Privacy First
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Your Voice Stays on Your Computer
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -64,9 +64,9 @@ export default function PrivacyPage() {
 
       {/* Key Privacy Points */}
       <section className="mb-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <div className="mb-4 inline-flex rounded-xl bg-green-100 p-3 dark:bg-green-900/30">
-            <Lock className="h-6 w-6 text-green-600 dark:text-green-400" />
+        <article className="rounded-[12px] border border-border bg-background p-6">
+          <div className="mb-4 inline-flex rounded-[12px] bg-primary/10 p-3 dark:bg-primary/10">
+            <Lock className="h-6 w-6 text-primary dark:text-[color:var(--terminal-fg)]" />
           </div>
           <h3 className="mb-2 text-xl font-semibold">100% Offline</h3>
           <p className="text-sm text-muted-foreground">
@@ -75,9 +75,9 @@ export default function PrivacyPage() {
           </p>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <div className="mb-4 inline-flex rounded-xl bg-blue-100 p-3 dark:bg-blue-900/30">
-            <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+        <article className="rounded-[12px] border border-border bg-background p-6">
+          <div className="mb-4 inline-flex rounded-[12px] bg-primary/10 p-3 dark:bg-primary/10">
+            <Server className="h-6 w-6 text-primary" />
           </div>
           <h3 className="mb-2 text-xl font-semibold">No Cloud Processing</h3>
           <p className="text-sm text-muted-foreground">
@@ -86,9 +86,9 @@ export default function PrivacyPage() {
           </p>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <div className="mb-4 inline-flex rounded-xl bg-violet-100 p-3 dark:bg-violet-900/30">
-            <Eye className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+        <article className="rounded-[12px] border border-border bg-background p-6">
+          <div className="mb-4 inline-flex rounded-[12px] bg-primary/10 p-3 dark:bg-primary/10">
+            <Eye className="h-6 w-6 text-primary" />
           </div>
           <h3 className="mb-2 text-xl font-semibold">Open Source</h3>
           <p className="text-sm text-muted-foreground">
@@ -100,8 +100,8 @@ export default function PrivacyPage() {
 
       {/* Detailed Privacy Sections */}
       <section className="space-y-8">
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
+        <article className="rounded-[12px] border border-border bg-background p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
             <Database className="h-5 w-5 text-primary" />
             Data Collection
           </h2>
@@ -112,31 +112,31 @@ export default function PrivacyPage() {
             </p>
             <ul className="space-y-2">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 No voice recordings or audio data
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 No transcribed text
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 No usage analytics or telemetry
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 No device fingerprints
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 No IP addresses or location data
               </li>
             </ul>
           </div>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
+        <article className="rounded-[12px] border border-border bg-background p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
             <Shield className="h-5 w-5 text-primary" />
             How We Process Your Voice
           </h2>
@@ -160,33 +160,33 @@ export default function PrivacyPage() {
                 discarded immediately after processing
               </li>
             </ol>
-            <p className="mt-4 rounded-lg bg-amber-50 p-4 text-sm dark:bg-amber-900/20">
+            <p className="mt-4 rounded-lg bg-muted p-4 text-sm dark:bg-muted">
               <strong>Note:</strong> No audio is ever written to disk or transmitted over the
               network.
             </p>
           </div>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
+        <article className="rounded-[12px] border border-border bg-background p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
             <Lock className="h-5 w-5 text-primary" />
             Configuration Data
           </h2>
           <div className="space-y-4 text-muted-foreground">
             <p>
-              Vocalinux stores configuration locally at <code className="rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-700">~/.config/vocalinux/</code>:
+              Vocalinux stores configuration locally at <code className="rounded bg-muted px-1.5 py-0.5 bg-muted">~/.config/vocalinux/</code>:
             </p>
             <ul className="space-y-2">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Settings like preferred engine, model size, and language
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Custom keyboard shortcuts
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 Window and tray preferences
               </li>
             </ul>
@@ -199,41 +199,41 @@ export default function PrivacyPage() {
       </section>
 
       {/* Comparison with Cloud Services */}
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-6 text-2xl font-bold">Vocalinux vs Cloud Dictation Services</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-6 font-display text-2xl font-semibold">Vocalinux vs Cloud Dictation Services</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+              <tr className="border-b border-border">
                 <th className="pb-3 text-sm font-semibold">Feature</th>
                 <th className="pb-3 text-sm font-semibold">Vocalinux</th>
                 <th className="pb-3 text-sm font-semibold">Cloud Services</th>
               </tr>
             </thead>
             <tbody className="text-sm text-muted-foreground">
-              <tr className="border-b border-zinc-100 dark:border-zinc-700/70">
+              <tr className="border-b border-border">
                 <td className="py-3 font-medium text-foreground">Data leaves device</td>
-                <td className="py-3 text-green-600 dark:text-green-400">Never</td>
-                <td className="py-3 text-red-600 dark:text-red-400">Always</td>
+                <td className="py-3 text-primary dark:text-[color:var(--terminal-fg)]">Never</td>
+                <td className="py-3 text-primary">Always</td>
               </tr>
-              <tr className="border-b border-zinc-100 dark:border-zinc-700/70">
+              <tr className="border-b border-border">
                 <td className="py-3 font-medium text-foreground">Internet required</td>
-                <td className="py-3 text-green-600 dark:text-green-400">No</td>
-                <td className="py-3 text-red-600 dark:text-red-400">Yes</td>
+                <td className="py-3 text-primary dark:text-[color:var(--terminal-fg)]">No</td>
+                <td className="py-3 text-primary">Yes</td>
               </tr>
-              <tr className="border-b border-zinc-100 dark:border-zinc-700/70">
+              <tr className="border-b border-border">
                 <td className="py-3 font-medium text-foreground">Source code available</td>
-                <td className="py-3 text-green-600 dark:text-green-400">Yes (GPL-3.0)</td>
-                <td className="py-3 text-red-600 dark:text-red-400">No</td>
+                <td className="py-3 text-primary dark:text-[color:var(--terminal-fg)]">Yes (GPL-3.0)</td>
+                <td className="py-3 text-primary">No</td>
               </tr>
-              <tr className="border-b border-zinc-100 dark:border-zinc-700/70">
+              <tr className="border-b border-border">
                 <td className="py-3 font-medium text-foreground">Voice recordings stored</td>
-                <td className="py-3 text-green-600 dark:text-green-400">No</td>
+                <td className="py-3 text-primary dark:text-[color:var(--terminal-fg)]">No</td>
                 <td className="py-3">Varies by service</td>
               </tr>
               <tr>
                 <td className="py-3 font-medium text-foreground">Cost</td>
-                <td className="py-3 text-green-600 dark:text-green-400">Free forever</td>
+                <td className="py-3 text-primary dark:text-[color:var(--terminal-fg)]">Free forever</td>
                 <td className="py-3">Subscription</td>
               </tr>
             </tbody>
@@ -242,8 +242,8 @@ export default function PrivacyPage() {
       </section>
 
       {/* Contact */}
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-xl font-bold">Questions About Privacy?</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 text-xl font-semibold">Questions About Privacy?</h2>
         <p className="mb-4 text-muted-foreground">
           If you have any questions about our privacy practices or want to verify our claims,
           please reach out:
