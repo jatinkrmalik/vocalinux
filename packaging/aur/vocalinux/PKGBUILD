@@ -19,7 +19,7 @@ depends=(
   'gobject-introspection'
   'python-cairo'
   'python-pynput'
-  'python-pywhispercpp-cpu'
+  'python-pywhispercpp'
   'python-pyaudio'
   'portaudio'
   'python-numpy'
@@ -42,7 +42,9 @@ makedepends=(
   'python-setuptools'
 )
 optdepends=(
-  'python-pywhispercpp-cuda: NVIDIA GPU (replace python-pywhispercpp-cpu)'
+  'python-pywhispercpp-cpu: CPU-only whisper.cpp backend (default provider)'
+  'python-pywhispercpp-cuda: NVIDIA GPU whisper.cpp backend'
+  'python-pywhispercpp-rocm: AMD GPU whisper.cpp backend'
   'python-onnxruntime: Silero VAD'
   'xdotool: X11 injection fallback'
 )
