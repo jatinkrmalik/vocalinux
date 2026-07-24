@@ -154,30 +154,42 @@ export default function AlternativesPage() {
                 <td className="py-3 font-medium">{row.feature}</td>
                 <td className="py-3">
                   {row.vocalinux ? (
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" aria-label="Yes" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-primary" />
+                    <XCircle
+                      className="h-5 w-5 text-[#c45c5c] dark:text-[#e08b8b]"
+                      aria-label="No"
+                    />
                   )}
                 </td>
                 <td className="py-3">
                   {row.dragon ? (
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" aria-label="Yes" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-primary" />
+                    <XCircle
+                      className="h-5 w-5 text-[#c45c5c] dark:text-[#e08b8b]"
+                      aria-label="No"
+                    />
                   )}
                 </td>
                 <td className="py-3">
                   {row.otter ? (
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" aria-label="Yes" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-primary" />
+                    <XCircle
+                      className="h-5 w-5 text-[#c45c5c] dark:text-[#e08b8b]"
+                      aria-label="No"
+                    />
                   )}
                 </td>
                 <td className="py-3">
                   {row.google ? (
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                    <CheckCircle2 className="h-5 w-5 text-primary" aria-label="Yes" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-primary" />
+                    <XCircle
+                      className="h-5 w-5 text-[#c45c5c] dark:text-[#e08b8b]"
+                      aria-label="No"
+                    />
                   )}
                 </td>
               </tr>
@@ -204,24 +216,32 @@ export default function AlternativesPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg bg-primary/10 p-4 dark:bg-primary/10">
-                <p className="mb-2 text-sm font-semibold text-primary dark:text-[color:var(--terminal-fg)]">Pros</p>
-                <ul className="space-y-1">
+              <div className="rounded-[12px] border border-border bg-muted/40 p-4">
+                <p className="mb-2 text-sm font-semibold text-primary">Pros</p>
+                <ul className="space-y-1.5">
                   {alt.pros.map((pro) => (
-                    <li key={pro} className="flex items-center gap-2 text-sm text-primary">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    <li
+                      key={pro}
+                      className="flex items-start gap-2 text-sm text-muted-foreground"
+                    >
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                       {pro}
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="rounded-lg bg-primary/10 p-4 dark:bg-primary/10">
-                <p className="mb-2 text-sm font-semibold text-primary">Cons</p>
-                <ul className="space-y-1">
+              <div className="rounded-[12px] border border-border bg-muted/40 p-4">
+                <p className="mb-2 text-sm font-semibold text-[#c45c5c] dark:text-[#e08b8b]">
+                  Cons
+                </p>
+                <ul className="space-y-1.5">
                   {alt.cons.map((con) => (
-                    <li key={con} className="flex items-center gap-2 text-sm text-primary">
-                      <XCircle className="h-3.5 w-3.5" />
+                    <li
+                      key={con}
+                      className="flex items-start gap-2 text-sm text-muted-foreground"
+                    >
+                      <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#c45c5c] dark:text-[#e08b8b]" />
                       {con}
                     </li>
                   ))}
