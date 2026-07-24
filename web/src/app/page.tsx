@@ -739,7 +739,7 @@ export default function HomePage() {
 
       {/* Install details */}
       <section className="border-t border-border bg-card/40 px-4 py-16 sm:px-6 sm:py-20">
-        <div className="mx-auto grid max-w-6xl min-w-0 gap-10 lg:grid-cols-12">
+        <div className="mx-auto grid max-w-6xl min-w-0 gap-10 lg:grid-cols-12 lg:items-start">
           <div className="lg:col-span-5">
             <h2 className="section-heading">What the installer does</h2>
             <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
@@ -767,27 +767,13 @@ export default function HomePage() {
               </ul>
             </div>
           </div>
-          <div className="min-w-0 space-y-6 lg:col-span-7">
-            <figure className="shot-frame">
-              <Image
-                src="/screenshots/settings-general.png"
-                alt="Vocalinux general settings"
-                width={1100}
-                height={720}
-                className="h-auto w-full"
-              />
-              <figcaption className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
-                General settings after install
-              </figcaption>
-            </figure>
-            <div>
-              <h3 className="mb-3 text-sm font-semibold">Uninstall</h3>
-              <TerminalBlock
-                command={uninstallCommand}
-                displayCommand={uninstallDisplayCommand}
-                label="uninstall.sh"
-              />
-            </div>
+          <div className="min-w-0 lg:col-span-7">
+            <h3 className="mb-3 text-sm font-semibold">Uninstall</h3>
+            <TerminalBlock
+              command={uninstallCommand}
+              displayCommand={uninstallDisplayCommand}
+              label="uninstall.sh"
+            />
           </div>
         </div>
       </section>
