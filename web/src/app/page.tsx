@@ -728,41 +728,75 @@ export default function HomePage() {
 
       {/* Install details */}
       <section className="border-t border-border bg-card/40 px-4 py-16 sm:px-6 sm:py-20">
-        <div className="mx-auto grid max-w-6xl min-w-0 gap-10 lg:grid-cols-12 lg:items-start">
-          <div className="lg:col-span-5">
-            <h2 className="section-heading">What the installer does</h2>
-            <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
-              {[
-                "Installs system dependencies",
-                "Creates an isolated virtual environment",
-                "Downloads speech models for your choice",
-                "Sets up desktop integration and PATH",
-                "Creates an application launcher",
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-2">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8 rounded-[12px] border border-border bg-background p-5">
-              <h3 className="text-sm font-semibold">System requirements</h3>
-              <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
-                <li>Ubuntu, Debian, Fedora, Arch, openSUSE, or equivalent</li>
-                <li>Python 3.9+ with GTK 3 / PyGObject</li>
-                <li>4GB RAM minimum; 8GB+ for larger models</li>
-                <li>Microphone plus X11 or Wayland session</li>
-                <li>~200MB disk for the default whisper.cpp setup</li>
+        <div className="mx-auto max-w-6xl min-w-0">
+          <div className="grid gap-10 lg:grid-cols-12 lg:items-start">
+            <div className="lg:col-span-5">
+              <h2 className="section-heading">What the installer does</h2>
+              <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
+                {[
+                  "Installs system dependencies",
+                  "Creates an isolated virtual environment",
+                  "Downloads speech models for your choice",
+                  "Sets up desktop integration and PATH",
+                  "Creates an application launcher",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    {item}
+                  </li>
+                ))}
               </ul>
             </div>
+            <div className="min-w-0 lg:col-span-7">
+              <h3 className="mb-3 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Uninstall
+              </h3>
+              <TerminalBlock
+                command={uninstallCommand}
+                displayCommand={uninstallDisplayCommand}
+                label="uninstall.sh"
+              />
+            </div>
           </div>
-          <div className="min-w-0 lg:col-span-7">
-            <h3 className="mb-3 text-sm font-semibold">Uninstall</h3>
-            <TerminalBlock
-              command={uninstallCommand}
-              displayCommand={uninstallDisplayCommand}
-              label="uninstall.sh"
-            />
+
+          {/* Spec rail — label/value pairs, not a nested bullet card */}
+          <div className="mt-12 border-t border-border pt-10">
+            <h3 className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              System requirements
+            </h3>
+            <dl className="mt-6 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                {
+                  label: "OS",
+                  value: "Ubuntu, Debian, Fedora, Arch, openSUSE, or equivalent",
+                },
+                {
+                  label: "Runtime",
+                  value: "Python 3.9+ with GTK 3 / PyGObject",
+                },
+                {
+                  label: "Memory",
+                  value: "4GB minimum; 8GB+ for larger models",
+                },
+                {
+                  label: "Display",
+                  value: "Microphone plus X11 or Wayland session",
+                },
+                {
+                  label: "Disk",
+                  value: "~200MB for the default whisper.cpp setup",
+                },
+              ].map((row) => (
+                <div key={row.label} className="min-w-0 border-l border-border pl-4">
+                  <dt className="font-mono text-[11px] uppercase tracking-wider text-primary">
+                    {row.label}
+                  </dt>
+                  <dd className="mt-1.5 text-sm leading-snug text-foreground">
+                    {row.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
       </section>
