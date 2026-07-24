@@ -21,6 +21,7 @@ from typing import Callable, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.paths import models_dir
+from ..utils.model_hash_verifier import verify_download
 from ..utils.vosk_model_info import VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from ..version import __version__
@@ -1794,6 +1795,17 @@ class SpeechRecognitionManager:
 
         try:
             self._stream_model_download(url, temp_file)
+
+            # Verify hash before finalizing download
+            model_filename = os.path.basename(model_path)
+            if not verify_download(temp_file, "whispercpp", model_filename):
+                os.remove(temp_file)
+                raise RuntimeError(
+                    f"Hash verification failed for {model_filename}. "
+                    "The downloaded file may be corrupted or tampered with. "
+                    "Please try again or report this issue."
+                )
+
             os.rename(temp_file, model_path)
             logger.info("whisper.cpp model downloaded successfully")
 
@@ -1955,6 +1967,16 @@ class SpeechRecognitionManager:
                         # Also log progress periodically
                         logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
 
+            # Verify hash before extraction
+            zip_filename = os.path.basename(zip_path)
+            if not verify_download(zip_path, "vosk", zip_filename):
+                os.remove(zip_path)
+                raise RuntimeError(
+                    f"Hash verification failed for {zip_filename}. "
+                    "The downloaded file may be corrupted or tampered with. "
+                    "Please try again or report this issue."
+                )
+
             # Update status for extraction phase
             if self._download_progress_callback:
                 self._download_progress_callback(1.0, 0, "Extracting model...")
@@ -2087,6 +2109,16 @@ class SpeechRecognitionManager:
                         last_update_time = current_time
 
                         logger.info(f"Download progress: {progress * 100:.1f}% - {status}")
+
+            # Verify hash before finalizing download
+            model_filename = f"{self.model_size}.pt"
+            if not verify_download(temp_file, "whisper", model_filename):
+                os.remove(temp_file)
+                raise RuntimeError(
+                    f"Hash verification failed for {model_filename}. "
+                    "The downloaded file may be corrupted or tampered with. "
+                    "Please try again or report this issue."
+                )
 
             # Rename temp file to final
             os.rename(temp_file, model_file)

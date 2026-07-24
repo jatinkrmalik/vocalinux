@@ -1,0 +1,23 @@
+{
+  "_comment": "SHA256 hashes for model integrity verification. See SECURITY.md for details.",
+  "_updated": "2026-07-24",
+  "_incidents": [
+    "JFrog: ~100 malicious models on HF with pickle deserialization (March 2024)",
+    "ReversingLabs nullifAI: models evading Picklescan via 7z compression (Feb 2025)",
+    "ShadowPickle: 63% evasion rate across all scanners (2026)",
+    "Picklescan CVEs: CVE-2025-10155/56/57, CVSS 9.3 (Dec 2025)"
+  ],
+  "whispercpp": {
+    "ggml-tiny.bin": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+    "ggml-tiny.en.bin": "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
+    "ggml-base.bin": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "ggml-small.bin": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+    "ggml-medium.bin": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"
+  },
+  "whisper": {
+    "tiny.pt": "65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9"
+  },
+  "vosk": {
+    "vosk-model-small-en-us-0.15.zip": "TODO_DOWNLOAD_AND_COMPUTE"
+  }
+}
