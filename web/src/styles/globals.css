@@ -191,7 +191,11 @@
   }
 
   .subpage-card {
-    @apply rounded-[12px] border border-border bg-background transition-colors hover:border-primary/40;
+    @apply rounded-[12px] border border-border bg-background transition-colors;
+  }
+
+  .subpage-card:hover {
+    border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
   }
 
   .subpage-panel {
