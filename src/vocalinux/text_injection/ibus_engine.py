@@ -280,12 +280,9 @@ def start_ibus_daemon():
     if is_ibus_daemon_running():
         return True
 
-    # Do not auto-start an XIM-mode daemon under Wayland (see #574).
     if _is_wayland_session():
-        logger.debug(
-            "Not starting ibus-daemon on Wayland (XIM -x mode is not "
-            "compositor-bridged; see #574)"
-        )
+        # XIM -x is not compositor-bridged; spawning it only fools the pgrep check (#574).
+        logger.debug("Not starting ibus-daemon on Wayland (see #574)")
         return False
 
     if not is_ibus_available():
