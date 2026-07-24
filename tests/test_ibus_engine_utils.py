@@ -191,9 +191,7 @@ class TestStartIBusDaemon(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.subprocess.Popen")
     @patch("vocalinux.text_injection.ibus_engine.is_ibus_available", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.is_ibus_daemon_running", return_value=False)
-    def test_start_ibus_daemon_noop_on_wayland(
-        self, mock_is_running, mock_available, mock_popen
-    ):
+    def test_start_ibus_daemon_noop_on_wayland(self, mock_is_running, mock_available, mock_popen):
         """On Wayland, never spawn XIM ibus-daemon -x -d -r (#574)."""
         from vocalinux.text_injection.ibus_engine import start_ibus_daemon
 
