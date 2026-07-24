@@ -1004,10 +1004,23 @@ class TextInjector:
                         logger.error("Text injection timed out on final attempt")
                         raise
 
-            # Try to reset any stuck modifiers
+            # Release modifiers without sending Escape, which applications may
+            # interpret as a request to cancel or leave the focused input.
             try:
                 subprocess.run(
-                    ["xdotool", "key", "--clearmodifiers", "Escape"],
+                    [
+                        "xdotool",
+                        "keyup",
+                        "--clearmodifiers",
+                        "Control_L",
+                        "Control_R",
+                        "Shift_L",
+                        "Shift_R",
+                        "Alt_L",
+                        "Alt_R",
+                        "Super_L",
+                        "Super_R",
+                    ],
                     env=env,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,

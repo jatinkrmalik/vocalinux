@@ -150,9 +150,10 @@ const troubleshootingItems = [
     symptoms: ["No system tray icon", "Cannot access settings"],
     solutions: [
       "v0.10.1+ bundles resources to prevent missing tray icons - ensure you're on latest version",
-      "Ensure your desktop environment supports system trays (GNOME requires extension)",
-      "Install AppIndicator extension for GNOME: sudo apt install gnome-shell-extension-appindicator",
-      "Check if ayatana-appindicator is installed: sudo apt install libayatana-appindicator3-1",
+      "Ensure your desktop environment supports system trays (GNOME requires an AppIndicator extension)",
+      "Install the GNOME AppIndicator extension (pick your distro): Debian/Ubuntu: sudo apt install gnome-shell-extension-appindicator — Fedora: sudo dnf install gnome-shell-extension-appindicator — Arch: sudo pacman -S gnome-shell-extension-appindicator",
+      "Then enable the extension (Extensions app, or: gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com) and log out/in if needed",
+      "Debian/Ubuntu only — also check ayatana: sudo apt install libayatana-appindicator3-1 (Fedora already pulls libappindicator-gtk3 via the installer)",
       "Try launching from terminal to see any errors: vocalinux --debug",
     ],
   },
