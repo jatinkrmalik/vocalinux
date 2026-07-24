@@ -23,6 +23,14 @@ def _restore_sys_modules():
     added = set(sys.modules.keys()) - set(saved.keys())
     for k in added:
         del sys.modules[k]
+        # Also drop the stale attribute from the parent package so that
+        # mock.patch and a later re-import resolve to the same fresh module
+        parent, _, child = k.rpartition(".")
+        if parent and parent in sys.modules:
+            try:
+                delattr(sys.modules[parent], child)
+            except AttributeError:
+                pass
     for k, v in saved.items():
         if k not in sys.modules or sys.modules[k] is not v:
             sys.modules[k] = v
@@ -297,6 +305,25 @@ class TestMainFunction(unittest.TestCase):
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 1
+
+    def test_main_version_flag_with_lock_held(self):
+        """Test that --version works even when another instance holds the lock."""
+        from vocalinux.main import main
+        from vocalinux.version import __version__
+
+        mock_single_instance = MagicMock()
+        mock_single_instance.acquire_lock.return_value = False
+
+        output = StringIO()
+        with patch.dict(sys.modules, {"vocalinux.single_instance": mock_single_instance}):
+            with patch.object(sys, "argv", ["vocalinux", "--version"]):
+                with redirect_stdout(output):
+                    with pytest.raises(SystemExit) as exc_info:
+                        main()
+
+        assert exc_info.value.code == 0
+        assert output.getvalue() == f"vocalinux {__version__}\n"
+        mock_single_instance.acquire_lock.assert_not_called()
 
     @patch("vocalinux.main.check_display_available")
     @patch("vocalinux.main.logging")
