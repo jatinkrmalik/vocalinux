@@ -54,65 +54,29 @@ class TestFirstRunDialogConstants(unittest.TestCase):
 class TestFirstRunDialogResponseHandler(unittest.TestCase):
     """Tests for _on_response mapping without constructing Gtk.Dialog."""
 
-    def test_on_response_maps_yes(self):
-        """YES response maps to 'yes'."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
-
-        obj = SimpleNamespace(
-            _response_map={
-                RESPONSE_YES: "yes",
-                RESPONSE_NO: "no",
-                RESPONSE_LATER: "later",
-            },
-            result=None,
+    def test_on_response_maps_ids(self):
+        """YES/NO/LATER map to strings; unknown ids map to None."""
+        from vocalinux.ui.first_run_dialog import (
+            RESPONSE_LATER,
+            RESPONSE_NO,
+            RESPONSE_YES,
+            FirstRunDialog,
         )
-        FirstRunDialog._on_response(obj, obj, RESPONSE_YES)
-        self.assertEqual(obj.result, "yes")
 
-    def test_on_response_maps_no(self):
-        """NO response maps to 'no'."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
-
-        obj = SimpleNamespace(
-            _response_map={
-                RESPONSE_YES: "yes",
-                RESPONSE_NO: "no",
-                RESPONSE_LATER: "later",
-            },
-            result=None,
-        )
-        FirstRunDialog._on_response(obj, obj, RESPONSE_NO)
-        self.assertEqual(obj.result, "no")
-
-    def test_on_response_maps_later(self):
-        """LATER response maps to 'later'."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
-
-        obj = SimpleNamespace(
-            _response_map={
-                RESPONSE_YES: "yes",
-                RESPONSE_NO: "no",
-                RESPONSE_LATER: "later",
-            },
-            result=None,
-        )
-        FirstRunDialog._on_response(obj, obj, RESPONSE_LATER)
-        self.assertEqual(obj.result, "later")
-
-    def test_on_response_unknown_id_is_none(self):
-        """Unknown response IDs map to None via dict.get default."""
-        from vocalinux.ui.first_run_dialog import RESPONSE_LATER, RESPONSE_NO, RESPONSE_YES, FirstRunDialog
-
-        obj = SimpleNamespace(
-            _response_map={
-                RESPONSE_YES: "yes",
-                RESPONSE_NO: "no",
-                RESPONSE_LATER: "later",
-            },
-            result="yes",
-        )
-        FirstRunDialog._on_response(obj, obj, 99999)
-        self.assertIsNone(obj.result)
+        response_map = {
+            RESPONSE_YES: "yes",
+            RESPONSE_NO: "no",
+            RESPONSE_LATER: "later",
+        }
+        for response_id, expected in (
+            (RESPONSE_YES, "yes"),
+            (RESPONSE_NO, "no"),
+            (RESPONSE_LATER, "later"),
+            (99999, None),
+        ):
+            obj = SimpleNamespace(_response_map=response_map, result=None)
+            FirstRunDialog._on_response(obj, obj, response_id)
+            self.assertEqual(obj.result, expected)
 
 
 class TestShowFirstRunDialogFunction(unittest.TestCase):
