@@ -8,6 +8,8 @@ import atexit
 import logging
 import sys
 
+from .version import __version__
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -21,7 +23,13 @@ logger = logging.getLogger(__name__)
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Vocalinux")
+    parser = argparse.ArgumentParser(prog="vocalinux", description="Vocalinux")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show the installed Vocalinux version and exit",
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     # default model, language and engine are loaded from default config
     # due to priority of args over config
@@ -214,6 +222,10 @@ def check_appindicator_support():
 
 def main():
     """Main entry point for the application."""
+    # Parse arguments first so flags like --version work even when
+    # another instance already holds the single-instance lock
+    args = parse_arguments()
+
     # Check for single instance BEFORE any initialization
     from . import single_instance
 
@@ -240,8 +252,6 @@ def main():
 
     # Register cleanup to release lock on exit
     atexit.register(single_instance.release_lock)
-
-    args = parse_arguments()
 
     # Configure debug logging if requested
     if args.debug:
