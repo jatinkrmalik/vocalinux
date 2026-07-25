@@ -205,6 +205,141 @@ class TestModelInfo(unittest.TestCase):
         self.assertFalse(is_english_only_model("large-v3-turbo"))
 
 
+class TestDetectVulkanDevices(unittest.TestCase):
+    """Test cases for detect_vulkan_devices function."""
+
+    def setUp(self):
+        """Clear lru_cache before each test."""
+        from vocalinux.utils.whispercpp_model_info import detect_vulkan_devices
+
+        detect_vulkan_devices.cache_clear()
+
+    def test_detect_vulkan_devices_empty_when_unavailable(self):
+        """Test that detect_vulkan_devices returns empty list when vulkaninfo unavailable."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = FileNotFoundError("vulkaninfo not found")
+
+            from vocalinux.utils.whispercpp_model_info import detect_vulkan_devices
+
+            devices = detect_vulkan_devices()
+            self.assertEqual(devices, [])
+
+    def test_detect_vulkan_devices_single_discrete(self):
+        """Test detection of a single discrete GPU."""
+        vulkaninfo_output = (
+            "GPU id = 0\n"
+            "deviceName = NVIDIA RTX 3080\n"
+            "deviceType = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU\n"
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=vulkaninfo_output)
+
+            from vocalinux.utils.whispercpp_model_info import detect_vulkan_devices
+
+            devices = detect_vulkan_devices()
+            self.assertEqual(len(devices), 1)
+            self.assertEqual(devices[0]["index"], 0)
+            self.assertEqual(devices[0]["name"], "NVIDIA RTX 3080")
+            self.assertEqual(devices[0]["device_type"], "discrete")
+
+    def test_detect_vulkan_devices_hybrid_system(self):
+        """Test detection on hybrid system with integrated and discrete GPUs."""
+        vulkaninfo_output = (
+            "GPU id = 0\n"
+            "deviceName = Intel UHD 630\n"
+            "deviceType = PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU\n"
+            "GPU id = 1\n"
+            "deviceName = NVIDIA RTX 2060\n"
+            "deviceType = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU\n"
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=vulkaninfo_output)
+
+            from vocalinux.utils.whispercpp_model_info import detect_vulkan_devices
+
+            devices = detect_vulkan_devices()
+            self.assertEqual(len(devices), 2)
+            self.assertEqual(devices[0]["index"], 0)
+            self.assertEqual(devices[0]["name"], "Intel UHD 630")
+            self.assertEqual(devices[0]["device_type"], "integrated")
+            self.assertEqual(devices[1]["index"], 1)
+            self.assertEqual(devices[1]["name"], "NVIDIA RTX 2060")
+            self.assertEqual(devices[1]["device_type"], "discrete")
+
+    def test_detect_vulkan_devices_on_timeout(self):
+        """Test that timeout returns empty list."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired("vulkaninfo", 5)
+
+            from vocalinux.utils.whispercpp_model_info import detect_vulkan_devices
+
+            devices = detect_vulkan_devices()
+            self.assertEqual(devices, [])
+
+    def test_detect_vulkan_devices_on_error(self):
+        """Test that error returncode returns empty list."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+
+            from vocalinux.utils.whispercpp_model_info import detect_vulkan_devices
+
+            devices = detect_vulkan_devices()
+            self.assertEqual(devices, [])
+
+
+class TestPreferDiscreteVulkanDevice(unittest.TestCase):
+    """Test cases for _prefer_discrete_vulkan_device function."""
+
+    def setUp(self):
+        """Clear lru_cache before each test."""
+        from vocalinux.utils.whispercpp_model_info import detect_vulkan_devices
+
+        detect_vulkan_devices.cache_clear()
+
+    def test_prefer_discrete_when_available(self):
+        """Test that discrete GPU is preferred when available."""
+        vulkaninfo_output = (
+            "GPU id = 0\n"
+            "deviceName = Intel UHD 630\n"
+            "deviceType = PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU\n"
+            "GPU id = 1\n"
+            "deviceName = NVIDIA RTX 2060\n"
+            "deviceType = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU\n"
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=vulkaninfo_output)
+
+            from vocalinux.utils.whispercpp_model_info import _prefer_discrete_vulkan_device
+
+            preferred_idx = _prefer_discrete_vulkan_device()
+            self.assertEqual(preferred_idx, 1)
+
+    def test_prefer_discrete_falls_back_to_first(self):
+        """Test that first device is used when no discrete GPU available."""
+        vulkaninfo_output = (
+            "GPU id = 0\n"
+            "deviceName = Intel UHD 630\n"
+            "deviceType = PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU\n"
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=vulkaninfo_output)
+
+            from vocalinux.utils.whispercpp_model_info import _prefer_discrete_vulkan_device
+
+            preferred_idx = _prefer_discrete_vulkan_device()
+            self.assertEqual(preferred_idx, 0)
+
+    def test_prefer_discrete_returns_none_when_empty(self):
+        """Test that None is returned when no devices found."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = FileNotFoundError("vulkaninfo not found")
+
+            from vocalinux.utils.whispercpp_model_info import _prefer_discrete_vulkan_device
+
+            preferred_idx = _prefer_discrete_vulkan_device()
+            self.assertIsNone(preferred_idx)
+
+
 class TestDetectVulkanSupport(unittest.TestCase):
     """Test cases for detect_vulkan_support function."""
 

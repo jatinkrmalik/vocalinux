@@ -501,6 +501,173 @@ class TestWhispercppInitialization(unittest.TestCase):
                                 manager._init_whispercpp()
 
 
+class TestWhispercppGpuDeviceSelection(unittest.TestCase):
+    """Test whisper.cpp GPU device selection logic."""
+
+    def test_gpu_device_auto_select_discrete(self):
+        """Test auto-selection of discrete GPU when configured as None."""
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
+        manager.model_size = "tiny"
+
+        mock_pywhispercpp = MagicMock()
+        mock_model = MagicMock()
+        mock_pywhispercpp.Model = MagicMock(return_value=mock_model)
+        mock_pywhispercpp.model.Model = MagicMock(return_value=mock_model)
+
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        vulkan_devices = [
+            {"index": 0, "name": "Intel UHD 630", "device_type": "integrated"},
+            {"index": 1, "name": "NVIDIA RTX 2060", "device_type": "discrete"},
+        ]
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.WHISPERCPP_MODEL_INFO", {"tiny": {}}
+        ):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value="/fake/model.bin",
+            ):
+                with patch("os.path.getsize", return_value=100000000):
+                    with patch("os.path.exists", return_value=True):
+                        with patch.dict(
+                            "sys.modules",
+                            {
+                                "pywhispercpp": mock_pywhispercpp,
+                                "pywhispercpp.model": mock_pywhispercpp,
+                                "psutil": mock_psutil,
+                            },
+                        ):
+                            import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+                            with patch.object(
+                                whispercpp_info,
+                                "detect_compute_backend",
+                                return_value=(whispercpp_info.ComputeBackend.VULKAN, "Vulkan GPU"),
+                            ):
+                                with patch.object(
+                                    whispercpp_info,
+                                    "get_backend_display_name",
+                                    return_value="Vulkan",
+                                ):
+                                    with patch.object(
+                                        whispercpp_info,
+                                        "detect_vulkan_devices",
+                                        return_value=vulkan_devices,
+                                    ):
+                                        with patch.object(
+                                            whispercpp_info,
+                                            "_prefer_discrete_vulkan_device",
+                                            return_value=1,
+                                        ):
+                                            with patch.dict("os.environ", {}, clear=True):
+                                                manager._init_whispercpp()
+                                                assert os.environ.get("GGML_VULKAN_DEVICE") == "1"
+
+    def test_gpu_device_explicit_index(self):
+        """Test explicit GPU device index selection."""
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=0)
+        manager.model_size = "tiny"
+
+        mock_pywhispercpp = MagicMock()
+        mock_model = MagicMock()
+        mock_pywhispercpp.Model = MagicMock(return_value=mock_model)
+        mock_pywhispercpp.model.Model = MagicMock(return_value=mock_model)
+
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        vulkan_devices = [
+            {"index": 0, "name": "Intel UHD 630", "device_type": "integrated"},
+            {"index": 1, "name": "NVIDIA RTX 2060", "device_type": "discrete"},
+        ]
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.WHISPERCPP_MODEL_INFO", {"tiny": {}}
+        ):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value="/fake/model.bin",
+            ):
+                with patch("os.path.getsize", return_value=100000000):
+                    with patch("os.path.exists", return_value=True):
+                        with patch.dict(
+                            "sys.modules",
+                            {
+                                "pywhispercpp": mock_pywhispercpp,
+                                "pywhispercpp.model": mock_pywhispercpp,
+                                "psutil": mock_psutil,
+                            },
+                        ):
+                            import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+                            with patch.object(
+                                whispercpp_info,
+                                "detect_compute_backend",
+                                return_value=(whispercpp_info.ComputeBackend.VULKAN, "Vulkan GPU"),
+                            ):
+                                with patch.object(
+                                    whispercpp_info,
+                                    "get_backend_display_name",
+                                    return_value="Vulkan",
+                                ):
+                                    with patch.object(
+                                        whispercpp_info,
+                                        "detect_vulkan_devices",
+                                        return_value=vulkan_devices,
+                                    ):
+                                        with patch.dict("os.environ", {}, clear=True):
+                                            manager._init_whispercpp()
+                                            assert os.environ.get("GGML_VULKAN_DEVICE") == "0"
+
+    def test_gpu_device_not_set_for_cpu_backend(self):
+        """Test that GGML_VULKAN_DEVICE is not set when using CPU backend."""
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
+        manager.model_size = "tiny"
+
+        mock_pywhispercpp = MagicMock()
+        mock_model = MagicMock()
+        mock_pywhispercpp.Model = MagicMock(return_value=mock_model)
+        mock_pywhispercpp.model.Model = MagicMock(return_value=mock_model)
+
+        mock_psutil = MagicMock()
+        mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
+
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.WHISPERCPP_MODEL_INFO", {"tiny": {}}
+        ):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.get_model_path",
+                return_value="/fake/model.bin",
+            ):
+                with patch("os.path.getsize", return_value=100000000):
+                    with patch("os.path.exists", return_value=True):
+                        with patch.dict(
+                            "sys.modules",
+                            {
+                                "pywhispercpp": mock_pywhispercpp,
+                                "pywhispercpp.model": mock_pywhispercpp,
+                                "psutil": mock_psutil,
+                            },
+                        ):
+                            import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+                            with patch.object(
+                                whispercpp_info,
+                                "detect_compute_backend",
+                                return_value=(whispercpp_info.ComputeBackend.CPU, "CPU"),
+                            ):
+                                with patch.object(
+                                    whispercpp_info,
+                                    "get_backend_display_name",
+                                    return_value="CPU",
+                                ):
+                                    with patch.dict("os.environ", {}, clear=True):
+                                        manager._init_whispercpp()
+                                        assert "GGML_VULKAN_DEVICE" not in os.environ
+
+
 class TestTranscription(unittest.TestCase):
     """Test transcription methods."""
 
