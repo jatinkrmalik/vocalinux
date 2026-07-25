@@ -470,9 +470,9 @@ def main():
                 text_to_inject = " " + text_to_inject
                 logger.debug("Added space separator before new segment")
 
-            # Auto-capitalize sentences if enabled
+            # Auto-capitalize sentences if enabled (Vosk only - Whisper outputs proper casing)
             auto_capitalize = config_manager.get("text_injection", "auto_capitalize")
-            if auto_capitalize:
+            if auto_capitalize and speech_engine.engine == "vosk":
                 from vocalinux.speech_recognition.command_processor import capitalize_sentences
 
                 text_to_inject = capitalize_sentences(text_to_inject)
