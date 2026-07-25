@@ -126,40 +126,100 @@ class ComputeBackend:
 
 
 @lru_cache(maxsize=1)
-def detect_vulkan_support() -> tuple[bool, Optional[str]]:
-    """
-    Detect if Vulkan is available and get device info.
+def detect_vulkan_devices() -> list[dict]:
+    """Enumerate all Vulkan-capable GPU devices.
 
     Returns:
-        Tuple of (is_available, device_name)
+        List of dicts with keys: index (int), name (str),
+        device_type (str: "discrete" or "integrated" or "other").
     """
-    """
-    Detect if Vulkan is available and get device info.
-
-    Returns:
-        Tuple of (is_available, device_name)
-    """
+    devices: list[dict] = []
     try:
-        # Check for vulkaninfo command
         result = subprocess.run(
             ["vulkaninfo", "--summary"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        if result.returncode == 0:
-            # Try to extract GPU name from output
-            for line in result.stdout.split("\n"):
-                if "deviceName" in line or "GPU" in line:
-                    device_name = line.split(":")[-1].strip()
-                    if device_name:
-                        logger.info(f"Vulkan support detected: {device_name}")
-                        return True, device_name
-            logger.info("Vulkan support detected")
-            return True, "Vulkan GPU"
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-        logger.debug(f"Vulkan detection failed: {e}")
+        if result.returncode != 0:
+            return devices
 
+        current_index = None
+        current_name = None
+        current_type = "other"
+
+        for line in result.stdout.split("\n"):
+            stripped = line.strip()
+
+            if stripped.startswith("GPU id"):
+                if current_index is not None and current_name is not None:
+                    devices.append(
+                        {
+                            "index": current_index,
+                            "name": current_name,
+                            "device_type": current_type,
+                        }
+                    )
+                try:
+                    current_index = int(stripped.split("=")[-1].strip())
+                except (ValueError, IndexError):
+                    current_index = None
+                current_name = None
+                current_type = "other"
+
+            if "deviceName" in stripped and "=" in stripped:
+                current_name = stripped.split("=", 1)[-1].strip()
+
+            if "deviceType" in stripped and "=" in stripped:
+                type_val = stripped.split("=", 1)[-1].strip().upper()
+                if "DISCRETE" in type_val:
+                    current_type = "discrete"
+                elif "INTEGRATED" in type_val:
+                    current_type = "integrated"
+
+        if current_index is not None and current_name is not None:
+            devices.append(
+                {
+                    "index": current_index,
+                    "name": current_name,
+                    "device_type": current_type,
+                }
+            )
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.debug(f"Vulkan device enumeration failed: {e}")
+
+    return devices
+
+
+def _prefer_discrete_vulkan_device() -> Optional[int]:
+    """Return the index of the preferred Vulkan GPU (discrete if available)."""
+    devices = detect_vulkan_devices()
+    for device in devices:
+        if device["device_type"] == "discrete":
+            return device["index"]
+    return devices[0]["index"] if devices else None
+
+
+@lru_cache(maxsize=1)
+def detect_vulkan_support() -> tuple[bool, Optional[str]]:
+    """Detect if Vulkan is available and get device info.
+
+    When multiple Vulkan GPUs exist, prefers the discrete GPU.
+
+    Returns:
+        Tuple of (is_available, device_name)
+    """
+    devices = detect_vulkan_devices()
+    if devices:
+        preferred_idx = _prefer_discrete_vulkan_device()
+        device_name = (
+            devices[preferred_idx]["name"] if preferred_idx is not None else devices[0]["name"]
+        )
+        logger.info(f"Vulkan support detected: {device_name}")
+        return True, device_name
+
+    logger.debug("Vulkan detection failed")
     return False, None
 
 

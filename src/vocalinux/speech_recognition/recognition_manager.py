@@ -842,6 +842,7 @@ class SpeechRecognitionManager:
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
         self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
+        self.whispercpp_gpu_device = kwargs.get("whispercpp_gpu_device", None)
 
         # Remote API settings
         self.remote_api_url = kwargs.get("remote_api_url", "")
@@ -1235,7 +1236,9 @@ class SpeechRecognitionManager:
 
         from ..utils.whispercpp_model_info import (
             ComputeBackend,
+            _prefer_discrete_vulkan_device,
             detect_compute_backend,
+            detect_vulkan_devices,
             get_backend_display_name,
         )
 
@@ -1245,6 +1248,21 @@ class SpeechRecognitionManager:
         logger.info(
             f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
         )
+
+        # Set Vulkan GPU device before model initialization
+        if backend == ComputeBackend.VULKAN:
+            gpu_device_index = self.whispercpp_gpu_device
+            if gpu_device_index is None or gpu_device_index < 0:
+                gpu_device_index = _prefer_discrete_vulkan_device()
+
+            if gpu_device_index is not None:
+                devices = detect_vulkan_devices()
+                device_name = next(
+                    (d["name"] for d in devices if d["index"] == gpu_device_index),
+                    "unknown",
+                )
+                logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
+                os.environ["GGML_VULKAN_DEVICE"] = str(gpu_device_index)
 
         # Log hardware summary
         import psutil
@@ -2895,6 +2913,7 @@ class SpeechRecognitionManager:
             "whispercpp_logprob_thold",
             "whispercpp_no_speech_thold",
             "whispercpp_n_threads",
+            "whispercpp_gpu_device",
         ):
             if param_name in kwargs:
                 setattr(self, param_name, kwargs[param_name])

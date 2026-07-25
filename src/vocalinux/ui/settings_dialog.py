@@ -36,6 +36,7 @@ from ..utils.whispercpp_model_info import MODEL_SIZES as WHISPERCPP_MODEL_SIZES
 from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
     detect_compute_backend,
+    detect_vulkan_devices,
     get_backend_display_name,
 )
 from ..utils.whispercpp_model_info import get_model_size as get_whispercpp_model_size
@@ -2243,6 +2244,22 @@ class SettingsDialog(Gtk.Dialog):
         controls_box.pack_start(info_box, False, False, 0)
         controls_box.pack_start(group, False, False, 0)
 
+        gpu_group = PreferencesGroup(title="GPU Device")
+        self.gpu_device_combo = Gtk.ComboBoxText()
+        self.gpu_device_combo.set_size_request(250, -1)
+        self.gpu_device_combo.set_tooltip_text(
+            "Select which GPU to use for whisper.cpp Vulkan acceleration"
+        )
+        _prevent_scroll_on_hover(self.gpu_device_combo)
+        self._populate_gpu_devices()
+        gpu_row = PreferenceRow(
+            title="Vulkan GPU",
+            subtitle="Device for hardware acceleration",
+            widget=self.gpu_device_combo,
+        )
+        gpu_group.add_row(gpu_row)
+        controls_box.pack_start(gpu_group, False, False, 0)
+
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         separator.set_margin_top(8)
         separator.set_margin_bottom(8)
@@ -2261,6 +2278,8 @@ class SettingsDialog(Gtk.Dialog):
 
         self.advanced_initial_prompt_buffer = self.advanced_initial_prompt_textview.get_buffer()
         self.advanced_initial_prompt_buffer.connect("changed", self._on_advanced_prompt_changed)
+
+        self.gpu_device_combo.connect("changed", self._on_advanced_param_changed)
 
         self.power_user_switch.connect("state-set", self._on_power_user_toggled)
 
@@ -2465,6 +2484,7 @@ class SettingsDialog(Gtk.Dialog):
             self.advanced_entropy_thold_spin.set_value(defaults["whispercpp_entropy_thold"])
             self.advanced_logprob_thold_spin.set_value(defaults["whispercpp_logprob_thold"])
             self.advanced_no_speech_thold_spin.set_value(defaults["whispercpp_no_speech_thold"])
+            self.gpu_device_combo.set_active_id("-1")
         finally:
             self._applying_settings = False
 
@@ -3284,6 +3304,11 @@ class SettingsDialog(Gtk.Dialog):
             "whispercpp_no_speech_thold": self.advanced_no_speech_thold_spin.get_value(),
         }
 
+        gpu_device_id = self.gpu_device_combo.get_active_id()
+        if gpu_device_id is not None:
+            gpu_device_val = int(gpu_device_id)
+            settings["whispercpp_gpu_device"] = None if gpu_device_val == -1 else gpu_device_val
+
         # Remote API additional settings
         if engine == "remote_api":
             settings["remote_api_url"] = self.remote_api_url_entry.get_text().strip()
@@ -3533,6 +3558,24 @@ For now, the engine has been reverted to VOSK."""
                 error_dialog.run()
                 error_dialog.destroy()
             return False
+
+    def _populate_gpu_devices(self):
+        """Populate the GPU device dropdown with available Vulkan devices."""
+        self.gpu_device_combo.remove_all()
+        self.gpu_device_combo.append("-1", "Auto (prefer discrete GPU)")
+
+        devices = detect_vulkan_devices()
+        for device in devices:
+            type_label = device["device_type"].capitalize()
+            label = f"[{device['index']}] {device['name']} ({type_label})"
+            self.gpu_device_combo.append(str(device["index"]), label)
+
+        saved_device = self.config_manager.get("advanced", "whispercpp_gpu_device", None)
+        if saved_device is None:
+            self.gpu_device_combo.set_active_id("-1")
+        else:
+            if not self.gpu_device_combo.set_active_id(str(saved_device)):
+                self.gpu_device_combo.set_active_id("-1")
 
     def _populate_audio_devices(self):
         """Populate the audio device dropdown with available input devices."""

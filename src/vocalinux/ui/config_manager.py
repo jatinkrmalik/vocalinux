@@ -75,6 +75,7 @@ DEFAULT_CONFIG = {
         "whispercpp_logprob_thold": -1.0,
         "whispercpp_no_speech_thold": 0.6,
         "whispercpp_n_threads": 0,  # 0 = auto-detect optimal thread count; set to override
+        "whispercpp_gpu_device": None,  # None = auto-select discrete GPU; int = specific device index
     },
 }
 

@@ -208,6 +208,16 @@ class TestModelInfo(unittest.TestCase):
 class TestDetectVulkanSupport(unittest.TestCase):
     """Test cases for detect_vulkan_support function."""
 
+    def setUp(self):
+        """Clear lru_cache before each test."""
+        from vocalinux.utils.whispercpp_model_info import (
+            detect_vulkan_devices,
+            detect_vulkan_support,
+        )
+
+        detect_vulkan_support.cache_clear()
+        detect_vulkan_devices.cache_clear()
+
     def test_detect_vulkan_support_returns_tuple(self):
         """Test that detect_vulkan_support returns a tuple."""
         from vocalinux.utils.whispercpp_model_info import detect_vulkan_support
@@ -218,8 +228,13 @@ class TestDetectVulkanSupport(unittest.TestCase):
 
     def test_detect_vulkan_support_when_available(self):
         """Test Vulkan detection when vulkaninfo is available."""
+        vulkaninfo_output = (
+            "GPU id = 0\n"
+            "deviceName = Intel Arc\n"
+            "deviceType = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU\n"
+        )
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="deviceName: Intel Arc\n")
+            mock_run.return_value = MagicMock(returncode=0, stdout=vulkaninfo_output)
 
             from vocalinux.utils.whispercpp_model_info import detect_vulkan_support
 
