@@ -361,7 +361,7 @@ Vocalinux requires text injection tools to work with X11 or Wayland:
 ### For Wayland
 - **IBus**: Recommended for KDE Plasma Wayland and generally the most reliable direct text input path
 - **wtype**: Recommended for wlroots-style Wayland compositors such as sway
-- **ydotool**: Universal alternative that works with both X11 and Wayland, but requires `ydotoold`; Vocalinux uses clipboard paste with `wl-clipboard`, `xclip`, or `xsel` to avoid non-US layout scrambling
+- **ydotool**: Universal alternative that works with both X11 and Wayland. Current distro packages use the per-user `ydotool.service`; source builds can install the system-level `ydotoold.service`. Vocalinux uses clipboard paste with `wl-clipboard`, `xclip`, or `xsel` to avoid non-US layout scrambling.
 - **xdotool**: May work via XWayland fallback
 
 ### Installation by Distribution
@@ -372,6 +372,28 @@ sudo dnf install xdotool wtype wl-clipboard xclip xsel     # Fedora
 sudo pacman -S xdotool wtype wl-clipboard xclip xsel       # Arch
 sudo zypper install xdotool wtype wl-clipboard xclip xsel  # openSUSE
 ```
+
+Ubuntu releases which package `ydotool` install a **user** unit named
+`ydotool.service`. Enable it only for the account running Vocalinux:
+
+```bash
+sudo apt install ydotool
+sudo usermod -aG input $USER  # then log out and back in
+systemctl --user enable --now ydotool.service
+```
+
+Do **not** use `sudo systemctl --global enable ydotool.service`. Global user-unit
+enablement also starts the input-injection daemon for the display-manager greeter
+and other accounts. If it was previously enabled globally, repair the setup with:
+
+```bash
+sudo systemctl --global disable ydotool.service
+systemctl --user enable --now ydotool.service
+```
+
+The command is different for the Debian source-build path documented above: the
+upstream install supplies the system unit `ydotoold.service`, so
+`sudo systemctl enable --now ydotoold.service` is correct only for that route.
 
 ## Manual Installation
 
