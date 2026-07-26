@@ -237,3 +237,29 @@ docs(readme): update installation instructions
 - **All changes require a PR** - Even small fixes and documentation updates
 - **Wait for CI to pass** before merging PRs
 - **Squash merge** PRs to keep history clean
+
+## Cursor Cloud specific instructions
+
+The startup update script keeps a Python venv (`venv/`) and `web/node_modules` in sync.
+Standard commands live in the sections above and in `web/AGENTS.md`; notes below are the
+non-obvious gotchas for this environment.
+
+- **Activate the venv first.** Python tooling (`vocalinux`, `pytest`, `make lint`, `mypy`)
+  lives in `venv/`. Run `source venv/bin/activate` (or prefix with `./venv/bin/`) before use.
+- **The venv must be created with `--system-site-packages`.** GTK/`PyGObject` come from the
+  apt package `python3-gi`; installing `PyGObject` from pip fails on Ubuntu 24.04 because the
+  pinned version needs `girepository-2.0` (glib 2.80+), which the distro doesn't ship. The
+  update script already creates the venv this way — don't drop that flag.
+- **`black --check` prints a Python-version warning.** `pyproject.toml` targets py314 but the
+  VM runs Python 3.12; Black still reports "All done" and lint passes. This warning is benign.
+- **Desktop app is a GTK tray app.** On startup it logs `No StatusNotifierWatcher found on
+  D-Bus session bus` and the tray icon won't render in this headless X session — expected.
+  The app itself still runs its main loop. `DISPLAY=:1` is available.
+- **No microphone in the VM, so live dictation can't be exercised.** To validate the core
+  speech pipeline, drive it programmatically: transcribe audio with the default engine
+  (`from pywhispercpp.model import Model`) and format the result via
+  `vocalinux.speech_recognition.command_processor.CommandProcessor`. The first transcription
+  downloads the ~74MB whisper.cpp `tiny` model (needs network); it is cached afterward.
+- **Website dev server:** `cd web && npm run dev -- -H 0.0.0.0 -p 3456` (per `web/AGENTS.md`).
+  Lint currently reports 3 pre-existing `@next/next/no-html-link-for-pages` errors in
+  `src/components/seo-subpage-shell.tsx`; typecheck, tests, and build are clean.
