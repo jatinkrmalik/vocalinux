@@ -119,23 +119,31 @@ class TestModelKeepAlive(unittest.TestCase):
         ka.start()
         self.assertTrue(ka.active)
 
-    @patch("gi.repository.GLib")
-    def test_glib_schedule_and_timeout(self, mock_glib):
+    def test_glib_schedule_and_timeout(self):
+        """Drive GLib scheduling via mocked gi.repository (same pattern as auto-pause)."""
+        mock_glib = MagicMock()
         mock_glib.timeout_add_seconds.return_value = 42
         fired = []
-        ka = ModelKeepAlive(
-            get_config=lambda: (True, 90),
-            on_idle_unload=lambda: fired.append(1),
-            is_safe_to_unload=lambda: True,
-            use_glib=True,
-        )
-        ka.start()
-        ka.bump()
-        mock_glib.timeout_add_seconds.assert_called()
-        # Invoke the scheduled callback
-        cb = mock_glib.timeout_add_seconds.call_args[0][1]
-        self.assertFalse(cb())
-        self.assertEqual(fired, [1])
+
+        with patch.dict(
+            "sys.modules",
+            {"gi": MagicMock(), "gi.repository": MagicMock(GLib=mock_glib)},
+        ):
+            ka = ModelKeepAlive(
+                get_config=lambda: (True, 90),
+                on_idle_unload=lambda: fired.append(1),
+                is_safe_to_unload=lambda: True,
+                use_glib=True,
+            )
+            ka.start()
+            ka.bump()
+            mock_glib.timeout_add_seconds.assert_called()
+            # Invoke the scheduled callback
+            cb = mock_glib.timeout_add_seconds.call_args[0][1]
+            self.assertFalse(cb())
+            self.assertEqual(fired, [1])
+            ka.shutdown()
+            mock_glib.source_remove.assert_called()
 
     def test_default_config_section(self):
         self.assertIn("model_keepalive", DEFAULT_CONFIG)
