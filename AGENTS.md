@@ -263,3 +263,8 @@ non-obvious gotchas for this environment.
 - **Website dev server:** `cd web && npm run dev -- -H 0.0.0.0 -p 3456` (per `web/AGENTS.md`).
   Lint currently reports 3 pre-existing `@next/next/no-html-link-for-pages` errors in
   `src/components/seo-subpage-shell.tsx`; typecheck, tests, and build are clean.
+- **Running `install.sh` here:** use `./install.sh --dev --auto` — `--auto` forces
+  non-interactive mode (the Shell has no TTY) and it reuses the existing `venv/`. It also
+  runs the full `pytest` suite and installs a wrapper at `~/.local/bin/vocalinux` (that dir
+  is not on `PATH`; call the wrapper by full path or add it). Pass `--no-rebuild-whispercpp`
+  to skip the lengthy cmake/Vulkan rebuild and reuse the pip-installed `pywhispercpp`.
