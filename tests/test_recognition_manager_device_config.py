@@ -561,12 +561,10 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                             "_prefer_discrete_vulkan_device",
                                             return_value=1,
                                         ):
-                                            with patch.dict("os.environ", {}, clear=True):
-                                                manager._init_whispercpp()
-                                                assert os.environ.get("GGML_VULKAN_DEVICE") == "1"
-                                                assert mock_pywhispercpp.Model.call_args.kwargs.get(
-                                                    "context_params"
-                                                ) == {"gpu_device": 1}
+                                            manager._init_whispercpp()
+                                            assert mock_pywhispercpp.Model.call_args.kwargs.get(
+                                                "context_params"
+                                            ) == {"gpu_device": 1}
 
     def test_gpu_device_explicit_index(self):
         """Test explicit GPU device index selection."""
@@ -620,12 +618,10 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                         "detect_vulkan_devices",
                                         return_value=vulkan_devices,
                                     ):
-                                        with patch.dict("os.environ", {}, clear=True):
-                                            manager._init_whispercpp()
-                                            assert os.environ.get("GGML_VULKAN_DEVICE") == "0"
-                                            assert mock_pywhispercpp.Model.call_args.kwargs.get(
-                                                "context_params"
-                                            ) == {"gpu_device": 0}
+                                        manager._init_whispercpp()
+                                        assert mock_pywhispercpp.Model.call_args.kwargs.get(
+                                            "context_params"
+                                        ) == {"gpu_device": 0}
 
     def test_gpu_device_context_params_fallback_on_old_pywhispercpp(self):
         """Test graceful fallback when pywhispercpp rejects context_params."""
@@ -658,7 +654,7 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
             assert "context_params" not in mock_pywhispercpp.Model.call_args_list[1].kwargs
 
     def test_gpu_device_not_set_for_cpu_backend(self):
-        """Test that GGML_VULKAN_DEVICE is not set when using CPU backend."""
+        """Test that GPU device selection is skipped on CPU backend."""
         manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
         manager.model_size = "tiny"
 
@@ -699,9 +695,11 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                     "get_backend_display_name",
                                     return_value="CPU",
                                 ):
-                                    with patch.dict("os.environ", {}, clear=True):
-                                        manager._init_whispercpp()
-                                        assert "GGML_VULKAN_DEVICE" not in os.environ
+                                    manager._init_whispercpp()
+                                    assert (
+                                        "context_params"
+                                        not in mock_pywhispercpp.Model.call_args.kwargs
+                                    )
 
 
 class TestTranscription(unittest.TestCase):

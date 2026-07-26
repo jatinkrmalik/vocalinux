@@ -1269,7 +1269,7 @@ class SpeechRecognitionManager:
             f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
         )
 
-        # Set Vulkan GPU device before model initialization
+        # Select Vulkan GPU via pywhispercpp context_params (GGML_VULKAN_DEVICE is ignored).
         selected_gpu_device = None
         if backend == ComputeBackend.VULKAN:
             gpu_device_index = self.whispercpp_gpu_device
@@ -1283,7 +1283,6 @@ class SpeechRecognitionManager:
                     "unknown",
                 )
                 logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
-                os.environ["GGML_VULKAN_DEVICE"] = str(gpu_device_index)
                 selected_gpu_device = gpu_device_index
 
         # Log hardware summary
