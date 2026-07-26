@@ -252,12 +252,45 @@ non-obvious gotchas for this environment.
   update script already creates the venv this way — don't drop that flag.
 - **`black --check` prints a Python-version warning.** `pyproject.toml` targets py314 but the
   VM runs Python 3.12; Black still reports "All done" and lint passes. This warning is benign.
-- **Desktop app is a GTK tray app.** On startup it logs `No StatusNotifierWatcher found on
-  D-Bus session bus` and the tray icon won't render in this headless X session — expected.
-  The app itself still runs its main loop. `DISPLAY=:1` is available.
-- **No microphone in the VM, so live dictation can't be exercised.** To validate the core
-  speech pipeline, drive it programmatically: transcribe audio with the default engine
-  (`from pywhispercpp.model import Model`) and format the result via
+- **Desktop app is a GTK tray app.** An XFCE session (`xfwm4` + `xfce4-panel`) runs on
+  `DISPLAY=:1`. Always give the app the session env: `DISPLAY=:1`,
+  `DBUS_SESSION_BUS_ADDRESS=autolaunch:`, `XDG_RUNTIME_DIR=/run/user/1000`,
+  `XDG_CURRENT_DESKTOP=XFCE`. Single-instance lock lives at
+  `~/.local/share/vocalinux/instance.lock`; delete it after killing a stale instance. Kill
+  instances by explicit PID (never `pkill -f`).
+
+### Running / using the desktop GUI end-to-end in the VM
+
+Two things are missing from the base session and must be set up once per boot (packages
+already installed; these are runtime/session steps, not for the update script):
+
+1. **System tray (StatusNotifierWatcher).** The panel ships no tray by default, so the
+   AppIndicator icon can't appear. Add the `systray` plugin and (re)start the panel:
+   `xfconf-query -c xfce4-panel -p /plugins/plugin-6 -t string -s systray --create`, append
+   `6` to `/panels/panel-1/plugin-ids`, then start the panel detached
+   (`setsid bash -c xfce4-panel …`). Verify `org.kde.StatusNotifierWatcher` is on the session
+   bus before launching the app.
+2. **Virtual microphone (no audio server by default).** Create `/run/user/1000` (chown to
+   your uid), start PulseAudio (`pulseaudio --start --exit-idle-time=-1`), then
+   `pactl load-module module-null-sink sink_name=virtmic` +
+   `module-virtual-source source_name=virtmic_src master=virtmic.monitor`,
+   `pactl set-default-source virtmic_src`, and write `~/.asoundrc` with
+   `pcm.!default pulse` / `ctl.!default pulse` so PyAudio sees an input device. Feed speech in
+   with `paplay --device=virtmic <file.wav>`.
+
+Also set `audio.device_index` to `null` in `~/.config/vocalinux/config.json` (a stale index
+prevents opening the stream).
+
+**Dictation control is Ctrl-based and stateful.** Default activation is double-tap `Ctrl`
+in **toggle** mode (`shortcuts` in the config). The app catches synthetic X key events
+(`xdotool key Control_L`), so it can be driven from a script, but toggle state persists across
+dictations — and any stray `Ctrl` (e.g. `Ctrl+A`/`Ctrl+C` for clipboard) will flip
+recording on/off. For a deterministic run, launch a **fresh** (idle) app instance, then:
+focus the target window → double-tap `Ctrl` → `paplay` the wav → wait ~5s for the
+2s silence timeout + whisper.cpp transcription + xdotool injection into the focused window.
+
+- **Headless-only speech check (no GUI/audio setup):** drive the pipeline programmatically —
+  transcribe with `from pywhispercpp.model import Model` and format via
   `vocalinux.speech_recognition.command_processor.CommandProcessor`. The first transcription
   downloads the ~74MB whisper.cpp `tiny` model (needs network); it is cached afterward.
 - **Website dev server:** `cd web && npm run dev -- -H 0.0.0.0 -p 3456` (per `web/AGENTS.md`).
