@@ -1210,7 +1210,23 @@ class SpeechRecognitionManager:
             context_params["gpu_device"] = gpu_device
         if context_params:
             compatible_kwargs["context_params"] = context_params
-        return Model(model_path, **compatible_kwargs)
+
+        try:
+            return Model(model_path, **compatible_kwargs)
+        except TypeError as exc:
+            # Older pywhispercpp releases (< ~1.4.0) do not accept context_params.
+            # Retry without GPU device selection so the engine still loads.
+            if context_params and (
+                "context_params" in str(exc) or "unexpected keyword" in str(exc)
+            ):
+                logger.warning(
+                    "pywhispercpp does not support context_params; "
+                    "upgrade pywhispercpp to enable GPU device selection. "
+                    f"Falling back to default device. Error: {exc}"
+                )
+                compatible_kwargs.pop("context_params")
+                return Model(model_path, **compatible_kwargs)
+            raise
 
     def _detect_pywhispercpp_gpu_backend(self) -> str:
         """Detect whether pywhispercpp's native library actually has GPU support."""

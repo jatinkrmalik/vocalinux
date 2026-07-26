@@ -627,6 +627,36 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                                 "context_params"
                                             ) == {"gpu_device": 0}
 
+    def test_gpu_device_context_params_fallback_on_old_pywhispercpp(self):
+        """Test graceful fallback when pywhispercpp rejects context_params."""
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=1)
+        manager.model_size = "tiny"
+
+        mock_pywhispercpp = MagicMock()
+        mock_model = MagicMock()
+
+        def _model_side_effect(*args, **kwargs):
+            if kwargs.get("context_params"):
+                raise TypeError("Model() got an unexpected keyword argument 'context_params'")
+            return mock_model
+
+        mock_pywhispercpp.Model.side_effect = _model_side_effect
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp,
+            },
+        ):
+            result = manager._load_model_with_compatible_params("/fake/model.bin", {}, gpu_device=1)
+            assert result is mock_model
+            assert mock_pywhispercpp.Model.call_count == 2
+            assert mock_pywhispercpp.Model.call_args_list[0].kwargs.get("context_params") == {
+                "gpu_device": 1
+            }
+            assert "context_params" not in mock_pywhispercpp.Model.call_args_list[1].kwargs
+
     def test_gpu_device_not_set_for_cpu_backend(self):
         """Test that GGML_VULKAN_DEVICE is not set when using CPU backend."""
         manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
