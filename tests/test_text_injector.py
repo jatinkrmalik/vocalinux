@@ -820,30 +820,40 @@ class TestTextInjector(unittest.TestCase):
 
     def test_should_restore_clipboard_reads_config(self):
         """_should_restore_clipboard reflects the on-disk config, defaulting to
-        False when the file is missing, disabled, or unreadable."""
-        import tempfile
+        False when the file is missing, disabled, or unreadable.
 
-        with tempfile.TemporaryDirectory() as d:
-            cfg = os.path.join(d, "config.json")
-            with patch("vocalinux.text_injection.text_injector.config_dir", return_value=d):
-                inj = TextInjector.__new__(TextInjector)
+        File I/O is mocked directly (no tempfile) so the test is self-contained
+        and immune to other suites that patch tempfile.
+        """
+        from unittest.mock import mock_open
 
-                # No config file -> default False
+        inj = TextInjector.__new__(TextInjector)
+        with patch("vocalinux.text_injection.text_injector.config_dir", return_value="/cfg"):
+            # No config file -> default False
+            with patch("os.path.exists", return_value=False):
                 self.assertFalse(inj._should_restore_clipboard())
 
-                # Enabled
-                with open(cfg, "w") as f:
-                    f.write('{"text_injection": {"restore_clipboard_after_paste": true}}')
+            # Enabled
+            data = '{"text_injection": {"restore_clipboard_after_paste": true}}'
+            with (
+                patch("os.path.exists", return_value=True),
+                patch("builtins.open", mock_open(read_data=data)),
+            ):
                 self.assertTrue(inj._should_restore_clipboard())
 
-                # Disabled
-                with open(cfg, "w") as f:
-                    f.write('{"text_injection": {"restore_clipboard_after_paste": false}}')
+            # Disabled
+            data = '{"text_injection": {"restore_clipboard_after_paste": false}}'
+            with (
+                patch("os.path.exists", return_value=True),
+                patch("builtins.open", mock_open(read_data=data)),
+            ):
                 self.assertFalse(inj._should_restore_clipboard())
 
-                # Malformed JSON -> exception path -> False
-                with open(cfg, "w") as f:
-                    f.write("{ not valid json")
+            # Malformed JSON -> exception path -> False
+            with (
+                patch("os.path.exists", return_value=True),
+                patch("builtins.open", mock_open(read_data="{ not valid json")),
+            ):
                 self.assertFalse(inj._should_restore_clipboard())
 
     @patch("vocalinux.text_injection.text_injector.shutil.which")
