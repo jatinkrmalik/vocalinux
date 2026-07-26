@@ -564,6 +564,9 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                             with patch.dict("os.environ", {}, clear=True):
                                                 manager._init_whispercpp()
                                                 assert os.environ.get("GGML_VULKAN_DEVICE") == "1"
+                                                assert mock_pywhispercpp.Model.call_args.kwargs.get(
+                                                    "context_params"
+                                                ) == {"gpu_device": 1}
 
     def test_gpu_device_explicit_index(self):
         """Test explicit GPU device index selection."""
@@ -620,6 +623,9 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                         with patch.dict("os.environ", {}, clear=True):
                                             manager._init_whispercpp()
                                             assert os.environ.get("GGML_VULKAN_DEVICE") == "0"
+                                            assert mock_pywhispercpp.Model.call_args.kwargs.get(
+                                                "context_params"
+                                            ) == {"gpu_device": 0}
 
     def test_gpu_device_not_set_for_cpu_backend(self):
         """Test that GGML_VULKAN_DEVICE is not set when using CPU backend."""

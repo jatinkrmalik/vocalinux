@@ -1199,10 +1199,17 @@ class SpeechRecognitionManager:
                 )
         return compatible_kwargs
 
-    def _load_model_with_compatible_params(self, model_path: str, model_kwargs: dict):
+    def _load_model_with_compatible_params(
+        self, model_path: str, model_kwargs: dict, gpu_device: Optional[int] = None
+    ):
         from pywhispercpp.model import Model
 
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
+        context_params = {}
+        if gpu_device is not None and gpu_device >= 0:
+            context_params["gpu_device"] = gpu_device
+        if context_params:
+            compatible_kwargs["context_params"] = context_params
         return Model(model_path, **compatible_kwargs)
 
     def _detect_pywhispercpp_gpu_backend(self) -> str:
@@ -1250,6 +1257,7 @@ class SpeechRecognitionManager:
         )
 
         # Set Vulkan GPU device before model initialization
+        selected_gpu_device = None
         if backend == ComputeBackend.VULKAN:
             gpu_device_index = self.whispercpp_gpu_device
             if gpu_device_index is None or gpu_device_index < 0:
@@ -1263,6 +1271,7 @@ class SpeechRecognitionManager:
                 )
                 logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
                 os.environ["GGML_VULKAN_DEVICE"] = str(gpu_device_index)
+                selected_gpu_device = gpu_device_index
 
         # Log hardware summary
         import psutil
@@ -1297,7 +1306,9 @@ class SpeechRecognitionManager:
 
         # Attempt to load model; filter unsupported params and fall back to CPU if needed
         try:
-            self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
+            self.model = self._load_model_with_compatible_params(
+                model_path, model_kwargs, gpu_device=selected_gpu_device
+            )
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
                 model_error, model_path, model_kwargs, ComputeBackend.CPU
