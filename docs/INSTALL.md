@@ -629,11 +629,30 @@ Model names with more language and size variety can be found in [VOSK Models](ht
 **Symptom:** Tray icon missing or generic
 
 **Solution:**
-```bash
-# Refresh icon cache
-gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 
-# Restart the application
+On GNOME (including Fedora Workstation and Ubuntu), AppIndicator support is often
+disabled until you install and enable the tray extension:
+
+```bash
+# Debian/Ubuntu
+sudo apt install gnome-shell-extension-appindicator
+
+# Fedora
+sudo dnf install gnome-shell-extension-appindicator
+
+# Arch
+sudo pacman -S gnome-shell-extension-appindicator
+
+# Then enable (Extensions app, or):
+gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com
+# Log out and back in if the icon still does not appear
+```
+
+Also refresh the icon cache and restart Vocalinux:
+
+```bash
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
+vocalinux --debug
 ```
 
 ## Uninstallation

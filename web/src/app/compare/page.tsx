@@ -20,8 +20,8 @@ const engineTable = [
     footprint: "Small models available (~74MB tiny)",
     bestFor: "Most users who want strong speed + quality",
     icon: Zap,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-500/10",
+    iconColor: "text-primary",
+    iconBg: "bg-muted",
   },
   {
     engine: "Whisper (OpenAI)",
@@ -31,8 +31,8 @@ const engineTable = [
     footprint: "Large dependency footprint (~2.3GB)",
     bestFor: "Users already standardized on PyTorch stack",
     icon: Sparkles,
-    iconColor: "text-violet-500",
-    iconBg: "bg-violet-500/10",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     engine: "VOSK",
@@ -42,8 +42,8 @@ const engineTable = [
     footprint: "Very lightweight (~40MB model)",
     bestFor: "Older hardware and minimal-resource environments",
     icon: Cpu,
-    iconColor: "text-cyan-500",
-    iconBg: "bg-cyan-500/10",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     engine: "Remote API",
@@ -53,8 +53,8 @@ const engineTable = [
     footprint: "No local model required",
     bestFor: "Powerful LAN servers or shared transcription backends",
     icon: Server,
-    iconColor: "text-green-500",
-    iconBg: "bg-green-500/10",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
 ];
 
@@ -109,7 +109,7 @@ export default function CompareEnginesPage() {
           <Sparkles className="h-4 w-4" />
           Speech Engine Comparison
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           whisper.cpp vs Whisper vs VOSK vs Remote API on Linux
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -125,7 +125,7 @@ export default function CompareEnginesPage() {
           return (
             <article
               key={row.engine}
-              className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <div className="mb-4 flex items-center gap-3">
                 <span className={`inline-flex rounded-md p-2 ${row.iconBg}`}>
@@ -154,10 +154,10 @@ export default function CompareEnginesPage() {
         })}
       </section>
 
-      <section className="hidden overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800 md:block">
+      <section className="hidden overflow-x-auto rounded-[12px] border border-border bg-background md:block">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-700">
+            <tr className="border-b border-border">
               <th className="px-4 py-3 text-sm font-semibold">Engine</th>
               <th className="px-4 py-3 text-sm font-semibold">Speed</th>
               <th className="px-4 py-3 text-sm font-semibold">Hardware</th>
@@ -172,7 +172,7 @@ export default function CompareEnginesPage() {
               return (
                 <tr
                   key={row.engine}
-                  className="border-b border-zinc-100 align-top dark:border-zinc-700/70"
+                  className="border-b border-border align-top"
                 >
                   <td className="px-4 py-4 font-semibold">
                     <span className="inline-flex items-center gap-2">
@@ -206,7 +206,7 @@ export default function CompareEnginesPage() {
         </table>
       </section>
 
-      <section className="mt-8 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
+      <section className="mt-8 rounded-[12px] border border-border bg-muted p-6">
         <h2 className="mb-3 text-2xl font-semibold">
           Switching Between Engines
         </h2>
@@ -219,7 +219,7 @@ export default function CompareEnginesPage() {
       </section>
 
       <section className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-2xl font-semibold">
             When to pick whisper.cpp
           </h2>
@@ -231,7 +231,7 @@ export default function CompareEnginesPage() {
           </p>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-2xl font-semibold">When to pick Whisper</h2>
           <p className="text-sm text-muted-foreground">
             Choose OpenAI Whisper if your environment already depends on
@@ -239,7 +239,7 @@ export default function CompareEnginesPage() {
           </p>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-2xl font-semibold">When to pick VOSK</h2>
           <p className="text-sm text-muted-foreground">
             Choose VOSK on older laptops, low-RAM systems, or lightweight VMs
@@ -247,7 +247,7 @@ export default function CompareEnginesPage() {
           </p>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-2xl font-semibold">
             When to pick Remote API
           </h2>
@@ -265,11 +265,11 @@ export default function CompareEnginesPage() {
         </article>
       </section>
 
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Next steps</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Next steps</h2>
         <ul className="space-y-3 text-muted-foreground">
           <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               Install by distro:
               <Link
@@ -296,14 +296,14 @@ export default function CompareEnginesPage() {
             </span>
           </li>
           <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               Use interactive install to detect your hardware and pick the best
               engine defaults.
             </span>
           </li>
           <li className="flex gap-2">
-            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               After install, tune model size, VAD sensitivity, or Remote API
               settings for your preferred latency and accuracy level.

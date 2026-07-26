@@ -291,24 +291,24 @@ const getTypeStyles = (type: string) => {
     case "stable":
       return {
         badge:
-          "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+          "bg-primary/10 text-primary dark:text-[color:var(--terminal-fg)]",
         label: "Stable",
       };
     case "beta":
       return {
         badge:
-          "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+          "bg-primary/10 text-primary dark:text-primary",
         label: "Beta",
       };
     case "alpha":
       return {
         badge:
-          "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+          "bg-muted text-muted-foreground dark:text-muted-foreground",
         label: "Alpha",
       };
     default:
       return {
-        badge: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400",
+        badge: "bg-muted text-zinc-700",
         label: type,
       };
   }
@@ -363,7 +363,7 @@ export default function ChangelogPage() {
           <Clock className="h-4 w-4" />
           Release History
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Vocalinux Changelog
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -378,12 +378,12 @@ export default function ChangelogPage() {
           return (
             <article
               key={release.version}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <Tag className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold">{release.version}</span>
+                  <span className="font-display text-2xl font-semibold">{release.version}</span>
                 </div>
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${styles.badge}`}
@@ -406,7 +406,7 @@ export default function ChangelogPage() {
                     key={highlight}
                     className="flex items-start gap-2 text-muted-foreground"
                   >
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                     {highlight}
                   </li>
                 ))}
@@ -438,7 +438,7 @@ export default function ChangelogPage() {
                 </div>
               )}
 
-              <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-700">
+              <div className="mt-4 border-t border-border pt-4">
                 <a
                   href={`https://github.com/jatinkrmalik/vocalinux/releases/tag/${release.version}`}
                   target="_blank"
@@ -455,8 +455,8 @@ export default function ChangelogPage() {
         })}
       </section>
 
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Stay Updated</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Stay Updated</h2>
         <ul className="space-y-3 text-muted-foreground">
           <li className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />

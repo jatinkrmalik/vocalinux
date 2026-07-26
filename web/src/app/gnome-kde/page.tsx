@@ -90,11 +90,11 @@ export default function GnomeVsKdePage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Monitor className="h-4 w-4" />
           Linux Desktop Comparison
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Voice Typing on GNOME vs KDE Plasma: Linux Desktop Comparison
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -104,8 +104,8 @@ export default function GnomeVsKdePage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">Why desktop environment matters for voice dictation</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Why desktop environment matters for voice dictation</h2>
         <p className="text-muted-foreground">
           Voice typing quality is not just about the speech engine. Your desktop environment determines
           session type defaults, tray behavior, and input method routing. That affects whether dictation
@@ -113,32 +113,32 @@ export default function GnomeVsKdePage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">GNOME: what to expect</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">GNOME: what to expect</h2>
         <ul className="space-y-3 text-muted-foreground">
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               <strong>Wayland is the default</strong> on modern GNOME sessions, so IBus-backed text
               injection is usually the primary path.
             </span>
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               <strong>IBus integration is central</strong> for reliable cross-app dictation behavior on
               Wayland.
             </span>
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               <strong>Tray icon often needs AppIndicator support</strong> via GNOME extension, because
               legacy tray behavior differs from KDE.
             </span>
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               <strong>Known issues and workarounds:</strong> if the tray icon is missing, install/enable
               AppIndicator extension; if text does not appear in apps, verify IBus daemon/engine state.
@@ -147,25 +147,25 @@ export default function GnomeVsKdePage() {
         </ul>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">KDE Plasma: what to expect</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">KDE Plasma: what to expect</h2>
         <ul className="space-y-3 text-muted-foreground">
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               <strong>X11 vs Wayland matters</strong>: Plasma supports both widely, so behavior can differ
               between sessions.
             </span>
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               <strong>IBus setup may be more explicit</strong> compared with GNOME defaults, depending on
               distro and prior input method configuration.
             </span>
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <span>
               <strong>System Settings integration is strong</strong>, making it easier to inspect session
               type, input method behavior, and tray settings from one place.
@@ -174,11 +174,11 @@ export default function GnomeVsKdePage() {
         </ul>
       </section>
 
-      <section className="mb-12 overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="px-4 pb-2 pt-5 text-2xl font-bold">GNOME vs KDE Plasma comparison</h2>
+      <section className="mb-12 overflow-x-auto rounded-[12px] border border-border bg-background">
+        <h2 className="px-4 pb-2 pt-5 font-display text-2xl font-semibold">GNOME vs KDE Plasma comparison</h2>
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-700">
+            <tr className="border-b border-border">
               <th className="px-4 py-3 text-sm font-semibold">Feature</th>
               <th className="px-4 py-3 text-sm font-semibold">GNOME</th>
               <th className="px-4 py-3 text-sm font-semibold">KDE Plasma</th>
@@ -188,7 +188,7 @@ export default function GnomeVsKdePage() {
             {comparisonRows.map((row) => {
               const Icon = row.icon;
               return (
-                <tr key={row.feature} className="border-b border-zinc-100 align-top dark:border-zinc-700/70">
+                <tr key={row.feature} className="border-b border-border align-top">
                   <td className="px-4 py-4 font-semibold">
                     <span className="inline-flex items-center gap-2">
                       <span className="rounded-md bg-primary/10 p-1.5">
@@ -207,7 +207,7 @@ export default function GnomeVsKdePage() {
       </section>
 
       <section className="mb-12 grid gap-6 md:grid-cols-2">
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-2xl font-semibold">When GNOME is a better fit</h2>
           <p className="text-sm text-muted-foreground">
             Choose GNOME when you want a Wayland-first environment with familiar IBus defaults and a
@@ -216,7 +216,7 @@ export default function GnomeVsKdePage() {
           </p>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-3 text-2xl font-semibold">When KDE Plasma is a better fit</h2>
           <p className="text-sm text-muted-foreground">
             Choose KDE Plasma when you want deeper system configurability, flexible X11/Wayland session
@@ -225,8 +225,8 @@ export default function GnomeVsKdePage() {
         </article>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Helpful guides</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-muted p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Helpful guides</h2>
         <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
           <Link href="/wayland/" className="font-semibold text-primary hover:underline">
             Wayland setup and architecture
@@ -240,15 +240,15 @@ export default function GnomeVsKdePage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-primary/20 bg-primary/5 p-8">
-        <h2 className="mb-4 text-2xl font-bold">Ready to set up voice typing on your desktop?</h2>
+      <section className="rounded-[12px] border border-primary/20 bg-primary/5 p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Ready to set up voice typing on your desktop?</h2>
         <p className="mb-6 max-w-3xl text-muted-foreground">
           Install Vocalinux and get reliable offline voice dictation on GNOME or KDE Plasma, with the
           right text injection path for your session type.
         </p>
         <Link
           href="/install/"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
         >
           Install Vocalinux
           <ChevronRight className="h-4 w-4" />

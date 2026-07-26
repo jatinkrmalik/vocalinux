@@ -110,7 +110,7 @@ export default function AdvancedSettingsPage() {
           <SlidersHorizontal className="h-4 w-4" />
           v0.11.0 Advanced Tab
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Advanced Whisper.cpp Settings for Linux Dictation
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -145,9 +145,9 @@ export default function AdvancedSettingsPage() {
           return (
             <article
               key={item.title}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
-              <span className="bg-primary/10 mb-4 inline-flex rounded-xl p-3">
+              <span className="bg-primary/10 mb-4 inline-flex rounded-[12px] p-3">
                 <Icon className="h-6 w-6 text-primary" />
               </span>
               <h2 className="mb-2 text-xl font-semibold">{item.title}</h2>
@@ -159,8 +159,8 @@ export default function AdvancedSettingsPage() {
         })}
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-5 flex items-center gap-2 text-2xl font-bold">
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-5 flex items-center gap-2 font-display text-2xl font-semibold">
           <Cpu className="h-5 w-5 text-primary" />
           Whisper.cpp Decoding Controls
         </h2>
@@ -168,7 +168,7 @@ export default function AdvancedSettingsPage() {
           {whisperControls.map((control) => (
             <article
               key={control.name}
-              className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/60"
+              className="rounded-[12px] border border-border bg-muted p-5"
             >
               <h3 className="mb-2 text-lg font-semibold">{control.name}</h3>
               <p className="text-sm text-muted-foreground">{control.detail}</p>
@@ -178,24 +178,24 @@ export default function AdvancedSettingsPage() {
       </section>
 
       <section className="mb-12 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
-            <Settings className="h-5 w-5 text-blue-500" />
+        <div className="rounded-[12px] border border-border bg-muted p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
+            <Settings className="h-5 w-5 text-primary" />
             When to Use Advanced Settings
           </h2>
           <ul className="space-y-3 text-sm text-muted-foreground">
             {useCases.map((useCase) => (
               <li key={useCase} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 <span>{useCase}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6">
-          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
-            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+        <div className="rounded-[12px] border border-border bg-muted p-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold">
+            <AlertTriangle className="h-5 w-5 text-muted-foreground" />
             Keep Defaults Unless You Need Them
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -207,8 +207,8 @@ export default function AdvancedSettingsPage() {
         </div>
       </section>
 
-      <section className="border-primary/20 bg-primary/5 rounded-2xl border p-8">
-        <h2 className="mb-4 text-2xl font-bold">Related Guides</h2>
+      <section className="border-primary/20 bg-primary/5 rounded-[12px] border p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <Link href="/voice-activity-detection/" className="group">
             <h3 className="font-semibold">Silero VAD</h3>

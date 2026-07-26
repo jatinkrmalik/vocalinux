@@ -110,11 +110,11 @@ export default function VsNerdDictationPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Trophy className="h-4 w-4" />
           Vocalinux Comparison
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Vocalinux vs Nerd Dictation
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -124,11 +124,11 @@ export default function VsNerdDictationPage() {
         </p>
       </section>
 
-      <section className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="px-4 pb-2 pt-5 text-2xl font-bold">Feature-by-feature comparison</h2>
+      <section className="overflow-x-auto rounded-[12px] border border-border bg-background">
+        <h2 className="px-4 pb-2 pt-5 font-display text-2xl font-semibold">Feature-by-feature comparison</h2>
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-700">
+            <tr className="border-b border-border">
               <th className="px-4 py-3 text-sm font-semibold">Feature</th>
               <th className="px-4 py-3 text-sm font-semibold">Vocalinux</th>
               <th className="px-4 py-3 text-sm font-semibold">Nerd Dictation</th>
@@ -142,7 +142,7 @@ export default function VsNerdDictationPage() {
               return (
                 <tr
                   key={row.feature}
-                  className="border-b border-zinc-100 align-top dark:border-zinc-700/70"
+                  className="border-b border-border align-top"
                 >
                   <td className="px-4 py-4 font-semibold">
                     <span className="inline-flex items-center gap-2">
@@ -154,7 +154,7 @@ export default function VsNerdDictationPage() {
                   </td>
                   <td className="px-4 py-4 text-sm text-muted-foreground">{row.vocalinux}</td>
                   <td className="px-4 py-4 text-sm text-muted-foreground">{row.nerdDictation}</td>
-                  <td className="px-4 py-4 text-sm font-semibold text-green-600 dark:text-green-400">
+                  <td className="px-4 py-4 text-sm font-semibold text-primary dark:text-[color:var(--terminal-fg)]">
                     <span className="inline-flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4" />
                       {row.winner}
@@ -167,8 +167,8 @@ export default function VsNerdDictationPage() {
         </table>
       </section>
 
-      <section className="mt-10 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Go deeper</h2>
+      <section className="mt-10 rounded-[12px] border border-border bg-muted p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Go deeper</h2>
         <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
           <Link href="/offline/" className="font-semibold text-primary hover:underline">
             Why offline dictation matters
@@ -191,8 +191,8 @@ export default function VsNerdDictationPage() {
         </div>
       </section>
 
-      <section className="mt-10 rounded-2xl border border-primary/20 bg-primary/5 p-8">
-        <h2 className="mb-4 text-2xl font-bold">Ready to switch from terminal-only dictation?</h2>
+      <section className="mt-10 rounded-[12px] border border-primary/20 bg-primary/5 p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Ready to switch from terminal-only dictation?</h2>
         <p className="mb-6 max-w-3xl text-muted-foreground">
           Install Vocalinux for a native Linux voice dictation workflow with offline privacy, better
           usability, and stronger performance options.
@@ -200,14 +200,14 @@ export default function VsNerdDictationPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Vocalinux
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/compare/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             Engine comparison
           </Link>

@@ -18,7 +18,7 @@ const faqCategories = [
   {
     category: "Getting Started",
     icon: Zap,
-    iconColor: "text-amber-500",
+    iconColor: "text-primary",
     questions: [
       {
         q: "How do I install Vocalinux?",
@@ -37,7 +37,7 @@ const faqCategories = [
   {
     category: "Privacy & Security",
     icon: Lock,
-    iconColor: "text-green-500",
+    iconColor: "text-primary",
     questions: [
       {
         q: "Is Vocalinux really 100% offline?",
@@ -56,7 +56,7 @@ const faqCategories = [
   {
     category: "Speech Recognition",
     icon: Mic,
-    iconColor: "text-blue-500",
+    iconColor: "text-primary",
     questions: [
       {
         q: "Which speech recognition engines are available?",
@@ -79,7 +79,7 @@ const faqCategories = [
   {
     category: "Usage & Features",
     icon: Volume2,
-    iconColor: "text-violet-500",
+    iconColor: "text-primary",
     questions: [
       {
         q: "How do I start and stop dictation?",
@@ -106,7 +106,7 @@ const faqCategories = [
   {
     category: "Performance",
     icon: Cpu,
-    iconColor: "text-cyan-500",
+    iconColor: "text-primary",
     questions: [
       {
         q: "How much RAM does Vocalinux need?",
@@ -166,7 +166,7 @@ export default function FaqPage() {
           <CircleHelp className="h-4 w-4" />
           Help Center
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Frequently Asked Questions
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -181,10 +181,10 @@ export default function FaqPage() {
           return (
             <article
               key={category.category}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
-              <h2 className="mb-6 flex items-center gap-3 text-2xl font-bold">
-                <span className={`rounded-xl bg-zinc-100 p-2 dark:bg-zinc-700`}>
+              <h2 className="mb-6 flex items-center gap-3 font-display text-2xl font-semibold">
+                <span className={`rounded-[12px] bg-muted p-2 bg-muted`}>
                   <Icon className={`h-5 w-5 ${category.iconColor}`} />
                 </span>
                 {category.category}
@@ -194,7 +194,7 @@ export default function FaqPage() {
                 {category.questions.map((item, index) => (
                   <div
                     key={index}
-                    className="border-b border-zinc-100 pb-6 last:border-0 last:pb-0 dark:border-zinc-700"
+                    className="border-b border-border pb-6 last:border-0 last:pb-0"
                   >
                     <h3 className="mb-2 text-lg font-semibold">{item.q}</h3>
                     <p className="text-muted-foreground">{item.a}</p>
@@ -206,8 +206,8 @@ export default function FaqPage() {
         })}
       </section>
 
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Still have questions?</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Still have questions?</h2>
         <ul className="space-y-3 text-muted-foreground">
           <li>
             <span className="inline-flex items-center gap-2">

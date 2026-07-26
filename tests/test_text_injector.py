@@ -10,7 +10,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Update import path to use the new package structure
-from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+from vocalinux.text_injection.text_injector import (
+    DesktopEnvironment,
+    TextInjector,
+    _warn_if_ydotool_globally_enabled,
+    _ydotool_install_guidance,
+)
 
 # Create a mock for audio feedback module
 mock_audio_feedback = MagicMock()
@@ -1237,6 +1242,30 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 TextInjector()
 
+    def test_ydotool_package_guidance_uses_user_service(self):
+        """Package and source routes must clearly use their distinct unit scopes."""
+        guidance = _ydotool_install_guidance()
+
+        self.assertIn("sudo apt install ydotool", guidance)
+        self.assertIn("systemctl --user enable --now ydotool.service", guidance)
+        self.assertIn("sudo usermod -aG input $USER", guidance)
+        self.assertIn("sudo systemctl enable --now ydotoold.service", guidance)
+        self.assertIn("Do NOT use 'systemctl --global enable ydotool.service'", guidance)
+
+    @patch("vocalinux.text_injection.text_injector.logger.warning")
+    @patch("vocalinux.text_injection.text_injector.os.path.lexists", return_value=True)
+    def test_globally_enabled_ydotool_warns_with_remediation(self, mock_lexists, mock_warning):
+        """A persistent global unit should produce an actionable greeter warning."""
+        _warn_if_ydotool_globally_enabled()
+
+        mock_lexists.assert_called_once_with(
+            "/etc/systemd/user/default.target.wants/ydotool.service"
+        )
+        warning = mock_warning.call_args.args[0]
+        self.assertIn("display-manager greeter sessions", warning)
+        self.assertIn("systemctl --global disable ydotool.service", warning)
+        self.assertIn("systemctl --user enable --now ydotool.service", warning)
+
     def test_detect_environment_unknown(self):
         """Test environment detection when session type is unknown and no display vars set."""
         # Use clear=True to start fresh, then only set XDG_SESSION_TYPE to empty
@@ -1441,6 +1470,32 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
                 # Restore DISPLAY
                 if env_backup is not None:
                     os.environ["DISPLAY"] = env_backup
+
+    def test_inject_with_xdotool_releases_modifiers_without_escape(self):
+        """The xdotool path must keep the target input focused after injection."""
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.X11
+
+        injector._inject_with_xdotool("test")
+
+        commands = [call.args[0] for call in self.mock_subprocess.call_args_list]
+        self.assertIn(
+            [
+                "xdotool",
+                "keyup",
+                "--clearmodifiers",
+                "Control_L",
+                "Control_R",
+                "Shift_L",
+                "Shift_R",
+                "Alt_L",
+                "Alt_R",
+                "Super_L",
+                "Super_R",
+            ],
+            commands,
+        )
+        self.assertFalse(any("Escape" in command for command in commands))
 
     def test_inject_with_wayland_tool_ydotool(self):
         """Test text injection with ydotool."""

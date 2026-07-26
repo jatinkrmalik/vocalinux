@@ -142,11 +142,11 @@ export default function AutostartPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Power className="h-4 w-4" />
           New in v0.7.0
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Autostart Voice Dictation on Login
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -161,7 +161,7 @@ export default function AutostartPage() {
           return (
             <div
               key={method.method}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <Icon className="mb-3 h-6 w-6 text-primary" />
               <h3 className="mb-2 font-semibold">{method.method}</h3>
@@ -172,23 +172,23 @@ export default function AutostartPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">How It Works</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">How It Works</h2>
         <div className="space-y-4">
           {howItWorks.map((step) => (
             <div
               key={step.step}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <div className="mb-2 flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                   {step.step}
                 </span>
                 <h3 className="font-semibold">{step.title}</h3>
               </div>
               <p className="ml-10 text-sm text-muted-foreground">{step.description}</p>
               {step.code && (
-                <div className="ml-10 mt-2 rounded-lg bg-zinc-950 p-2">
-                  <code className="text-sm text-green-400">{step.code}</code>
+                <div className="ml-10 mt-2 rounded-lg bg-[color:var(--terminal)] p-2">
+                  <code className="text-sm text-[color:var(--terminal-fg)]">{step.code}</code>
                 </div>
               )}
             </div>
@@ -196,8 +196,8 @@ export default function AutostartPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-6 text-2xl font-bold">Desktop Environment Compatibility</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-6 font-display text-2xl font-semibold">Desktop Environment Compatibility</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Vocalinux uses the XDG Autostart specification, which is supported by virtually all Linux
           desktop environments:
@@ -205,7 +205,7 @@ export default function AutostartPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+              <tr className="border-b border-border">
                 <th className="pb-3 pr-4 font-semibold">Desktop</th>
                 <th className="pb-3 pr-4 font-semibold">Method</th>
                 <th className="pb-3 pr-4 font-semibold">Supported</th>
@@ -214,12 +214,12 @@ export default function AutostartPage() {
             </thead>
             <tbody>
               {desktopEnvironments.map((de) => (
-                <tr key={de.name} className="border-b border-zinc-100 dark:border-zinc-700/70">
+                <tr key={de.name} className="border-b border-border">
                   <td className="py-3 pr-4 font-medium">{de.name}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{de.autostartMethod}</td>
                   <td className="py-3 pr-4">
                     {de.supported ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary dark:text-[color:var(--terminal-fg)]">
                         <CheckCircle2 className="h-3 w-3" />
                         Yes
                       </span>
@@ -235,27 +235,27 @@ export default function AutostartPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900/20">
-        <h2 className="mb-3 text-xl font-bold text-blue-800 dark:text-blue-300">
+      <section className="mb-12 rounded-[12px] border border-border bg-primary/5 p-6">
+        <h2 className="mb-3 text-xl font-semibold text-foreground">
           Not a systemd Service
         </h2>
-        <p className="text-sm text-blue-700 dark:text-blue-400">
+        <p className="text-sm text-muted-foreground">
           Vocalinux autostart uses <strong>XDG desktop entries</strong>, not systemd services. This
           means it starts as a regular desktop application in your graphical session - which is the
           correct way to launch GUI apps. No background services, no root required.
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">Manual Setup (Advanced)</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Manual Setup (Advanced)</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           If you prefer to manage autostart manually or need to customize the startup behavior:
         </p>
         <div className="space-y-3">
           <div>
             <p className="mb-1 text-sm font-medium">Enable autostart:</p>
-            <div className="rounded-lg bg-zinc-950 p-3">
-              <code className="text-sm text-green-400">
+            <div className="rounded-lg bg-[color:var(--terminal)] p-3">
+              <code className="text-sm text-[color:var(--terminal-fg)]">
                 mkdir -p ~/.config/autostart && cp /usr/share/applications/vocalinux.desktop
                 ~/.config/autostart/
               </code>
@@ -263,14 +263,14 @@ export default function AutostartPage() {
           </div>
           <div>
             <p className="mb-1 text-sm font-medium">Disable autostart:</p>
-            <div className="rounded-lg bg-zinc-950 p-3">
-              <code className="text-sm text-green-400">rm ~/.config/autostart/vocalinux.desktop</code>
+            <div className="rounded-lg bg-[color:var(--terminal)] p-3">
+              <code className="text-sm text-[color:var(--terminal-fg)]">rm ~/.config/autostart/vocalinux.desktop</code>
             </div>
           </div>
           <div>
             <p className="mb-1 text-sm font-medium">Start minimized (skip welcome dialog):</p>
-            <div className="rounded-lg bg-zinc-950 p-3">
-              <code className="text-sm text-green-400">
+            <div className="rounded-lg bg-[color:var(--terminal)] p-3">
+              <code className="text-sm text-[color:var(--terminal-fg)]">
                 vocalinux --start-minimized
               </code>
             </div>
@@ -278,8 +278,8 @@ export default function AutostartPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Ready to Automate?</h2>
+      <section className="rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Ready to Automate?</h2>
         <p className="mb-6 text-muted-foreground">
           Install Vocalinux and enable autostart. Your voice dictation will be ready the moment you
           log in.
@@ -287,14 +287,14 @@ export default function AutostartPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/faq/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             Common Questions
           </Link>

@@ -8,8 +8,8 @@ const useCases = [
   {
     title: "Developers",
     icon: Code,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     description: "Code faster with voice. Dictate comments, documentation, and even code snippets hands-free.",
     benefits: [
       "Dictate code comments while keeping hands on the keyboard",
@@ -22,8 +22,8 @@ const useCases = [
   {
     title: "Writers & Authors",
     icon: Feather,
-    iconColor: "text-violet-500",
-    iconBg: "bg-violet-100 dark:bg-violet-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     description: "Capture ideas as fast as you can think them. Perfect for drafts, articles, and creative writing.",
     benefits: [
       "Write at natural speaking speed (100+ WPM)",
@@ -36,8 +36,8 @@ const useCases = [
   {
     title: "Students",
     icon: GraduationCap,
-    iconColor: "text-emerald-500",
-    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     description: "Take notes during lectures, transcribe recordings, and write essays faster.",
     benefits: [
       "Take lecture notes at speaking speed",
@@ -50,8 +50,8 @@ const useCases = [
   {
     title: "Accessibility Users",
     icon: Accessibility,
-    iconColor: "text-rose-500",
-    iconBg: "bg-rose-100 dark:bg-rose-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     description: "Full voice control for users with mobility impairments, RSI, or carpal tunnel.",
     benefits: [
       "Type without using hands",
@@ -64,8 +64,8 @@ const useCases = [
   {
     title: "Professionals",
     icon: Briefcase,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-100 dark:bg-amber-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     description: "Dictate emails, reports, and meeting notes. Boost productivity in any profession.",
     benefits: [
       "Draft emails quickly with natural speech",
@@ -78,8 +78,8 @@ const useCases = [
   {
     title: "Content Creators",
     icon: Heart,
-    iconColor: "text-pink-500",
-    iconBg: "bg-pink-100 dark:bg-pink-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     description: "Create YouTube scripts, podcast notes, and social media content at speaking speed.",
     benefits: [
       "Write scripts as fast as you can speak",
@@ -136,11 +136,11 @@ export default function UseCasesPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Users className="h-4 w-4" />
           For Everyone
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Voice Dictation for Every Workflow
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -155,14 +155,14 @@ export default function UseCasesPage() {
           return (
             <article
               key={useCase.title}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
               <div className="mb-6 flex flex-wrap items-start gap-4">
-                <div className={`rounded-xl p-3 ${useCase.iconBg}`}>
+                <div className={`rounded-[12px] p-3 ${useCase.iconBg}`}>
                   <Icon className={`h-6 w-6 ${useCase.iconColor}`} />
                 </div>
                 <div className="flex-1">
-                  <h2 className="mb-2 text-2xl font-bold">{useCase.title}</h2>
+                  <h2 className="mb-2 font-display text-2xl font-semibold">{useCase.title}</h2>
                   <p className="text-muted-foreground">{useCase.description}</p>
                 </div>
               </div>
@@ -186,7 +186,7 @@ export default function UseCasesPage() {
                     {useCase.commands.map((cmd) => (
                       <kbd
                         key={cmd}
-                        className="rounded-lg border border-zinc-300 bg-zinc-100 px-2 py-1 text-xs font-mono dark:border-zinc-600 dark:bg-zinc-900"
+                        className="rounded-lg border border-border bg-muted px-2 py-1 text-xs font-mono"
                       >
                         "{cmd}"
                       </kbd>
@@ -199,22 +199,22 @@ export default function UseCasesPage() {
         })}
       </section>
 
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Ready to Get Started?</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Ready to Get Started?</h2>
         <p className="mb-6 text-muted-foreground">
           Install Vocalinux in minutes and start dictating in any application on Linux.
         </p>
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/shortcuts/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             View Voice Commands
           </Link>

@@ -125,7 +125,7 @@ export default function DesktopReliabilityPage() {
           <ShieldCheck className="h-4 w-4" />
           Desktop Reliability
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Reliable Voice Dictation on Real Linux Desktops
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -142,9 +142,9 @@ export default function DesktopReliabilityPage() {
           return (
             <article
               key={feature.title}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
-              <span className="bg-primary/10 mb-4 inline-flex rounded-xl p-3">
+              <span className="bg-primary/10 mb-4 inline-flex rounded-[12px] p-3">
                 <Icon className="h-6 w-6 text-primary" />
               </span>
               <h2 className="mb-2 text-xl font-semibold">{feature.title}</h2>
@@ -156,13 +156,13 @@ export default function DesktopReliabilityPage() {
         })}
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-5 text-2xl font-bold">Reliability Work by Release</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-muted p-6">
+        <h2 className="mb-5 font-display text-2xl font-semibold">Reliability Work by Release</h2>
         <div className="space-y-4">
           {releaseMap.map((release) => (
             <article
               key={release.version}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <h3 className="mb-2 text-lg font-semibold">{release.version}</h3>
               <p className="text-sm text-muted-foreground">
@@ -174,8 +174,8 @@ export default function DesktopReliabilityPage() {
       </section>
 
       <section className="mb-12 grid gap-6 lg:grid-cols-[1fr_1fr]">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-          <h2 className="mb-4 text-2xl font-bold">Why This Matters</h2>
+        <div className="rounded-[12px] border border-border bg-background p-6">
+          <h2 className="mb-4 font-display text-2xl font-semibold">Why This Matters</h2>
           <ul className="space-y-3 text-sm text-muted-foreground">
             {[
               "Dictation should survive laptop lid closes, docking changes, and USB re-enumeration.",
@@ -184,15 +184,15 @@ export default function DesktopReliabilityPage() {
               "Settings should fit smaller displays and window managers with different decoration behavior.",
             ].map((item) => (
               <li key={item} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 <span>{item}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="border-primary/20 bg-primary/5 rounded-2xl border p-6">
-          <h2 className="mb-4 text-2xl font-bold">Where to Debug Issues</h2>
+        <div className="border-primary/20 bg-primary/5 rounded-[12px] border p-6">
+          <h2 className="mb-4 font-display text-2xl font-semibold">Where to Debug Issues</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             If dictation works in one app but not another, start with the
             display server and input method path. Wayland sessions often depend
@@ -208,8 +208,8 @@ export default function DesktopReliabilityPage() {
         </div>
       </section>
 
-      <section className="border-primary/20 bg-primary/5 rounded-2xl border p-8">
-        <h2 className="mb-4 text-2xl font-bold">Related Guides</h2>
+      <section className="border-primary/20 bg-primary/5 rounded-[12px] border p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <Link href="/wayland/" className="group">
             <h3 className="font-semibold">Wayland support</h3>

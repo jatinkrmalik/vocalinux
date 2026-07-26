@@ -8,7 +8,7 @@ const shortcutCategories = [
   {
     category: "Dictation Controls",
     icon: Mic,
-    iconColor: "text-blue-500",
+    iconColor: "text-primary",
     shortcuts: [
       { keys: ["Ctrl", "Ctrl"], action: "Toggle mode: start/stop dictation", note: "Default mode" },
       { keys: ["Hold Ctrl"], action: "Push-to-talk mode: speak while held", note: "Release to stop" },
@@ -27,7 +27,7 @@ const shortcutCategories = [
   {
     category: "Voice Commands",
     icon: Zap,
-    iconColor: "text-amber-500",
+    iconColor: "text-primary",
     shortcuts: [
       { keys: ["\"new line\""], action: "Insert a new line", note: "Say this phrase" },
       { keys: ["\"new paragraph\""], action: "Insert a new paragraph", note: "Say this phrase" },
@@ -48,7 +48,7 @@ const shortcutCategories = [
   {
     category: "Audio Feedback",
     icon: Volume2,
-    iconColor: "text-sky-500",
+    iconColor: "text-primary",
     shortcuts: [
       {
         keys: ["Settings Toggle"],
@@ -65,7 +65,7 @@ const shortcutCategories = [
   {
     category: "Tray Icon Actions",
     icon: Mouse,
-    iconColor: "text-green-500",
+    iconColor: "text-primary",
     shortcuts: [
       { keys: ["Left Click"], action: "Toggle dictation", note: "On tray icon" },
       { keys: ["Right Click"], action: "Open context menu", note: "Settings, quit, etc." },
@@ -74,7 +74,7 @@ const shortcutCategories = [
   {
     category: "Configuration",
     icon: Settings,
-    iconColor: "text-violet-500",
+    iconColor: "text-primary",
     shortcuts: [
       { keys: ["Config File"], action: "~/.config/vocalinux/config.json", note: "Manual editing" },
     ],
@@ -136,11 +136,11 @@ export default function ShortcutsPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Keyboard className="h-4 w-4" />
           Quick Reference
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Keyboard Shortcuts & Voice Commands
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -150,15 +150,15 @@ export default function ShortcutsPage() {
       </section>
 
       {/* Quick Start */}
-      <section className="mb-12 rounded-2xl border border-primary/20 bg-primary/5 p-6">
-        <h2 className="mb-4 text-xl font-bold">Quick Start</h2>
+      <section className="mb-12 rounded-[12px] border border-primary/20 bg-primary/5 p-6">
+        <h2 className="mb-4 text-xl font-semibold">Quick Start</h2>
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <kbd className="rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-1.5 font-mono text-sm font-semibold dark:border-zinc-600 dark:bg-zinc-800">
+            <kbd className="rounded-lg border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">
               Ctrl
             </kbd>
             <span className="text-muted-foreground">+</span>
-            <kbd className="rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-1.5 font-mono text-sm font-semibold dark:border-zinc-600 dark:bg-zinc-800">
+            <kbd className="rounded-lg border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">
               Ctrl
             </kbd>
           </div>
@@ -181,10 +181,10 @@ export default function ShortcutsPage() {
           return (
             <article
               key={category.category}
-              className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-6"
             >
-              <h2 className="mb-6 flex items-center gap-3 text-2xl font-bold">
-                <span className={`rounded-xl bg-zinc-100 p-2 dark:bg-zinc-700`}>
+              <h2 className="mb-6 flex items-center gap-3 font-display text-2xl font-semibold">
+                <span className={`rounded-[12px] bg-muted p-2 bg-muted`}>
                   <Icon className={`h-5 w-5 ${category.iconColor}`} />
                 </span>
                 {category.category}
@@ -194,12 +194,12 @@ export default function ShortcutsPage() {
                 {category.shortcuts.map((shortcut, index) => (
                   <div
                     key={index}
-                    className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-zinc-50 p-4 dark:bg-zinc-900/50"
+                    className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] bg-muted p-4"
                   >
                     <div className="flex items-center gap-3">
                       {shortcut.keys.map((key, keyIndex) => (
                         <span key={keyIndex} className="flex items-center gap-2">
-                          <kbd className="rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-1.5 font-mono text-sm font-semibold shadow-sm dark:border-zinc-600 dark:bg-zinc-800">
+                          <kbd className="rounded-lg border border-border bg-muted px-3 py-1.5 font-mono text-sm font-semibold">
                             {key}
                           </kbd>
                           {keyIndex < shortcut.keys.length - 1 && (
@@ -221,14 +221,14 @@ export default function ShortcutsPage() {
       </section>
 
       {/* Customization */}
-      <section className="mt-12 rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Customizing Shortcuts</h2>
+      <section className="mt-12 rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Customizing Shortcuts</h2>
         <p className="mb-4 text-muted-foreground">
           You can customize the activation shortcut in the settings panel or by editing the
           configuration file directly:
         </p>
-        <div className="rounded-lg bg-zinc-950 p-4">
-          <code className="text-sm text-green-400">~/.config/vocalinux/config.json</code>
+        <div className="rounded-lg bg-[color:var(--terminal)] p-4">
+          <code className="text-sm text-[color:var(--terminal-fg)]">~/.config/vocalinux/config.json</code>
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
           Open Vocalinux and access Settings from the tray icon to change keyboard shortcuts
@@ -240,7 +240,7 @@ export default function ShortcutsPage() {
       <section className="mt-12 grid gap-6 md:grid-cols-2">
         <Link
           href="/faq/"
-          className="group rounded-2xl border border-zinc-200 bg-white p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+          className="group rounded-[12px] border border-border bg-background p-6 transition-all"
         >
           <h3 className="mb-2 text-xl font-semibold">Frequently Asked Questions</h3>
           <p className="text-sm text-muted-foreground">
@@ -254,7 +254,7 @@ export default function ShortcutsPage() {
 
         <Link
           href="/troubleshooting/"
-          className="group rounded-2xl border border-zinc-200 bg-white p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+          className="group rounded-[12px] border border-border bg-background p-6 transition-all"
         >
           <h3 className="mb-2 text-xl font-semibold">Troubleshooting</h3>
           <p className="text-sm text-muted-foreground">

@@ -157,26 +157,26 @@ const getDistroStyles = (distro: DistroSlug) => {
   if (distro === "ubuntu") {
     return {
       icon: Laptop,
-      iconClass: "text-orange-500",
-      chipClass: "border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400",
-      panelClass: "from-orange-500/15 to-amber-500/10",
+      iconClass: "text-primary",
+      chipClass: "border-border bg-muted text-muted-foreground",
+      panelClass: "bg-primary/10",
     };
   }
 
   if (distro === "fedora") {
     return {
       icon: Sparkles,
-      iconClass: "text-blue-500",
-      chipClass: "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400",
-      panelClass: "from-blue-500/15 to-cyan-500/10",
+      iconClass: "text-primary",
+      chipClass: "border-border bg-primary/10 text-primary",
+      panelClass: "bg-primary/10",
     };
   }
 
   return {
     icon: Cpu,
-    iconClass: "text-emerald-500",
-    chipClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    panelClass: "from-emerald-500/15 to-teal-500/10",
+    iconClass: "text-primary",
+    chipClass: "border-border bg-primary/10 text-muted-foreground",
+    panelClass: "bg-primary/10",
   };
 };
 
@@ -297,18 +297,18 @@ export default async function DistroInstallPage({
           {config.name} Setup Guide
         </p>
 
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl">{config.title}</h1>
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">{config.title}</h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">{config.intro}</p>
 
         <div
-          className={`rounded-2xl border border-zinc-200 bg-gradient-to-br p-6 dark:border-zinc-700 ${styles.panelClass}`}
+          className={`rounded-[12px] border border-border p-6  ${styles.panelClass}`}
         >
           <h2 className="mb-3 inline-flex items-center gap-2 text-xl font-semibold">
-            <Terminal className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <Terminal className="h-5 w-5 text-primary dark:text-[color:var(--terminal-fg)]" />
             Install command
           </h2>
-          <div className="rounded-xl bg-zinc-950 p-4">
-            <code className="block overflow-x-auto whitespace-pre-wrap break-all text-sm text-green-400 sm:text-base">
+          <div className="rounded-[12px] bg-[color:var(--terminal)] p-4">
+            <code className="block overflow-x-auto whitespace-pre-wrap break-all text-sm text-[color:var(--terminal-fg)] sm:text-base">
               {config.installCommand}
             </code>
           </div>
@@ -316,30 +316,30 @@ export default async function DistroInstallPage({
       </section>
 
       <section className="mt-10 grid gap-6 md:grid-cols-2">
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
-            <Shield className="h-5 w-5 text-blue-500" />
+            <Shield className="h-5 w-5 text-primary" />
             Prerequisites
           </h2>
           <ul className="space-y-2 text-muted-foreground">
             {config.prerequisites.map((item) => (
               <li key={item} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 {item}
               </li>
             ))}
           </ul>
         </article>
 
-        <article className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+        <article className="rounded-[12px] border border-border bg-background p-6">
           <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
-            <Sparkles className="h-5 w-5 text-violet-500" />
+            <Sparkles className="h-5 w-5 text-primary" />
             Tested environments
           </h2>
           <ul className="space-y-2 text-muted-foreground">
             {config.testedOn.map((item) => (
               <li key={item} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                 {item}
               </li>
             ))}
@@ -347,30 +347,30 @@ export default async function DistroInstallPage({
         </article>
       </section>
 
-      <section className="mt-10 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+      <section className="mt-10 rounded-[12px] border border-border bg-background p-6">
         <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
-          <Cpu className="h-5 w-5 text-cyan-500" />
+          <Cpu className="h-5 w-5 text-primary" />
           Setup notes for {config.name}
         </h2>
         <ol className="space-y-3 text-muted-foreground">
           {config.setupNotes.map((item) => (
             <li key={item} className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
               {item}
             </li>
           ))}
         </ol>
       </section>
 
-      <section className="mt-10 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/70">
+      <section className="mt-10 rounded-[12px] border border-border bg-muted p-6 /70">
         <h2 className="mb-4 inline-flex items-center gap-2 text-2xl font-semibold">
-          <CheckCircle2 className="h-5 w-5 text-green-500" />
+          <CheckCircle2 className="h-5 w-5 text-primary" />
           Post-install checklist
         </h2>
         <ul className="space-y-3 text-muted-foreground">
           {config.postInstallChecks.map((item) => (
             <li key={item} className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
               {item}
             </li>
           ))}

@@ -1484,11 +1484,17 @@ install_system_dependencies() {
     fi
 
     # Define package names for different distributions
-    # Determine the correct GObject Introspection dev package for Ubuntu-family distros
-    # Ubuntu 24.04+ and Pop!_OS Cosmic+ ship libgirepository-2.0-dev instead of 1.0
+    # GObject Introspection / GLib headers for building PyGObject and friends.
+    # Prefer libgirepository-2.0-dev when available (Ubuntu 24.04+, Pop!_OS Cosmic+,
+    # Debian 13+). When both 1.0 and 2.0 packages exist, install both: 2.0 provides
+    # the modern GLib GI headers that pip builds need, while 1.0 still pulls
+    # gobject-introspection tooling. Older distros that only ship 1.0 keep that.
+    # See #571 (installer previously kept 1.0 whenever apt-cache still listed it).
     local GI_DEV_PKG="libgirepository1.0-dev"
     if apt-cache show libgirepository-2.0-dev &>/dev/null 2>&1; then
-        if ! apt-cache show libgirepository1.0-dev &>/dev/null 2>&1; then
+        if apt-cache show libgirepository1.0-dev &>/dev/null 2>&1; then
+            GI_DEV_PKG="libgirepository-2.0-dev libgirepository1.0-dev"
+        else
             GI_DEV_PKG="libgirepository-2.0-dev"
         fi
     fi

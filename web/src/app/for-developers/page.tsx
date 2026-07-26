@@ -21,8 +21,8 @@ const useCases = [
       "Dictate inline comments, JSDoc, docstrings, and README sections without leaving your editor.",
     example: "This function validates user input and returns true if valid",
     icon: FileCode2,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Git Commit Messages",
@@ -30,8 +30,8 @@ const useCases = [
       "Speak your commit messages naturally - no more brief, unhelpful commits because typing is slow.",
     example: "fix authentication timeout when server is under heavy load",
     icon: Terminal,
-    iconColor: "text-orange-500",
-    iconBg: "bg-orange-100 dark:bg-orange-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Pull Request Descriptions",
@@ -39,8 +39,8 @@ const useCases = [
       "Write detailed PR descriptions explaining your changes, rationale, and testing approach.",
     example: "This PR refactors the user service to improve testability and adds error handling",
     icon: FileText,
-    iconColor: "text-purple-500",
-    iconBg: "bg-purple-100 dark:bg-purple-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Technical Documentation",
@@ -48,8 +48,8 @@ const useCases = [
       "Create API docs, architecture guides, and technical specifications at speaking speed.",
     example: "The API accepts a JSON payload with the following fields",
     icon: FileText,
-    iconColor: "text-emerald-500",
-    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Code Review Comments",
@@ -57,8 +57,8 @@ const useCases = [
       "Write thorough code review feedback without the fatigue of typing detailed explanations.",
     example: "Consider extracting this logic into a separate function for reusability",
     icon: MessageSquare,
-    iconColor: "text-rose-500",
-    iconBg: "bg-rose-100 dark:bg-rose-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
   {
     title: "Pair Programming Notes",
@@ -66,8 +66,8 @@ const useCases = [
       "Dictate notes while pairing - keep your hands on the keyboard for code, use voice for meta.",
     example: "Remember to add unit tests for the edge case we just discussed",
     icon: Zap,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-100 dark:bg-amber-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
   },
 ];
 
@@ -160,11 +160,11 @@ export default function ForDevelopersPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Code2 className="h-4 w-4" />
           For Developers
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Voice Dictation for Developers
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -177,7 +177,7 @@ export default function ForDevelopersPage() {
         {benefits.map((benefit) => (
           <div
             key={benefit.title}
-            className="rounded-xl border border-zinc-200 bg-white p-5 text-center dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-[12px] border border-border bg-background p-5 text-center"
           >
             <h3 className="mb-2 font-semibold">{benefit.title}</h3>
             <p className="text-sm text-muted-foreground">{benefit.description}</p>
@@ -186,14 +186,14 @@ export default function ForDevelopersPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Developer Use Cases</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Developer Use Cases</h2>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {useCases.map((useCase) => {
             const Icon = useCase.icon;
             return (
               <article
                 key={useCase.title}
-                className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+                className="rounded-[12px] border border-border bg-background p-5"
               >
                 <div className="mb-3 flex items-center gap-3">
                   <div className={`rounded-lg p-2 ${useCase.iconBg}`}>
@@ -202,8 +202,8 @@ export default function ForDevelopersPage() {
                   <h3 className="font-semibold">{useCase.title}</h3>
                 </div>
                 <p className="mb-3 text-sm text-muted-foreground">{useCase.description}</p>
-                <div className="rounded-lg bg-zinc-950 p-3">
-                  <code className="text-xs text-green-400">&quot;{useCase.example}&quot;</code>
+                <div className="rounded-lg bg-[color:var(--terminal)] p-3">
+                  <code className="text-xs text-[color:var(--terminal-fg)]">&quot;{useCase.example}&quot;</code>
                 </div>
               </article>
             );
@@ -211,8 +211,8 @@ export default function ForDevelopersPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">Helpful Voice Commands for Coding</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Helpful Voice Commands for Coding</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Use these voice commands for punctuation and symbols commonly used in code:
         </p>
@@ -220,9 +220,9 @@ export default function ForDevelopersPage() {
           {voiceCommands.map((cmd) => (
             <div
               key={cmd.command}
-              className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+              className="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2"
             >
-              <kbd className="rounded bg-zinc-200 px-2 py-0.5 text-xs font-mono dark:bg-zinc-700">
+              <kbd className="rounded bg-muted px-2 py-0.5 text-xs font-mono bg-muted">
                 &quot;{cmd.command}&quot;
               </kbd>
               <span className="text-xs text-muted-foreground">{cmd.action}</span>
@@ -234,19 +234,19 @@ export default function ForDevelopersPage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900/20">
-        <h2 className="mb-3 text-xl font-bold text-blue-800 dark:text-blue-300">
+      <section className="mb-12 rounded-[12px] border border-border bg-primary/5 p-6">
+        <h2 className="mb-3 text-xl font-semibold text-foreground">
           Not Voice Coding - Voice Documentation
         </h2>
-        <p className="text-sm text-blue-700 dark:text-blue-400">
+        <p className="text-sm text-muted-foreground">
           Vocalinux is designed for <strong>dictating text</strong>, not writing code syntax. For
           actual code, your keyboard is still faster. But for comments, docs, messages, and
           notes - voice is a game-changer. Use both together for maximum productivity.
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-4 text-2xl font-bold">Works in Every IDE</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Works in Every IDE</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           {[
             "VS Code",
@@ -261,9 +261,9 @@ export default function ForDevelopersPage() {
           ].map((ide) => (
             <div
               key={ide}
-              className="flex items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+              className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2"
             >
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-primary" />
               <span className="text-sm">{ide}</span>
             </div>
           ))}
@@ -273,8 +273,8 @@ export default function ForDevelopersPage() {
         </p>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Start Dictating Your Docs</h2>
+      <section className="rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Start Dictating Your Docs</h2>
         <p className="mb-6 text-muted-foreground">
           Install Vocalinux and start writing better documentation with less effort. Your future
           self (and your team) will thank you.
@@ -282,14 +282,14 @@ export default function ForDevelopersPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/rsi-prevention/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             RSI Prevention
           </Link>

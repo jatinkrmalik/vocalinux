@@ -25,8 +25,8 @@ const gpuBackends = [
       "Best option for AMD and Intel GPUs",
     ],
     icon: Monitor,
-    iconColor: "text-violet-500",
-    iconBg: "bg-violet-100 dark:bg-violet-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     recommended: true,
   },
   {
@@ -40,8 +40,8 @@ const gpuBackends = [
       "Works with PyTorch-based Whisper engine",
     ],
     icon: Cpu,
-    iconColor: "text-green-500",
-    iconBg: "bg-green-100 dark:bg-green-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     recommended: false,
   },
   {
@@ -56,8 +56,8 @@ const gpuBackends = [
       "Lowest power consumption option",
     ],
     icon: MemoryStick,
-    iconColor: "text-blue-500",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
     recommended: false,
   },
 ];
@@ -178,11 +178,11 @@ export default function GpuAccelerationPage() {
       />
 
       <section>
-        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+        <p className="subpage-kicker">
           <Zap className="h-4 w-4" />
           Performance
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           GPU Accelerated Voice Dictation
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -191,13 +191,13 @@ export default function GpuAccelerationPage() {
         </p>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-primary/20 bg-primary/5 p-6">
-        <h2 className="mb-4 text-xl font-bold">Quick Check: Do You Have GPU Support?</h2>
+      <section className="mb-12 rounded-[12px] border border-primary/20 bg-primary/5 p-6">
+        <h2 className="mb-4 text-xl font-semibold">Quick Check: Do You Have GPU Support?</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Run this command to check if your system supports Vulkan GPU acceleration:
         </p>
-        <div className="rounded-lg bg-zinc-950 p-4">
-          <code className="text-sm text-green-400">vulkaninfo --summary | grep deviceName</code>
+        <div className="rounded-lg bg-[color:var(--terminal)] p-4">
+          <code className="text-sm text-[color:var(--terminal-fg)]">vulkaninfo --summary | grep deviceName</code>
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
           If you see your GPU name, you&apos;re ready for accelerated dictation!
@@ -205,17 +205,17 @@ export default function GpuAccelerationPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Supported GPU Backends</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Supported GPU Backends</h2>
         <div className="space-y-6">
           {gpuBackends.map((backend) => {
             const Icon = backend.icon;
             return (
               <article
                 key={backend.name}
-                className={`rounded-2xl border p-6 ${
+                className={`rounded-[12px] border p-6 ${
                   backend.recommended
                     ? "border-primary/50 bg-primary/5"
-                    : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800"
+                    : "border-border bg-background  "
                 }`}
               >
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
@@ -238,7 +238,7 @@ export default function GpuAccelerationPage() {
                 <ul className="space-y-1.5">
                   {backend.advantages.map((advantage) => (
                     <li key={advantage} className="flex items-start gap-2 text-sm">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" />
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
                       {advantage}
                     </li>
                   ))}
@@ -249,8 +249,8 @@ export default function GpuAccelerationPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
-        <h2 className="mb-6 text-2xl font-bold">Model Performance Comparison</h2>
+      <section className="mb-12 rounded-[12px] border border-border bg-background p-6">
+        <h2 className="mb-6 font-display text-2xl font-semibold">Model Performance Comparison</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Approximate transcription times for 5 seconds of audio. GPU times assume a mid-range
           Vulkan-compatible GPU.
@@ -258,7 +258,7 @@ export default function GpuAccelerationPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+              <tr className="border-b border-border">
                 <th className="pb-3 pr-4 font-semibold">Model</th>
                 <th className="pb-3 pr-4 font-semibold">Size</th>
                 <th className="pb-3 pr-4 font-semibold">CPU Time</th>
@@ -269,7 +269,7 @@ export default function GpuAccelerationPage() {
             </thead>
             <tbody>
               {modelPerformance.map((row) => (
-                <tr key={row.model} className="border-b border-zinc-100 dark:border-zinc-700/70">
+                <tr key={row.model} className="border-b border-border">
                   <td className="py-3 pr-4 font-medium">{row.model}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{row.size}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{row.cpuSpeed}</td>
@@ -284,12 +284,12 @@ export default function GpuAccelerationPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="mb-6 text-2xl font-bold">Hardware Requirements</h2>
+        <h2 className="mb-6 font-display text-2xl font-semibold">Hardware Requirements</h2>
         <div className="grid gap-6 sm:grid-cols-3">
           {hardwareRequirements.map((tier) => (
             <article
               key={tier.category}
-              className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-[12px] border border-border bg-background p-5"
             >
               <h3 className="mb-3 font-semibold">{tier.category}</h3>
               <dl className="space-y-2 text-sm">
@@ -312,14 +312,14 @@ export default function GpuAccelerationPage() {
         </div>
       </section>
 
-      <section className="mb-12 rounded-2xl border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-900/20">
+      <section className="mb-12 rounded-[12px] border border-border bg-muted p-6">
         <div className="flex items-start gap-3">
-          <Gauge className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <Gauge className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" />
           <div>
-            <h3 className="mb-2 font-semibold text-amber-800 dark:text-amber-300">
+            <h3 className="mb-2 font-semibold text-foreground">
               Intel GPU Note
             </h3>
-            <p className="text-sm text-amber-700 dark:text-amber-400">
+            <p className="text-sm text-muted-foreground">
               Some Intel integrated GPUs don&apos;t fully support the compute features needed for
               whisper.cpp GPU acceleration. Vocalinux v0.7.0+ automatically detects incompatible
               Intel GPUs and falls back to CPU processing for reliability.
@@ -328,8 +328,8 @@ export default function GpuAccelerationPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-8 dark:border-zinc-700 dark:bg-zinc-900/60">
-        <h2 className="mb-4 text-2xl font-bold">Get Started with GPU Acceleration</h2>
+      <section className="rounded-[12px] border border-border bg-muted p-8">
+        <h2 className="mb-4 font-display text-2xl font-semibold">Get Started with GPU Acceleration</h2>
         <p className="mb-6 text-muted-foreground">
           The installer automatically detects your GPU and configures the best backend. Just run
           and go.
@@ -337,14 +337,14 @@ export default function GpuAccelerationPage() {
         <div className="flex flex-wrap gap-4">
           <Link
             href="/install/"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground dark:text-black hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Install Now
             <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             href="/compare/"
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted hover:bg-muted"
           >
             Compare Engines
           </Link>

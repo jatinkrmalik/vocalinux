@@ -145,7 +145,7 @@ export default function ScreenshotsPage() {
           <Camera className="h-4 w-4" />
           v0.14.0 Beta UI
         </p>
-        <h1 className="mb-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+        <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Vocalinux Screenshots
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
@@ -160,8 +160,8 @@ export default function ScreenshotsPage() {
         settingsShots={settingsShots}
       />
 
-      <section className="border-primary/20 bg-primary/5 rounded-2xl border p-8">
-        <h2 className="mb-3 text-2xl font-bold">Try it yourself</h2>
+      <section className="border-primary/20 bg-primary/5 rounded-[12px] border p-8">
+        <h2 className="mb-3 font-display text-2xl font-semibold">Try it yourself</h2>
         <p className="mb-6 max-w-2xl text-muted-foreground">
           Install Vocalinux and open Settings from the system tray to explore
           the same screens on your desktop.
@@ -169,7 +169,7 @@ export default function ScreenshotsPage() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link
             href="/install/"
-            className="hover:bg-primary/90 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground dark:text-black"
+            className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
           >
             <Download className="h-4 w-4" />
             Install guide
@@ -177,7 +177,7 @@ export default function ScreenshotsPage() {
           </Link>
           <Link
             href="/advanced-settings/"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-5 py-3 text-sm font-semibold transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-border bg-background px-5 py-3 text-sm font-semibold transition-colors hover:bg-muted hover:bg-muted"
           >
             Advanced settings guide
             <ChevronRight className="h-4 w-4" />
