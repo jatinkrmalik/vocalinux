@@ -1205,18 +1205,15 @@ class SpeechRecognitionManager:
         from pywhispercpp.model import Model
 
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
-        context_params = {}
         if gpu_device is not None and gpu_device >= 0:
-            context_params["gpu_device"] = gpu_device
-        if context_params:
-            compatible_kwargs["context_params"] = context_params
+            compatible_kwargs["context_params"] = {"gpu_device": gpu_device}
 
         try:
             return Model(model_path, **compatible_kwargs)
         except TypeError as exc:
             # Older pywhispercpp releases (< ~1.4.0) do not accept context_params.
             # Retry without GPU device selection so the engine still loads.
-            if context_params and (
+            if "context_params" in compatible_kwargs and (
                 "context_params" in str(exc) or "unexpected keyword" in str(exc)
             ):
                 logger.warning(
