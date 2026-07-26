@@ -1288,6 +1288,7 @@ class SettingsDialog(Gtk.Dialog):
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
 
         self._build_auto_pause_section()
+        self._build_model_keepalive_section()
 
     def _build_auto_pause_section(self):
         """Build Auto-Pause settings: enable toggle + process name list."""
@@ -1542,6 +1543,80 @@ class SettingsDialog(Gtk.Dialog):
                         existing.add(name.lower())
             self._save_auto_pause_apps(apps)
         dialog.destroy()
+
+    def _build_model_keepalive_section(self):
+        """Build Model Keep-Alive settings: enable toggle + idle timeout."""
+        group = PreferencesGroup(
+            title="Model Keep-Alive (Battery)",
+            description=(
+                "After a period of inactivity, unload the speech model so hybrid GPUs "
+                "(NVIDIA Optimus) can sleep. The next dictation reloads the model "
+                "(may take a moment on larger models)."
+            ),
+        )
+
+        self.model_keepalive_switch = Gtk.Switch()
+        self.model_keepalive_switch.set_tooltip_text(
+            "Unload the speech model after idle timeout to free VRAM/GPU power"
+        )
+        enable_row = PreferenceRow(
+            title="Enable Keep-Alive Unload",
+            subtitle="Opt-in idle unload for battery saving on hybrid-GPU laptops",
+            widget=self.model_keepalive_switch,
+        )
+        group.add_row(enable_row)
+
+        self.model_keepalive_timeout_combo = Gtk.ComboBoxText()
+        self.model_keepalive_timeout_combo.set_size_request(160, -1)
+        # id = seconds as string
+        for seconds, label in (
+            (60, "1 minute"),
+            (300, "5 minutes"),
+            (600, "10 minutes"),
+            (900, "15 minutes"),
+            (1800, "30 minutes"),
+        ):
+            self.model_keepalive_timeout_combo.append(str(seconds), label)
+        self.model_keepalive_timeout_combo.set_tooltip_text(
+            "How long to wait after the last dictation before unloading the model"
+        )
+        _prevent_scroll_on_hover(self.model_keepalive_timeout_combo)
+        timeout_row = PreferenceRow(
+            title="Idle Timeout",
+            subtitle="Unload the model after this much inactivity",
+            widget=self.model_keepalive_timeout_combo,
+        )
+        group.add_row(timeout_row)
+
+        self.general_tab.pack_start(group, False, False, 0)
+
+        self.model_keepalive_switch.connect("state-set", self._on_model_keepalive_enabled_toggled)
+        self.model_keepalive_timeout_combo.connect(
+            "changed", self._on_model_keepalive_timeout_changed
+        )
+
+    def _on_model_keepalive_enabled_toggled(self, widget, state):
+        if self._initializing or self._applying_settings:
+            return False
+        enabled = bool(state)
+        logger.info("Model keep-alive enabled toggled: %s", enabled)
+        self.config_manager.set("model_keepalive", "enabled", enabled)
+        self.config_manager.save_settings()
+        return False
+
+    def _on_model_keepalive_timeout_changed(self, widget):
+        if self._initializing or self._applying_settings:
+            return
+        active_id = self.model_keepalive_timeout_combo.get_active_id()
+        if not active_id:
+            return
+        try:
+            seconds = int(active_id)
+        except (TypeError, ValueError):
+            return
+        logger.info("Model keep-alive timeout set to %s seconds", seconds)
+        self.config_manager.set("model_keepalive", "idle_timeout_seconds", seconds)
+        self.config_manager.save_settings()
 
     def _on_autostart_toggled(self, widget, state):
         """Handle toggle of the autostart switch."""
@@ -2775,6 +2850,12 @@ class SettingsDialog(Gtk.Dialog):
         auto_pause_settings = self.config_manager.get_settings().get("auto_pause", {})
         self.auto_pause_switch.set_active(bool(auto_pause_settings.get("enabled", False)))
         self._refresh_auto_pause_list()
+
+        keepalive_settings = self.config_manager.get_settings().get("model_keepalive", {})
+        self.model_keepalive_switch.set_active(bool(keepalive_settings.get("enabled", False)))
+        timeout_seconds = int(keepalive_settings.get("idle_timeout_seconds", 300) or 300)
+        if not self.model_keepalive_timeout_combo.set_active_id(str(timeout_seconds)):
+            self.model_keepalive_timeout_combo.set_active_id("300")
 
         available_engines = get_available_engines()
         available_count = 0

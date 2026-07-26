@@ -482,6 +482,9 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
         indicator._input_monitor = None
         indicator._settle_timer_id = None
         indicator._monitor_timeout_id = None
+        indicator._model_keepalive = MagicMock()
+        indicator._auto_pause_monitor = MagicMock()
+        indicator._auto_pause_monitor.paused = False
         return indicator
 
     def test_get_auto_pause_config(self):
@@ -501,12 +504,43 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
     def test_on_auto_pause_calls_unload(self):
         indicator = self._make_tray_indicator()
         indicator._on_auto_pause()
-        indicator.speech_engine.unload_model.assert_called_once()
+        indicator.speech_engine.unload_model.assert_called_once_with(reason="auto_pause")
+        indicator._model_keepalive.cancel.assert_called_once()
 
     def test_on_auto_resume_calls_reinit(self):
         indicator = self._make_tray_indicator()
         indicator._on_auto_resume()
         indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+        indicator._model_keepalive.bump.assert_called_once()
+
+    def test_get_model_keepalive_config(self):
+        indicator = self._make_tray_indicator()
+        indicator.config_manager.get_bool.return_value = True
+        indicator.config_manager.get_float.return_value = 600.0
+
+        enabled, timeout = indicator._get_model_keepalive_config()
+
+        assert enabled is True
+        assert timeout == 600.0
+        indicator.config_manager.get_bool.assert_called_with("model_keepalive", "enabled", False)
+
+    def test_on_keepalive_idle_unload(self):
+        indicator = self._make_tray_indicator()
+        indicator._on_keepalive_idle_unload()
+        indicator.speech_engine.unload_model.assert_called_once_with(reason="idle_keepalive")
+
+    def test_is_safe_for_keepalive_unload(self):
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.state = RecognitionState.IDLE
+        indicator.speech_engine.is_auto_paused = False
+        assert indicator._is_safe_for_keepalive_unload() is True
+
+        indicator.speech_engine.state = RecognitionState.LISTENING
+        assert indicator._is_safe_for_keepalive_unload() is False
+
+        indicator.speech_engine.state = RecognitionState.IDLE
+        indicator.speech_engine.is_auto_paused = True
+        assert indicator._is_safe_for_keepalive_unload() is False
 
     @patch("vocalinux.ui.tray_indicator.GLib")
     def test_system_resume_skips_reinit_when_auto_paused(self, mock_glib):
@@ -589,6 +623,24 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
         indicator.speech_engine.reinitialize_after_resume = None
 
         indicator._on_auto_resume()  # no-op path
+        indicator._model_keepalive.bump.assert_called_once()
+
+    def test_quit_shuts_down_keepalive(self):
+        indicator = self._make_tray_indicator()
+        monitor = MagicMock()
+        indicator._auto_pause_monitor = monitor
+        indicator._suspend_handler = MagicMock()
+        indicator._cleanup_input_monitor = MagicMock()
+        indicator.shortcut_manager = MagicMock()
+        indicator.text_injector = None
+
+        with patch("vocalinux.ui.tray_indicator.Gtk") as mock_gtk:
+            indicator._quit()
+
+        monitor.shutdown.assert_called_once()
+        indicator._model_keepalive.shutdown.assert_called_once()
+        indicator._suspend_handler.shutdown.assert_called_once()
+        mock_gtk.main_quit.assert_called_once()
 
 
 if __name__ == "__main__":

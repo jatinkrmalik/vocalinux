@@ -453,6 +453,7 @@ class TestUnloadModelAndAutoPauseBlock(unittest.TestCase):
         mgr.recognizer = MagicMock(name="recognizer")
         mgr._model_initialized = True
         mgr._auto_paused = False
+        mgr._idle_unloaded = False
         mgr._model_lock = MagicMock()
         mgr._model_lock.__enter__ = MagicMock(return_value=None)
         mgr._model_lock.__exit__ = MagicMock(return_value=False)
@@ -528,6 +529,60 @@ class TestUnloadModelAndAutoPauseBlock(unittest.TestCase):
         # Should not have transitioned to listening
         mgr._update_state.assert_not_called()
 
+    def test_unload_idle_keepalive_sets_idle_flag_not_auto_pause(self):
+        mgr = self._make_manager()
+        mgr.unload_model(reason="idle_keepalive")
+        self.assertFalse(mgr.is_auto_paused)
+        self.assertTrue(mgr.is_idle_unloaded)
+        self.assertIsNone(mgr.model)
+
+    def test_ensure_model_loaded_reloads_after_idle_unload(self):
+        mgr = self._make_manager()
+        mgr.unload_model(reason="idle_keepalive")
+
+        def init_vosk():
+            mgr.model = MagicMock()
+            mgr._model_initialized = True
+
+        mgr._init_vosk.side_effect = init_vosk
+        self.assertTrue(mgr.ensure_model_loaded())
+        self.assertFalse(mgr.is_idle_unloaded)
+        self.assertTrue(mgr.model_ready)
+
+    def test_ensure_model_loaded_blocked_when_auto_paused(self):
+        mgr = self._make_manager()
+        mgr.unload_model(reason="auto_pause")
+        self.assertFalse(mgr.ensure_model_loaded())
+        mgr._init_vosk.assert_not_called()
+
+    def test_start_recognition_lazy_reloads_after_idle_unload(self):
+        mgr = self._make_manager()
+        mgr.unload_model(reason="idle_keepalive")
+
+        def init_vosk():
+            mgr.model = MagicMock()
+            mgr._model_initialized = True
+
+        mgr._init_vosk.side_effect = init_vosk
+        mgr.should_record = False
+        mgr._recognition_mode = "toggle"
+        mgr.audio_buffer = []
+        mgr._segment_queue = None
+        mgr.audio_thread = None
+        mgr.recognition_thread = None
+
+        with (
+            patch("vocalinux.speech_recognition.recognition_manager.play_start_sound"),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager.threading.Thread"
+            ) as mock_thread,
+        ):
+            mock_thread.return_value = MagicMock()
+            mgr.start_recognition()
+
+        self.assertFalse(mgr.is_idle_unloaded)
+        mgr._update_state.assert_called()
+
     def test_reinitialize_clears_auto_pause_and_reloads(self):
         mgr = self._make_manager()
         mgr._auto_paused = True
@@ -591,6 +646,12 @@ class TestAutoPauseConfigDefaults(unittest.TestCase):
         self.assertFalse(section["enabled"])
         self.assertEqual(section["apps"], [])
         self.assertIn("poll_interval_seconds", section)
+
+    def test_default_config_has_model_keepalive_section(self):
+        self.assertIn("model_keepalive", DEFAULT_CONFIG)
+        section = DEFAULT_CONFIG["model_keepalive"]
+        self.assertFalse(section["enabled"])
+        self.assertEqual(section["idle_timeout_seconds"], 300)
 
     def test_config_manager_round_trip_auto_pause(self):
         import json
