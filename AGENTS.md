@@ -269,7 +269,14 @@ already installed; these are runtime/session steps, not for the update script):
    `xfconf-query -c xfce4-panel -p /plugins/plugin-6 -t string -s systray --create`, append
    `6` to `/panels/panel-1/plugin-ids`, then start the panel detached
    (`setsid bash -c xfce4-panel …`). Verify `org.kde.StatusNotifierWatcher` is on the session
-   bus before launching the app.
+   bus before launching the app. Keep the systray `size-max` unset or a sane value (e.g. 22);
+   `size-max=0` renders zero-sized (invisible) icons.
+   - **AppIndicator + SVG icons must both be present or the icon shows blank.** The GI runtime
+     comes from `gir1.2-ayatanaappindicator3-0.1` (+ `gir1.2-notify-0.7`). VocaLinux's tray/app
+     icons are **SVG**, so `librsvg2-common` (the gdk-pixbuf SVG loader) is required — without
+     it the icon registers on the bus but renders empty and the panel logs
+     `gdk-pixbuf does not provide SVG support`. `scripts/check-system-deps.sh` should report
+     `✓ AppIndicator/Ayatana GI runtime` and `✓ All critical dependencies found!`.
 2. **Virtual microphone (no audio server by default).** Create `/run/user/1000` (chown to
    your uid), start PulseAudio (`pulseaudio --start --exit-idle-time=-1`), then
    `pactl load-module module-null-sink sink_name=virtmic` +
