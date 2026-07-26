@@ -142,8 +142,10 @@ class TestModelKeepAlive(unittest.TestCase):
             cb = mock_glib.timeout_add_seconds.call_args[0][1]
             self.assertFalse(cb())
             self.assertEqual(fired, [1])
+            # Callback clears _timeout_id; shutdown should be a no-op cancel
             ka.shutdown()
-            mock_glib.source_remove.assert_called()
+            self.assertFalse(ka.active)
+            self.assertFalse(ka.armed)
 
     def test_default_config_section(self):
         self.assertIn("model_keepalive", DEFAULT_CONFIG)
