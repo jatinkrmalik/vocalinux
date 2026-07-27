@@ -318,12 +318,14 @@ class TestMainModule(unittest.TestCase):
         text_callback("World")
 
         calls = [call.args[0] for call in mock_text_instance.inject_text.call_args_list]
-        self.assertEqual(calls, ["Hello.", " World"])
+        self.assertEqual(calls, ["Hello. ", "World "])
 
         state_callback(RecognitionState.IDLE)
         mock_text_instance.inject_text.reset_mock()
         text_callback("Next session")
-        mock_text_instance.inject_text.assert_called_once_with("Next session")
+        # Trailing space persists in the previous field; next session starts clean
+        # (no leading space) but still gets its own trailing space.
+        mock_text_instance.inject_text.assert_called_once_with("Next session ")
 
     def _run_main_and_get_text_callback(
         self,
@@ -895,7 +897,7 @@ class TestMainConfigPrecedence(unittest.TestCase):
 class TestTextCallbackSpacing(unittest.TestCase):
     """Test spacing logic in text_callback_wrapper."""
 
-    def _make_callback(self):
+    def _make_callback(self, append_trailing_space: bool = True):
         """Build text_callback_wrapper with mocked dependencies."""
         from vocalinux.ui.action_handler import ActionHandler
 
@@ -904,10 +906,13 @@ class TestTextCallbackSpacing(unittest.TestCase):
         action_handler = ActionHandler(text_system)
 
         def text_callback_wrapper(text: str):
-            text_to_inject = text.strip()
+            text_to_inject = text.lstrip().rstrip(" \t")
             if not text_to_inject:
                 return
-            if action_handler.last_injected_text and action_handler.last_injected_text.strip():
+            if append_trailing_space:
+                if not text_to_inject.endswith((" ", "\t", "\n")):
+                    text_to_inject += " "
+            elif action_handler.last_injected_text and action_handler.last_injected_text.strip():
                 text_to_inject = " " + text_to_inject
             success = text_system.inject_text(text_to_inject)
             if success:
@@ -919,25 +924,26 @@ class TestTextCallbackSpacing(unittest.TestCase):
 
         return text_callback_wrapper, on_state_change, text_system, action_handler
 
-    def test_first_segment_has_no_leading_space(self):
+    def test_first_segment_has_trailing_space(self):
         cb, _, text_system, _ = self._make_callback()
         cb("Hello world")
-        text_system.inject_text.assert_called_once_with("Hello world")
+        text_system.inject_text.assert_called_once_with("Hello world ")
 
-    def test_subsequent_segment_gets_space_separator(self):
+    def test_subsequent_segment_has_trailing_space_not_leading(self):
         cb, _, text_system, _ = self._make_callback()
         cb("Hello")
         cb("world")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
-        self.assertEqual(calls, ["Hello", " world"])
+        self.assertEqual(calls, ["Hello ", "world "])
 
-    def test_reset_clears_leading_space(self):
+    def test_cross_session_keeps_trailing_space_without_leading_space(self):
         cb, on_state_change, text_system, _ = self._make_callback()
         cb("first session")
         on_state_change(RecognitionState.IDLE)
         text_system.inject_text.reset_mock()
         cb("second session")
-        text_system.inject_text.assert_called_once_with("second session")
+        # No leading space (empty-field safe); trailing space still appended.
+        text_system.inject_text.assert_called_once_with("second session ")
 
     def test_whitespace_only_input_is_skipped(self):
         cb, _, text_system, _ = self._make_callback()
@@ -947,22 +953,27 @@ class TestTextCallbackSpacing(unittest.TestCase):
     def test_input_with_leading_space_is_stripped(self):
         cb, _, text_system, _ = self._make_callback()
         cb(" Hello world")
-        text_system.inject_text.assert_called_once_with("Hello world")
+        text_system.inject_text.assert_called_once_with("Hello world ")
 
-    def test_multiple_segments_all_get_separators(self):
+    def test_multiple_segments_all_get_trailing_spaces(self):
         cb, _, text_system, _ = self._make_callback()
         cb("one")
         cb("two")
         cb("three")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
-        self.assertEqual(calls, ["one", " two", " three"])
+        self.assertEqual(calls, ["one ", "two ", "three "])
 
     def test_space_after_punctuation_segment(self):
         cb, _, text_system, _ = self._make_callback()
         cb("Hello.")
         cb("World")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
-        self.assertEqual(calls, ["Hello.", " World"])
+        self.assertEqual(calls, ["Hello. ", "World "])
+
+    def test_newline_segment_does_not_get_trailing_space(self):
+        cb, _, text_system, _ = self._make_callback()
+        cb("Hello.\n")
+        text_system.inject_text.assert_called_once_with("Hello.\n")
 
     def test_processing_to_listening_keeps_segment_spacing(self):
         cb, on_state_change, text_system, _ = self._make_callback()
@@ -971,7 +982,22 @@ class TestTextCallbackSpacing(unittest.TestCase):
         on_state_change(RecognitionState.LISTENING)
         cb("World")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello. ", "World "])
+
+    def test_legacy_mode_uses_leading_space_in_session(self):
+        cb, _, text_system, _ = self._make_callback(append_trailing_space=False)
+        cb("Hello.")
+        cb("World")
+        calls = [c.args[0] for c in text_system.inject_text.call_args_list]
         self.assertEqual(calls, ["Hello.", " World"])
+
+    def test_legacy_mode_clears_leading_space_across_sessions(self):
+        cb, on_state_change, text_system, _ = self._make_callback(append_trailing_space=False)
+        cb("first session")
+        on_state_change(RecognitionState.IDLE)
+        text_system.inject_text.reset_mock()
+        cb("second session")
+        text_system.inject_text.assert_called_once_with("second session")
 
 
 if __name__ == "__main__":
