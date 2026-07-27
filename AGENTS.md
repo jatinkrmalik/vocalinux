@@ -250,6 +250,8 @@ The startup update script keeps a Python venv (`venv/`) and `web/node_modules` i
 
 ### Running / using the desktop GUI end-to-end in the VM
 
+Convenience: this VM has an idempotent bring-up script at `~/.local/bin/vocalinux-gui-env.sh` (installed in the environment, not committed to the repo) that performs both steps below — run it once per boot, then launch the app. The manual steps are documented here as the source of truth in case the script is unavailable.
+
 Two things are missing from the base session and must be set up once per boot (packages already installed; these are runtime/session steps, not for the update script):
 
 1. **System tray (StatusNotifierWatcher).** The panel ships no tray by default, so the AppIndicator icon can't appear. Add the `systray` plugin and (re)start the panel: `xfconf-query -c xfce4-panel -p /plugins/plugin-6 -t string -s systray --create`, append `6` to `/panels/panel-1/plugin-ids`, then start the panel detached (`setsid bash -c xfce4-panel …`). Verify `org.kde.StatusNotifierWatcher` is on the session bus before launching the app. Keep the systray `size-max` unset or a sane value (e.g. 22); `size-max=0` renders zero-sized (invisible) icons.
