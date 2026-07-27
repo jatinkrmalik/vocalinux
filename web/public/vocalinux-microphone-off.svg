@@ -1,13 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Idle / muted: slate disc, opaque for StatusNotifier trays -->
-  <circle cx="64" cy="64" r="60" fill="#334155"/>
+  <!-- Idle / muted: slate disc; keep slash subtle so 22px trays don't look like a red badge -->
+  <circle cx="64" cy="64" r="60" fill="#1e293b"/>
   <!-- Mic body -->
   <rect x="52" y="28" width="24" height="40" rx="12" fill="#94a3b8"/>
   <!-- Mic stand -->
   <path d="M40 68c0 13.255 10.745 24 24 24s24-10.745 24-24" fill="none" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
   <line x1="64" y1="92" x2="64" y2="102" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
   <line x1="50" y1="102" x2="78" y2="102" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
-  <!-- Mute slash (drawn last so it sits on top) -->
-  <line x1="34" y1="98" x2="94" y2="30" stroke="#f8fafc" stroke-width="10" stroke-linecap="round"/>
-  <line x1="34" y1="98" x2="94" y2="30" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
+  <!-- Mute slash: light outline only so the slate disc stays the dominant color -->
+  <line x1="36" y1="96" x2="92" y2="32" stroke="#f8fafc" stroke-width="8" stroke-linecap="round"/>
 </svg>

@@ -271,6 +271,13 @@ def main():
 
     GLib.set_prgname("vocalinux")
     GLib.set_application_name("Vocalinux")
+    try:
+        gi.require_version("Gdk", "3.0")
+        from gi.repository import Gdk
+
+        Gdk.set_program_class("Vocalinux")
+    except Exception:
+        pass
 
     # Check if display is available before creating any GTK widgets
     if not check_display_available():

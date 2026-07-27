@@ -56,15 +56,24 @@ curl -fsSL -o "$TOOLDIR/appimagetool" \
 chmod +x "$TOOLDIR/linuxdeploy" "$TOOLDIR/linuxdeploy-plugin-gtk.sh" "$TOOLDIR/appimagetool"
 
 echo "== Bundling Python runtime ($PYTHON) =="
-PY_PREFIX="$("$PYTHON" -c 'import sys; print(sys.prefix)')"
+# Use base_prefix so a venv builder still ships a full stdlib (encodings, etc.).
+PY_PREFIX="$("$PYTHON" -c 'import sys; print(sys.base_prefix)')"
 PY_VER="$("$PYTHON" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
-PY_BIN="$("$PYTHON" -c 'import sys; print(sys.executable)')"
+PY_BIN="$("$PYTHON" -c 'import sys; print(sys.base_prefix)')/bin/python${PY_VER}"
+if [ ! -x "$PY_BIN" ]; then
+  PY_BIN="$("$PYTHON" -c 'import sys; print(sys.base_prefix)')/bin/python3"
+fi
+if [ ! -x "$PY_BIN" ]; then
+  PY_BIN="$("$PYTHON" -c 'import sys; print(sys.executable)')"
+fi
 cp -L "$PY_BIN" "$APPDIR/usr/bin/python3"
 cp -r "$PY_PREFIX/lib/python${PY_VER}" "$APPDIR/usr/lib/python${PY_VER}"
 rm -rf "$APPDIR/usr/lib/python${PY_VER}/site-packages"
 
 echo "== Installing Vocalinux + runtime deps into the bundle =="
-"$PYTHON" -m pip install --no-cache-dir --prefix "$APPDIR/usr" \
+# --ignore-installed: pip otherwise treats the builder env's packages as
+# satisfying deps and skips copying vosk/pywhispercpp/etc. into AppDir.
+"$PYTHON" -m pip install --no-cache-dir --ignore-installed --prefix "$APPDIR/usr" \
   "$WHEEL" PyGObject pycairo onnxruntime
 
 echo "== Adding desktop entry + icon =="
