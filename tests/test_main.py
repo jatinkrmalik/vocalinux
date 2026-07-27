@@ -325,6 +325,143 @@ class TestMainModule(unittest.TestCase):
         text_callback("Next session")
         mock_text_instance.inject_text.assert_called_once_with("Next session")
 
+    def _run_main_and_get_text_callback(
+        self,
+        *,
+        engine: str,
+        auto_capitalize: bool,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Boot main() with mocked deps and return the registered text callback."""
+        mock_check_deps.return_value = True
+
+        mock_config_instance = MagicMock()
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
+        mock_config_instance.get.side_effect = lambda section, key, default=None: (
+            auto_capitalize if section == "text_injection" and key == "auto_capitalize" else default
+        )
+        mock_config_manager.return_value = mock_config_instance
+
+        mock_speech_instance = MagicMock()
+        mock_speech_instance.engine = engine
+        mock_text_instance = MagicMock()
+        mock_text_instance.inject_text.return_value = True
+        mock_tray_instance = MagicMock()
+
+        mock_speech.return_value = mock_speech_instance
+        mock_text.return_value = mock_text_instance
+        mock_tray.return_value = mock_tray_instance
+
+        with patch("vocalinux.main.parse_arguments") as mock_parse:
+            mock_args = MagicMock()
+            mock_args.debug = False
+            mock_args.model = "medium"
+            mock_args.engine = engine
+            mock_args.language = "en-us"
+            mock_args.wayland = False
+            mock_args.start_minimized = False
+            mock_parse.return_value = mock_args
+
+            with patch("sys.argv", ["vocalinux", "--engine", engine]):
+                main()
+
+        text_callback = mock_speech_instance.register_text_callback.call_args.args[0]
+        return text_callback, mock_text_instance
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_vosk_auto_capitalize_applies_to_injected_text(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Vosk engine capitalizes sentences when auto_capitalize is enabled."""
+        text_callback, mock_text_instance = self._run_main_and_get_text_callback(
+            engine="vosk",
+            auto_capitalize=True,
+            mock_config_manager=mock_config_manager,
+            mock_tray=mock_tray,
+            mock_text=mock_text,
+            mock_speech=mock_speech,
+            mock_check_deps=mock_check_deps,
+        )
+
+        text_callback("hello world. goodbye")
+        mock_text_instance.inject_text.assert_called_once_with("Hello world. Goodbye")
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_vosk_auto_capitalize_can_be_disabled(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Vosk leaves casing unchanged when auto_capitalize is disabled."""
+        text_callback, mock_text_instance = self._run_main_and_get_text_callback(
+            engine="vosk",
+            auto_capitalize=False,
+            mock_config_manager=mock_config_manager,
+            mock_tray=mock_tray,
+            mock_text=mock_text,
+            mock_speech=mock_speech,
+            mock_check_deps=mock_check_deps,
+        )
+
+        text_callback("hello world. goodbye")
+        mock_text_instance.inject_text.assert_called_once_with("hello world. goodbye")
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_whisper_skips_auto_capitalize(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Whisper engines keep model casing even when auto_capitalize is on."""
+        text_callback, mock_text_instance = self._run_main_and_get_text_callback(
+            engine="whisper_cpp",
+            auto_capitalize=True,
+            mock_config_manager=mock_config_manager,
+            mock_tray=mock_tray,
+            mock_text=mock_text,
+            mock_speech=mock_speech,
+            mock_check_deps=mock_check_deps,
+        )
+
+        text_callback("hello world. goodbye")
+        mock_text_instance.inject_text.assert_called_once_with("hello world. goodbye")
+
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.ui.action_handler.ActionHandler")
     @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
