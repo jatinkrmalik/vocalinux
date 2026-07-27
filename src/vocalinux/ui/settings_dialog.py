@@ -3557,8 +3557,9 @@ class SettingsDialog(Gtk.Dialog):
             )
             self.language_warning.show()
         elif lang_info.get("warning"):
+            lang_name = lang_info.get("name", "This language")
             self.language_warning.set_markup(
-                f"<span foreground='#e5a50a'>⚠ {lang_info['warning']}</span>"
+                f"<span foreground='#e5a50a'>⚠ {lang_name}: {lang_info['warning'].lower()}</span>"
             )
             self.language_warning.show()
         else:

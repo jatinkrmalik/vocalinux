@@ -413,12 +413,10 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         self.assertIn("def _on_reset_advanced_clicked(self, widget):", source_code)
         self.assertIn('defaults = DEFAULT_CONFIG["advanced"]', source_code)
         self.assertIn("self.advanced_reset_button", source_code)
-        self.assertIn(
-            "action_area.set_child_secondary(self.advanced_reset_button, True)", source_code
-        )
-        self.assertNotIn("reset_box.pack_start(self.advanced_reset_button", source_code)
 
-    def test_advanced_reset_button_is_contextual_footer_action(self):
+    def test_advanced_reset_button_is_in_page_action(self):
+        """Reset to Defaults lives inside the Advanced page (gated with the
+        controls it resets), not in a footer that changes per page."""
         import os
 
         source_path = os.path.join(
@@ -432,15 +430,11 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         with open(source_path, "r") as f:
             source_code = f.read()
 
-        self.assertIn("self.advanced_page_num = notebook.append_page", source_code)
-        self.assertIn(
-            'notebook.connect("switch-page", self._on_settings_page_switched)', source_code
-        )
-        self.assertIn("def _update_advanced_reset_button_visibility", source_code)
-        self.assertIn(
-            "self.advanced_reset_button.set_visible(page_num == self.advanced_page_num)",
-            source_code,
-        )
+        self.assertIn("reset_row.pack_start(self.advanced_reset_button", source_code)
+        self.assertIn("controls_box.pack_start(reset_row", source_code)
+        # Not a floating action-area button anymore
+        self.assertNotIn("action_area.pack_start(self.advanced_reset_button", source_code)
+        self.assertNotIn("set_child_secondary(self.advanced_reset_button", source_code)
 
     def test_advanced_panel_omits_unsupported_non_speech_token_setting(self):
         import os
@@ -691,6 +685,120 @@ class TestSettingsDialogHelperFunctions(unittest.TestCase):
             ("medium", "mock hardware reason"),
         )
         self.assertEqual(_default_whispercpp_variant_for_size("medium", "auto"), "medium")
+
+
+class TestSettingsSearch(unittest.TestCase):
+    """Test cases for the settings search feature."""
+
+    def setUp(self):
+        if "vocalinux.ui.settings_dialog" in sys.modules:
+            del sys.modules["vocalinux.ui.settings_dialog"]
+
+    def test_row_matches_query_title(self):
+        from vocalinux.ui.settings_dialog import _row_matches_query
+
+        self.assertTrue(_row_matches_query("clip", "Copy to Clipboard"))
+        self.assertTrue(_row_matches_query("COPY", "Copy to Clipboard"))
+        self.assertFalse(_row_matches_query("gpu", "Copy to Clipboard"))
+
+    def test_row_matches_query_subtitle_and_keywords(self):
+        from vocalinux.ui.settings_dialog import _row_matches_query
+
+        self.assertTrue(
+            _row_matches_query("pasting", "Copy to Clipboard", "copy text for easy pasting")
+        )
+        self.assertTrue(_row_matches_query("vulkan", "GPU Device", "", ("vulkan", "graphics")))
+        self.assertFalse(_row_matches_query("audio", "GPU Device", "", ("vulkan",)))
+
+    def test_row_matches_query_empty_query_matches(self):
+        from vocalinux.ui.settings_dialog import _row_matches_query
+
+        self.assertTrue(_row_matches_query("", "Anything"))
+        self.assertTrue(_row_matches_query("   ", "Anything"))
+
+    def test_search_wiring_in_source(self):
+        """The dialog wires a live search entry that filters all pages."""
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            source_code = f.read()
+
+        self.assertIn("self.search_entry = Gtk.SearchEntry()", source_code)
+        self.assertIn('"search-changed", self._on_search_changed', source_code)
+        self.assertIn("def _snapshot_search_baseline", source_code)
+        self.assertIn("def _restore_search_baseline", source_code)
+        # Clearing the search restores engine-driven visibility
+        restore_body = source_code.split("def _restore_search_baseline")[1].split("def ")[0]
+        self.assertIn("self._update_engine_specific_ui()", restore_body)
+
+
+class TestSettingsNavigation(unittest.TestCase):
+    """Test cases for the sidebar + stack navigation shell."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as f:
+            cls.source_code = f.read()
+
+    def test_sidebar_and_stack_replace_notebook(self):
+        self.assertIn("self.settings_stack = Gtk.Stack()", self.source_code)
+        self.assertIn("self.sidebar_listbox = Gtk.ListBox()", self.source_code)
+        self.assertNotIn("Gtk.Notebook()", self.source_code)
+
+    def test_topic_pages_exist(self):
+        for name, title in [
+            ("dictation", "Dictation"),
+            ("model", "Speech Model"),
+            ("audio", "Audio"),
+            ("performance", "Performance"),
+            ("application", "Application"),
+            ("advanced", "Advanced"),
+        ]:
+            self.assertIn(f'SettingsPage("{name}", "{title}"', self.source_code)
+
+    def test_status_strip_is_persistent(self):
+        """The status strip is packed into the dialog, not into a page."""
+        self.assertIn("def _build_status_strip(self):", self.source_code)
+        strip_body = self.source_code.split("def _build_status_strip")[1].split("\n    def ")[0]
+        self.assertIn("self.get_content_area().pack_start(strip", strip_body)
+        # One shared level bar for recognition + mic test
+        self.assertIn("self.recognition_audio_level = self.audio_level_bar", strip_body)
+
+    def test_gpu_selection_is_not_power_user_gated(self):
+        """GPU device selection lives on the Performance page, ungated."""
+        self.assertIn("def _build_gpu_section(self):", self.source_code)
+        gpu_body = self.source_code.split("def _build_gpu_section")[1].split("\n    def ")[0]
+        self.assertIn("self.power_tab.pack_start(gpu_group", gpu_body)
+        advanced_body = self.source_code.split("def _build_advanced_section")[1].split(
+            "\n    def "
+        )[0]
+        self.assertNotIn("gpu", advanced_body.lower())
+
+    def test_dialog_keyboard_shortcuts(self):
+        """Ctrl+F focuses search; Esc clears an active search."""
+        self.assertIn("def _on_dialog_key_press(self, widget, event):", self.source_code)
+        body = self.source_code.split("def _on_dialog_key_press")[1].split("\n    def ")[0]
+        self.assertIn('"f"', body)
+        self.assertIn("self.search_entry.grab_focus()", body)
+        self.assertIn('"escape"', body)
 
 
 if __name__ == "__main__":
