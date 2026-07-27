@@ -267,9 +267,9 @@ class TextInjector:
 
         out = (result.stdout or "").strip().lower() if result.returncode == 0 else ""
         # gdbus prints variant wrappers like: (<<true>>,) or (<<false>>,)
-        if "true" in out:
+        if "<<true>>" in out:
             return True
-        if "false" in out:
+        if "<<false>>" in out:
             logger.info(
                 "KWin Virtual Keyboard is disabled; IBus commits will not reach "
                 "native apps. Falling back to ydotool/wtype. Enable: System "
