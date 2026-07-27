@@ -30,8 +30,6 @@
 
 </div>
 
-![Vocalinux Users](https://github.com/user-attachments/assets/e3d8dd16-3d4f-408c-b899-93d85e98b107)
-
 Linux has always punched above its weight, except when it comes to voice typing. Vocalinux fixes that.
 
 It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* application, on X11 or Wayland, using fully offline speech recognition. Pick from three engines (whisper.cpp, OpenAI Whisper, or VOSK), get automatic GPU acceleration via Vulkan, and control it all with customizable keyboard shortcuts: toggle or push-to-talk.
