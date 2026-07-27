@@ -1077,6 +1077,12 @@ class SettingsDialog(Gtk.Dialog):
         self.shortcuts_tab.set_margin_start(16)
         self.shortcuts_tab.set_margin_end(16)
 
+        self.power_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.power_tab.set_margin_top(16)
+        self.power_tab.set_margin_bottom(16)
+        self.power_tab.set_margin_start(16)
+        self.power_tab.set_margin_end(16)
+
         self.general_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.general_tab.set_margin_top(16)
         self.general_tab.set_margin_bottom(16)
@@ -1120,6 +1126,11 @@ class SettingsDialog(Gtk.Dialog):
         shortcuts_label.set_tooltip_text("Keyboard shortcuts")
         notebook.append_page(_scrollable(self.shortcuts_tab), shortcuts_label)
 
+        # Power tab - resource management (auto-pause, idle unload)
+        power_label = Gtk.Label(label="Power")
+        power_label.set_tooltip_text("Free CPU, GPU, and memory while gaming or idle")
+        notebook.append_page(_scrollable(self.power_tab), power_label)
+
         # General tab - least important (application behavior)
         general_label = Gtk.Label(label="General")
         general_label.set_tooltip_text("General settings")
@@ -1142,6 +1153,8 @@ class SettingsDialog(Gtk.Dialog):
 
         # Build UI sections into appropriate tabs
         self._build_general_section()
+        self._build_auto_pause_section()
+        self._build_model_keepalive_section()
         self._build_audio_section()
         self._build_engine_section()
         self._build_remote_server_section()
@@ -1287,26 +1300,24 @@ class SettingsDialog(Gtk.Dialog):
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
 
-        self._build_auto_pause_section()
-        self._build_model_keepalive_section()
-
     def _build_auto_pause_section(self):
         """Build Auto-Pause settings: enable toggle + process name list."""
         group = PreferencesGroup(
             title="Auto-Pause for Games & Apps",
             description=(
-                "When a listed process is running, Vocalinux unloads the speech model "
-                "to free CPU/GPU/RAM, then reloads it when the process exits."
+                "While any app in the list is running, Vocalinux pauses dictation and "
+                "unloads the speech model to free CPU, GPU, and memory. Everything "
+                "resumes automatically when the app closes."
             ),
         )
 
         self.auto_pause_switch = Gtk.Switch()
         self.auto_pause_switch.set_tooltip_text(
-            "Unload the speech model while any listed game or app is running"
+            "Pause dictation and unload the speech model while any listed app is running"
         )
         enable_row = PreferenceRow(
-            title="Enable Auto-Pause",
-            subtitle="Free resources while selected games or apps are running",
+            title="Pause for Listed Apps",
+            subtitle="Free resources while any app below is running",
             widget=self.auto_pause_switch,
         )
         group.add_row(enable_row)
@@ -1322,21 +1333,21 @@ class SettingsDialog(Gtk.Dialog):
         self.auto_pause_entry.set_placeholder_text("Process name (e.g. overwatch, steam)")
         self.auto_pause_entry.set_hexpand(True)
         self.auto_pause_entry.set_tooltip_text(
-            "Executable basename as shown by the process list (case-insensitive). "
-            "For Windows games under Wine/Proton, omit the .exe suffix."
+            "Process name, matched case-insensitively. "
+            "For Windows games under Wine/Proton, the .exe suffix is optional."
         )
         add_box.pack_start(self.auto_pause_entry, True, True, 0)
 
-        add_btn = Gtk.Button(label="Add")
-        add_btn.set_tooltip_text("Add this process name to the auto-pause list")
-        add_btn.connect("clicked", self._on_auto_pause_add_clicked)
+        self.auto_pause_add_btn = Gtk.Button(label="Add")
+        self.auto_pause_add_btn.set_tooltip_text("Add this process name to the list")
+        self.auto_pause_add_btn.connect("clicked", self._on_auto_pause_add_clicked)
         self.auto_pause_entry.connect("activate", self._on_auto_pause_add_clicked)
-        add_box.pack_start(add_btn, False, False, 0)
+        add_box.pack_start(self.auto_pause_add_btn, False, False, 0)
 
-        pick_btn = Gtk.Button(label="From running…")
-        pick_btn.set_tooltip_text("Pick a process name from currently running processes")
-        pick_btn.connect("clicked", self._on_auto_pause_pick_running)
-        add_box.pack_start(pick_btn, False, False, 0)
+        self.auto_pause_pick_btn = Gtk.Button(label="Choose Running App…")
+        self.auto_pause_pick_btn.set_tooltip_text("Pick from apps that are running right now")
+        self.auto_pause_pick_btn.connect("clicked", self._on_auto_pause_pick_running)
+        add_box.pack_start(self.auto_pause_pick_btn, False, False, 0)
 
         # Custom row for the add controls (not a PreferenceRow)
         add_row = Gtk.ListBoxRow()
@@ -1364,7 +1375,7 @@ class SettingsDialog(Gtk.Dialog):
         group.add_row(list_row)
 
         self.auto_pause_empty_label = Gtk.Label(
-            label="No apps listed yet. Add process names above.",
+            label="No apps in the list yet. Type a process name or choose a running app above.",
             xalign=0,
         )
         self.auto_pause_empty_label.get_style_context().add_class("preference-row-subtitle")
@@ -1381,9 +1392,19 @@ class SettingsDialog(Gtk.Dialog):
         empty_row.set_no_show_all(True)
         self._auto_pause_empty_row = empty_row
 
-        self.general_tab.pack_start(group, False, False, 0)
+        self.power_tab.pack_start(group, False, False, 0)
 
         self.auto_pause_switch.connect("state-set", self._on_auto_pause_enabled_toggled)
+
+    def _update_auto_pause_sensitivity(self, enabled: bool) -> None:
+        """Gray out the app-list controls while auto-pause is disabled."""
+        for widget in (
+            self.auto_pause_entry,
+            self.auto_pause_add_btn,
+            self.auto_pause_pick_btn,
+            self.auto_pause_listbox,
+        ):
+            widget.set_sensitive(enabled)
 
     def _get_auto_pause_apps(self) -> list:
         """Return a clean list of configured auto-pause process names."""
@@ -1446,9 +1467,10 @@ class SettingsDialog(Gtk.Dialog):
         self.auto_pause_listbox.show_all()
 
     def _on_auto_pause_enabled_toggled(self, widget, state):
+        enabled = bool(state)
+        self._update_auto_pause_sensitivity(enabled)
         if self._initializing or self._applying_settings:
             return False
-        enabled = bool(state)
         logger.info("Auto-pause enabled toggled: %s", enabled)
         self.config_manager.set("auto_pause", "enabled", enabled)
         self.config_manager.save_settings()
@@ -1506,7 +1528,7 @@ class SettingsDialog(Gtk.Dialog):
         if not names:
             return
 
-        dialog = Gtk.Dialog(title="Running processes", transient_for=self, flags=0)
+        dialog = Gtk.Dialog(title="Choose a Running App", transient_for=self, flags=0)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.add_button("Add", Gtk.ResponseType.OK)
         dialog.set_default_size(360, 400)
@@ -1552,23 +1574,24 @@ class SettingsDialog(Gtk.Dialog):
         dialog.destroy()
 
     def _build_model_keepalive_section(self):
-        """Build Model Keep-Alive settings: enable toggle + idle timeout."""
+        """Build idle unload settings: enable toggle + idle timeout."""
         group = PreferencesGroup(
-            title="Model Keep-Alive (Battery)",
+            title="Unload When Idle",
             description=(
-                "After a period of inactivity, unload the speech model so hybrid GPUs "
-                "(NVIDIA Optimus) can sleep. The next dictation reloads the model "
-                "(may take a moment on larger models)."
+                "After a period of inactivity, unload the speech model to save memory "
+                "and battery — on hybrid-GPU laptops (NVIDIA Optimus) this lets the "
+                "GPU sleep. The next dictation reloads the model automatically, which "
+                "may take a moment on larger models."
             ),
         )
 
         self.model_keepalive_switch = Gtk.Switch()
         self.model_keepalive_switch.set_tooltip_text(
-            "Unload the speech model after idle timeout to free VRAM/GPU power"
+            "Unload the speech model after the idle timeout to save memory and battery"
         )
         enable_row = PreferenceRow(
-            title="Enable Keep-Alive Unload",
-            subtitle="Opt-in idle unload for battery saving on hybrid-GPU laptops",
+            title="Unload Model When Idle",
+            subtitle="Free memory and GPU power after a period of inactivity",
             widget=self.model_keepalive_switch,
         )
         group.add_row(enable_row)
@@ -1595,17 +1618,22 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(timeout_row)
 
-        self.general_tab.pack_start(group, False, False, 0)
+        self.power_tab.pack_start(group, False, False, 0)
 
         self.model_keepalive_switch.connect("state-set", self._on_model_keepalive_enabled_toggled)
         self.model_keepalive_timeout_combo.connect(
             "changed", self._on_model_keepalive_timeout_changed
         )
 
+    def _update_model_keepalive_sensitivity(self, enabled: bool) -> None:
+        """Gray out the idle timeout selector while idle unload is disabled."""
+        self.model_keepalive_timeout_combo.set_sensitive(enabled)
+
     def _on_model_keepalive_enabled_toggled(self, widget, state):
+        enabled = bool(state)
+        self._update_model_keepalive_sensitivity(enabled)
         if self._initializing or self._applying_settings:
             return False
-        enabled = bool(state)
         logger.info("Model keep-alive enabled toggled: %s", enabled)
         self.config_manager.set("model_keepalive", "enabled", enabled)
         self.config_manager.save_settings()
@@ -2855,11 +2883,15 @@ class SettingsDialog(Gtk.Dialog):
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
 
         auto_pause_settings = self.config_manager.get_settings().get("auto_pause", {})
-        self.auto_pause_switch.set_active(bool(auto_pause_settings.get("enabled", False)))
+        auto_pause_enabled = bool(auto_pause_settings.get("enabled", False))
+        self.auto_pause_switch.set_active(auto_pause_enabled)
+        self._update_auto_pause_sensitivity(auto_pause_enabled)
         self._refresh_auto_pause_list()
 
         keepalive_settings = self.config_manager.get_settings().get("model_keepalive", {})
-        self.model_keepalive_switch.set_active(bool(keepalive_settings.get("enabled", False)))
+        keepalive_enabled = bool(keepalive_settings.get("enabled", False))
+        self.model_keepalive_switch.set_active(keepalive_enabled)
+        self._update_model_keepalive_sensitivity(keepalive_enabled)
         timeout_seconds = int(keepalive_settings.get("idle_timeout_seconds", 300) or 300)
         if not self.model_keepalive_timeout_combo.set_active_id(str(timeout_seconds)):
             self.model_keepalive_timeout_combo.set_active_id("300")
