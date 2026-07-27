@@ -1,34 +1,36 @@
 # Vocalinux demo video
 
-Product walkthrough used on GitHub and [vocalinux.com](https://vocalinux.com/#demo).
+Product walkthrough for GitHub, YouTube, and [vocalinux.com](https://vocalinux.com/#demo).
 
 | File | Purpose |
 |------|---------|
-| `vocalinux-demo.mp4` | 1920×1080 H.264 + AAC, ~75s |
+| `vocalinux-demo.mp4` | 1920×1080 H.264 + AAC launch cut (~53s) |
 | `vocalinux-demo-poster.jpg` | Poster frame for the website `<video>` element |
 
 ## What it shows
 
-1. Title card
-2. Double-tap Ctrl tip
-3. Live dictation into Mousepad on a Linux desktop
-4. Privacy reminder (audio stays on-device)
-5. Settings screenshots (engine + shortcuts)
-6. Install command / GitHub outro
+1. Hook + title
+2. Live dictation into Mousepad
+3. Privacy beat
+4. Fast settings montage (Speech Engine, Recognition, Audio, Shortcuts, General, Advanced, tray, About)
+5. Install CTA
 
 ## How it was made (free / open source only)
 
-No paid APIs or cloud TTS keys were used.
+No paid APIs or cloud TTS keys.
 
-| Piece | Tool | License / notes |
-|-------|------|-----------------|
-| Screen capture | `ffmpeg` x11grab | LGPL/GPL |
-| Editing / mux | `ffmpeg` | LGPL/GPL |
-| Spoken narration + demo speech | [Piper](https://github.com/rhasspy/piper) (`en_US-lessac-medium`) | MIT (voice models from rhasspy/piper-voices) |
-| Ambient music bed | Generated locally with Python + SoX (sine pad + reverb) | Original to this repo; free to reuse with the video |
-| Title cards | ImageMagick + project icon assets | Project assets (GPL-3.0 with the app) |
-| Live app footage | Vocalinux + Mousepad on XFCE | This project |
+| Piece | Tool | Notes |
+|-------|------|-------|
+| Screen capture | `ffmpeg` x11grab + Cursor screen recording | Live UI tour + dictation |
+| Edit / motion | `ffmpeg` (`zoompan`, `xfade`) + ImageMagick | Eased zooms, wipe/slide transitions |
+| Narration | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (`af_heart`) via `kokoro` | Apache-2.0, offline |
+| Dictation demo voice | Kokoro (`am_michael`) | Separate voice from narrator |
+| Music | Procedural beat bed (Python/NumPy) mixed with [SoundHelix](https://www.soundhelix.com/) example track | SoundHelix examples are free for any use; beat bed is original |
+| Title cards / labels | ImageMagick + project icons | GPL-3.0 with the app |
 
-## Rebuilding
+YouTube description credit line you can paste:
 
-There is no checked-in render script yet; regenerating needs a desktop session, virtual mic, and the Piper binary/voice used above. Prefer editing the finished `vocalinux-demo.mp4` in place unless you are intentionally reshooting the live segment.
+```text
+Music: original beat bed + SoundHelix example track (https://www.soundhelix.com/)
+Voice: Kokoro-82M (https://huggingface.co/hexgrad/Kokoro-82M)
+```
