@@ -240,71 +240,26 @@ docs(readme): update installation instructions
 
 ## Cursor Cloud specific instructions
 
-The startup update script keeps a Python venv (`venv/`) and `web/node_modules` in sync.
-Standard commands live in the sections above and in `web/AGENTS.md`; notes below are the
-non-obvious gotchas for this environment.
+The startup update script keeps a Python venv (`venv/`) and `web/node_modules` in sync. Standard commands live in the sections above and in `web/AGENTS.md`; notes below are the non-obvious gotchas for this environment.
 
-- **Activate the venv first.** Python tooling (`vocalinux`, `pytest`, `make lint`, `mypy`)
-  lives in `venv/`. Run `source venv/bin/activate` (or prefix with `./venv/bin/`) before use.
-- **The venv must be created with `--system-site-packages`.** GTK/`PyGObject` come from the
-  apt package `python3-gi`; installing `PyGObject` from pip fails on Ubuntu 24.04 because the
-  pinned version needs `girepository-2.0` (glib 2.80+), which the distro doesn't ship. The
-  update script already creates the venv this way — don't drop that flag.
-- **`black --check` prints a Python-version warning.** `pyproject.toml` targets py314 but the
-  VM runs Python 3.12; Black still reports "All done" and lint passes. This warning is benign.
-- **Desktop app is a GTK tray app.** An XFCE session (`xfwm4` + `xfce4-panel`) runs on
-  `DISPLAY=:1`. Always give the app the session env: `DISPLAY=:1`,
-  `DBUS_SESSION_BUS_ADDRESS=autolaunch:`, `XDG_RUNTIME_DIR=/run/user/1000`,
-  `XDG_CURRENT_DESKTOP=XFCE`. Single-instance lock lives at
-  `~/.local/share/vocalinux/instance.lock`; delete it after killing a stale instance. Kill
-  instances by explicit PID (never `pkill -f`).
+- **Activate the venv first.** Python tooling (`vocalinux`, `pytest`, `make lint`, `mypy`) lives in `venv/`. Run `source venv/bin/activate` (or prefix with `./venv/bin/`) before use.
+- **The venv must be created with `--system-site-packages`.** GTK/`PyGObject` come from the apt package `python3-gi`; installing `PyGObject` from pip fails on Ubuntu 24.04 because the pinned version needs `girepository-2.0` (glib 2.80+), which the distro doesn't ship. The update script already creates the venv this way — don't drop that flag.
+- **`black --check` prints a Python-version warning.** `pyproject.toml` targets py314 but the VM runs Python 3.12; Black still reports "All done" and lint passes. This warning is benign.
+- **Desktop app is a GTK tray app.** An XFCE session (`xfwm4` + `xfce4-panel`) runs on `DISPLAY=:1`. Always give the app the session env: `DISPLAY=:1`, `DBUS_SESSION_BUS_ADDRESS=autolaunch:`, `XDG_RUNTIME_DIR=/run/user/1000`, `XDG_CURRENT_DESKTOP=XFCE`. Single-instance lock lives at `~/.local/share/vocalinux/instance.lock`; delete it after killing a stale instance. Kill instances by explicit PID (never `pkill -f`).
+- **Pre-installed agent skills (not committed to the repo).** The `humanizer` and `ponytail` skills live in this VM at `~/.cursor/skills/<name>/SKILL.md` (user-level, baked into the environment snapshot), so Cursor auto-discovers them for every session on this repo without adding them to git.
 
 ### Running / using the desktop GUI end-to-end in the VM
 
-Two things are missing from the base session and must be set up once per boot (packages
-already installed; these are runtime/session steps, not for the update script):
+Two things are missing from the base session and must be set up once per boot (packages already installed; these are runtime/session steps, not for the update script):
 
-1. **System tray (StatusNotifierWatcher).** The panel ships no tray by default, so the
-   AppIndicator icon can't appear. Add the `systray` plugin and (re)start the panel:
-   `xfconf-query -c xfce4-panel -p /plugins/plugin-6 -t string -s systray --create`, append
-   `6` to `/panels/panel-1/plugin-ids`, then start the panel detached
-   (`setsid bash -c xfce4-panel …`). Verify `org.kde.StatusNotifierWatcher` is on the session
-   bus before launching the app. Keep the systray `size-max` unset or a sane value (e.g. 22);
-   `size-max=0` renders zero-sized (invisible) icons.
-   - **AppIndicator + SVG icons must both be present or the icon shows blank.** The GI runtime
-     comes from `gir1.2-ayatanaappindicator3-0.1` (+ `gir1.2-notify-0.7`). VocaLinux's tray/app
-     icons are **SVG**, so `librsvg2-common` (the gdk-pixbuf SVG loader) is required — without
-     it the icon registers on the bus but renders empty and the panel logs
-     `gdk-pixbuf does not provide SVG support`. `scripts/check-system-deps.sh` should report
-     `✓ AppIndicator/Ayatana GI runtime` and `✓ All critical dependencies found!`.
-2. **Virtual microphone (no audio server by default).** Create `/run/user/1000` (chown to
-   your uid), start PulseAudio (`pulseaudio --start --exit-idle-time=-1`), then
-   `pactl load-module module-null-sink sink_name=virtmic` +
-   `module-virtual-source source_name=virtmic_src master=virtmic.monitor`,
-   `pactl set-default-source virtmic_src`, and write `~/.asoundrc` with
-   `pcm.!default pulse` / `ctl.!default pulse` so PyAudio sees an input device. Feed speech in
-   with `paplay --device=virtmic <file.wav>`.
+1. **System tray (StatusNotifierWatcher).** The panel ships no tray by default, so the AppIndicator icon can't appear. Add the `systray` plugin and (re)start the panel: `xfconf-query -c xfce4-panel -p /plugins/plugin-6 -t string -s systray --create`, append `6` to `/panels/panel-1/plugin-ids`, then start the panel detached (`setsid bash -c xfce4-panel …`). Verify `org.kde.StatusNotifierWatcher` is on the session bus before launching the app. Keep the systray `size-max` unset or a sane value (e.g. 22); `size-max=0` renders zero-sized (invisible) icons.
+   - **AppIndicator + SVG icons must both be present or the icon shows blank.** The GI runtime comes from `gir1.2-ayatanaappindicator3-0.1` (+ `gir1.2-notify-0.7`). VocaLinux's tray/app icons are SVG, so `librsvg2-common` (the gdk-pixbuf SVG loader) is required — without it the icon registers on the bus but renders empty and the panel logs `gdk-pixbuf does not provide SVG support`. `scripts/check-system-deps.sh` should report `✓ AppIndicator/Ayatana GI runtime` and `✓ All critical dependencies found!`.
+2. **Virtual microphone (no audio server by default).** Create `/run/user/1000` (chown to your uid), start PulseAudio (`pulseaudio --start --exit-idle-time=-1`), then `pactl load-module module-null-sink sink_name=virtmic` + `module-virtual-source source_name=virtmic_src master=virtmic.monitor`, `pactl set-default-source virtmic_src`, and write `~/.asoundrc` with `pcm.!default pulse` / `ctl.!default pulse` so PyAudio sees an input device. Feed speech in with `paplay --device=virtmic <file.wav>`.
 
-Also set `audio.device_index` to `null` in `~/.config/vocalinux/config.json` (a stale index
-prevents opening the stream).
+Also set `audio.device_index` to `null` in `~/.config/vocalinux/config.json` (a stale index prevents opening the stream).
 
-**Dictation control is Ctrl-based and stateful.** Default activation is double-tap `Ctrl`
-in **toggle** mode (`shortcuts` in the config). The app catches synthetic X key events
-(`xdotool key Control_L`), so it can be driven from a script, but toggle state persists across
-dictations — and any stray `Ctrl` (e.g. `Ctrl+A`/`Ctrl+C` for clipboard) will flip
-recording on/off. For a deterministic run, launch a **fresh** (idle) app instance, then:
-focus the target window → double-tap `Ctrl` → `paplay` the wav → wait ~5s for the
-2s silence timeout + whisper.cpp transcription + xdotool injection into the focused window.
+**Dictation control is Ctrl-based and stateful.** Default activation is double-tap `Ctrl` in toggle mode (`shortcuts` in the config). The app catches synthetic X key events (`xdotool key Control_L`), so it can be driven from a script, but toggle state persists across dictations — and any stray `Ctrl` (e.g. `Ctrl+A`/`Ctrl+C` for clipboard) will flip recording on/off. For a deterministic run, launch a fresh (idle) app instance, then: focus the target window → double-tap `Ctrl` → `paplay` the wav → wait ~5s for the 2s silence timeout + whisper.cpp transcription + xdotool injection into the focused window.
 
-- **Headless-only speech check (no GUI/audio setup):** drive the pipeline programmatically —
-  transcribe with `from pywhispercpp.model import Model` and format via
-  `vocalinux.speech_recognition.command_processor.CommandProcessor`. The first transcription
-  downloads the ~74MB whisper.cpp `tiny` model (needs network); it is cached afterward.
-- **Website dev server:** `cd web && npm run dev -- -H 0.0.0.0 -p 3456` (per `web/AGENTS.md`).
-  Lint currently reports 3 pre-existing `@next/next/no-html-link-for-pages` errors in
-  `src/components/seo-subpage-shell.tsx`; typecheck, tests, and build are clean.
-- **Running `install.sh` here:** use `./install.sh --dev --auto` — `--auto` forces
-  non-interactive mode (the Shell has no TTY) and it reuses the existing `venv/`. It also
-  runs the full `pytest` suite and installs a wrapper at `~/.local/bin/vocalinux` (that dir
-  is not on `PATH`; call the wrapper by full path or add it). Pass `--no-rebuild-whispercpp`
-  to skip the lengthy cmake/Vulkan rebuild and reuse the pip-installed `pywhispercpp`.
+- **Headless-only speech check (no GUI/audio setup):** drive the pipeline programmatically — transcribe with `from pywhispercpp.model import Model` and format via `vocalinux.speech_recognition.command_processor.CommandProcessor`. The first transcription downloads the ~74MB whisper.cpp `tiny` model (needs network); it is cached afterward.
+- **Website dev server:** `cd web && npm run dev -- -H 0.0.0.0 -p 3456` (per `web/AGENTS.md`). Lint currently reports 3 pre-existing `@next/next/no-html-link-for-pages` errors in `src/components/seo-subpage-shell.tsx`; typecheck, tests, and build are clean.
+- **Running `install.sh` here:** use `./install.sh --dev --auto` — `--auto` forces non-interactive mode (the Shell has no TTY) and it reuses the existing `venv/`. It also runs the full `pytest` suite and installs a wrapper at `~/.local/bin/vocalinux` (that dir is not on `PATH`; call the wrapper by full path or add it). Pass `--no-rebuild-whispercpp` to skip the lengthy cmake/Vulkan rebuild and reuse the pip-installed `pywhispercpp`.
