@@ -118,6 +118,44 @@ kill_vocalinux_processes() {
     fi
 }
 
+# Stop the Vocalinux IBus engine subprocess if a PID file is present.
+stop_ibus_engine() {
+    local pid_file="$IBUS_DATA_DIR/engine.pid"
+
+    if [ ! -f "$pid_file" ]; then
+        return 0
+    fi
+
+    local pid
+    pid=$(tr -d '[:space:]' < "$pid_file" 2>/dev/null || true)
+    if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
+        safe_remove "$pid_file" "stale IBus engine PID file"
+        return 0
+    fi
+
+    local cmdline=""
+    if [ -r "/proc/$pid/cmdline" ]; then
+        cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline")
+    fi
+
+    if [ -n "$cmdline" ] && [[ "$cmdline" != *"ibus_engine.py"* || "$cmdline" != *"vocalinux"* ]]; then
+        print_warning "PID file points to a non-Vocalinux process ($pid); removing stale PID file"
+        safe_remove "$pid_file" "stale IBus engine PID file"
+        return 0
+    fi
+
+    if kill -0 "$pid" 2>/dev/null; then
+        print_info "Stopping Vocalinux IBus engine (PID $pid)..."
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 1
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -KILL "$pid" 2>/dev/null || true
+        fi
+    fi
+
+    safe_remove "$pid_file" "IBus engine PID file"
+}
+
 print_info "Vocalinux Uninstaller"
 print_info "=============================="
 echo ""
@@ -173,6 +211,7 @@ done
 # Define XDG directories
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vocalinux"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux"
+IBUS_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux-ibus"
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
@@ -307,6 +346,9 @@ remove_config_and_data() {
     else
         print_info "Keeping application data directory as requested: $DATA_DIR"
     fi
+
+    # IBus runtime data (socket, PID file, logs) is recreated on next launch.
+    safe_remove "$IBUS_DATA_DIR" "IBus runtime data directory"
 }
 
 # Function to clean up build artifacts
@@ -405,6 +447,12 @@ verify_uninstallation() {
         print_warning "Application data directory still exists: $DATA_DIR"
         ((ISSUES++))
     fi
+
+    # IBus runtime data should always be removed
+    if [ -d "$IBUS_DATA_DIR" ]; then
+        print_warning "IBus runtime data directory still exists: $IBUS_DATA_DIR"
+        ((ISSUES++))
+    fi
     
     # Return the number of issues found
     return $ISSUES
@@ -448,6 +496,7 @@ print_uninstallation_summary() {
 
 # Kill any running Vocalinux processes first
 kill_vocalinux_processes
+stop_ibus_engine
 
 # Perform uninstallation steps
 remove_virtual_environment
