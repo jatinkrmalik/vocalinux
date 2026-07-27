@@ -799,10 +799,12 @@ def _row_matches_query(query: str, title: str, subtitle: str = "", keywords=()) 
 class PreferencesGroup(Gtk.Box):
     """A card-style group of preferences, similar to libadwaita's AdwPreferencesGroup."""
 
-    def __init__(self, title: str = "", description: str = ""):
+    def __init__(self, title: str = "", description: str = "", keywords=()):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.get_style_context().add_class("preferences-group")
         self.title = title
+        self.description = description
+        self.keywords = tuple(keywords)
         self.rows = []
 
         # Header with title
@@ -925,13 +927,28 @@ class SettingsPage:
         self.box.set_margin_end(16)
 
     def collect_children(self):
-        """Classify built children into searchable groups and extras."""
+        """Classify built descendants into searchable groups and extras.
+
+        Most groups are direct page children, but gated sections such as the
+        Advanced decoding controls live inside a Gtk.Revealer. Walk nested
+        containers so unlocked settings are searchable too.
+        """
         self.groups = []
         self.extras = []
+
+        def collect_groups(widget):
+            if isinstance(widget, PreferencesGroup):
+                self.groups.append(widget)
+                return True
+            if isinstance(widget, Gtk.Container):
+                found = False
+                for child in widget.get_children():
+                    found = collect_groups(child) or found
+                return found
+            return False
+
         for child in self.box.get_children():
-            if isinstance(child, PreferencesGroup):
-                self.groups.append(child)
-            else:
+            if not collect_groups(child):
                 self.extras.append(child)
 
 
@@ -1311,7 +1328,15 @@ class SettingsDialog(Gtk.Dialog):
         baseline = {"rows": {}, "groups": {}, "extras": {}}
         for page in self._pages:
             for group in page.groups:
-                baseline["groups"][group] = group.get_visible()
+                visible = group.get_visible()
+                parent = group.get_parent()
+                while visible and parent is not None and parent is not page.box:
+                    if isinstance(parent, Gtk.Revealer) and not parent.get_reveal_child():
+                        visible = False
+                    else:
+                        visible = parent.get_visible()
+                    parent = parent.get_parent()
+                baseline["groups"][group] = visible
                 for row in group.rows:
                     baseline["rows"][row] = row.get_visible()
             for extra in page.extras:
@@ -1356,7 +1381,9 @@ class SettingsDialog(Gtk.Dialog):
                     # Whole group hidden by engine-specific logic; skip it.
                     group.hide()
                     continue
-                group_title_match = _row_matches_query(query, group.title)
+                group_title_match = _row_matches_query(
+                    query, group.title, group.description, group.keywords
+                )
                 visible_rows = 0
                 for row in group.rows:
                     if not baseline["rows"].get(row, True):
@@ -1489,6 +1516,7 @@ class SettingsDialog(Gtk.Dialog):
                 "unloads the speech model to free CPU, GPU, and memory. Everything "
                 "resumes automatically when the app closes."
             ),
+            keywords=("process", "program", "game"),
         )
 
         self.auto_pause_switch = Gtk.Switch()

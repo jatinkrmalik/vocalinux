@@ -739,6 +739,34 @@ class TestSettingsSearch(unittest.TestCase):
         restore_body = source_code.split("def _restore_search_baseline")[1].split("def ")[0]
         self.assertIn("self._update_engine_specific_ui()", restore_body)
 
+    def test_search_indexes_nested_preference_groups(self):
+        """Unlocked settings inside a revealer remain discoverable."""
+        source = self._settings_source()
+        self.assertIn("collect_groups", source)
+        self.assertIn("Gtk.Container", source)
+        self.assertIn("widget.get_children()", source)
+
+    def test_search_respects_closed_revealers(self):
+        """A locked Advanced section must not leak controls into search."""
+        source = self._settings_source()
+        self.assertIn("Gtk.Revealer", source)
+        self.assertIn("parent.get_reveal_child()", source)
+
+    @staticmethod
+    def _settings_source():
+        import os
+
+        source_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "src",
+            "vocalinux",
+            "ui",
+            "settings_dialog.py",
+        )
+        with open(source_path, "r") as source_file:
+            return source_file.read()
+
 
 class TestSettingsNavigation(unittest.TestCase):
     """Test cases for the sidebar + stack navigation shell."""
