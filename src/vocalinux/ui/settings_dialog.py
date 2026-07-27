@@ -1376,6 +1376,9 @@ class SettingsDialog(Gtk.Dialog):
         empty_row.set_activatable(False)
         empty_row.add(self.auto_pause_empty_label)
         group.add_row(empty_row)
+        # Keep the dialog-wide show_all() from re-showing this row when the
+        # list is non-empty; visibility is managed in _refresh_auto_pause_list.
+        empty_row.set_no_show_all(True)
         self._auto_pause_empty_row = empty_row
 
         self.general_tab.pack_start(group, False, False, 0)
@@ -1413,7 +1416,11 @@ class SettingsDialog(Gtk.Dialog):
 
         apps = self._get_auto_pause_apps()
         if hasattr(self, "_auto_pause_empty_row"):
-            self._auto_pause_empty_row.set_visible(len(apps) == 0)
+            if len(apps) == 0:
+                self.auto_pause_empty_label.show()
+                self._auto_pause_empty_row.show()
+            else:
+                self._auto_pause_empty_row.hide()
 
         for name in apps:
             row = Gtk.ListBoxRow()
