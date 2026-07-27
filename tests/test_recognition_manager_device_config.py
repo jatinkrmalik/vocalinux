@@ -21,7 +21,7 @@ import threading
 import time
 import unittest
 from unittest import mock
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 
@@ -31,6 +31,9 @@ from vocalinux.speech_recognition.recognition_manager import (
     _filter_non_speech,
     _get_supported_channels,
     _get_supported_sample_rate,
+    _is_bluetooth_device,
+    _probe_audio_format,
+    _safe_close_stream,
     get_audio_input_devices,
 )
 
@@ -47,6 +50,87 @@ def _make_manager(engine="whisper_cpp", **kw):
 
 class TestAudioDeviceDetection(unittest.TestCase):
     """Test audio device enumeration functions."""
+
+    def test_is_bluetooth_device_detection(self):
+        """Bluetooth headset/mic names should be recognized (Issue #567)."""
+        assert _is_bluetooth_device("Bluetooth internal capture stream for HUAWEI FreeBuds Pro 3")
+        assert _is_bluetooth_device("bluez_source.XX_XX_XX")
+        assert _is_bluetooth_device("Hands-Free AG Speech")
+        assert not _is_bluetooth_device("WH-1000XM5 Headset")  # no bluetooth marker
+        assert not _is_bluetooth_device("USB Audio Device")
+        assert not _is_bluetooth_device(None)
+        assert not _is_bluetooth_device("")
+
+    def test_safe_close_stream_stops_before_close(self):
+        """PortAudio streams must be stopped before close to avoid heap corruption."""
+        mock_stream = MagicMock()
+        _safe_close_stream(mock_stream)
+        mock_stream.stop_stream.assert_called_once()
+        mock_stream.close.assert_called_once()
+        # stop must happen before close
+        assert mock_stream.mock_calls.index(mock.call.stop_stream()) < mock_stream.mock_calls.index(
+            mock.call.close()
+        )
+
+    def test_safe_close_stream_tolerates_errors(self):
+        """Cleanup must not raise even if stop/close fail."""
+        mock_stream = MagicMock()
+        mock_stream.stop_stream.side_effect = OSError("already stopped")
+        mock_stream.close.side_effect = OSError("already closed")
+        _safe_close_stream(mock_stream)  # should not raise
+        _safe_close_stream(None)  # should not raise
+
+    def test_probe_audio_format_returns_channels_and_rate(self):
+        """Combined probe should return the first working (channels, rate) pair."""
+        mock_audio = MagicMock()
+        mock_stream = MagicMock()
+        mock_audio.open.return_value = mock_stream
+        mock_audio.get_device_info_by_index.return_value = {
+            "name": "USB Mic",
+            "defaultSampleRate": 48000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            channels, rate = _probe_audio_format(mock_audio, 0)
+            assert channels == 1
+            assert rate == 48000
+            assert mock_audio.open.call_count == 1
+            mock_stream.stop_stream.assert_called_once()
+            mock_stream.close.assert_called_once()
+
+    def test_probe_audio_format_bluetooth_single_open(self):
+        """Bluetooth devices must not be double-probed (Issue #567).
+
+        The previous channels-then-rate probing opened the SCO capture stream
+        twice in quick succession, which can abort with malloc heap corruption.
+        """
+        mock_audio = MagicMock()
+        mock_stream = MagicMock()
+        mock_audio.open.return_value = mock_stream
+        mock_audio.get_device_info_by_index.return_value = {
+            "name": "Bluetooth internal capture stream for HUAWEI FreeBuds Pro 3",
+            "defaultSampleRate": 16000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            channels, rate = _probe_audio_format(mock_audio, 14)
+            assert channels == 1
+            assert rate == 16000
+            assert mock_audio.open.call_count == 1
+
+    def test_get_supported_sample_rate_reuses_known_rate(self):
+        """known_working_rate must skip opening another PortAudio stream."""
+        mock_audio = MagicMock()
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            rate = _get_supported_sample_rate(mock_audio, 14, channels=1, known_working_rate=16000)
+            assert rate == 16000
+            mock_audio.open.assert_not_called()
 
     def test_get_supported_channels_mono_success(self):
         """Test mono channel support detection."""

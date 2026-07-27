@@ -210,6 +210,57 @@ def _is_virtual_device(device_name: str) -> bool:
     return any(pattern in name_lower for pattern in virtual_patterns)
 
 
+def _is_bluetooth_device(device_name: Optional[str]) -> bool:
+    """Return True if the device name looks like a Bluetooth headset/mic."""
+    if not device_name:
+        return False
+    name_lower = device_name.lower()
+    # Prefer explicit Bluetooth/BlueZ markers. Avoid bare "headset" which also
+    # matches many wired USB headsets that do not need SCO settle delays.
+    bluetooth_patterns = (
+        "bluetooth",
+        "bluez",
+        "hands-free",
+        "handsfree",
+    )
+    return any(pattern in name_lower for pattern in bluetooth_patterns)
+
+
+def _safe_close_stream(stream) -> None:
+    """Stop and close a PortAudio stream without raising.
+
+    Closing an active stream (especially Bluetooth SCO/HFP capture) without
+    stopping it first is a known trigger for PortAudio heap corruption and
+    process abort via malloc assertions.
+    """
+    if stream is None:
+        return
+    try:
+        stop = getattr(stream, "stop_stream", None)
+        if callable(stop):
+            stop()
+    except Exception:
+        pass
+    try:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+    except Exception:
+        pass
+
+
+def _get_device_info_safe(audio, device_index: Optional[int] = None) -> dict:
+    """Fetch PortAudio device info, returning {} on failure."""
+    try:
+        if device_index is not None:
+            info = audio.get_device_info_by_index(device_index)
+        else:
+            info = audio.get_default_input_device_info()
+        return info if isinstance(info, dict) else {}
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        return {}
+
+
 def get_audio_input_devices() -> list:
     """
     Get a list of available audio input devices, excluding virtual devices.
@@ -357,52 +408,60 @@ def _resolve_valid_input_device(audio, preferred_index: Optional[int] = None) ->
     return input_device_indices[0]
 
 
-def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
+def _probe_audio_format(audio, device_index: Optional[int] = None) -> tuple[int, int]:
     """
-    Detect the supported number of channels for the audio device.
+    Find a working (channels, sample_rate) with a single successful open.
 
-    Some audio devices (particularly professional audio interfaces and certain
-    onboard audio chips) only support specific channel configurations. This
-    function tests mono (1) and stereo (2) to find a working configuration.
+    Historically Vocalinux probed channels and sample rates separately, each
+    opening and closing PortAudio streams. Bluetooth headset capture (SCO/HFP
+    / PipeWire "Bluetooth internal capture stream") is especially sensitive to
+    that pattern and can abort the process with malloc heap corruption
+    (see GitHub issue #567).
 
-    Pro-audio USB interfaces (MUPRO, Vocaster, etc.) often only support 48kHz
-    and will reject 16kHz probes. This function uses the device's default
-    sample rate first, then falls back to common rates.
+    This combined probe returns the first working pair and stops, so callers
+    can open the real capture stream without a redundant second probe cycle.
 
     Args:
         audio: PyAudio instance
         device_index: The device index to test (None for default)
 
     Returns:
-        int: Number of channels supported (1 or 2), defaults to 1
+        Tuple of (channels, sample_rate). Defaults to (1, 16000) if probing fails.
     """
     import pyaudio
 
     FORMAT = pyaudio.paInt16
     CHUNK = 1024
-
     COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
 
-    rates_to_try = []
-    try:
-        if device_index is not None:
-            device_info = audio.get_device_info_by_index(device_index)
-        else:
-            device_info = audio.get_default_input_device_info()
+    device_info = _get_device_info_safe(audio, device_index)
+    device_name = device_info.get("name")
+    rates_to_try: list[int] = []
+    max_channels = 2
 
-        default_rate = int(device_info.get("defaultSampleRate", 0))
-        if default_rate > 0:
-            rates_to_try.append(default_rate)
-            logger.debug(f"Device reports default sample rate: {default_rate}Hz")
-    except (IOError, OSError) as e:
-        logger.debug(f"Could not get device info for channel probing: {e}")
+    default_rate = int(device_info.get("defaultSampleRate", 0) or 0)
+    if default_rate > 0:
+        rates_to_try.append(default_rate)
+        logger.debug(f"Device reports default sample rate: {default_rate}Hz")
+
+    reported_channels = int(device_info.get("maxInputChannels", 0) or 0)
+    if reported_channels == 1:
+        max_channels = 1
+    elif reported_channels >= 2:
+        max_channels = 2
 
     for rate in COMMON_RATES:
         if rate not in rates_to_try:
             rates_to_try.append(rate)
 
-    for channels in [1, 2]:
+    channel_options = [1] if max_channels == 1 else [1, 2]
+    bluetooth = _is_bluetooth_device(device_name)
+    # Brief settle helps BlueZ/Pulse release SCO between failed probe attempts.
+    settle_s = 0.15 if bluetooth else 0.0
+
+    for channels in channel_options:
         for rate in rates_to_try:
+            test_stream = None
             try:
                 stream_kwargs = {
                     "format": FORMAT,
@@ -415,22 +474,49 @@ def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
                     stream_kwargs["input_device_index"] = device_index
 
                 test_stream = audio.open(**stream_kwargs)
-                test_stream.close()
+                _safe_close_stream(test_stream)
+                test_stream = None
                 logger.debug(f"Device supports {channels} channel(s) at {rate}Hz")
-                return channels
+                return channels, rate
             except (IOError, OSError) as e:
                 error_str = str(e).lower()
                 if "invalid number of channels" in error_str or "-9998" in error_str:
                     logger.debug(f"Device rejected {channels} channel(s) at {rate}Hz: {e}")
                 else:
-                    logger.debug(f"Channel test failed at {rate}Hz: {e}")
-                continue
+                    logger.debug(f"Format probe failed ({channels}ch @ {rate}Hz): {e}")
+                if settle_s:
+                    time.sleep(settle_s)
+            finally:
+                _safe_close_stream(test_stream)
 
-    logger.warning("Could not determine supported channel count, defaulting to 1")
-    return 1
+    logger.warning("Could not determine audio format, defaulting to 1ch/16000Hz")
+    return 1, 16000
 
 
-def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int = 1) -> int:
+def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
+    """
+    Detect the supported number of channels for the audio device.
+
+    Prefer :func:`_probe_audio_format` when both channel count and sample rate
+    are needed, to avoid opening Bluetooth capture streams twice.
+
+    Args:
+        audio: PyAudio instance
+        device_index: The device index to test (None for default)
+
+    Returns:
+        int: Number of channels supported (1 or 2), defaults to 1
+    """
+    channels, _rate = _probe_audio_format(audio, device_index)
+    return channels
+
+
+def _get_supported_sample_rate(
+    audio,
+    device_index: Optional[int],
+    channels: int = 1,
+    known_working_rate: Optional[int] = None,
+) -> int:
     """
     Get a supported sample rate for the audio device.
 
@@ -438,14 +524,24 @@ def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int
     (e.g., 48kHz) and will fail with the default 16kHz. This function tests
     common sample rates and returns the highest supported one.
 
+    When ``known_working_rate`` is provided (from a prior successful probe),
+    that rate is returned without opening another PortAudio stream. This is
+    critical for Bluetooth headsets where a second open/close cycle can abort
+    the process with heap corruption.
+
     Args:
         audio: PyAudio instance
         device_index: The device index to test
         channels: Number of channels (default 1)
+        known_working_rate: Rate already verified by a prior probe
 
     Returns:
         int: A supported sample rate, defaulting to 16000 if none work
     """
+    if known_working_rate is not None and known_working_rate > 0:
+        logger.debug(f"Reusing known working sample rate: {known_working_rate}Hz")
+        return known_working_rate
+
     import pyaudio
 
     FORMAT = pyaudio.paInt16
@@ -454,38 +550,21 @@ def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int
     # Common sample rates to try, ordered from highest to lowest quality
     COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
 
-    # First, try the device's default sample rate
-    try:
-        if device_index is not None:
-            device_info = audio.get_device_info_by_index(device_index)
-        else:
-            device_info = audio.get_default_input_device_info()
+    device_info = _get_device_info_safe(audio, device_index)
+    device_name = device_info.get("name")
+    bluetooth = _is_bluetooth_device(device_name)
+    settle_s = 0.15 if bluetooth else 0.0
 
-        default_rate = int(device_info.get("defaultSampleRate", 0))
-        if default_rate > 0 and default_rate in COMMON_RATES:
-            # Test if the default rate actually works
-            try:
-                stream_kwargs = {
-                    "format": FORMAT,
-                    "channels": channels,
-                    "rate": default_rate,
-                    "input": True,
-                    "frames_per_buffer": CHUNK,
-                }
-                if device_index is not None:
-                    stream_kwargs["input_device_index"] = device_index
-
-                test_stream = audio.open(**stream_kwargs)
-                test_stream.close()
-                logger.debug(f"Using device default sample rate: {default_rate}Hz")
-                return default_rate
-            except (IOError, OSError):
-                logger.debug(f"Device default rate {default_rate}Hz failed, trying common rates")
-    except (IOError, OSError) as e:
-        logger.debug(f"Could not get device default rate: {e}")
-
-    # Try common sample rates in order of preference
+    rates_to_try: list[int] = []
+    default_rate = int(device_info.get("defaultSampleRate", 0) or 0)
+    if default_rate > 0:
+        rates_to_try.append(default_rate)
     for rate in COMMON_RATES:
+        if rate not in rates_to_try:
+            rates_to_try.append(rate)
+
+    for rate in rates_to_try:
+        test_stream = None
         try:
             stream_kwargs = {
                 "format": FORMAT,
@@ -498,11 +577,15 @@ def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int
                 stream_kwargs["input_device_index"] = device_index
 
             test_stream = audio.open(**stream_kwargs)
-            test_stream.close()
+            _safe_close_stream(test_stream)
+            test_stream = None
             logger.debug(f"Found supported sample rate: {rate}Hz")
             return rate
         except (IOError, OSError):
-            continue
+            if settle_s:
+                time.sleep(settle_s)
+        finally:
+            _safe_close_stream(test_stream)
 
     # Fallback to 16kHz if nothing works
     logger.warning("Could not find supported sample rate, defaulting to 16000Hz")
@@ -561,15 +644,13 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             audio.terminate()
             return result
 
-        # Detect supported channel count first (some devices require stereo)
-        CHANNELS = _get_supported_channels(audio, device_index)
+        # Probe channels + rate together (avoids a second Bluetooth SCO open/close).
+        CHANNELS, RATE = _probe_audio_format(audio, device_index)
         logger.info(f"Using {CHANNELS} channel(s) for audio test")
-
-        # Detect supported sample rate for this device
-        RATE = _get_supported_sample_rate(audio, device_index, CHANNELS)
         result["sample_rate"] = RATE
 
         # Open stream
+        stream = None
         try:
             stream_kwargs = {
                 "format": FORMAT,
@@ -584,6 +665,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             stream = audio.open(**stream_kwargs)
         except (IOError, OSError) as e:
             result["error"] = f"Cannot open audio stream: {e}"
+            _safe_close_stream(stream)
             audio.terminate()
             return result
 
@@ -601,8 +683,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
                 result["error"] = f"Error reading audio: {e}"
                 break
 
-        stream.stop_stream()
-        stream.close()
+        _safe_close_stream(stream)
         audio.terminate()
 
         if all_amplitudes:
@@ -2460,12 +2541,9 @@ class SpeechRecognitionManager:
                 except (IOError, OSError):
                     continue
 
-            # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio, resolved_device_index)
+            # Probe channels + rate together (avoids a second Bluetooth SCO open/close).
+            CHANNELS, RATE = _probe_audio_format(audio, resolved_device_index)
             logger.info(f"Using {CHANNELS} channel(s) for recording")
-
-            # Detect supported sample rate for the selected device
-            RATE = _get_supported_sample_rate(audio, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.info(f"Using sample rate: {RATE}Hz")
 
@@ -3089,12 +3167,9 @@ class SpeechRecognitionManager:
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
 
-            # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio_instance, resolved_device_index)
+            # Probe channels + rate together (avoids a second Bluetooth SCO open/close).
+            CHANNELS, RATE = _probe_audio_format(audio_instance, resolved_device_index)
             logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
-
-            # Detect supported sample rate for the device
-            RATE = _get_supported_sample_rate(audio_instance, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
