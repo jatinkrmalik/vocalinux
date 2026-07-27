@@ -373,12 +373,18 @@ curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install
 ### Old Version Still Running
 
 ```bash
-# Kill any running instances
-pkill -f vocalinux
+# Prefer stopping from the tray, or kill by the PID in the lock file:
+kill "$(tr -d '[:space:]' < "${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux/instance.lock")"
+
+# If you used IBus injection, also stop the engine:
+kill "$(tr -d '[:space:]' < "${XDG_DATA_HOME:-$HOME/.local/share}/vocalinux-ibus/engine.pid")"
 
 # Start fresh
 vocalinux
 ```
+
+Avoid `pkill -f vocalinux` — it matches any process whose command line
+mentions the repo path (editors, shells, test runners) and can kill unrelated work.
 
 ### Missing Dependencies
 
