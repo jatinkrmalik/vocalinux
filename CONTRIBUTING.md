@@ -13,6 +13,7 @@ This document provides guidelines and instructions for contributing to the proje
 - [Testing](#testing)
 - [Pull Request Process](#pull-request-process)
 - [Release Process](#release-process)
+- [Repository mirrors](#repository-mirrors)
 - [Community](#community)
 
 ## Code of Conduct
@@ -317,6 +318,16 @@ We follow [Semantic Versioning](https://semver.org/):
 
 - **MAJOR.MINOR.PATCH** (e.g., `1.2.3`)
 - Pre-release: `x.y.z-alpha`, `x.y.z-beta`, `x.y.z-rc.1`
+
+## Repository mirrors
+
+GitHub is the canonical place to contribute (issues, pull requests, discussions, and CI).
+
+A read-only git mirror may also be available on Codeberg for source redundancy:
+
+- https://codeberg.org/jatinkrmalik/vocalinux
+
+Do not open issues or pull requests on the mirror. Maintainer setup: [docs/CODEBERG_MIRROR.md](docs/CODEBERG_MIRROR.md).
 
 ## Community
 
