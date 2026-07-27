@@ -346,9 +346,11 @@ SETTINGS_CSS = """
     background-color: alpha(@theme_selected_bg_color, 0.2);
 }
 
-.notebook tab:selected {
+/* GTK3 marks the selected notebook tab with :checked (not :selected) */
+.notebook tab:checked {
     background-color: transparent;
     color: @theme_fg_color;
+    box-shadow: inset 0 -3px @theme_selected_bg_color;
 }
 
 .notebook tab label {
@@ -356,8 +358,8 @@ SETTINGS_CSS = """
     font-size: 0.95em;
 }
 
-.notebook tab:selected label {
-    font-weight: 600;
+.notebook tab:checked label {
+    font-weight: 700;
 }
 
 .notebook header {
