@@ -74,12 +74,17 @@ is_vocalinux_process() {
         return 0
     fi
 
-    # Console-script entrypoints: argv0 basename is exactly vocalinux / vocalinux-gui
-    local argv0
-    argv0=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -n1)
-    case "$(basename -- "$argv0")" in
-        vocalinux|vocalinux-gui) return 0 ;;
-    esac
+    # Console-script entrypoints. Setuptools scripts are executed as
+    # `python …/bin/vocalinux`, so argv0 is python — scan every arg for the
+    # script path (require …/bin/vocalinux to avoid matching a repo directory).
+    local arg
+    while IFS= read -r -d '' arg; do
+        case "$arg" in
+            vocalinux|vocalinux-gui|*/bin/vocalinux|*/bin/vocalinux-gui)
+                return 0
+                ;;
+        esac
+    done < "/proc/$pid/cmdline"
 
     return 1
 }
