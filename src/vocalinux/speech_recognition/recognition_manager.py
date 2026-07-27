@@ -842,6 +842,7 @@ class SpeechRecognitionManager:
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
         self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
+        self.whispercpp_gpu_device = kwargs.get("whispercpp_gpu_device", None)
 
         # Remote API settings
         self.remote_api_url = kwargs.get("remote_api_url", "")
@@ -1198,11 +1199,31 @@ class SpeechRecognitionManager:
                 )
         return compatible_kwargs
 
-    def _load_model_with_compatible_params(self, model_path: str, model_kwargs: dict):
+    def _load_model_with_compatible_params(
+        self, model_path: str, model_kwargs: dict, gpu_device: Optional[int] = None
+    ):
         from pywhispercpp.model import Model
 
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
-        return Model(model_path, **compatible_kwargs)
+        if gpu_device is not None and gpu_device >= 0:
+            compatible_kwargs["context_params"] = {"gpu_device": gpu_device}
+
+        try:
+            return Model(model_path, **compatible_kwargs)
+        except TypeError as exc:
+            # Older pywhispercpp releases (< ~1.4.0) do not accept context_params.
+            # Retry without GPU device selection so the engine still loads.
+            if "context_params" in compatible_kwargs and (
+                "context_params" in str(exc) or "unexpected keyword" in str(exc)
+            ):
+                logger.warning(
+                    "pywhispercpp does not support context_params; "
+                    "upgrade pywhispercpp to enable GPU device selection. "
+                    f"Falling back to default device. Error: {exc}"
+                )
+                compatible_kwargs.pop("context_params")
+                return Model(model_path, **compatible_kwargs)
+            raise
 
     def _detect_pywhispercpp_gpu_backend(self) -> str:
         """Detect whether pywhispercpp's native library actually has GPU support."""
@@ -1235,7 +1256,9 @@ class SpeechRecognitionManager:
 
         from ..utils.whispercpp_model_info import (
             ComputeBackend,
+            _prefer_discrete_vulkan_device,
             detect_compute_backend,
+            detect_vulkan_devices,
             get_backend_display_name,
         )
 
@@ -1245,6 +1268,22 @@ class SpeechRecognitionManager:
         logger.info(
             f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
         )
+
+        # Select Vulkan GPU via pywhispercpp context_params (GGML_VULKAN_DEVICE is ignored).
+        selected_gpu_device = None
+        if backend == ComputeBackend.VULKAN:
+            gpu_device_index = self.whispercpp_gpu_device
+            if gpu_device_index is None or gpu_device_index < 0:
+                gpu_device_index = _prefer_discrete_vulkan_device()
+
+            if gpu_device_index is not None:
+                devices = detect_vulkan_devices()
+                device_name = next(
+                    (d["name"] for d in devices if d["index"] == gpu_device_index),
+                    "unknown",
+                )
+                logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
+                selected_gpu_device = gpu_device_index
 
         # Log hardware summary
         import psutil
@@ -1279,7 +1318,9 @@ class SpeechRecognitionManager:
 
         # Attempt to load model; filter unsupported params and fall back to CPU if needed
         try:
-            self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
+            self.model = self._load_model_with_compatible_params(
+                model_path, model_kwargs, gpu_device=selected_gpu_device
+            )
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
                 model_error, model_path, model_kwargs, ComputeBackend.CPU
@@ -2895,6 +2936,7 @@ class SpeechRecognitionManager:
             "whispercpp_logprob_thold",
             "whispercpp_no_speech_thold",
             "whispercpp_n_threads",
+            "whispercpp_gpu_device",
         ):
             if param_name in kwargs:
                 setattr(self, param_name, kwargs[param_name])
