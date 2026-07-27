@@ -1,5 +1,4 @@
 # Push git data to the Codeberg read-only mirror after changes land on main.
-# Inactive until CODEBERG_MIRROR_SSH_KEY is set (Codeberg deploy key with write access).
 name: Mirror to Codeberg
 
 on:
