@@ -395,6 +395,17 @@ vocalinux/
 - [Distribution Compatibility](docs/DISTRO_COMPATIBILITY.md) - Distro/session behavior and caveats
 - [Contributing](CONTRIBUTING.md) - Development setup and contribution guidelines
 
+## Repository mirrors
+
+GitHub is the **primary** forge for issues, pull requests, CI, and releases.
+
+| Role | URL |
+|------|-----|
+| Primary | https://github.com/jatinkrmalik/vocalinux |
+| Read-only mirror (Codeberg) | https://codeberg.org/jatinkrmalik/vocalinux |
+
+The Codeberg copy is a read-only source backup. Open issues and PRs on GitHub only.
+
 ## 🔊 Sound Customization
 
 Vocalinux uses smooth, pleasant gliding tones for audio feedback:

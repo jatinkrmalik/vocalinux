@@ -1,0 +1,43 @@
+# Push git data to the Codeberg read-only mirror after changes land on main.
+name: Mirror to Codeberg
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: codeberg-mirror
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    name: Push to Codeberg
+    runs-on: ubuntu-latest
+    if: github.repository == 'jatinkrmalik/vocalinux'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirror branches and tags to Codeberg
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.CODEBERG_MIRROR_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_PRIVATE_KEY}" ]; then
+            echo "CODEBERG_MIRROR_SSH_KEY is not set; skipping mirror push."
+            exit 0
+          fi
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/codeberg_mirror
+          chmod 600 ~/.ssh/codeberg_mirror
+          ssh-keyscan -t ed25519,rsa codeberg.org >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/codeberg_mirror -o IdentitiesOnly=yes"
+
+          git remote add codeberg git@codeberg.org:jatinkrmalik/vocalinux.git
+          git push codeberg --all
+          git push codeberg --tags
