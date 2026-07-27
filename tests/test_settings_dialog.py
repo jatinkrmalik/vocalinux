@@ -752,6 +752,13 @@ class TestSettingsSearch(unittest.TestCase):
         self.assertIn("Gtk.Revealer", source)
         self.assertIn("parent.get_reveal_child()", source)
 
+    def test_clearing_search_restores_previous_page(self):
+        """Clearing a no-results search must leave a real page selected."""
+        source = self._settings_source()
+        self.assertIn("self._search_previous_page = visible_page", source)
+        self.assertIn("self.sidebar_listbox.select_row(page.sidebar_row)", source)
+        self.assertIn("self.settings_stack.set_visible_child_name(page.name)", source)
+
     @staticmethod
     def _settings_source():
         import os

@@ -1206,6 +1206,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Search state: baseline visibility snapshot while a query is active.
         self._search_baseline = None
+        self._search_previous_page = None
 
         # Set content_box to speech_engine_tab for backward compatibility
         self.content_box = self.speech_engine_tab
@@ -1325,6 +1326,10 @@ class SettingsDialog(Gtk.Dialog):
 
     def _snapshot_search_baseline(self):
         """Remember pre-search visibility so clearing the query restores it."""
+        visible_page = self.settings_stack.get_visible_child_name()
+        page_names = {page.name for page in self._pages}
+        self._search_previous_page = visible_page if visible_page in page_names else "dictation"
+
         baseline = {"rows": {}, "groups": {}, "extras": {}}
         for page in self._pages:
             for group in page.groups:
@@ -1360,6 +1365,14 @@ class SettingsDialog(Gtk.Dialog):
         # Engine-driven visibility is authoritative; re-apply it in case a
         # control changed while the filter was active.
         self._update_engine_specific_ui()
+
+        page = next(
+            (page for page in self._pages if page.name == self._search_previous_page),
+            self._pages[0],
+        )
+        self.sidebar_listbox.select_row(page.sidebar_row)
+        self.settings_stack.set_visible_child_name(page.name)
+        self._search_previous_page = None
 
     def _on_search_changed(self, entry):
         """Live-filter settings rows across all pages."""
