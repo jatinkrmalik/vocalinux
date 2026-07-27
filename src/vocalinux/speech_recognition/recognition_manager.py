@@ -816,6 +816,10 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
         self._defer_download = defer_download
         self._model_initialized = False
+        # True while auto-pause has unloaded the model for a configured app/game
+        self._auto_paused = False
+        # True while idle keep-alive has unloaded the model (dictation may lazy-reload)
+        self._idle_unloaded = False
 
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
@@ -2282,18 +2286,45 @@ class SpeechRecognitionManager:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
             return
 
-        # Check if model is ready
-        if not self.model_ready:
+        if self._auto_paused:
             logger.warning(
-                "Cannot start recognition: model not downloaded. " "Please download via Settings."
+                "Cannot start recognition: auto-paused while a configured app/game is running"
             )
             play_error_sound()
             _show_notification(
-                "No Speech Model",
-                "Please open Settings and download a speech recognition model " "to use dictation.",
-                "dialog-warning",
+                "Dictation Paused",
+                "Vocalinux is paused because a listed game or app is running. "
+                "Close that app or remove it from Auto-Pause settings to resume.",
+                "dialog-information",
             )
             return
+
+        # Check if model is ready (lazy-reload after idle keep-alive unload)
+        if not self.model_ready:
+            if self._idle_unloaded:
+                logger.info("Model was unloaded by keep-alive; reloading before dictation")
+                if not self.ensure_model_loaded():
+                    play_error_sound()
+                    _show_notification(
+                        "Model Reload Failed",
+                        "Vocalinux could not reload the speech model. "
+                        "Open Settings to check your engine and try again.",
+                        "dialog-warning",
+                    )
+                    return
+            else:
+                logger.warning(
+                    "Cannot start recognition: model not downloaded. "
+                    "Please download via Settings."
+                )
+                play_error_sound()
+                _show_notification(
+                    "No Speech Model",
+                    "Please open Settings and download a speech recognition model "
+                    "to use dictation.",
+                    "dialog-warning",
+                )
+                return
 
         logger.info("Starting speech recognition")
         self._update_state(RecognitionState.LISTENING)
@@ -3109,12 +3140,92 @@ class SpeechRecognitionManager:
             logger.error(f"Unexpected error during audio reconnection: {e}")
             return False
 
+    def unload_model(self, reason: str = "auto_pause") -> None:
+        """Stop recognition (if active) and release model resources from memory.
+
+        Args:
+            reason: Why the model is being unloaded:
+                - ``"auto_pause"``: a configured game/app is running; dictation is blocked
+                  until :meth:`reinitialize_after_resume` (or auto-pause resume).
+                - ``"idle_keepalive"``: idle keep-alive timeout; next dictation may
+                  lazy-reload via :meth:`ensure_model_loaded`.
+                - ``"manual"`` / other: unload only without setting pause/idle flags.
+        """
+        logger.info("Unloading speech model (reason=%s)", reason)
+
+        if self.state != RecognitionState.IDLE:
+            logger.info("Stopping active recognition before model unload")
+            self.stop_recognition()
+
+        with self._model_lock:
+            self.model = None
+            self.recognizer = None
+            if self._http_session is not None:
+                try:
+                    self._http_session.close()
+                except Exception:
+                    logger.debug("Error closing HTTP session during unload", exc_info=True)
+                self._http_session = None
+            self._model_initialized = False
+
+        if reason == "auto_pause":
+            self._auto_paused = True
+            self._idle_unloaded = False
+            logger.info("Speech model unloaded; dictation blocked until auto-pause clears")
+        elif reason == "idle_keepalive":
+            # Auto-pause owns lifecycle if both could apply
+            if not self._auto_paused:
+                self._idle_unloaded = True
+            logger.info("Speech model unloaded after idle keep-alive timeout")
+        else:
+            logger.info("Speech model unloaded")
+
+        try:
+            import gc
+
+            gc.collect()
+        except Exception:
+            pass
+
+    @property
+    def is_auto_paused(self) -> bool:
+        """True when the model was unloaded for auto-pause and not yet reloaded."""
+        return bool(self._auto_paused)
+
+    @property
+    def is_idle_unloaded(self) -> bool:
+        """True when the model was unloaded by idle keep-alive and not yet reloaded."""
+        return bool(self._idle_unloaded)
+
+    def ensure_model_loaded(self) -> bool:
+        """Ensure the speech model is loaded and ready for dictation.
+
+        Returns:
+            True if the model is ready after this call. Returns False when
+            auto-pause still owns the unload, or when reload fails.
+        """
+        if self.model_ready:
+            return True
+        if self._auto_paused:
+            logger.warning("Cannot load model: auto-pause is still active")
+            return False
+
+        try:
+            self.reinitialize_after_resume()
+        except Exception:
+            logger.error("ensure_model_loaded failed", exc_info=True)
+            return False
+
+        return self.model_ready
+
     def reinitialize_after_resume(self):
         """Reinitialize the speech engine after system resume from suspend.
 
         Stops any active recognition, releases stale model resources,
         and re-creates the engine so that the audio pipeline and model
         are in a clean state for new dictation.
+
+        Also used after auto-pause / idle keep-alive to reload the model.
         """
         logger.info("Reinitializing speech engine after system resume")
 
@@ -3143,6 +3254,8 @@ class SpeechRecognitionManager:
                     logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
                     return
 
+                self._auto_paused = False
+                self._idle_unloaded = False
                 logger.info("Speech engine reinitialized after resume")
             except Exception:
                 logger.error("Failed to reinitialize speech engine after resume", exc_info=True)

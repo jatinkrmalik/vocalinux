@@ -59,6 +59,19 @@ DEFAULT_CONFIG = {
         "autostart": False,
         "first_run": True,
     },
+    "auto_pause": {
+        # When enabled, unload the speech model while any listed process is running
+        # so games/apps can use full CPU/GPU/RAM. Model reloads when they exit.
+        "enabled": False,
+        "apps": [],  # Process/executable basenames, e.g. ["overwatch", "steam"]
+        "poll_interval_seconds": 5,  # How often to scan running processes
+    },
+    "model_keepalive": {
+        # Opt-in idle unload so hybrid-GPU laptops can release VRAM/Vulkan and
+        # let the dGPU sleep. Next dictation lazy-reloads the model (cold start).
+        "enabled": False,
+        "idle_timeout_seconds": 300,  # 5 minutes when enabled
+    },
     "text_injection": {
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
     },
