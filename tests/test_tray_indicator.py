@@ -323,7 +323,7 @@ class TestTrayIndicator(unittest.TestCase):
             result = self.tray_indicator._update_ui(self.RecognitionState.LISTENING)
 
         self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
-            "vocalinux-microphone", "Microphone on"
+            self.tray_indicator._icon_keys["active"], "Microphone on"
         )
         self.assertEqual(result, False)
 
@@ -340,7 +340,7 @@ class TestTrayIndicator(unittest.TestCase):
             result = self.tray_indicator._update_ui(self.RecognitionState.PROCESSING)
 
         self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
-            "vocalinux-microphone-process", "Processing speech"
+            self.tray_indicator._icon_keys["processing"], "Processing speech"
         )
         self.assertEqual(result, False)
 
@@ -357,7 +357,7 @@ class TestTrayIndicator(unittest.TestCase):
             result = self.tray_indicator._update_ui(self.RecognitionState.ERROR)
 
         self.tray_indicator.indicator.set_icon_full.assert_called_once_with(
-            "vocalinux-microphone-off", "Error"
+            self.tray_indicator._icon_keys["default"], "Error"
         )
         self.assertEqual(result, False)
 
@@ -515,7 +515,12 @@ class TestTrayIndicator(unittest.TestCase):
         from vocalinux.ui.tray_indicator import TrayIndicator
 
         tray = TrayIndicator.__new__(TrayIndicator)
-        tray.icon_paths = {}
+        tray.icon_paths = {
+            "default": "/tmp/fake-off.svg",
+            "active": "/tmp/fake-on.svg",
+            "processing": "/tmp/fake-process.svg",
+        }
+        tray._icon_keys = dict(tray.icon_paths)
         tray._show_appindicator_error_dialog = MagicMock(return_value=False)
 
         with patch("vocalinux.ui.tray_indicator.os.path.exists", return_value=False):
