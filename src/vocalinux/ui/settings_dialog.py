@@ -2235,6 +2235,7 @@ class SettingsDialog(Gtk.Dialog):
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
         self.voice_commands_switch.connect("state-set", self._on_voice_commands_toggled)
+        self.auto_capitalize_switch.connect("state-set", self._on_auto_capitalize_toggled)
 
     def _build_shortcuts_section(self):
         """Build the Keyboard Shortcuts section."""
