@@ -1,6 +1,8 @@
 <div align="center">
 
-# <img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="36" height="36" alt="Vocalinux"> Vocalinux
+<img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="50" height="50" alt="Vocalinux"> 
+
+# Vocalinux
 
 **Voice-to-text for Linux, finally done right!**
 
