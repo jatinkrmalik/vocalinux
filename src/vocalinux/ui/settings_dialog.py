@@ -89,7 +89,7 @@ ENGINE_MODELS = {
 ENGINE_DISPLAY_NAMES = {
     "vosk": "Vosk",
     "whisper": "Whisper",
-    "whisper_cpp": "Whisper_cpp",
+    "whisper_cpp": "whisper.cpp",
     "remote_api": "Remote API",
 }
 
@@ -3657,8 +3657,7 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_advanced_tab_sensitivity(self):
         """Enable or disable advanced settings based on selected engine."""
-        engine_text = self.engine_combo.get_active_text()
-        is_whispercpp = engine_text and engine_text.lower() == "whisper_cpp"
+        is_whispercpp = self._get_selected_engine() == "whisper_cpp"
 
         widgets = [
             self.advanced_no_timestamps_switch,

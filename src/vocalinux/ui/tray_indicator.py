@@ -239,6 +239,7 @@ class TrayIndicator:
                 )
                 self.indicator.set_icon_theme_path(ICON_DIR)
             self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+            self.indicator.set_title("Vocalinux")
         except Exception as e:
             logger.error(f"Failed to create AppIndicator: {e}")
             GLib.idle_add(self._show_appindicator_error_dialog, str(e))
