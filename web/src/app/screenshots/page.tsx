@@ -155,6 +155,26 @@ export default function ScreenshotsPage() {
         </p>
       </section>
 
+      <section className="mb-12">
+        <h2 className="mb-3 font-display text-2xl font-semibold">Demo video</h2>
+        <p className="mb-5 max-w-2xl text-muted-foreground">
+          A short walkthrough of toggle dictation into a text editor, plus
+          settings and the one-line install.
+        </p>
+        <div className="overflow-hidden rounded-[12px] border border-border bg-zinc-950">
+          <video
+            className="aspect-video h-auto w-full"
+            controls
+            playsInline
+            preload="metadata"
+            poster="/demo/vocalinux-demo-poster.jpg"
+          >
+            <source src="/demo/vocalinux-demo.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </section>
+
       <ScreenshotGallery
         productShots={productShots}
         settingsShots={settingsShots}

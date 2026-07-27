@@ -321,6 +321,7 @@ export default function HomePage() {
   }, []);
 
   const navLinks = [
+    { href: "#demo", label: "Demo" },
     { href: "#features", label: "Features" },
     { href: "/screenshots/", label: "Screenshots" },
     { href: "#install", label: "Install" },
@@ -574,6 +575,34 @@ export default function HomePage() {
             >
               Distro notes
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Product demo video */}
+      <section
+        id="demo"
+        className="border-t border-border px-4 py-16 sm:px-6 sm:py-20"
+      >
+        <div className="mx-auto max-w-6xl min-w-0">
+          <div className="mb-8 max-w-2xl">
+            <h2 className="section-heading">See it dictate</h2>
+            <p className="section-lede">
+              Double-tap Ctrl, speak, and text lands in the focused app. Local
+              models, no cloud round-trip.
+            </p>
+          </div>
+          <div className="overflow-hidden rounded-[12px] border border-border bg-zinc-950">
+            <video
+              className="aspect-video h-auto w-full"
+              controls
+              playsInline
+              preload="metadata"
+              poster="/demo/vocalinux-demo-poster.jpg"
+            >
+              <source src="/demo/vocalinux-demo.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
           </div>
         </div>
       </section>
@@ -1154,6 +1183,7 @@ export default function HomePage() {
                 {
                   title: "Get started",
                   links: [
+                    { href: "#demo", label: "Demo" },
                     { href: "#features", label: "Features" },
                     { href: "/install/", label: "Install guide" },
                     { href: "/screenshots/", label: "Screenshots" },

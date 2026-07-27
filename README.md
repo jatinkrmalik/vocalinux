@@ -77,6 +77,14 @@ See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com
 - ⚙️ **Graphical settings** dialog for easy configuration
 - 📦 **3 engine choices** - whisper.cpp (default), OpenAI Whisper, or VOSK
 
+## 🎬 Demo
+
+Watch Vocalinux dictate into a Linux text editor (double-tap Ctrl, speak, text appears). ~75 seconds:
+
+https://github.com/jatinkrmalik/vocalinux/raw/main/demo/vocalinux-demo.mp4
+
+Also embedded on [vocalinux.com](https://vocalinux.com/#demo) and the [screenshots page](https://vocalinux.com/screenshots/). See [`demo/README.md`](demo/README.md) for how the video was made (all free/open-source tooling).
+
 ## 📸 Screenshots
 
 Vocalinux in action, plus the settings tabs from v0.14.0-beta. Full gallery on the [website screenshots page](https://vocalinux.com/screenshots/).
