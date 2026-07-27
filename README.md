@@ -394,7 +394,6 @@ vocalinux/
 - [User Guide](docs/USER_GUIDE.md) - Complete user documentation
 - [Distribution Compatibility](docs/DISTRO_COMPATIBILITY.md) - Distro/session behavior and caveats
 - [Contributing](CONTRIBUTING.md) - Development setup and contribution guidelines
-- [Codeberg mirror setup](docs/CODEBERG_MIRROR.md) - Read-only git mirror (maintainers)
 
 ## Repository mirrors
 
@@ -405,7 +404,7 @@ GitHub is the **primary** forge for issues, pull requests, CI, and releases.
 | Primary | https://github.com/jatinkrmalik/vocalinux |
 | Read-only mirror (Codeberg) | https://codeberg.org/jatinkrmalik/vocalinux |
 
-The Codeberg copy is a source backup so the project is not tied to a single host. Open issues and PRs on GitHub only. Setup steps: [docs/CODEBERG_MIRROR.md](docs/CODEBERG_MIRROR.md).
+The Codeberg copy is a read-only source backup. Open issues and PRs on GitHub only.
 
 ## 🔊 Sound Customization
 
