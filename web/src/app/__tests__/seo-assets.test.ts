@@ -21,8 +21,20 @@ describe("SEO Assets", () => {
 
   it("blocks crawler access to technical paths", () => {
     expect(robotsContent).toContain("Disallow: /api/");
-    expect(robotsContent).toContain("Disallow: /_next/");
     expect(robotsContent).toContain("Disallow: /out/");
+  });
+
+  it("does not block Next.js static assets needed for rendering", () => {
+    expect(robotsContent).not.toContain("Disallow: /_next/");
+  });
+
+  it("does not blanket-block query-string URLs", () => {
+    // Blocking all query strings causes GSC "Indexed, though blocked by robots.txt"
+    // for pages discovered with UTM/tracking params. Use canonicals instead.
+    const disallowRules = robotsContent
+      .split("\n")
+      .filter((line) => line.trimStart().startsWith("Disallow:"));
+    expect(disallowRules.some((line) => /\/\*\?\*/.test(line))).toBe(false);
   });
 
   it("includes core landing pages in sitemap", () => {
