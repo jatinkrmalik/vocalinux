@@ -75,6 +75,10 @@ DEFAULT_CONFIG = {
     "text_injection": {
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
         "auto_capitalize": True,  # Capitalize first letter of each sentence
+        # Append a trailing space after each completed transcription segment so
+        # the next dictation session (push-to-talk / toggle) continues cleanly
+        # without glueing onto the previous sentence ("Hello.This").
+        "append_trailing_space": True,
     },
     "advanced": {
         "power_user_mode": False,

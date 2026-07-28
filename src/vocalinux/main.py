@@ -21,6 +21,30 @@ logger = logging.getLogger(__name__)
 # dependency checking to provide better error messages for pip/pipx users
 
 
+def _should_append_trailing_space() -> bool:
+    """Return whether completed transcriptions should get a trailing space.
+
+    Reads config.json from disk on each call so Settings toggles take effect
+    immediately. TrayIndicator and main() each construct their own
+    ConfigManager, so an in-memory read from main's instance would miss
+    Settings writes (same pattern as TextInjector._should_copy_to_clipboard).
+    """
+    try:
+        import json
+        import os
+
+        from .utils.paths import config_dir
+
+        config_path = os.path.join(config_dir(), "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            return bool(config.get("text_injection", {}).get("append_trailing_space", True))
+    except Exception as e:
+        logger.debug(f"Could not read append_trailing_space setting: {e}")
+    return True
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(prog="vocalinux", description="Vocalinux")
@@ -434,9 +458,9 @@ def main():
         #
         #   text_callback(text: str)
         #       Called on the recognition thread when a transcription segment
-        #       is finalised.  The wrapper below strips whitespace, inserts
-        #       inter-segment spaces, injects the text, and records it so
-        #       "delete that" can undo it.
+        #       is finalised.  The wrapper below strips whitespace, optionally
+        #       appends a trailing space (or legacy leading separator), injects
+        #       the text, and records it so "delete that" can undo it.
         #
         #   action_callback(action: str) -> bool
         #       Called when a voice command (e.g. "undo", "select all") is
@@ -452,23 +476,19 @@ def main():
             """Bridge between speech engine text events and the text injector.
 
             Called on the recognition thread with each finalised transcription
-            segment.  Strips leading/trailing whitespace (whisper tokenizer
-            sometimes prepends spaces), inserts a single space between
-            consecutive segments, then injects via TextInjector.
+            segment.  Strips leading whitespace and trailing spaces/tabs (but
+            preserves trailing newlines from voice commands), then either
+            appends a trailing space (default) or uses the legacy in-session
+            leading-space separator, and injects via TextInjector.
 
             Args:
                 text: Raw transcription segment from the speech engine.
             """
-            text_to_inject = text.strip()
+            # Preserve trailing newlines ("new line" / "new paragraph"); only
+            # strip spaces/tabs that whisper sometimes wraps around tokens.
+            text_to_inject = text.lstrip().rstrip(" \t")
             if not text_to_inject:
                 return
-
-            # Add a separating space between consecutive dictation segments,
-            # but never for the very first segment (avoids unwanted leading space
-            # when starting dictation in an empty text field).
-            if action_handler.last_injected_text and action_handler.last_injected_text.strip():
-                text_to_inject = " " + text_to_inject
-                logger.debug("Added space separator before new segment")
 
             # Auto-capitalize sentences if enabled (Vosk only - Whisper outputs proper casing)
             auto_capitalize = config_manager.get("text_injection", "auto_capitalize")
@@ -476,6 +496,23 @@ def main():
                 from vocalinux.speech_recognition.command_processor import capitalize_sentences
 
                 text_to_inject = capitalize_sentences(text_to_inject)
+
+            # Read from disk so the Settings toggle applies without restart
+            # (main and tray each own a ConfigManager instance).
+            append_trailing_space = _should_append_trailing_space()
+
+            if append_trailing_space:
+                # Put the separator into the previous field so the next session
+                # (push-to-talk / toggle) continues cleanly without needing
+                # cross-session memory — and without a leading space in empty
+                # fields. Skip after newlines from "new line" / "new paragraph".
+                if not text_to_inject.endswith((" ", "\t", "\n")):
+                    text_to_inject += " "
+                    logger.debug("Appended trailing space after transcription segment")
+            elif action_handler.last_injected_text and action_handler.last_injected_text.strip():
+                # Legacy: leading space between consecutive in-session segments.
+                text_to_inject = " " + text_to_inject
+                logger.debug("Added space separator before new segment")
 
             success = text_system.inject_text(text_to_inject)
             if success:
