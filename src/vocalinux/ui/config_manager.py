@@ -59,8 +59,26 @@ DEFAULT_CONFIG = {
         "autostart": False,
         "first_run": True,
     },
+    "auto_pause": {
+        # When enabled, unload the speech model while any listed process is running
+        # so games/apps can use full CPU/GPU/RAM. Model reloads when they exit.
+        "enabled": False,
+        "apps": [],  # Process/executable basenames, e.g. ["overwatch", "steam"]
+        "poll_interval_seconds": 5,  # How often to scan running processes
+    },
+    "model_keepalive": {
+        # Opt-in idle unload so hybrid-GPU laptops can release VRAM/Vulkan and
+        # let the dGPU sleep. Next dictation lazy-reloads the model (cold start).
+        "enabled": False,
+        "idle_timeout_seconds": 300,  # 5 minutes when enabled
+    },
     "text_injection": {
         "copy_to_clipboard": False,  # Disabled by default; users can enable in Settings
+        "auto_capitalize": True,  # Capitalize first letter of each sentence
+        # Append a trailing space after each completed transcription segment so
+        # the next dictation session (push-to-talk / toggle) continues cleanly
+        # without glueing onto the previous sentence ("Hello.This").
+        "append_trailing_space": True,
     },
     "advanced": {
         "power_user_mode": False,
@@ -75,6 +93,7 @@ DEFAULT_CONFIG = {
         "whispercpp_logprob_thold": -1.0,
         "whispercpp_no_speech_thold": 0.6,
         "whispercpp_n_threads": 0,  # 0 = auto-detect optimal thread count; set to override
+        "whispercpp_gpu_device": None,  # None = auto-select discrete GPU; int = specific device index
     },
 }
 

@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
@@ -42,7 +42,10 @@ jobs:
             gobject-introspection \
             gir1.2-gtk-3.0 \
             gir1.2-appindicator3-0.1 \
-            gir1.2-ibus-1.0
+            gir1.2-ayatanaappindicator3-0.1 \
+            gir1.2-ibus-1.0 \
+            gir1.2-rsvg-2.0 \
+            librsvg2-common
 
       - name: Install build dependencies
         run: |
@@ -261,7 +264,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
 
@@ -284,7 +287,10 @@ jobs:
             gobject-introspection \
             gir1.2-gtk-3.0 \
             gir1.2-appindicator3-0.1 \
-            gir1.2-ibus-1.0
+            gir1.2-ayatanaappindicator3-0.1 \
+            gir1.2-ibus-1.0 \
+            gir1.2-rsvg-2.0 \
+            librsvg2-common
 
       - name: Install build dependencies
         run: |

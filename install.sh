@@ -44,27 +44,99 @@ print_kde_wayland_ibus_hint() {
     print_info "After changing it, restart Vocalinux or log out and back in."
 }
 
-get_vocalinux_pids() {
-    pgrep -f "vocalinux" 2>/dev/null | while read -r pid; do
-        [ -z "$pid" ] && continue
+# Read a numeric PID from a file (instance.lock / engine.pid). Empty if missing/invalid.
+read_pid_file() {
+    local file="$1"
+    local pid=""
 
-        if [ "$pid" = "$$" ] || [ "$pid" = "$PPID" ]; then
-            continue
-        fi
-
-        local stat
-        stat=$(ps -o stat= -p "$pid" 2>/dev/null | awk '{print $1}')
-        if [[ "$stat" == Z* ]]; then
-            continue
-        fi
-
-        local cmd
-        cmd=$(ps -o args= -p "$pid" 2>/dev/null)
-        if [[ "$cmd" == *"install.sh"* ]] || [[ "$cmd" == *"uninstall.sh"* ]]; then
-            continue
-        fi
-
+    [ -f "$file" ] || return 0
+    pid=$(tr -d '[:space:]' < "$file" 2>/dev/null || true)
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
         echo "$pid"
+    fi
+}
+
+# True only for the Vocalinux app / IBus engine — not editors, shells, or tests
+# whose argv merely contains the string "vocalinux" (e.g. cwd under the repo).
+is_vocalinux_process() {
+    local pid="$1"
+
+    if [ "$pid" = "$$" ] || [ "$pid" = "$PPID" ]; then
+        return 1
+    fi
+    [ -r "/proc/$pid/cmdline" ] || return 1
+
+    local stat
+    stat=$(ps -o stat= -p "$pid" 2>/dev/null | awk '{print $1}')
+    if [[ "$stat" == Z* ]]; then
+        return 1
+    fi
+
+    local cmdline
+    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+    [ -n "$cmdline" ] || return 1
+
+    # Never target the installer/uninstaller themselves
+    if [[ "$cmdline" == *"install.sh"* || "$cmdline" == *"uninstall.sh"* ]]; then
+        return 1
+    fi
+
+    # python -m vocalinux.main [--flags]
+    if [[ "$cmdline" == *"-m vocalinux.main"* ]]; then
+        return 0
+    fi
+
+    # IBus engine: .../vocalinux/.../ibus_engine.py
+    if [[ "$cmdline" == *"ibus_engine.py"* && "$cmdline" == *"vocalinux"* ]]; then
+        return 0
+    fi
+
+    # Console-script entrypoints. Setuptools scripts are executed as
+    # `python …/bin/vocalinux`, so argv0 is python — scan every arg for the
+    # script path (require …/bin/vocalinux to avoid matching a repo directory).
+    local arg
+    while IFS= read -r -d '' arg; do
+        case "$arg" in
+            vocalinux|vocalinux-gui|*/bin/vocalinux|*/bin/vocalinux-gui)
+                return 0
+                ;;
+        esac
+    done < "/proc/$pid/cmdline"
+
+    return 1
+}
+
+# Prefer the PIDs the app writes; fall back to narrow entrypoint patterns only.
+# Deliberately does NOT use `pgrep -f vocalinux` (matches editors/shells/cwd paths).
+get_vocalinux_pids() {
+    local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+    local -A seen=()
+    local pid candidate
+    local -a candidates=()
+
+    for candidate in \
+        "$(read_pid_file "$data_home/vocalinux/instance.lock")" \
+        "$(read_pid_file "$data_home/vocalinux-ibus/engine.pid")"
+    do
+        [ -n "$candidate" ] && candidates+=("$candidate")
+    done
+
+    # Fallback when PID files are missing/stale: exact process name or known argv.
+    while read -r candidate; do
+        [ -n "$candidate" ] && candidates+=("$candidate")
+    done < <(
+        pgrep -u "$(id -u)" -x vocalinux 2>/dev/null || true
+        pgrep -u "$(id -u)" -x vocalinux-gui 2>/dev/null || true
+        pgrep -u "$(id -u)" -f -- '-m vocalinux\.main' 2>/dev/null || true
+        pgrep -u "$(id -u)" -f -- 'vocalinux/.*/ibus_engine\.py' 2>/dev/null || true
+    )
+
+    for pid in "${candidates[@]}"; do
+        [ -n "${seen[$pid]:-}" ] && continue
+        seen[$pid]=1
+        if is_vocalinux_process "$pid"; then
+            echo "$pid"
+        fi
     done
 }
 
@@ -73,7 +145,13 @@ check_running_processes() {
     PIDS=$(get_vocalinux_pids || true)
 
     if [ -n "$PIDS" ]; then
-        print_warning "Found running Vocalinux process(es): $PIDS"
+        print_warning "Found running Vocalinux process(es):"
+        local pid
+        for pid in $PIDS; do
+            local cmd
+            cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || echo "?")
+            print_warning "  PID $pid: $cmd"
+        done
         echo ""
 
         if [[ "$NON_INTERACTIVE" == "yes" ]]; then
@@ -89,7 +167,8 @@ check_running_processes() {
         fi
 
         print_info "Stopping Vocalinux..."
-        echo "$PIDS" | xargs -r kill -TERM 2>/dev/null || true
+        # shellcheck disable=SC2086
+        echo $PIDS | xargs -r kill -TERM 2>/dev/null || true
         sleep 2
 
         local REMAINING_PIDS
@@ -97,7 +176,8 @@ check_running_processes() {
 
         if [ -n "$REMAINING_PIDS" ]; then
             print_warning "Some processes still running, forcing termination..."
-            echo "$REMAINING_PIDS" | xargs -r kill -KILL 2>/dev/null || true
+            # shellcheck disable=SC2086
+            echo $REMAINING_PIDS | xargs -r kill -KILL 2>/dev/null || true
             sleep 1
         fi
 

@@ -6,30 +6,9 @@ const config = {
 	// Configuration for custom domain deployment
 	distDir: 'out',
 
-	// Configure cache headers for static assets
-	// This generates a _headers file for platforms like Netlify/Vercel
-	async headers() {
-		return [
-			{
-				source: '/_next/static/:path*',
-				headers: [
-					{
-						key: 'Cache-Control',
-						value: 'public, max-age=31536000, immutable',
-					},
-				],
-			},
-			{
-				source: '/:all*(svg|jpg|jpeg|png|webp|avif|ico|woff|woff2)',
-				headers: [
-					{
-						key: 'Cache-Control',
-						value: 'public, max-age=31536000, immutable',
-					},
-				],
-			},
-		];
-	},
+	// Cache/security headers live in public/_headers (copied into the static
+	// export). next.config headers() is ignored with output: 'export' and only
+	// produces build warnings.
 	images: {
 		unoptimized: true,
 		formats: ['image/avif', 'image/webp'],

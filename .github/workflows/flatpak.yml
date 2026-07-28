@@ -51,7 +51,7 @@ jobs:
       options: --privileged
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build and bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6

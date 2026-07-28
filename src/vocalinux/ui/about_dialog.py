@@ -186,6 +186,11 @@ class AboutDialog(Gtk.Dialog):
         color: @theme_unfocused_fg_color;
         font-size: 0.85em;
     }
+
+    .about-dialog button {
+        min-height: 32px;
+        padding: 6px 14px;
+    }
     """
 
     def __init__(self, parent: Gtk.Window = None):
