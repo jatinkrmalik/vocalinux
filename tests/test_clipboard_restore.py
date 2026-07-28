@@ -359,6 +359,36 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
 
         self.assertEqual(copy_calls[-1], arabic_previous)
 
+    def test_restore_failure_is_handled_gracefully(self):
+        """No exception when _copy_to_clipboard returns False during restore."""
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        copy_calls: list[str] = []
+
+        def fake_copy(t: str) -> bool:
+            copy_calls.append(t)
+            # injection copy succeeds; restore copy fails
+            return t != "previous_content"
+
+        with patch.object(obj, "_read_clipboard", return_value="previous_content"):
+            with patch.object(obj, "_copy_to_clipboard", side_effect=fake_copy):
+                with patch.object(
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
+                ):
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            result = obj._inject_via_clipboard_paste("injected text")
+                            time.sleep(0.5)
+
+        self.assertTrue(result)
+        # The restore attempt was made but failed — no exception raised
+        self.assertIn("previous_content", copy_calls)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1040,7 +1040,7 @@ class TextInjector:
         except UnicodeEncodeError:
             return True
 
-    def _read_clipboard(self) -> str | None:
+    def _read_clipboard(self) -> Optional[str]:
         """
         Read the current clipboard content.
 
