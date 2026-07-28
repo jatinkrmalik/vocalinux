@@ -1828,7 +1828,13 @@ class TestCompositorIBusBridging(unittest.TestCase):
                 self.assertTrue(injector._wayland_compositor_bridges_ibus(), desktop)
 
     def test_unbridged_compositors_skip_ibus(self):
-        """COSMIC and wlroots compositors do not deliver IBus commits to native apps."""
+        """COSMIC and wlroots compositors do not deliver IBus commits to native apps.
+
+        The ibus-wayland bridge is explicitly absent here; see
+        ``test_unbridged_compositors_use_ibus_when_bridge_running`` for the
+        opposite case. Patching it keeps the result independent of whether the
+        machine running the suite happens to have the bridge up.
+        """
         injector = self._bare_injector()
         for desktop in ("COSMIC", "sway", "Hyprland", "wayfire", "niri", "river"):
             with patch.dict(
@@ -1839,7 +1845,55 @@ class TestCompositorIBusBridging(unittest.TestCase):
                     "DESKTOP_SESSION": desktop,
                 },
             ):
-                self.assertFalse(injector._wayland_compositor_bridges_ibus(), desktop)
+                with patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=False):
+                    self.assertFalse(injector._wayland_compositor_bridges_ibus(), desktop)
+
+    def test_unbridged_compositors_use_ibus_when_bridge_running(self):
+        """ibus-wayland supplies the input-method-v2 relay these compositors lack (#607)."""
+        injector = self._bare_injector()
+        for desktop in ("COSMIC", "sway", "Hyprland", "wayfire", "niri", "river"):
+            with patch.dict(
+                "os.environ",
+                {
+                    "XDG_CURRENT_DESKTOP": desktop,
+                    "XDG_SESSION_DESKTOP": desktop,
+                    "DESKTOP_SESSION": desktop,
+                },
+            ):
+                with patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=True):
+                    self.assertTrue(injector._wayland_compositor_bridges_ibus(), desktop)
+
+    def test_bridge_probe_not_consulted_for_bridged_desktops(self):
+        """GNOME and friends never reach the probe; behaviour there is unchanged."""
+        injector = self._bare_injector()
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_CURRENT_DESKTOP": "GNOME",
+                "XDG_SESSION_DESKTOP": "GNOME",
+                "DESKTOP_SESSION": "GNOME",
+                "KDE_FULL_SESSION": "",
+            },
+            clear=False,
+        ):
+            with patch.object(TextInjector, "_ibus_wayland_bridge_running") as probe:
+                self.assertTrue(injector._wayland_compositor_bridges_ibus())
+                probe.assert_not_called()
+
+    def test_bridge_probe_detects_running_process(self):
+        """The probe shells out to pgrep -x ibus-wayland."""
+        with patch("subprocess.run", return_value=MagicMock(returncode=0)) as run:
+            self.assertTrue(TextInjector._ibus_wayland_bridge_running())
+        self.assertEqual(run.call_args[0][0], ["pgrep", "-x", "ibus-wayland"])
+
+        with patch("subprocess.run", return_value=MagicMock(returncode=1)):
+            self.assertFalse(TextInjector._ibus_wayland_bridge_running())
+
+    def test_bridge_probe_survives_missing_pgrep(self):
+        """No pgrep (or a hung one) must not raise -- just report 'no bridge'."""
+        for boom in (FileNotFoundError(), subprocess.TimeoutExpired("pgrep", 2)):
+            with patch("subprocess.run", side_effect=boom):
+                self.assertFalse(TextInjector._ibus_wayland_bridge_running())
 
     def test_non_wayland_always_bridges(self):
         """On X11/XWayland IBus works via XIM regardless of desktop."""
@@ -2116,7 +2170,11 @@ class TestCompositorIBusBridging(unittest.TestCase):
                 "DESKTOP_SESSION": "cosmic",
             },
         ):
-            injector = TextInjector()
+            # No ibus-wayland relay here, so COSMIC stays unbridged. Stated
+            # explicitly because mock_run returns returncode=0 for every
+            # subprocess, which the bridge probe would otherwise read as a hit.
+            with patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=False):
+                injector = TextInjector()
 
         self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
         self.assertEqual(injector.wayland_tool, "wtype")
@@ -2142,3 +2200,26 @@ class TestCompositorIBusBridging(unittest.TestCase):
             ):
                 injector = TextInjector()
         self.assertEqual(injector.wayland_tool, "ydotool")
+
+
+class TestForcedBackend(unittest.TestCase):
+    """VOCALINUX_FORCE_BACKEND overrides backend autodetection."""
+
+    def test_unset_or_auto_means_auto(self):
+        for value in ("", "auto", "  AUTO  "):
+            with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": value}):
+                self.assertEqual(TextInjector._forced_backend(), "auto")
+
+    def test_recognised_backends(self):
+        for value in ("ibus", "wtype", "ydotool"):
+            with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": value.upper()}):
+                self.assertEqual(TextInjector._forced_backend(), value)
+
+    def test_unknown_value_falls_back_to_auto(self):
+        """A typo must not silently pin the wrong backend."""
+        with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": "ibsu"}):
+            self.assertEqual(TextInjector._forced_backend(), "auto")
+
+    def test_missing_variable_means_auto(self):
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(TextInjector._forced_backend(), "auto")

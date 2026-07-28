@@ -277,7 +277,7 @@ class TestCheckDependencies(unittest.TestCase):
         self.assertEqual(obj.wayland_tool, "wtype")
 
     def test_unbridged_wayland_skips_ibus_when_engine_is_xkb(self):
-        from vocalinux.text_injection.text_injector import DesktopEnvironment
+        from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
 
         obj = _make_injector(DesktopEnvironment.WAYLAND)
 
@@ -301,6 +301,10 @@ class TestCheckDependencies(unittest.TestCase):
                 "shutil.which",
                 side_effect=lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None,
             ),
+            # No ibus-wayland relay, so sway stays unbridged. Stated explicitly so
+            # the result does not depend on whether the machine running the suite
+            # happens to have the bridge up.
+            patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=False),
         ):
             obj._check_dependencies()
 
