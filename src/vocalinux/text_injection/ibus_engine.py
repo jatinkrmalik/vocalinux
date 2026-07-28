@@ -601,7 +601,13 @@ def _handle_engine_destroy(
         next_active_instance = None
 
     if ibus_available and super_destroy is not None:
-        super_destroy()
+        # The caller assigns our return value to _active_instance and clears the
+        # focus event, so a failing parent destroy must not skip that teardown:
+        # otherwise a destroyed engine stays registered as active with focus set.
+        try:
+            super_destroy()
+        except Exception:
+            logger.exception("Parent engine destroy failed; continuing teardown")
 
     return next_active_instance
 
@@ -866,7 +872,20 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
         logger.debug("VocalinuxEngine instance destroyed")
         super_destroy: Optional[Callable[[], None]] = None
         if IBUS_AVAILABLE:
-            super_destroy = super().do_destroy
+            parent_destroy = super().do_destroy
+
+            def destroy_via_parent() -> None:
+                # PyGObject binds this vfunc to the GType rather than to the
+                # instance, so calling it with no arguments raises
+                # "IBus.Object.destroy() takes exactly 1 argument (0 given)".
+                # Retry with the instance explicitly. The try/except keeps this
+                # working if a future PyGObject binds the vfunc correctly.
+                try:
+                    parent_destroy()
+                except TypeError:
+                    IBus.Object.destroy(self)
+
+            super_destroy = destroy_via_parent
         was_active = VocalinuxEngine._active_instance is self
         VocalinuxEngine._active_instance = _handle_engine_destroy(
             VocalinuxEngine._active_instance,

@@ -2015,6 +2015,47 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
 
         mock_super_destroy.assert_not_called()
 
+    def test_do_destroy_clears_active_instance_when_super_raises(self):
+        """A failing parent destroy must not skip teardown (#606).
+
+        PyGObject binds the destroy vfunc to the GType rather than the instance,
+        so ``super().do_destroy()`` raised TypeError on every teardown. That
+        exception escaped before the return value was assigned, leaving a
+        destroyed engine registered as active with the focus event still set.
+        """
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        engine = object()
+        failing_super_destroy = MagicMock(
+            side_effect=TypeError("IBus.Object.destroy() takes exactly 1 argument (0 given)")
+        )
+
+        next_active = _handle_engine_destroy(
+            active_instance=engine,
+            current_instance=engine,
+            ibus_available=True,
+            super_destroy=failing_super_destroy,
+        )
+
+        failing_super_destroy.assert_called_once()
+        self.assertIsNone(next_active)
+
+    def test_do_destroy_keeps_other_instance_when_super_raises(self):
+        """A failing parent destroy still returns the unrelated active engine (#606)."""
+        from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
+
+        active_engine = object()
+        failing_super_destroy = MagicMock(side_effect=RuntimeError("boom"))
+
+        next_active = _handle_engine_destroy(
+            active_instance=active_engine,
+            current_instance=object(),
+            ibus_available=True,
+            super_destroy=failing_super_destroy,
+        )
+
+        self.assertIs(next_active, active_engine)
+
     def test_do_destroy_handles_missing_super_callback(self):
         """Test destroy handler works when no parent destroy callback is provided."""
         from vocalinux.text_injection.ibus_engine import _handle_engine_destroy
