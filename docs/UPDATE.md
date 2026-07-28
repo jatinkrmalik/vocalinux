@@ -31,6 +31,7 @@ This guide explains how to update Vocalinux to the latest version.
 
 ### Bug Fixes
 
+- **Audio**: Stop Bluetooth mic probing from corrupting the heap — one PortAudio open per capture session, stop-before-close, no stereo probe on mono-only devices (#599, fixes #567)
 - **IBus**: Keep engine teardown correct when parent `do_destroy` fails (#613 by @eiseleb47, fixes #606)
 - **Settings UI**: Flatten info notices so helper text matches the rest of the dialog (#615)
 - **KDE Plasma Wayland**: Skip unbridged IBus when `ibus-wayland` is not present so injection does not silently fail (#577, fixes #574)

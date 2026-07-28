@@ -408,7 +408,7 @@ git push origin v0.5.1-beta
 | 0.14.0-beta | 2026-07-13 | Beta | Configurable modifier+key hotkeys, FunASR/SenseVoice remote-API support, GNOME/KDE Wayland IBus reliability fixes, audio crash fix, hybrid-CPU efficiency fix |
 | 0.14.1 | 2026-07-17 | Stable | Flatpak packaging, AUR package, layout-aware hotkeys, installer/text-injection fixes |
 | 0.14.2 | 2026-07-17 | Stable | IBus engine launch + FocusIn gate; settings tabs scroll to fit monitor |
-| 0.15.0 | 2026-07-28 | Stable | Searchable settings, AppImage, dictation capitalize/spacing, auto-pause/keepalive, Vulkan device selection, ibus-wayland |
+| 0.15.0 | 2026-07-28 | Stable | Searchable settings, AppImage, dictation capitalize/spacing, auto-pause/keepalive, Vulkan device selection, ibus-wayland, Bluetooth mic crash fix |
 
 ## Questions?
 

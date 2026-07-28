@@ -27,7 +27,7 @@ const releases = [
       "Wayland: use IBus on previously unbridged compositors when ibus-wayland is running (PR #614, closes #607)",
       "IBus: keep engine teardown correct when parent destroy fails (PR #613, fixes #606)",
       "CLI: vocalinux --version (PR #563, closes #555)",
-      "Settings info notices flattened; KDE unbridged-IBus skip when ibus-wayland is absent; xdotool focus preserve; installer/AUR fixes (PR #615, #577, #564, #583, #569, #597, #579, #586)",
+      "Settings info notices flattened; Bluetooth mic heap-corruption fix; KDE unbridged-IBus skip when ibus-wayland is absent; xdotool focus preserve; installer/AUR fixes (PR #615, #599, #577, #564, #583, #569, #597, #579, #586)",
       "Marketing site redesign; robots.txt indexing fix (PR #582, #610)",
     ],
   },

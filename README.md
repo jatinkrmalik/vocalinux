@@ -56,6 +56,7 @@ No internet required. No data leaves your machine. Just speak and type.
 ### Also in this release
 
 - CLI `--version` (#563)
+- Bluetooth mic probing no longer corrupts the heap / crashes on SCO capture devices (#599)
 - IBus engine teardown when parent destroy fails (#613)
 - Settings info notices flattened to match the rest of the dialog (#615)
 - KDE Plasma Wayland unbridged-IBus skip when ibus-wayland is absent (#577)
