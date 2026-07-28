@@ -284,6 +284,29 @@ class TextInjector:
         )
         return False
 
+    @staticmethod
+    def _ibus_wayland_bridge_running() -> bool:
+        """Whether IBus' zwp_input_method_v2 bridge (``ibus-wayland``) is running.
+
+        The ``_IBUS_UNBRIDGED_COMPOSITORS`` denylist assumes nothing sits between
+        the compositor and ibus-daemon. Since IBus 1.5.32 the ``ibus-wayland``
+        helper implements ``zwp_input_method_v2``, so on a compositor that
+        exposes ``zwp_input_method_manager_v2`` (the wlroots/smithay ones on the
+        denylist all do) it relays commits to native Wayland clients speaking
+        text-input-v3. When it is running, those compositors are bridged.
+
+        Mirrors ``is_ibus_daemon_running()`` in ibus_engine.py.
+        """
+        try:
+            result = subprocess.run(
+                ["pgrep", "-x", "ibus-wayland"],
+                capture_output=True,
+                timeout=2,
+            )
+            return result.returncode == 0
+        except (subprocess.SubprocessError, FileNotFoundError):
+            return False
+
     def _wayland_compositor_bridges_ibus(self) -> bool:
         """Whether native Wayland clients receive IBus commits on this compositor.
 
@@ -293,6 +316,12 @@ class TextInjector:
         those we must use a virtual-keyboard tool (wtype/ydotool) instead. We use
         a denylist rather than an allowlist so that unrecognised desktops keep the
         previous IBus-preferred behaviour.
+
+        A denylisted compositor is still bridged when ``ibus-wayland`` is running,
+        since that supplies exactly the input-method-v2 relay those compositors
+        lack (issue #607). The check is a live probe rather than configuration,
+        so this degrades back to the denylist on its own if the bridge dies or
+        was never started.
 
         On KDE Plasma Wayland, bridging also requires KWin VirtualKeyboard to be
         enabled (issue #574); otherwise commit_text succeeds at the IBus layer
@@ -306,6 +335,14 @@ class TextInjector:
             for var in ("XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION")
         ).lower()
         if any(name in desktop for name in self._IBUS_UNBRIDGED_COMPOSITORS):
+            if self._ibus_wayland_bridge_running():
+                logger.info(
+                    "Compositor '%s' is on the unbridged list, but the ibus-wayland "
+                    "input-method-v2 bridge is running; IBus can reach native "
+                    "Wayland clients.",
+                    os.environ.get("XDG_CURRENT_DESKTOP", "unknown"),
+                )
+                return True
             return False
         if _is_kde_plasma_session():
             return self._kde_virtual_keyboard_enabled()
@@ -415,13 +452,40 @@ class TextInjector:
         logger.warning("ydotoold did not become ready in time")
         return False
 
+    @staticmethod
+    def _forced_backend() -> str:
+        """Backend pinned via ``VOCALINUX_FORCE_BACKEND``, or ``"auto"``.
+
+        Autodetection has to infer whether IBus commits actually reach the
+        focused app, and it cannot verify that: ``commit_text()`` reports
+        success even when the text is dropped. This gives users an escape hatch
+        when the inference is wrong, and makes the two paths A/B-testable
+        without editing code.
+
+        Accepts ``ibus``, ``wtype``, ``ydotool`` or ``auto``. Anything else is
+        ignored with a warning, so a typo cannot silently pin a backend.
+        """
+        value = os.environ.get("VOCALINUX_FORCE_BACKEND", "").strip().lower()
+        if not value or value == "auto":
+            return "auto"
+        if value in ("ibus", "wtype", "ydotool"):
+            return value
+        logger.warning(
+            "Ignoring unknown VOCALINUX_FORCE_BACKEND=%r (expected ibus/wtype/ydotool/auto)",
+            value,
+        )
+        return "auto"
+
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
         ibus_requested = False
+        forced = self._forced_backend()
+        if forced != "auto":
+            logger.info("VOCALINUX_FORCE_BACKEND=%s: overriding backend autodetection", forced)
 
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely
-        if is_ibus_available():
+        if is_ibus_available() and forced in ("auto", "ibus"):
             ibus_active = is_ibus_active_input_method()
             gtk_im = os.environ.get("GTK_IM_MODULE", "").lower()
             qt_im = os.environ.get("QT_IM_MODULE", "").lower()
@@ -445,13 +509,16 @@ class TextInjector:
             # Check if IBus is the active input method (not just installed)
             # This is important because IBus may be installed but not being used,
             # e.g., when the user has configured ydotool or Fcitx instead.
-            if not ibus_active and not wayland_scoped_ibus:
+            # VOCALINUX_FORCE_BACKEND=ibus bypasses the reachability guards below
+            # and goes straight to setup.
+            force_ibus = forced == "ibus"
+            if not force_ibus and not ibus_active and not wayland_scoped_ibus:
                 logger.info(
                     "IBus is installed but not the active input method. "
                     "Falling back to alternative text injection method."
                 )
             # Check if ibus-daemon is running before attempting setup
-            elif not is_ibus_daemon_running():
+            elif not force_ibus and not is_ibus_daemon_running():
                 logger.info(
                     "IBus daemon not running. This is normal on some desktop environments "
                     "(e.g., KDE Plasma). Using alternative text injection method. "
@@ -460,7 +527,7 @@ class TextInjector:
             # Some Wayland compositors (COSMIC, Sway, Hyprland, ...) do not deliver
             # IBus commits to native Wayland apps, so IBus would silently drop the
             # text even though commit_text() reports success.
-            elif not self._wayland_compositor_bridges_ibus():
+            elif not force_ibus and not self._wayland_compositor_bridges_ibus():
                 logger.info(
                     "Compositor '%s' does not bridge IBus to native Wayland apps; "
                     "using virtual-keyboard injection (wtype/ydotool) instead.",
@@ -496,7 +563,14 @@ class TextInjector:
 
             # Prefer ydotool when the daemon is (or can be) ready. Flatpak ships
             # ydotool for native Wayland typing; wtype needs a Wayland socket.
-            if ydotool_available and self._ensure_ydotoold():
+            if forced == "wtype" and wtype_available:
+                self.wayland_tool = "wtype"
+                logger.info("VOCALINUX_FORCE_BACKEND=wtype: using wtype for Wayland injection")
+            elif forced == "ydotool" and ydotool_available:
+                self._ensure_ydotoold()
+                self.wayland_tool = "ydotool"
+                logger.info("VOCALINUX_FORCE_BACKEND=ydotool: using ydotool for Wayland injection")
+            elif ydotool_available and self._ensure_ydotoold():
                 self.wayland_tool = "ydotool"
                 logger.info("Using ydotool for Wayland text injection")
             elif ydotool_available and not wtype_available:
