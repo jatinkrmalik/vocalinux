@@ -32,7 +32,7 @@ from vocalinux.speech_recognition.recognition_manager import (
     _get_supported_channels,
     _get_supported_sample_rate,
     _is_bluetooth_device,
-    _probe_audio_format,
+    _open_capture_stream,
     _safe_close_stream,
     get_audio_input_devices,
 )
@@ -80,8 +80,8 @@ class TestAudioDeviceDetection(unittest.TestCase):
         _safe_close_stream(mock_stream)  # should not raise
         _safe_close_stream(None)  # should not raise
 
-    def test_probe_audio_format_returns_channels_and_rate(self):
-        """Combined probe should return the first working (channels, rate) pair."""
+    def test_open_capture_stream_returns_live_stream(self):
+        """Negotiation must return the opened stream, never close-and-reopen."""
         mock_audio = MagicMock()
         mock_stream = MagicMock()
         mock_audio.open.return_value = mock_stream
@@ -93,18 +93,21 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_pyaudio = MagicMock(paInt16=8)
 
         with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
-            channels, rate = _probe_audio_format(mock_audio, 0)
+            channels, rate, stream = _open_capture_stream(mock_audio, 0)
             assert channels == 1
             assert rate == 48000
+            assert stream is mock_stream
             assert mock_audio.open.call_count == 1
-            mock_stream.stop_stream.assert_called_once()
-            mock_stream.close.assert_called_once()
+            # The negotiated stream is handed to the caller live.
+            mock_stream.stop_stream.assert_not_called()
+            mock_stream.close.assert_not_called()
 
-    def test_probe_audio_format_bluetooth_single_open(self):
-        """Bluetooth devices must not be double-probed (Issue #567).
+    def test_open_capture_stream_bluetooth_single_open(self):
+        """Bluetooth SCO capture must be opened exactly once (Issue #567).
 
-        The previous channels-then-rate probing opened the SCO capture stream
-        twice in quick succession, which can abort with malloc heap corruption.
+        The previous channels-then-rate-then-real-open flow opened the SCO
+        capture stream three times in under a second, which aborts with
+        malloc heap corruption on devices like the HUAWEI FreeBuds Pro 3.
         """
         mock_audio = MagicMock()
         mock_stream = MagicMock()
@@ -117,20 +120,76 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_pyaudio = MagicMock(paInt16=8)
 
         with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
-            channels, rate = _probe_audio_format(mock_audio, 14)
+            channels, rate, stream = _open_capture_stream(mock_audio, 14)
             assert channels == 1
             assert rate == 16000
+            assert stream is mock_stream
             assert mock_audio.open.call_count == 1
 
-    def test_get_supported_sample_rate_reuses_known_rate(self):
-        """known_working_rate must skip opening another PortAudio stream."""
+    def test_open_capture_stream_mono_device_never_probes_stereo(self):
+        """Mono-only devices must never be opened with 2 channels.
+
+        Opening with more channels than the device supports is itself a
+        PortAudio/ALSA heap-corruption trigger.
+        """
         mock_audio = MagicMock()
+        mock_audio.open.side_effect = IOError("cannot open")
+        mock_audio.get_device_info_by_index.return_value = {
+            "name": "Bluetooth internal capture stream",
+            "defaultSampleRate": 16000,
+            "maxInputChannels": 1,
+        }
         mock_pyaudio = MagicMock(paInt16=8)
 
         with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
-            rate = _get_supported_sample_rate(mock_audio, 14, channels=1, known_working_rate=16000)
-            assert rate == 16000
-            mock_audio.open.assert_not_called()
+            with patch("vocalinux.speech_recognition.recognition_manager.time.sleep"):
+                channels, rate, stream = _open_capture_stream(mock_audio, 14)
+            assert stream is None
+            assert (channels, rate) == (1, 16000)
+            assert all(call.kwargs.get("channels") == 1 for call in mock_audio.open.call_args_list)
+
+    def test_open_capture_stream_failure_returns_none_stream(self):
+        """Total negotiation failure returns (1, 16000, None) for caller fallback."""
+        mock_audio = MagicMock()
+        mock_audio.open.side_effect = IOError("no device")
+        mock_audio.get_device_info_by_index.side_effect = IOError("gone")
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            channels, rate, stream = _open_capture_stream(mock_audio, 3)
+            assert (channels, rate, stream) == (1, 16000, None)
+
+    def test_test_audio_input_single_portaudio_open(self):
+        """The mic test must perform exactly ONE PortAudio open (Issue #567)."""
+        from vocalinux.speech_recognition.recognition_manager import test_audio_input
+
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = b"\x00\x01" * 1024
+        mock_audio = MagicMock()
+        mock_audio.open.return_value = mock_stream
+        mock_audio.get_device_info_by_index.return_value = {
+            "index": 14,
+            "name": "Bluetooth internal capture stream for HUAWEI FreeBuds Pro 3",
+            "defaultSampleRate": 16000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            # Other test modules poison sys.modules["numpy"] with a MagicMock
+            # at import time; drop it so test_audio_input gets real numpy.
+            # patch.dict restores the original sys.modules afterwards.
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            result = test_audio_input(device_index=14, duration=0.1)
+
+        assert result["success"] is True
+        assert mock_audio.open.call_count == 1
+        # The stream that was read from is the negotiated stream itself.
+        assert mock_stream.read.called
+        mock_stream.stop_stream.assert_called_once()
+        mock_stream.close.assert_called_once()
 
     def test_get_supported_channels_mono_success(self):
         """Test mono channel support detection."""

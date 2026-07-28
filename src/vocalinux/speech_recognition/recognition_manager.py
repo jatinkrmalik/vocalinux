@@ -408,25 +408,30 @@ def _resolve_valid_input_device(audio, preferred_index: Optional[int] = None) ->
     return input_device_indices[0]
 
 
-def _probe_audio_format(audio, device_index: Optional[int] = None) -> tuple[int, int]:
+def _open_capture_stream(audio, device_index: Optional[int] = None) -> tuple[int, int, object]:
     """
-    Find a working (channels, sample_rate) with a single successful open.
+    Negotiate a working (channels, sample_rate) and return the opened stream.
 
     Historically Vocalinux probed channels and sample rates separately, each
-    opening and closing PortAudio streams. Bluetooth headset capture (SCO/HFP
-    / PipeWire "Bluetooth internal capture stream") is especially sensitive to
-    that pattern and can abort the process with malloc heap corruption
-    (see GitHub issue #567).
+    opening and closing PortAudio streams, then opened the real capture stream
+    on top — three open/close cycles in under a second. Bluetooth headset
+    capture (SCO/HFP / PipeWire "Bluetooth internal capture stream") is
+    especially sensitive to that pattern and can abort the process with malloc
+    heap corruption (see GitHub issue #567).
 
-    This combined probe returns the first working pair and stops, so callers
-    can open the real capture stream without a redundant second probe cycle.
+    This function opens PortAudio exactly once per capture session: candidate
+    formats are tried in order (device default rate first, mono before stereo,
+    stereo skipped entirely for mono-only devices) and the FIRST successfully
+    opened stream is returned to the caller for actual capture — never closed
+    and reopened.
 
     Args:
         audio: PyAudio instance
-        device_index: The device index to test (None for default)
+        device_index: The device index to open (None for default)
 
     Returns:
-        Tuple of (channels, sample_rate). Defaults to (1, 16000) if probing fails.
+        Tuple of (channels, sample_rate, stream). If no format works, returns
+        (1, 16000, None) and the caller may attempt its own fallback open.
     """
     import pyaudio
 
@@ -437,31 +442,29 @@ def _probe_audio_format(audio, device_index: Optional[int] = None) -> tuple[int,
     device_info = _get_device_info_safe(audio, device_index)
     device_name = device_info.get("name")
     rates_to_try: list[int] = []
-    max_channels = 2
 
     default_rate = int(device_info.get("defaultSampleRate", 0) or 0)
     if default_rate > 0:
         rates_to_try.append(default_rate)
         logger.debug(f"Device reports default sample rate: {default_rate}Hz")
 
-    reported_channels = int(device_info.get("maxInputChannels", 0) or 0)
-    if reported_channels == 1:
-        max_channels = 1
-    elif reported_channels >= 2:
-        max_channels = 2
-
     for rate in COMMON_RATES:
         if rate not in rates_to_try:
             rates_to_try.append(rate)
 
-    channel_options = [1] if max_channels == 1 else [1, 2]
+    # Never probe stereo on a device that reports a single input channel
+    # (opening with more channels than supported is itself a known
+    # PortAudio/ALSA corruption trigger).
+    reported_channels = int(device_info.get("maxInputChannels", 0) or 0)
+    channel_options = [1] if reported_channels == 1 else [1, 2]
+
     bluetooth = _is_bluetooth_device(device_name)
-    # Brief settle helps BlueZ/Pulse release SCO between failed probe attempts.
+    # Brief settle helps BlueZ/Pulse release SCO between failed open attempts.
     settle_s = 0.15 if bluetooth else 0.0
 
     for channels in channel_options:
         for rate in rates_to_try:
-            test_stream = None
+            stream = None
             try:
                 stream_kwargs = {
                     "format": FORMAT,
@@ -473,32 +476,30 @@ def _probe_audio_format(audio, device_index: Optional[int] = None) -> tuple[int,
                 if device_index is not None:
                     stream_kwargs["input_device_index"] = device_index
 
-                test_stream = audio.open(**stream_kwargs)
-                _safe_close_stream(test_stream)
-                test_stream = None
-                logger.debug(f"Device supports {channels} channel(s) at {rate}Hz")
-                return channels, rate
+                stream = audio.open(**stream_kwargs)
+                logger.debug(f"Opened capture stream: {channels} channel(s) at {rate}Hz")
+                return channels, rate, stream
             except (IOError, OSError) as e:
+                _safe_close_stream(stream)
                 error_str = str(e).lower()
                 if "invalid number of channels" in error_str or "-9998" in error_str:
                     logger.debug(f"Device rejected {channels} channel(s) at {rate}Hz: {e}")
                 else:
-                    logger.debug(f"Format probe failed ({channels}ch @ {rate}Hz): {e}")
+                    logger.debug(f"Capture open failed ({channels}ch @ {rate}Hz): {e}")
                 if settle_s:
                     time.sleep(settle_s)
-            finally:
-                _safe_close_stream(test_stream)
 
-    logger.warning("Could not determine audio format, defaulting to 1ch/16000Hz")
-    return 1, 16000
+    logger.warning("Could not open capture stream, defaulting to 1ch/16000Hz")
+    return 1, 16000, None
 
 
 def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
     """
     Detect the supported number of channels for the audio device.
 
-    Prefer :func:`_probe_audio_format` when both channel count and sample rate
-    are needed, to avoid opening Bluetooth capture streams twice.
+    Production code should use :func:`_open_capture_stream`, which keeps the
+    negotiated stream open instead of closing and reopening it. This helper is
+    retained for standalone format queries.
 
     Args:
         audio: PyAudio instance
@@ -507,16 +508,12 @@ def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
     Returns:
         int: Number of channels supported (1 or 2), defaults to 1
     """
-    channels, _rate = _probe_audio_format(audio, device_index)
+    channels, _rate, stream = _open_capture_stream(audio, device_index)
+    _safe_close_stream(stream)
     return channels
 
 
-def _get_supported_sample_rate(
-    audio,
-    device_index: Optional[int],
-    channels: int = 1,
-    known_working_rate: Optional[int] = None,
-) -> int:
+def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int = 1) -> int:
     """
     Get a supported sample rate for the audio device.
 
@@ -524,24 +521,18 @@ def _get_supported_sample_rate(
     (e.g., 48kHz) and will fail with the default 16kHz. This function tests
     common sample rates and returns the highest supported one.
 
-    When ``known_working_rate`` is provided (from a prior successful probe),
-    that rate is returned without opening another PortAudio stream. This is
-    critical for Bluetooth headsets where a second open/close cycle can abort
-    the process with heap corruption.
+    Production code should use :func:`_open_capture_stream`, which negotiates
+    channels and rate with a single PortAudio open. This helper is retained
+    for standalone format queries.
 
     Args:
         audio: PyAudio instance
         device_index: The device index to test
         channels: Number of channels (default 1)
-        known_working_rate: Rate already verified by a prior probe
 
     Returns:
         int: A supported sample rate, defaulting to 16000 if none work
     """
-    if known_working_rate is not None and known_working_rate > 0:
-        logger.debug(f"Reusing known working sample rate: {known_working_rate}Hz")
-        return known_working_rate
-
     import pyaudio
 
     FORMAT = pyaudio.paInt16
@@ -644,30 +635,32 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             audio.terminate()
             return result
 
-        # Probe channels + rate together (avoids a second Bluetooth SCO open/close).
-        CHANNELS, RATE = _probe_audio_format(audio, device_index)
+        # Negotiate the format and open the capture stream in ONE PortAudio
+        # open — Bluetooth SCO devices abort with heap corruption when the
+        # stream is opened, closed, and quickly reopened (issue #567).
+        CHANNELS, RATE, stream = _open_capture_stream(audio, device_index)
         logger.info(f"Using {CHANNELS} channel(s) for audio test")
         result["sample_rate"] = RATE
 
-        # Open stream
-        stream = None
-        try:
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": CHANNELS,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
-            if device_index is not None:
-                stream_kwargs["input_device_index"] = device_index
+        if stream is None:
+            # Negotiation failed; try one last plain open so the error
+            # message reflects the real failure.
+            try:
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": CHANNELS,
+                    "rate": RATE,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
+                if device_index is not None:
+                    stream_kwargs["input_device_index"] = device_index
 
-            stream = audio.open(**stream_kwargs)
-        except (IOError, OSError) as e:
-            result["error"] = f"Cannot open audio stream: {e}"
-            _safe_close_stream(stream)
-            audio.terminate()
-            return result
+                stream = audio.open(**stream_kwargs)
+            except (IOError, OSError) as e:
+                result["error"] = f"Cannot open audio stream: {e}"
+                audio.terminate()
+                return result
 
         # Record and analyze
         all_amplitudes = []
@@ -2541,28 +2534,13 @@ class SpeechRecognitionManager:
                 except (IOError, OSError):
                     continue
 
-            # Probe channels + rate together (avoids a second Bluetooth SCO open/close).
-            CHANNELS, RATE = _probe_audio_format(audio, resolved_device_index)
+            # Negotiate the format and open the capture stream in ONE PortAudio
+            # open — Bluetooth SCO devices abort with heap corruption when the
+            # stream is opened, closed, and quickly reopened (issue #567).
+            CHANNELS, RATE, negotiated_stream = _open_capture_stream(audio, resolved_device_index)
             logger.info(f"Using {CHANNELS} channel(s) for recording")
             self._capture_sample_rate = RATE
             logger.info(f"Using sample rate: {RATE}Hz")
-
-            # Open microphone stream with optional device selection and reconnection logic
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": CHANNELS,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
-
-            # Use the resolved device (skip if already system default)
-            try:
-                default_idx = audio.get_default_input_device_info().get("index")
-            except (IOError, OSError):
-                default_idx = None
-            if resolved_device_index != default_idx:
-                stream_kwargs["input_device_index"] = resolved_device_index
 
             try:
                 device_info = audio.get_device_info_by_index(resolved_device_index)
@@ -2572,21 +2550,45 @@ class SpeechRecognitionManager:
             except (IOError, OSError):
                 logger.warning(f"Could not get info for device index {resolved_device_index}")
 
-            try:
-                self._audio_stream = audio.open(**stream_kwargs)
-                stream = self._audio_stream
-            except (IOError, OSError) as e:
-                logger.error(f"Failed to open audio stream: {e}")
-                logger.error("This may indicate a problem with the audio device or permissions.")
+            if negotiated_stream is not None:
+                self._audio_stream = negotiated_stream
+                stream = negotiated_stream
+            else:
+                # Negotiation failed; fall back to a plain open so the
+                # existing reconnection/error path still applies.
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": CHANNELS,
+                    "rate": RATE,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
 
-                # Attempt reconnection
-                if self._attempt_audio_reconnection(audio):
+                # Use the resolved device (skip if already system default)
+                try:
+                    default_idx = audio.get_default_input_device_info().get("index")
+                except (IOError, OSError):
+                    default_idx = None
+                if resolved_device_index != default_idx:
+                    stream_kwargs["input_device_index"] = resolved_device_index
+
+                try:
+                    self._audio_stream = audio.open(**stream_kwargs)
                     stream = self._audio_stream
-                else:
-                    play_error_sound()
-                    audio.terminate()
-                    self._update_state(RecognitionState.ERROR)
-                    return
+                except (IOError, OSError) as e:
+                    logger.error(f"Failed to open audio stream: {e}")
+                    logger.error(
+                        "This may indicate a problem with the audio device or permissions."
+                    )
+
+                    # Attempt reconnection
+                    if self._attempt_audio_reconnection(audio):
+                        stream = self._audio_stream
+                    else:
+                        play_error_sound()
+                        audio.terminate()
+                        self._update_state(RecognitionState.ERROR)
+                        return
 
             logger.info("Audio recording started")
 
@@ -3167,30 +3169,33 @@ class SpeechRecognitionManager:
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
 
-            # Probe channels + rate together (avoids a second Bluetooth SCO open/close).
-            CHANNELS, RATE = _probe_audio_format(audio_instance, resolved_device_index)
+            # Negotiate the format and open the capture stream in ONE PortAudio
+            # open — Bluetooth SCO devices abort with heap corruption when the
+            # stream is opened, closed, and quickly reopened (issue #567).
+            CHANNELS, RATE, new_stream = _open_capture_stream(audio_instance, resolved_device_index)
             logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
             self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": CHANNELS,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
+            if new_stream is None:
+                # Negotiation failed; fall back to a plain open.
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": CHANNELS,
+                    "rate": RATE,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
 
-            # Use resolved device (skip if already system default)
-            try:
-                default_idx = audio_instance.get_default_input_device_info().get("index")
-            except (IOError, OSError):
-                default_idx = None
-            if resolved_device_index != default_idx:
-                stream_kwargs["input_device_index"] = resolved_device_index
+                # Use resolved device (skip if already system default)
+                try:
+                    default_idx = audio_instance.get_default_input_device_info().get("index")
+                except (IOError, OSError):
+                    default_idx = None
+                if resolved_device_index != default_idx:
+                    stream_kwargs["input_device_index"] = resolved_device_index
 
-            # Attempt to open new stream
-            new_stream = audio_instance.open(**stream_kwargs)
+                new_stream = audio_instance.open(**stream_kwargs)
 
             # Test the stream by reading a small amount of data
             test_data = new_stream.read(CHUNK, exception_on_overflow=False)
@@ -3201,11 +3206,7 @@ class SpeechRecognitionManager:
                 return True
             else:
                 logger.error("Reconnected stream returned no data")
-                try:
-                    new_stream.stop_stream()
-                    new_stream.close()
-                except Exception:
-                    pass
+                _safe_close_stream(new_stream)
                 return False
 
         except (IOError, OSError) as e:
