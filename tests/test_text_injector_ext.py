@@ -311,6 +311,127 @@ class TestCheckDependencies(unittest.TestCase):
         mock_ibus_class.assert_not_called()
         self.assertEqual(obj.wayland_tool, "wtype")
 
+    def test_unbridged_wayland_uses_ibus_when_bridge_running(self):
+        """ibus-wayland makes an otherwise-unbridged compositor usable (#607)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with (
+            patch.dict(
+                os.environ,
+                {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "Hyprland"},
+                clear=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                return_value=False,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
+                return_value=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
+            patch.object(obj, "_start_ibus_initialization"),
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None,
+            ),
+            patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=True),
+        ):
+            obj._check_dependencies()
+
+        mock_ibus_class.assert_called_once()
+
+    def test_force_backend_wtype_skips_ibus(self):
+        """VOCALINUX_FORCE_BACKEND=wtype pins wtype even where IBus would be chosen."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with (
+            patch.dict(
+                os.environ,
+                {"XDG_SESSION_TYPE": "wayland", "VOCALINUX_FORCE_BACKEND": "wtype"},
+                clear=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd in ("wtype", "ydotool") else None,
+            ),
+        ):
+            obj._check_dependencies()
+
+        self.assertEqual(obj.wayland_tool, "wtype")
+        mock_ibus_class.assert_not_called()
+
+    def test_force_backend_ydotool_skips_ibus_and_wtype(self):
+        """VOCALINUX_FORCE_BACKEND=ydotool pins ydotool even when wtype is available."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with (
+            patch.dict(
+                os.environ,
+                {"XDG_SESSION_TYPE": "wayland", "VOCALINUX_FORCE_BACKEND": "ydotool"},
+                clear=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
+            patch.object(obj, "_ensure_ydotoold", return_value=True) as mock_ensure,
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd in ("wtype", "ydotool") else None,
+            ),
+        ):
+            obj._check_dependencies()
+
+        self.assertEqual(obj.wayland_tool, "ydotool")
+        mock_ensure.assert_called_once()
+        mock_ibus_class.assert_not_called()
+
+    def test_force_backend_ibus_bypasses_reachability_guards(self):
+        """VOCALINUX_FORCE_BACKEND=ibus selects IBus even on an unbridged compositor."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment, TextInjector
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "XDG_SESSION_TYPE": "wayland",
+                    "XDG_CURRENT_DESKTOP": "Hyprland",
+                    "VOCALINUX_FORCE_BACKEND": "ibus",
+                },
+                clear=True,
+            ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_active_input_method",
+                return_value=False,
+            ),
+            patch(
+                "vocalinux.text_injection.text_injector.is_ibus_daemon_running",
+                return_value=False,
+            ),
+            patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
+            patch.object(obj, "_start_ibus_initialization"),
+            # Even with no bridge and no daemon, the explicit override wins.
+            patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=False),
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None,
+            ),
+        ):
+            obj._check_dependencies()
+
+        mock_ibus_class.assert_called_once()
+
     def test_kde_wayland_respects_explicit_non_ibus_input_method(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
