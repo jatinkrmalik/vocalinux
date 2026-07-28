@@ -2015,6 +2015,47 @@ class TestVocalinuxEngineDestroy(unittest.TestCase):
 
         mock_super_destroy.assert_not_called()
 
+    def test_invoke_parent_destroy_passes_through_when_binding_is_correct(self):
+        """A parent destroy that accepts no arguments is called as-is (#606)."""
+        from vocalinux.text_injection.ibus_engine import _invoke_parent_destroy
+
+        parent_destroy = MagicMock()
+
+        _invoke_parent_destroy(parent_destroy, object())
+
+        parent_destroy.assert_called_once_with()
+
+    def test_invoke_parent_destroy_retries_with_instance_on_type_error(self):
+        """PyGObject binds the vfunc to the GType, so retry with the instance (#606).
+
+        ``super().do_destroy`` resolves to a method bound to the GType rather
+        than the engine, so the no-argument call raises TypeError and the real
+        destroy never happens.
+        """
+        import vocalinux.text_injection.ibus_engine as mod
+        from vocalinux.text_injection.ibus_engine import _invoke_parent_destroy
+
+        parent_destroy = MagicMock(
+            side_effect=TypeError("IBus.Object.destroy() takes exactly 1 argument (0 given)")
+        )
+        instance = object()
+        fake_ibus = MagicMock()
+
+        with patch.object(mod, "IBus", fake_ibus):
+            _invoke_parent_destroy(parent_destroy, instance)
+
+        parent_destroy.assert_called_once_with()
+        fake_ibus.Object.destroy.assert_called_once_with(instance)
+
+    def test_invoke_parent_destroy_propagates_other_errors(self):
+        """Only the GType-binding TypeError is worked around; nothing else is masked."""
+        from vocalinux.text_injection.ibus_engine import _invoke_parent_destroy
+
+        parent_destroy = MagicMock(side_effect=RuntimeError("boom"))
+
+        with self.assertRaises(RuntimeError):
+            _invoke_parent_destroy(parent_destroy, object())
+
     def test_do_destroy_clears_active_instance_when_super_raises(self):
         """A failing parent destroy must not skip teardown (#606).
 
