@@ -35,6 +35,7 @@ from vocalinux.speech_recognition.recognition_manager import (
     _open_capture_stream,
     _safe_close_stream,
     get_audio_input_devices,
+    test_audio_input,
 )
 
 
@@ -190,6 +191,90 @@ class TestAudioDeviceDetection(unittest.TestCase):
         assert mock_stream.read.called
         mock_stream.stop_stream.assert_called_once()
         mock_stream.close.assert_called_once()
+
+    def test_test_audio_input_negotiation_fallback_open(self):
+        """When negotiation returns no stream, mic test falls back to a plain open."""
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = b"\x00\x01" * 1024
+        mock_audio = MagicMock()
+        mock_audio.open.return_value = mock_stream
+        mock_audio.get_device_info_by_index.return_value = {
+            "index": 14,
+            "name": "Bluetooth internal capture stream",
+            "defaultSampleRate": 16000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 16000, None),
+            ):
+                result = test_audio_input(device_index=14, duration=0.1)
+
+        assert result["success"] is True
+        mock_audio.open.assert_called_once()
+
+    def test_test_audio_input_negotiation_and_fallback_both_fail(self):
+        """When negotiation and fallback open both fail, return a clear error."""
+        mock_audio = MagicMock()
+        mock_audio.open.side_effect = IOError("device busy")
+        mock_audio.get_device_info_by_index.return_value = {
+            "index": 14,
+            "name": "Bluetooth internal capture stream",
+            "defaultSampleRate": 16000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 16000, None),
+            ):
+                result = test_audio_input(device_index=14, duration=0.1)
+
+        assert result["success"] is False
+        assert "Cannot open audio stream" in result["error"]
+
+    def test_get_supported_sample_rate_bluetooth_settle_on_failure(self):
+        """Bluetooth devices should pause between failed sample-rate probes."""
+        mock_audio = MagicMock()
+        mock_audio.open.side_effect = IOError("busy")
+        mock_audio.get_device_info_by_index.return_value = {
+            "name": "Bluetooth internal capture stream",
+            "defaultSampleRate": 48000,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            with patch("vocalinux.speech_recognition.recognition_manager.time.sleep") as mock_sleep:
+                rate = _get_supported_sample_rate(mock_audio, 0, channels=1)
+
+        assert rate == 16000
+        assert mock_sleep.called
+
+    def test_open_capture_stream_logs_channel_rejection(self):
+        """Invalid-channel errors during negotiation should be logged distinctly."""
+        mock_audio = MagicMock()
+        mock_audio.open.side_effect = IOError("[Errno -9998] Invalid number of channels")
+        mock_audio.get_device_info_by_index.return_value = {
+            "name": "USB Mic",
+            "defaultSampleRate": 48000,
+            "maxInputChannels": 2,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            channels, rate, stream = _open_capture_stream(mock_audio, 0)
+
+        assert (channels, rate, stream) == (1, 16000, None)
+        assert mock_audio.open.call_count >= 1
 
     def test_get_supported_channels_mono_success(self):
         """Test mono channel support detection."""
@@ -348,6 +433,59 @@ class TestAudioDeviceDetection(unittest.TestCase):
         with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
             rate = _get_supported_sample_rate(mock_audio, None, 1)
             assert rate == 16000  # Default fallback
+
+
+class TestRecordAudioNegotiationFallback(unittest.TestCase):
+    """Cover _record_audio fallback when stream negotiation returns None."""
+
+    def test_record_audio_falls_back_when_negotiation_returns_none(self):
+        """Negotiation failure must fall back to a plain PortAudio open."""
+        manager = _make_manager(engine="whisper_cpp")
+        manager.should_record = True
+        manager.state = RecognitionState.LISTENING
+        manager.silence_timeout = 0.05
+        manager._silero_vad = None
+
+        mock_stream = MagicMock()
+
+        def _read_once(*_args, **_kwargs):
+            manager.should_record = False
+            return b"\x00" * 2048
+
+        mock_stream.read.side_effect = _read_once
+
+        mock_audio = MagicMock()
+        mock_audio.get_device_count.return_value = 1
+        mock_audio.get_device_info_by_index.return_value = {
+            "index": 0,
+            "name": "test mic",
+            "maxInputChannels": 1,
+        }
+        mock_audio.get_default_input_device_info.return_value = {"index": 0}
+        mock_audio.open.return_value = mock_stream
+
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with (
+            patch.dict("sys.modules", {"pyaudio": mock_pyaudio}),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._resolve_device_by_name",
+                return_value=0,
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 16000, None),
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager.play_error_sound",
+            ),
+        ):
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            manager._record_audio()
+
+        mock_audio.open.assert_called_once()
 
 
 class TestFilterNonSpeech(unittest.TestCase):
