@@ -18,18 +18,21 @@ Offline-first Linux voice typing with real desktop integration (system tray, X11
 
 ## Operating context
 
-- Install via a one-line shell installer, then run from PATH or app menu
-- System tray indicator and settings GUI (GTK)
+- Install via a one-line shell installer, AppImage from GitHub Releases, AUR, or local Flatpak build; then run from PATH, app menu, or the AppImage binary
+- System tray indicator and settings GUI (GTK) with searchable sidebar navigation
 - Dictation into terminals, browsers, IDEs, office apps
-- Engines and models chosen for hardware (CPU, optional Vulkan GPU)
+- Engines and models chosen for hardware (CPU, optional Vulkan GPU with discrete-device preference)
 - Guides and comparison pages on vocalinux.com; source on GitHub
 
 ## Capabilities and constraints
 
 - Engines: whisper.cpp (default), OpenAI Whisper, VOSK, optional Remote API
 - Display servers: X11 and Wayland
-- Shortcut modes: toggle and push-to-talk; left/right modifier distinction
+- Shortcut modes: toggle and push-to-talk; left/right modifier distinction; configurable modifier+key combos
 - Optional voice commands; Silero neural VAD with amplitude fallback
+- Optional auto-pause while configured apps run; optional idle model keep-alive unload
+- Vulkan discrete GPU auto-select with manual device override in Advanced settings
+- Packaging: install.sh, AppImage (x86_64/aarch64), AUR, Flatpak (local/Flathub status as documented)
 - No usage telemetry in the installed app
 - GPL-3.0; marketing version string is tracked in site package/version surfaces
 - Website is Next.js marketing + SEO guides (static export)

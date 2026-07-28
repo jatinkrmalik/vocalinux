@@ -2,6 +2,48 @@
 
 This guide explains how to update Vocalinux to the latest version.
 
+## What's New in v0.15.0
+
+0.15.0 is a **minor** release on the stable line. It redesigns settings navigation, adds AppImage packages, and adds power/GPU controls, on top of the 0.14 packaging work (Flatpak, AUR, configurable hotkeys).
+
+### Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **Searchable settings** | Sidebar navigation with search replaces the seven-tab notebook (#601) |
+| **AppImage** | Self-contained x86_64 and aarch64 builds attached to GitHub Releases (#573, #602) |
+| **Auto-pause + keep-alive** | Unload the model while configured apps run, or after an idle timeout (#592) |
+| **Vulkan GPU selection** | Prefer a discrete GPU automatically; pick a device under Advanced settings (#590) |
+| **CLI `--version`** | Print the installed version and exit (#563) |
+
+### New Features
+
+- **Searchable sidebar settings** — Topic pages in a sidebar with live search instead of seven notebook tabs (#601)
+- **AppImage packaging** — Relocatable x86_64 and aarch64 AppImages built in the release workflow (#573, #602)
+- **Auto-pause apps + model keep-alive** — Optional unload while selected processes run; idle timeout unload for battery/Optimus laptops (#592, closes #445, #591)
+- **Vulkan discrete GPU auto-select + manual device** — Prefer discrete devices; override in Advanced settings (#590, closes #589)
+- **`vocalinux --version`** — Print package version (#563, closes #555)
+
+### Bug Fixes
+
+- **KDE Plasma Wayland**: Skip unbridged IBus so text injection does not silently fail (#577, fixes #574)
+- **xdotool**: Preserve input focus after injection (#564, fixes #549)
+- **Uninstall**: Remove IBus data dir; stop the app by PID file; remove `~/.local/bin` launcher wrappers reliably (#597, #569)
+- **Installer**: Prefer both libgirepository 1.0 and 2.0 when present (#583, fixes #571)
+- **AUR**: Virtual `python-pywhispercpp` dependency; clipboard/wtype tools as optdepends (#579, #586)
+- **UI**: First-run dialog response without `Gtk.Dialog.do_response` (#580, fixes #566)
+- **Vosk**: Italian and English-India entries in medium/large model tables (#551, fixes #550)
+- **Docs**: Correct ydotool service setup guidance (#560, fixes #557)
+
+### Docs / website
+
+- Marketing site redesign with workstation craft (#582)
+- Multi-distro tray icon FAQ (#584)
+
+See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.15.0).
+
+---
+
 ## What's New in v0.14.2
 
 0.14.2 is a stability patch on the **0.14 series**. The feature set is the same as 0.14.x; this release fixes IBus reliability and settings dialog sizing.
@@ -331,7 +373,7 @@ The installer will:
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.14.2
+git checkout v0.15.0
 ./install.sh
 ```
 

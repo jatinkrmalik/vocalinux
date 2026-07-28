@@ -48,12 +48,17 @@ const reliabilityFeatures = [
   {
     title: "Tray and settings polish",
     description:
-      "Bundled resources, lower dialog height, and an explicit close button improve behavior across desktop environments.",
+      "Bundled resources, searchable sidebar settings, and an explicit close button improve behavior across desktop environments.",
     icon: Wrench,
   },
 ];
 
 const releaseMap = [
+  {
+    version: "v0.15.0",
+    highlights:
+      "KDE Plasma Wayland skips unbridged IBus, xdotool keeps focus after injection, and searchable sidebar settings replace the seven-tab notebook.",
+  },
   {
     version: "v0.12.0-beta",
     highlights:

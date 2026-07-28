@@ -15,6 +15,22 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.15.0",
+    date: "2026-07-28",
+    type: "stable",
+    highlights: [
+      "Searchable sidebar settings with live search replace the seven-tab notebook (PR #601)",
+      "AppImage packages for x86_64 and aarch64 on GitHub Releases (PR #573, #602)",
+      "Auto-pause competing apps and idle model keep-alive unload for battery/GPU headroom (PR #592, closes #445, #591)",
+      "Vulkan: auto-select discrete GPU and pick a device in Advanced settings (PR #590, closes #589)",
+      "CLI: vocalinux --version (PR #563, closes #555)",
+      "KDE Plasma Wayland: skip unbridged IBus so injection does not silently fail (PR #577, fixes #574)",
+      "xdotool: preserve input focus after injection (PR #564, fixes #549)",
+      "Installer, uninstall, and AUR reliability fixes (PR #583, #569, #597, #579, #586)",
+      "Marketing site redesign with workstation craft (PR #582)",
+    ],
+  },
+  {
     version: "v0.14.2",
     date: "2026-07-17",
     type: "stable",

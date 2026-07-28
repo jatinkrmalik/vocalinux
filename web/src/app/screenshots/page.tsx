@@ -98,7 +98,7 @@ const settingsShots: Screenshot[] = [
 export const metadata: Metadata = buildPageMetadata({
   title: "Vocalinux Screenshots | Linux Voice Dictation UI",
   description:
-    "See Vocalinux in action: system tray, about dialog, log viewer, and the full settings tabs for speech engine, recognition, audio, shortcuts, general, and advanced options.",
+    "See Vocalinux in action: system tray, about dialog, log viewer, and settings pages for speech engine, recognition, audio, shortcuts, general, and advanced options.",
   path: "/screenshots",
   keywords: [
     "Vocalinux screenshots",
@@ -143,15 +143,17 @@ export default function ScreenshotsPage() {
       <section>
         <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <Camera className="h-4 w-4" />
-          v0.14.0 Beta UI
+          Settings gallery (refresh pending)
         </p>
         <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Vocalinux Screenshots
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           A look at offline voice dictation on Linux: tray controls, debugging
-          tools, and the full settings dialog. Click any image to expand it and
-          browse the gallery. These shots match the current v0.14.0-beta UI.
+          tools, and the settings dialog. Click any image to expand it and browse
+          the gallery. Product shots are current; some settings images still show
+          the older tabbed layout while the app uses a searchable sidebar in
+          v0.15.0+.
         </p>
       </section>
 

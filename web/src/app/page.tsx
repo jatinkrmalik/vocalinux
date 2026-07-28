@@ -48,7 +48,7 @@ const homeJsonLd = [
     },
     description:
       "Offline voice dictation and speech-to-text for Linux with whisper.cpp and VOSK.",
-    softwareVersion: "0.14.2",
+    softwareVersion: "0.15.0",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -65,6 +65,10 @@ const homeJsonLd = [
       "Toggle and push-to-talk shortcut modes",
       "Left/right modifier key distinction for shortcuts",
       "Optional voice commands with VOSK-aware defaults",
+      "Searchable sidebar settings",
+      "AppImage packages for x86_64 and aarch64",
+      "Auto-pause competing apps and idle model keep-alive unload",
+      "Vulkan discrete GPU auto-select with manual device selection",
       "Adaptive audio and IBus-aware text injection",
       "Clipboard fallback for unsupported Wayland compositors",
       "Sound effects toggle for audio feedback",
@@ -111,7 +115,7 @@ const homeJsonLd = [
         name: "How do I switch between speech engines?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Use the settings GUI or CLI flags for whisper.cpp, Whisper, VOSK, or Remote API. Remote API settings live under Advanced settings.",
+          text: "Use the settings GUI or CLI flags for whisper.cpp, Whisper, VOSK, or Remote API. Open Settings from the tray and use the sidebar (search works). Remote API options live under Advanced.",
         },
       },
       {
@@ -562,6 +566,12 @@ export default function HomePage() {
               Then launch:{" "}
               <code className="font-mono text-emerald-400">vocalinux</code>
             </span>
+            <a
+              href="https://github.com/jatinkrmalik/vocalinux/releases"
+              className="text-zinc-100 underline-offset-4 hover:underline"
+            >
+              AppImage downloads
+            </a>
             <Link
               href="/compare/"
               className="text-zinc-100 underline-offset-4 hover:underline"

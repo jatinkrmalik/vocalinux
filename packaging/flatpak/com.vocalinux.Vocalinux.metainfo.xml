@@ -105,6 +105,11 @@
   </content_rating>
 
   <releases>
+    <release version="0.15.0" date="2026-07-28">
+      <description>
+        <p>Searchable sidebar settings, AppImage packages for x86_64 and aarch64, auto-pause and idle model unload, Vulkan discrete-GPU auto-select with manual device picking, and desktop reliability fixes.</p>
+      </description>
+    </release>
     <release version="0.14.2" date="2026-07-17">
       <description>
         <p>IBus stability (engine process launch after XDG path import; first-dictation FocusIn gate on GNOME Wayland) and settings dialog tabs that scroll so the window fits the monitor.</p>
