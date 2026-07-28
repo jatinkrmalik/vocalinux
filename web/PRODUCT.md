@@ -30,8 +30,10 @@ Offline-first Linux voice typing with real desktop integration (system tray, X11
 - Display servers: X11 and Wayland
 - Shortcut modes: toggle and push-to-talk; left/right modifier distinction; configurable modifier+key combos
 - Optional voice commands; Silero neural VAD with amplitude fallback
+- Continuous dictation polish: capitalize after sentence punctuation; trailing space after each completed utterance
 - Optional auto-pause while configured apps run; optional idle model keep-alive unload
 - Vulkan discrete GPU auto-select with manual device override in Advanced settings
+- Wayland: IBus when `ibus-wayland` is running, including on compositors previously treated as unbridged
 - Packaging: install.sh, AppImage (x86_64/aarch64), AUR, Flatpak (local/Flathub status as documented)
 - No usage telemetry in the installed app
 - GPL-3.0; marketing version string is tracked in site package/version surfaces

@@ -21,13 +21,14 @@ const releases = [
     highlights: [
       "Searchable sidebar settings with live search replace the seven-tab notebook (PR #601)",
       "AppImage packages for x86_64 and aarch64 on GitHub Releases (PR #573, #602)",
+      "Auto-capitalize after sentence punctuation; trailing space so the next utterance does not glue on (PR #554, #608)",
       "Auto-pause competing apps and idle model keep-alive unload for battery/GPU headroom (PR #592, closes #445, #591)",
       "Vulkan: auto-select discrete GPU and pick a device in Advanced settings (PR #590, closes #589)",
+      "Wayland: use IBus on previously unbridged compositors when ibus-wayland is running (PR #614, closes #607)",
+      "IBus: keep engine teardown correct when parent destroy fails (PR #613, fixes #606)",
       "CLI: vocalinux --version (PR #563, closes #555)",
-      "KDE Plasma Wayland: skip unbridged IBus so injection does not silently fail (PR #577, fixes #574)",
-      "xdotool: preserve input focus after injection (PR #564, fixes #549)",
-      "Installer, uninstall, and AUR reliability fixes (PR #583, #569, #597, #579, #586)",
-      "Marketing site redesign with workstation craft (PR #582)",
+      "Settings info notices flattened; KDE unbridged-IBus skip when ibus-wayland is absent; xdotool focus preserve; installer/AUR fixes (PR #615, #577, #564, #583, #569, #597, #579, #586)",
+      "Marketing site redesign; robots.txt indexing fix (PR #582, #610)",
     ],
   },
   {

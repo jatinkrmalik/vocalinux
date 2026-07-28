@@ -36,6 +36,10 @@ Vocalinux supports login autostart using the standard Linux desktop-session mech
 4. **Speak clearly**: As you speak, your words will be transcribed into the currently focused application
 5. **Stop voice typing**: Click the tray icon and select "Stop Voice Typing" when you're done, double-tap again in toggle mode, or release the key in push-to-talk mode
 
+### Dictation formatting
+
+Vocalinux capitalizes the start of dictation and letters after `.`, `!`, or `?`. Each completed utterance also leaves a trailing space so the next push-to-talk or toggle session does not glue onto the previous sentence (`Hello.This` → `Hello. This`).
+
 ### Understanding the Status Icons
 
 - **Microphone off** (gray): Voice typing is inactive
