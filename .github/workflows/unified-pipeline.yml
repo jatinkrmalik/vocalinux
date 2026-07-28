@@ -198,7 +198,10 @@ jobs:
           sudo apt-get install -y \
             xdotool \
             gir1.2-appindicator3-0.1 \
+            gir1.2-ayatanaappindicator3-0.1 \
             gir1.2-ibus-1.0 \
+            gir1.2-rsvg-2.0 \
+            librsvg2-common \
             libcairo2-dev \
             pkg-config \
             python3-dev \

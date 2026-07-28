@@ -42,7 +42,10 @@ jobs:
             gobject-introspection \
             gir1.2-gtk-3.0 \
             gir1.2-appindicator3-0.1 \
-            gir1.2-ibus-1.0
+            gir1.2-ayatanaappindicator3-0.1 \
+            gir1.2-ibus-1.0 \
+            gir1.2-rsvg-2.0 \
+            librsvg2-common
 
       - name: Install build dependencies
         run: |
@@ -163,7 +166,10 @@ jobs:
             gobject-introspection \
             gir1.2-gtk-3.0 \
             gir1.2-appindicator3-0.1 \
-            gir1.2-ibus-1.0
+            gir1.2-ayatanaappindicator3-0.1 \
+            gir1.2-ibus-1.0 \
+            gir1.2-rsvg-2.0 \
+            librsvg2-common
 
       - name: Install build dependencies
         run: |

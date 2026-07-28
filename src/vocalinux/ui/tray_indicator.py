@@ -117,6 +117,18 @@ class TrayIndicator:
         }
         self.icon_names = _themed_icon_names()
 
+        # Prefer absolute icon paths outside Flatpak. StatusNotifier hosts often
+        # resolve IconName via the system hicolor theme and ignore IconThemePath,
+        # so a stale ~/.local/share/icons copy of vocalinux-microphone-off.svg
+        # (the old red placeholder) would win over the AppImage's bundled icons.
+        self._icon_keys = {
+            "default": (self.icon_names["default"] if FLATPAK_ID else self.icon_paths["default"]),
+            "active": (self.icon_names["active"] if FLATPAK_ID else self.icon_paths["active"]),
+            "processing": (
+                self.icon_names["processing"] if FLATPAK_ID else self.icon_paths["processing"]
+            ),
+        }
+
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
 
@@ -222,7 +234,7 @@ class TrayIndicator:
                 exists = os.path.exists(path)
                 logger.info(f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}")
 
-        initial_icon = _themed_icon_names()["default"]
+        initial_icon = self._icon_keys["default"]
         try:
             if FLATPAK_ID:
                 self.indicator = AppIndicator3.Indicator.new(
@@ -239,6 +251,7 @@ class TrayIndicator:
                 )
                 self.indicator.set_icon_theme_path(ICON_DIR)
             self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+            self.indicator.set_title("Vocalinux")
         except Exception as e:
             logger.error(f"Failed to create AppIndicator: {e}")
             GLib.idle_add(self._show_appindicator_error_dialog, str(e))
@@ -463,19 +476,19 @@ class TrayIndicator:
             return False
 
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon_full(self.icon_names["default"], "Microphone off")
+            self.indicator.set_icon_full(self._icon_keys["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon_full(self.icon_names["active"], "Microphone on")
+            self.indicator.set_icon_full(self._icon_keys["active"], "Microphone on")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon_full(self.icon_names["processing"], "Processing speech")
+            self.indicator.set_icon_full(self._icon_keys["processing"], "Processing speech")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon_full(self.icon_names["default"], "Error")
+            self.indicator.set_icon_full(self._icon_keys["default"], "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 

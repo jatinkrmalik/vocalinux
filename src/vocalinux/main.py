@@ -263,6 +263,22 @@ def main():
         logger.error("Cannot start Vocalinux due to missing dependencies")
         sys.exit(1)
 
+    # Identity for WM class / AppIndicator title (otherwise shows as main.py)
+    import gi
+
+    gi.require_version("GLib", "2.0")
+    from gi.repository import GLib
+
+    GLib.set_prgname("vocalinux")
+    GLib.set_application_name("Vocalinux")
+    try:
+        gi.require_version("Gdk", "3.0")
+        from gi.repository import Gdk
+
+        Gdk.set_program_class("Vocalinux")
+    except Exception:
+        pass
+
     # Check if display is available before creating any GTK widgets
     if not check_display_available():
         sys.exit(1)
