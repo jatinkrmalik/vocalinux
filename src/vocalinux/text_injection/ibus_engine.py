@@ -14,6 +14,7 @@ This is the preferred method for Wayland environments as it works universally
 without requiring compositor-specific protocols.
 """
 
+import functools
 import logging
 import os
 import signal
@@ -589,6 +590,23 @@ def restore_xkb_layout(layout: str, variant: str = "", option: str = "") -> bool
     return False
 
 
+def _invoke_parent_destroy(parent_destroy: Callable[[], None], instance: object) -> None:
+    """Call the parent engine destroy, working around PyGObject's GType binding.
+
+    PyGObject binds the ``do_destroy`` vfunc to the GType rather than to the
+    instance, so ``super().do_destroy()`` raises
+    ``TypeError: IBus.Object.destroy() takes exactly 1 argument (0 given)``.
+    Retry with the instance explicitly.
+
+    The TypeError path rather than an unconditional ``IBus.Object.destroy``
+    keeps this working if a future PyGObject binds the vfunc correctly.
+    """
+    try:
+        parent_destroy()
+    except TypeError:
+        IBus.Object.destroy(instance)
+
+
 def _handle_engine_destroy(
     active_instance: Optional["VocalinuxEngine"],
     current_instance: object,
@@ -601,7 +619,13 @@ def _handle_engine_destroy(
         next_active_instance = None
 
     if ibus_available and super_destroy is not None:
-        super_destroy()
+        # The caller assigns our return value to _active_instance and clears the
+        # focus event, so a failing parent destroy must not skip that teardown:
+        # otherwise a destroyed engine stays registered as active with focus set.
+        try:
+            super_destroy()
+        except Exception:
+            logger.exception("Parent engine destroy failed; continuing teardown")
 
     return next_active_instance
 
@@ -866,7 +890,7 @@ class VocalinuxEngine(IBus.Engine if IBUS_AVAILABLE else object):
         logger.debug("VocalinuxEngine instance destroyed")
         super_destroy: Optional[Callable[[], None]] = None
         if IBUS_AVAILABLE:
-            super_destroy = super().do_destroy
+            super_destroy = functools.partial(_invoke_parent_destroy, super().do_destroy, self)
         was_active = VocalinuxEngine._active_instance is self
         VocalinuxEngine._active_instance = _handle_engine_destroy(
             VocalinuxEngine._active_instance,
