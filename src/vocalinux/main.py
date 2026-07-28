@@ -21,6 +21,30 @@ logger = logging.getLogger(__name__)
 # dependency checking to provide better error messages for pip/pipx users
 
 
+def _should_append_trailing_space() -> bool:
+    """Return whether completed transcriptions should get a trailing space.
+
+    Reads config.json from disk on each call so Settings toggles take effect
+    immediately. TrayIndicator and main() each construct their own
+    ConfigManager, so an in-memory read from main's instance would miss
+    Settings writes (same pattern as TextInjector._should_copy_to_clipboard).
+    """
+    try:
+        import json
+        import os
+
+        from .utils.paths import config_dir
+
+        config_path = os.path.join(config_dir(), "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            return bool(config.get("text_injection", {}).get("append_trailing_space", True))
+    except Exception as e:
+        logger.debug(f"Could not read append_trailing_space setting: {e}")
+    return True
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(prog="vocalinux", description="Vocalinux")
@@ -473,8 +497,9 @@ def main():
 
                 text_to_inject = capitalize_sentences(text_to_inject)
 
-            text_injection_settings = config_manager.get_settings().get("text_injection", {})
-            append_trailing_space = bool(text_injection_settings.get("append_trailing_space", True))
+            # Read from disk so the Settings toggle applies without restart
+            # (main and tray each own a ConfigManager instance).
+            append_trailing_space = _should_append_trailing_space()
 
             if append_trailing_space:
                 # Put the separator into the previous field so the next session

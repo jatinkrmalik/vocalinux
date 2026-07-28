@@ -1000,5 +1000,34 @@ class TestTextCallbackSpacing(unittest.TestCase):
         text_system.inject_text.assert_called_once_with("second session")
 
 
+class TestShouldAppendTrailingSpace(unittest.TestCase):
+    """Test disk-backed trailing-space setting reader."""
+
+    def test_reads_setting_from_disk_with_true_default(self):
+        import json
+        import os
+        import tempfile
+
+        from vocalinux.main import _should_append_trailing_space
+
+        with tempfile.TemporaryDirectory() as d:
+            with patch("vocalinux.utils.paths.config_dir", return_value=d):
+                # No config file -> default True
+                self.assertTrue(_should_append_trailing_space())
+
+                cfg = os.path.join(d, "config.json")
+                with open(cfg, "w") as f:
+                    json.dump({"text_injection": {}}, f)
+                self.assertTrue(_should_append_trailing_space())
+
+                with open(cfg, "w") as f:
+                    json.dump({"text_injection": {"append_trailing_space": False}}, f)
+                self.assertFalse(_should_append_trailing_space())
+
+                with open(cfg, "w") as f:
+                    json.dump({"text_injection": {"append_trailing_space": True}}, f)
+                self.assertTrue(_should_append_trailing_space())
+
+
 if __name__ == "__main__":
     unittest.main()
