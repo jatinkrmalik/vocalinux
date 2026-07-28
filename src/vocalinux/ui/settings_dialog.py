@@ -503,17 +503,21 @@ spinbutton {
     margin-bottom: 6px;
 }
 
-/* Info box styling */
+/* Flat helper notices — muted surface, no accent strip */
 .info-box {
-    background-color: alpha(@theme_selected_bg_color, 0.1);
+    background-color: alpha(@theme_fg_color, 0.04);
+    border: 1px solid alpha(@borders, 0.45);
     border-radius: 8px;
-    padding: 12px;
-    border-left: 4px solid @theme_selected_bg_color;
+    padding: 10px 12px;
+}
+
+.info-box image {
+    opacity: 0.55;
 }
 
 .info-box-warning {
-    background-color: alpha(#e5a50a, 0.1);
-    border-left-color: #e5a50a;
+    background-color: alpha(#e5a50a, 0.08);
+    border-color: alpha(#e5a50a, 0.4);
 }
 
 /* Recognition status */

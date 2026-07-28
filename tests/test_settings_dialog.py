@@ -253,6 +253,15 @@ class TestSettingsDialogCSS(unittest.TestCase):
         self.assertIn(".status-warning", SETTINGS_CSS)
         self.assertIn(".status-error", SETTINGS_CSS)
 
+    def test_settings_css_info_box_is_flat(self):
+        """Info notices use a flat border, not a left accent strip."""
+        from vocalinux.ui.settings_dialog import SETTINGS_CSS
+
+        self.assertIn(".info-box", SETTINGS_CSS)
+        self.assertIn("border: 1px solid", SETTINGS_CSS)
+        self.assertNotIn("border-left:", SETTINGS_CSS)
+        self.assertNotIn("border-left-color:", SETTINGS_CSS)
+
 
 class TestSettingsDialogClasses(unittest.TestCase):
     """Test cases for SettingsDialog helper classes."""
