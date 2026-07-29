@@ -307,6 +307,8 @@ class TestSpeechRecognition(unittest.TestCase):
 
     def test_resolve_whisper_language_maps_english_variants(self):
         """Catalog ids like en-us/en-in must become Whisper's 'en' code."""
+        from unittest.mock import patch
+
         from vocalinux.speech_recognition.recognition_manager import resolve_whisper_language
 
         self.assertEqual(resolve_whisper_language("en-us"), "en")
@@ -314,6 +316,23 @@ class TestSpeechRecognition(unittest.TestCase):
         self.assertEqual(resolve_whisper_language("hu"), "hu")
         self.assertEqual(resolve_whisper_language("ja"), "ja")
         self.assertIsNone(resolve_whisper_language("auto"))
+        # Unknown catalog ids pass through unchanged.
+        self.assertEqual(resolve_whisper_language("zz-unknown"), "zz-unknown")
+
+        # Legacy fallback when a code is missing from the catalog entirely.
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.SUPPORTED_LANGUAGES",
+            {},
+        ):
+            self.assertEqual(resolve_whisper_language("en-us"), "en")
+            self.assertEqual(resolve_whisper_language("fr"), "fr")
+
+        # Entry present but without a whisper field still falls through.
+        with patch(
+            "vocalinux.speech_recognition.recognition_manager.SUPPORTED_LANGUAGES",
+            {"legacy": {"name": "Legacy", "vosk": None}},
+        ):
+            self.assertEqual(resolve_whisper_language("legacy"), "legacy")
 
     def test_vosk_init_italian_medium_model_resolves_correctly(self):
         """Selecting Italian + the 'medium' VOSK model must not crash (issue #550)."""
