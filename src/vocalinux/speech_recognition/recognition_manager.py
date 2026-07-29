@@ -21,11 +21,29 @@ from typing import Callable, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.paths import models_dir
-from ..utils.vosk_model_info import VOSK_MODEL_INFO
+from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from ..version import __version__
 from .command_processor import CommandProcessor
 from .silero_vad import SILERO_CHUNK_SIZE, load_silero_vad
+
+
+def resolve_whisper_language(language: str) -> Optional[str]:
+    """Map a catalog language id to a Whisper / whisper.cpp language code.
+
+    Catalog keys like ``en-us`` / ``en-in`` are not valid Whisper codes; the
+    ``whisper`` field on ``SUPPORTED_LANGUAGES`` holds the ISO-style code
+    (``en``). ``auto`` resolves to ``None`` for model auto-detect.
+    """
+    if language == "auto":
+        return None
+    info = SUPPORTED_LANGUAGES.get(language)
+    if info is not None and "whisper" in info:
+        return info["whisper"]
+    # Legacy fallback for codes not present in the catalog.
+    if language == "en-us":
+        return "en"
+    return language
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -1137,11 +1155,7 @@ class SpeechRecognitionManager:
                     import torch
                 use_fp16 = self.model.device != torch.device("cpu")
 
-                lang = self.language
-                if self.language == "en-us":
-                    lang = "en"
-                elif self.language == "auto":
-                    lang = None  # Auto-detect
+                lang = resolve_whisper_language(self.language)
 
                 # Transcribe with Whisper (handles variable length audio automatically)
                 result = self.model.transcribe(
@@ -1488,11 +1502,7 @@ class SpeechRecognitionManager:
             )
 
             # Prepare language parameter
-            lang = self.language
-            if self.language == "en-us":
-                lang = "en"
-            elif self.language == "auto":
-                lang = None  # Auto-detect
+            lang = resolve_whisper_language(self.language)
 
             logger.debug(f"whisper.cpp using language: {lang or 'auto-detect'}")
 
@@ -1625,11 +1635,7 @@ class SpeechRecognitionManager:
             )
 
             # Prepare language parameters
-            lang = self.language
-            if lang == "en-us":
-                lang = "en"
-            elif lang == "auto":
-                lang = None
+            lang = resolve_whisper_language(self.language)
 
             # Prepare HTTP request headers
             headers = {}
