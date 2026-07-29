@@ -40,7 +40,7 @@ No internet required. No data leaves your machine. Just speak and type.
 
 ## 📚 What's New in v0.15.0
 
-> **0.15.0** adds searchable sidebar settings, AppImage packages, cleaner continuous dictation (capitalization + trailing spaces), power-saving model unload, smarter Vulkan GPU selection, and Wayland IBus improvements on top of the 0.14 packaging line.
+> **0.15.0** adds searchable sidebar settings, AppImage packages, a much larger speech-language catalog (including Hungarian), cleaner continuous dictation (capitalization + trailing spaces), power-saving model unload, smarter Vulkan GPU selection, and Wayland IBus improvements on top of the 0.14 packaging line.
 
 ### Highlights
 
@@ -48,6 +48,7 @@ No internet required. No data leaves your machine. Just speak and type.
 |---------|-------------|
 | **Searchable settings** | Sidebar navigation with search replaces the seven-tab notebook (#601) |
 | **AppImage** | Self-contained x86_64 and aarch64 builds on GitHub Releases (#573, #602) |
+| **More languages** | ~33 selectable speech languages (plus Auto-detect), including Hungarian; VOSK only lists languages with official models (#616, fixes #565) |
 | **Dictation polish** | Auto-capitalize after sentence punctuation; trailing space so the next utterance does not glue on (#554, #608) |
 | **Auto-pause + keep-alive** | Pause/unload while configured apps run; unload after idle timeout (#592) |
 | **Vulkan GPU selection** | Prefer discrete GPUs automatically; pick a device in Advanced settings (#590) |

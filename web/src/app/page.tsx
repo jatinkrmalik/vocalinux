@@ -67,6 +67,7 @@ const homeJsonLd = [
       "Optional voice commands with VOSK-aware defaults",
       "Searchable sidebar settings",
       "AppImage packages for x86_64 and aarch64",
+      "Expanded speech-language catalog including Hungarian (per-engine availability)",
       "Auto-capitalize sentences after punctuation",
       "Trailing space after completed transcriptions for continuous dictation",
       "Auto-pause competing apps and idle model keep-alive unload",

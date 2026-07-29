@@ -4,7 +4,7 @@ This guide explains how to update Vocalinux to the latest version.
 
 ## What's New in v0.15.0
 
-0.15.0 is a **minor** release on the stable line. It redesigns settings navigation, adds AppImage packages, cleans up continuous dictation spacing/capitalization, adds power/GPU controls, and improves Wayland IBus on compositors that ship `ibus-wayland`, on top of the 0.14 packaging work (Flatpak, AUR, configurable hotkeys).
+0.15.0 is a **minor** release on the stable line. It redesigns settings navigation, adds AppImage packages, expands the speech-language catalog (Hungarian and many more), cleans up continuous dictation spacing/capitalization, adds power/GPU controls, and improves Wayland IBus on compositors that ship `ibus-wayland`, on top of the 0.14 packaging work (Flatpak, AUR, configurable hotkeys).
 
 ### Highlights
 
@@ -12,6 +12,7 @@ This guide explains how to update Vocalinux to the latest version.
 |---------|-------------|
 | **Searchable settings** | Sidebar navigation with search replaces the seven-tab notebook (#601) |
 | **AppImage** | Self-contained x86_64 and aarch64 builds attached to GitHub Releases (#573, #602) |
+| **Language catalog** | ~33 selectable speech languages plus Auto-detect (incl. Hungarian); CLI choices derived from the same catalog; VOSK hides Whisper-only langs (#616, fixes #565) |
 | **Dictation polish** | Auto-capitalize after `.` / `!` / `?`; append a trailing space after each completed utterance (#554, #608) |
 | **Auto-pause + keep-alive** | Unload the model while configured apps run, or after an idle timeout (#592) |
 | **Vulkan GPU selection** | Prefer a discrete GPU automatically; pick a device under Advanced settings (#590) |
@@ -22,6 +23,7 @@ This guide explains how to update Vocalinux to the latest version.
 
 - **Searchable sidebar settings** — Topic pages in a sidebar with live search instead of seven notebook tabs (#601)
 - **AppImage packaging** — Relocatable x86_64 and aarch64 AppImages built in the release workflow (#573, #602)
+- **Expanded speech languages** — Hungarian plus many high-demand Whisper languages in Settings/CLI; official Alphacephei VOSK models where available; Whisper-only languages stay hidden in the VOSK dropdown (#616 by @jatinkrmalik, fixes #565)
 - **Sentence capitalization** — Capitalize at the start of dictation and after sentence-ending punctuation (#554, closes #553)
 - **Trailing space between utterances** — Completed transcriptions leave a trailing space so the next session does not glue onto the previous sentence (#608, fixes #605)
 - **Auto-pause apps + model keep-alive** — Optional unload while selected processes run; idle timeout unload for battery/Optimus laptops (#592, closes #445, #591)
@@ -46,6 +48,7 @@ This guide explains how to update Vocalinux to the latest version.
 ### Docs / website
 
 - Marketing site redesign with workstation craft (#582)
+- Languages marketing page with honest per-engine badges (#616)
 - Multi-distro tray icon FAQ (#584)
 - robots.txt no longer blocks indexable pages (#610)
 - Website CI lint / action warning cleanup (#611)
