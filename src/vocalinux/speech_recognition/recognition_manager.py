@@ -21,11 +21,29 @@ from typing import Callable, Optional
 from ..common_types import RecognitionState
 from ..ui.audio_feedback import play_error_sound, play_start_sound, play_stop_sound
 from ..utils.paths import models_dir
-from ..utils.vosk_model_info import VOSK_MODEL_INFO
+from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO
 from ..utils.whispercpp_model_info import WHISPERCPP_MODEL_INFO, get_model_path, is_model_downloaded
 from ..version import __version__
 from .command_processor import CommandProcessor
 from .silero_vad import SILERO_CHUNK_SIZE, load_silero_vad
+
+
+def resolve_whisper_language(language: str) -> Optional[str]:
+    """Map a catalog language id to a Whisper / whisper.cpp language code.
+
+    Catalog keys like ``en-us`` / ``en-in`` are not valid Whisper codes; the
+    ``whisper`` field on ``SUPPORTED_LANGUAGES`` holds the ISO-style code
+    (``en``). ``auto`` resolves to ``None`` for model auto-detect.
+    """
+    if language == "auto":
+        return None
+    info = SUPPORTED_LANGUAGES.get(language)
+    if info is not None and "whisper" in info:
+        return info["whisper"]
+    # Legacy fallback for codes not present in the catalog.
+    if language == "en-us":
+        return "en"
+    return language
 
 
 # ALSA error handler to suppress warnings during PyAudio initialization
@@ -210,6 +228,57 @@ def _is_virtual_device(device_name: str) -> bool:
     return any(pattern in name_lower for pattern in virtual_patterns)
 
 
+def _is_bluetooth_device(device_name: Optional[str]) -> bool:
+    """Return True if the device name looks like a Bluetooth headset/mic."""
+    if not device_name:
+        return False
+    name_lower = device_name.lower()
+    # Prefer explicit Bluetooth/BlueZ markers. Avoid bare "headset" which also
+    # matches many wired USB headsets that do not need SCO settle delays.
+    bluetooth_patterns = (
+        "bluetooth",
+        "bluez",
+        "hands-free",
+        "handsfree",
+    )
+    return any(pattern in name_lower for pattern in bluetooth_patterns)
+
+
+def _safe_close_stream(stream) -> None:
+    """Stop and close a PortAudio stream without raising.
+
+    Closing an active stream (especially Bluetooth SCO/HFP capture) without
+    stopping it first is a known trigger for PortAudio heap corruption and
+    process abort via malloc assertions.
+    """
+    if stream is None:
+        return
+    try:
+        stop = getattr(stream, "stop_stream", None)
+        if callable(stop):
+            stop()
+    except Exception:
+        pass
+    try:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+    except Exception:
+        pass
+
+
+def _get_device_info_safe(audio, device_index: Optional[int] = None) -> dict:
+    """Fetch PortAudio device info, returning {} on failure."""
+    try:
+        if device_index is not None:
+            info = audio.get_device_info_by_index(device_index)
+        else:
+            info = audio.get_default_input_device_info()
+        return info if isinstance(info, dict) else {}
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        return {}
+
+
 def get_audio_input_devices() -> list:
     """
     Get a list of available audio input devices, excluding virtual devices.
@@ -357,52 +426,63 @@ def _resolve_valid_input_device(audio, preferred_index: Optional[int] = None) ->
     return input_device_indices[0]
 
 
-def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
+def _open_capture_stream(audio, device_index: Optional[int] = None) -> tuple[int, int, object]:
     """
-    Detect the supported number of channels for the audio device.
+    Negotiate a working (channels, sample_rate) and return the opened stream.
 
-    Some audio devices (particularly professional audio interfaces and certain
-    onboard audio chips) only support specific channel configurations. This
-    function tests mono (1) and stereo (2) to find a working configuration.
+    Historically Vocalinux probed channels and sample rates separately, each
+    opening and closing PortAudio streams, then opened the real capture stream
+    on top — three open/close cycles in under a second. Bluetooth headset
+    capture (SCO/HFP / PipeWire "Bluetooth internal capture stream") is
+    especially sensitive to that pattern and can abort the process with malloc
+    heap corruption (see GitHub issue #567).
 
-    Pro-audio USB interfaces (MUPRO, Vocaster, etc.) often only support 48kHz
-    and will reject 16kHz probes. This function uses the device's default
-    sample rate first, then falls back to common rates.
+    This function opens PortAudio exactly once per capture session: candidate
+    formats are tried in order (device default rate first, mono before stereo,
+    stereo skipped entirely for mono-only devices) and the FIRST successfully
+    opened stream is returned to the caller for actual capture — never closed
+    and reopened.
 
     Args:
         audio: PyAudio instance
-        device_index: The device index to test (None for default)
+        device_index: The device index to open (None for default)
 
     Returns:
-        int: Number of channels supported (1 or 2), defaults to 1
+        Tuple of (channels, sample_rate, stream). If no format works, returns
+        (1, 16000, None) and the caller may attempt its own fallback open.
     """
     import pyaudio
 
     FORMAT = pyaudio.paInt16
     CHUNK = 1024
-
     COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
 
-    rates_to_try = []
-    try:
-        if device_index is not None:
-            device_info = audio.get_device_info_by_index(device_index)
-        else:
-            device_info = audio.get_default_input_device_info()
+    device_info = _get_device_info_safe(audio, device_index)
+    device_name = device_info.get("name")
+    rates_to_try: list[int] = []
 
-        default_rate = int(device_info.get("defaultSampleRate", 0))
-        if default_rate > 0:
-            rates_to_try.append(default_rate)
-            logger.debug(f"Device reports default sample rate: {default_rate}Hz")
-    except (IOError, OSError) as e:
-        logger.debug(f"Could not get device info for channel probing: {e}")
+    default_rate = int(device_info.get("defaultSampleRate", 0) or 0)
+    if default_rate > 0:
+        rates_to_try.append(default_rate)
+        logger.debug(f"Device reports default sample rate: {default_rate}Hz")
 
     for rate in COMMON_RATES:
         if rate not in rates_to_try:
             rates_to_try.append(rate)
 
-    for channels in [1, 2]:
+    # Never probe stereo on a device that reports a single input channel
+    # (opening with more channels than supported is itself a known
+    # PortAudio/ALSA corruption trigger).
+    reported_channels = int(device_info.get("maxInputChannels", 0) or 0)
+    channel_options = [1] if reported_channels == 1 else [1, 2]
+
+    bluetooth = _is_bluetooth_device(device_name)
+    # Brief settle helps BlueZ/Pulse release SCO between failed open attempts.
+    settle_s = 0.15 if bluetooth else 0.0
+
+    for channels in channel_options:
         for rate in rates_to_try:
+            stream = None
             try:
                 stream_kwargs = {
                     "format": FORMAT,
@@ -414,20 +494,41 @@ def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
                 if device_index is not None:
                     stream_kwargs["input_device_index"] = device_index
 
-                test_stream = audio.open(**stream_kwargs)
-                test_stream.close()
-                logger.debug(f"Device supports {channels} channel(s) at {rate}Hz")
-                return channels
+                stream = audio.open(**stream_kwargs)
+                logger.debug(f"Opened capture stream: {channels} channel(s) at {rate}Hz")
+                return channels, rate, stream
             except (IOError, OSError) as e:
+                _safe_close_stream(stream)
                 error_str = str(e).lower()
                 if "invalid number of channels" in error_str or "-9998" in error_str:
                     logger.debug(f"Device rejected {channels} channel(s) at {rate}Hz: {e}")
                 else:
-                    logger.debug(f"Channel test failed at {rate}Hz: {e}")
-                continue
+                    logger.debug(f"Capture open failed ({channels}ch @ {rate}Hz): {e}")
+                if settle_s:
+                    time.sleep(settle_s)
 
-    logger.warning("Could not determine supported channel count, defaulting to 1")
-    return 1
+    logger.warning("Could not open capture stream, defaulting to 1ch/16000Hz")
+    return 1, 16000, None
+
+
+def _get_supported_channels(audio, device_index: Optional[int] = None) -> int:
+    """
+    Detect the supported number of channels for the audio device.
+
+    Production code should use :func:`_open_capture_stream`, which keeps the
+    negotiated stream open instead of closing and reopening it. This helper is
+    retained for standalone format queries.
+
+    Args:
+        audio: PyAudio instance
+        device_index: The device index to test (None for default)
+
+    Returns:
+        int: Number of channels supported (1 or 2), defaults to 1
+    """
+    channels, _rate, stream = _open_capture_stream(audio, device_index)
+    _safe_close_stream(stream)
+    return channels
 
 
 def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int = 1) -> int:
@@ -437,6 +538,10 @@ def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int
     Some audio devices (like Vocaster One) only support specific sample rates
     (e.g., 48kHz) and will fail with the default 16kHz. This function tests
     common sample rates and returns the highest supported one.
+
+    Production code should use :func:`_open_capture_stream`, which negotiates
+    channels and rate with a single PortAudio open. This helper is retained
+    for standalone format queries.
 
     Args:
         audio: PyAudio instance
@@ -454,38 +559,21 @@ def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int
     # Common sample rates to try, ordered from highest to lowest quality
     COMMON_RATES = [48000, 44100, 32000, 22050, 16000, 8000]
 
-    # First, try the device's default sample rate
-    try:
-        if device_index is not None:
-            device_info = audio.get_device_info_by_index(device_index)
-        else:
-            device_info = audio.get_default_input_device_info()
+    device_info = _get_device_info_safe(audio, device_index)
+    device_name = device_info.get("name")
+    bluetooth = _is_bluetooth_device(device_name)
+    settle_s = 0.15 if bluetooth else 0.0
 
-        default_rate = int(device_info.get("defaultSampleRate", 0))
-        if default_rate > 0 and default_rate in COMMON_RATES:
-            # Test if the default rate actually works
-            try:
-                stream_kwargs = {
-                    "format": FORMAT,
-                    "channels": channels,
-                    "rate": default_rate,
-                    "input": True,
-                    "frames_per_buffer": CHUNK,
-                }
-                if device_index is not None:
-                    stream_kwargs["input_device_index"] = device_index
-
-                test_stream = audio.open(**stream_kwargs)
-                test_stream.close()
-                logger.debug(f"Using device default sample rate: {default_rate}Hz")
-                return default_rate
-            except (IOError, OSError):
-                logger.debug(f"Device default rate {default_rate}Hz failed, trying common rates")
-    except (IOError, OSError) as e:
-        logger.debug(f"Could not get device default rate: {e}")
-
-    # Try common sample rates in order of preference
+    rates_to_try: list[int] = []
+    default_rate = int(device_info.get("defaultSampleRate", 0) or 0)
+    if default_rate > 0:
+        rates_to_try.append(default_rate)
     for rate in COMMON_RATES:
+        if rate not in rates_to_try:
+            rates_to_try.append(rate)
+
+    for rate in rates_to_try:
+        test_stream = None
         try:
             stream_kwargs = {
                 "format": FORMAT,
@@ -498,11 +586,15 @@ def _get_supported_sample_rate(audio, device_index: Optional[int], channels: int
                 stream_kwargs["input_device_index"] = device_index
 
             test_stream = audio.open(**stream_kwargs)
-            test_stream.close()
+            _safe_close_stream(test_stream)
+            test_stream = None
             logger.debug(f"Found supported sample rate: {rate}Hz")
             return rate
         except (IOError, OSError):
-            continue
+            if settle_s:
+                time.sleep(settle_s)
+        finally:
+            _safe_close_stream(test_stream)
 
     # Fallback to 16kHz if nothing works
     logger.warning("Could not find supported sample rate, defaulting to 16000Hz")
@@ -561,31 +653,32 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
             audio.terminate()
             return result
 
-        # Detect supported channel count first (some devices require stereo)
-        CHANNELS = _get_supported_channels(audio, device_index)
+        # Negotiate the format and open the capture stream in ONE PortAudio
+        # open — Bluetooth SCO devices abort with heap corruption when the
+        # stream is opened, closed, and quickly reopened (issue #567).
+        CHANNELS, RATE, stream = _open_capture_stream(audio, device_index)
         logger.info(f"Using {CHANNELS} channel(s) for audio test")
-
-        # Detect supported sample rate for this device
-        RATE = _get_supported_sample_rate(audio, device_index, CHANNELS)
         result["sample_rate"] = RATE
 
-        # Open stream
-        try:
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": CHANNELS,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
-            if device_index is not None:
-                stream_kwargs["input_device_index"] = device_index
+        if stream is None:
+            # Negotiation failed; try one last plain open so the error
+            # message reflects the real failure.
+            try:
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": CHANNELS,
+                    "rate": RATE,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
+                if device_index is not None:
+                    stream_kwargs["input_device_index"] = device_index
 
-            stream = audio.open(**stream_kwargs)
-        except (IOError, OSError) as e:
-            result["error"] = f"Cannot open audio stream: {e}"
-            audio.terminate()
-            return result
+                stream = audio.open(**stream_kwargs)
+            except (IOError, OSError) as e:
+                result["error"] = f"Cannot open audio stream: {e}"
+                audio.terminate()
+                return result
 
         # Record and analyze
         all_amplitudes = []
@@ -601,8 +694,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
                 result["error"] = f"Error reading audio: {e}"
                 break
 
-        stream.stop_stream()
-        stream.close()
+        _safe_close_stream(stream)
         audio.terminate()
 
         if all_amplitudes:
@@ -816,6 +908,10 @@ class SpeechRecognitionManager:
         self._download_cancelled = False
         self._defer_download = defer_download
         self._model_initialized = False
+        # True while auto-pause has unloaded the model for a configured app/game
+        self._auto_paused = False
+        # True while idle keep-alive has unloaded the model (dictation may lazy-reload)
+        self._idle_unloaded = False
 
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
@@ -842,6 +938,7 @@ class SpeechRecognitionManager:
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
         self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
+        self.whispercpp_gpu_device = kwargs.get("whispercpp_gpu_device", None)
 
         # Remote API settings
         self.remote_api_url = kwargs.get("remote_api_url", "")
@@ -1058,11 +1155,7 @@ class SpeechRecognitionManager:
                     import torch
                 use_fp16 = self.model.device != torch.device("cpu")
 
-                lang = self.language
-                if self.language == "en-us":
-                    lang = "en"
-                elif self.language == "auto":
-                    lang = None  # Auto-detect
+                lang = resolve_whisper_language(self.language)
 
                 # Transcribe with Whisper (handles variable length audio automatically)
                 result = self.model.transcribe(
@@ -1198,11 +1291,31 @@ class SpeechRecognitionManager:
                 )
         return compatible_kwargs
 
-    def _load_model_with_compatible_params(self, model_path: str, model_kwargs: dict):
+    def _load_model_with_compatible_params(
+        self, model_path: str, model_kwargs: dict, gpu_device: Optional[int] = None
+    ):
         from pywhispercpp.model import Model
 
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
-        return Model(model_path, **compatible_kwargs)
+        if gpu_device is not None and gpu_device >= 0:
+            compatible_kwargs["context_params"] = {"gpu_device": gpu_device}
+
+        try:
+            return Model(model_path, **compatible_kwargs)
+        except TypeError as exc:
+            # Older pywhispercpp releases (< ~1.4.0) do not accept context_params.
+            # Retry without GPU device selection so the engine still loads.
+            if "context_params" in compatible_kwargs and (
+                "context_params" in str(exc) or "unexpected keyword" in str(exc)
+            ):
+                logger.warning(
+                    "pywhispercpp does not support context_params; "
+                    "upgrade pywhispercpp to enable GPU device selection. "
+                    f"Falling back to default device. Error: {exc}"
+                )
+                compatible_kwargs.pop("context_params")
+                return Model(model_path, **compatible_kwargs)
+            raise
 
     def _detect_pywhispercpp_gpu_backend(self) -> str:
         """Detect whether pywhispercpp's native library actually has GPU support."""
@@ -1235,7 +1348,9 @@ class SpeechRecognitionManager:
 
         from ..utils.whispercpp_model_info import (
             ComputeBackend,
+            _prefer_discrete_vulkan_device,
             detect_compute_backend,
+            detect_vulkan_devices,
             get_backend_display_name,
         )
 
@@ -1245,6 +1360,22 @@ class SpeechRecognitionManager:
         logger.info(
             f"whisper.cpp using {get_backend_display_name(backend)} backend: {backend_info}"
         )
+
+        # Select Vulkan GPU via pywhispercpp context_params (GGML_VULKAN_DEVICE is ignored).
+        selected_gpu_device = None
+        if backend == ComputeBackend.VULKAN:
+            gpu_device_index = self.whispercpp_gpu_device
+            if gpu_device_index is None or gpu_device_index < 0:
+                gpu_device_index = _prefer_discrete_vulkan_device()
+
+            if gpu_device_index is not None:
+                devices = detect_vulkan_devices()
+                device_name = next(
+                    (d["name"] for d in devices if d["index"] == gpu_device_index),
+                    "unknown",
+                )
+                logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
+                selected_gpu_device = gpu_device_index
 
         # Log hardware summary
         import psutil
@@ -1279,7 +1410,9 @@ class SpeechRecognitionManager:
 
         # Attempt to load model; filter unsupported params and fall back to CPU if needed
         try:
-            self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
+            self.model = self._load_model_with_compatible_params(
+                model_path, model_kwargs, gpu_device=selected_gpu_device
+            )
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
                 model_error, model_path, model_kwargs, ComputeBackend.CPU
@@ -1369,11 +1502,7 @@ class SpeechRecognitionManager:
             )
 
             # Prepare language parameter
-            lang = self.language
-            if self.language == "en-us":
-                lang = "en"
-            elif self.language == "auto":
-                lang = None  # Auto-detect
+            lang = resolve_whisper_language(self.language)
 
             logger.debug(f"whisper.cpp using language: {lang or 'auto-detect'}")
 
@@ -1506,11 +1635,7 @@ class SpeechRecognitionManager:
             )
 
             # Prepare language parameters
-            lang = self.language
-            if lang == "en-us":
-                lang = "en"
-            elif lang == "auto":
-                lang = None
+            lang = resolve_whisper_language(self.language)
 
             # Prepare HTTP request headers
             headers = {}
@@ -2241,18 +2366,45 @@ class SpeechRecognitionManager:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
             return
 
-        # Check if model is ready
-        if not self.model_ready:
+        if self._auto_paused:
             logger.warning(
-                "Cannot start recognition: model not downloaded. " "Please download via Settings."
+                "Cannot start recognition: auto-paused while a configured app/game is running"
             )
             play_error_sound()
             _show_notification(
-                "No Speech Model",
-                "Please open Settings and download a speech recognition model " "to use dictation.",
-                "dialog-warning",
+                "Dictation Paused",
+                "Vocalinux is paused because a listed game or app is running. "
+                "Close that app or remove it from Auto-Pause settings to resume.",
+                "dialog-information",
             )
             return
+
+        # Check if model is ready (lazy-reload after idle keep-alive unload)
+        if not self.model_ready:
+            if self._idle_unloaded:
+                logger.info("Model was unloaded by keep-alive; reloading before dictation")
+                if not self.ensure_model_loaded():
+                    play_error_sound()
+                    _show_notification(
+                        "Model Reload Failed",
+                        "Vocalinux could not reload the speech model. "
+                        "Open Settings to check your engine and try again.",
+                        "dialog-warning",
+                    )
+                    return
+            else:
+                logger.warning(
+                    "Cannot start recognition: model not downloaded. "
+                    "Please download via Settings."
+                )
+                play_error_sound()
+                _show_notification(
+                    "No Speech Model",
+                    "Please open Settings and download a speech recognition model "
+                    "to use dictation.",
+                    "dialog-warning",
+                )
+                return
 
         logger.info("Starting speech recognition")
         self._update_state(RecognitionState.LISTENING)
@@ -2388,31 +2540,13 @@ class SpeechRecognitionManager:
                 except (IOError, OSError):
                     continue
 
-            # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio, resolved_device_index)
+            # Negotiate the format and open the capture stream in ONE PortAudio
+            # open — Bluetooth SCO devices abort with heap corruption when the
+            # stream is opened, closed, and quickly reopened (issue #567).
+            CHANNELS, RATE, negotiated_stream = _open_capture_stream(audio, resolved_device_index)
             logger.info(f"Using {CHANNELS} channel(s) for recording")
-
-            # Detect supported sample rate for the selected device
-            RATE = _get_supported_sample_rate(audio, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.info(f"Using sample rate: {RATE}Hz")
-
-            # Open microphone stream with optional device selection and reconnection logic
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": CHANNELS,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
-
-            # Use the resolved device (skip if already system default)
-            try:
-                default_idx = audio.get_default_input_device_info().get("index")
-            except (IOError, OSError):
-                default_idx = None
-            if resolved_device_index != default_idx:
-                stream_kwargs["input_device_index"] = resolved_device_index
 
             try:
                 device_info = audio.get_device_info_by_index(resolved_device_index)
@@ -2422,21 +2556,45 @@ class SpeechRecognitionManager:
             except (IOError, OSError):
                 logger.warning(f"Could not get info for device index {resolved_device_index}")
 
-            try:
-                self._audio_stream = audio.open(**stream_kwargs)
-                stream = self._audio_stream
-            except (IOError, OSError) as e:
-                logger.error(f"Failed to open audio stream: {e}")
-                logger.error("This may indicate a problem with the audio device or permissions.")
+            if negotiated_stream is not None:
+                self._audio_stream = negotiated_stream
+                stream = negotiated_stream
+            else:
+                # Negotiation failed; fall back to a plain open so the
+                # existing reconnection/error path still applies.
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": CHANNELS,
+                    "rate": RATE,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
 
-                # Attempt reconnection
-                if self._attempt_audio_reconnection(audio):
+                # Use the resolved device (skip if already system default)
+                try:
+                    default_idx = audio.get_default_input_device_info().get("index")
+                except (IOError, OSError):
+                    default_idx = None
+                if resolved_device_index != default_idx:
+                    stream_kwargs["input_device_index"] = resolved_device_index
+
+                try:
+                    self._audio_stream = audio.open(**stream_kwargs)
                     stream = self._audio_stream
-                else:
-                    play_error_sound()
-                    audio.terminate()
-                    self._update_state(RecognitionState.ERROR)
-                    return
+                except (IOError, OSError) as e:
+                    logger.error(f"Failed to open audio stream: {e}")
+                    logger.error(
+                        "This may indicate a problem with the audio device or permissions."
+                    )
+
+                    # Attempt reconnection
+                    if self._attempt_audio_reconnection(audio):
+                        stream = self._audio_stream
+                    else:
+                        play_error_sound()
+                        audio.terminate()
+                        self._update_state(RecognitionState.ERROR)
+                        return
 
             logger.info("Audio recording started")
 
@@ -2895,6 +3053,7 @@ class SpeechRecognitionManager:
             "whispercpp_logprob_thold",
             "whispercpp_no_speech_thold",
             "whispercpp_n_threads",
+            "whispercpp_gpu_device",
         ):
             if param_name in kwargs:
                 setattr(self, param_name, kwargs[param_name])
@@ -3016,33 +3175,33 @@ class SpeechRecognitionManager:
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
 
-            # Detect supported channel count first (some devices require stereo)
-            CHANNELS = _get_supported_channels(audio_instance, resolved_device_index)
+            # Negotiate the format and open the capture stream in ONE PortAudio
+            # open — Bluetooth SCO devices abort with heap corruption when the
+            # stream is opened, closed, and quickly reopened (issue #567).
+            CHANNELS, RATE, new_stream = _open_capture_stream(audio_instance, resolved_device_index)
             logger.debug(f"Reconnecting with {CHANNELS} channel(s)")
-
-            # Detect supported sample rate for the device
-            RATE = _get_supported_sample_rate(audio_instance, resolved_device_index, CHANNELS)
             self._capture_sample_rate = RATE
             logger.debug(f"Reconnecting with sample rate: {RATE}Hz")
 
-            stream_kwargs = {
-                "format": FORMAT,
-                "channels": CHANNELS,
-                "rate": RATE,
-                "input": True,
-                "frames_per_buffer": CHUNK,
-            }
+            if new_stream is None:
+                # Negotiation failed; fall back to a plain open.
+                stream_kwargs = {
+                    "format": FORMAT,
+                    "channels": CHANNELS,
+                    "rate": RATE,
+                    "input": True,
+                    "frames_per_buffer": CHUNK,
+                }
 
-            # Use resolved device (skip if already system default)
-            try:
-                default_idx = audio_instance.get_default_input_device_info().get("index")
-            except (IOError, OSError):
-                default_idx = None
-            if resolved_device_index != default_idx:
-                stream_kwargs["input_device_index"] = resolved_device_index
+                # Use resolved device (skip if already system default)
+                try:
+                    default_idx = audio_instance.get_default_input_device_info().get("index")
+                except (IOError, OSError):
+                    default_idx = None
+                if resolved_device_index != default_idx:
+                    stream_kwargs["input_device_index"] = resolved_device_index
 
-            # Attempt to open new stream
-            new_stream = audio_instance.open(**stream_kwargs)
+                new_stream = audio_instance.open(**stream_kwargs)
 
             # Test the stream by reading a small amount of data
             test_data = new_stream.read(CHUNK, exception_on_overflow=False)
@@ -3053,11 +3212,7 @@ class SpeechRecognitionManager:
                 return True
             else:
                 logger.error("Reconnected stream returned no data")
-                try:
-                    new_stream.stop_stream()
-                    new_stream.close()
-                except Exception:
-                    pass
+                _safe_close_stream(new_stream)
                 return False
 
         except (IOError, OSError) as e:
@@ -3067,12 +3222,92 @@ class SpeechRecognitionManager:
             logger.error(f"Unexpected error during audio reconnection: {e}")
             return False
 
+    def unload_model(self, reason: str = "auto_pause") -> None:
+        """Stop recognition (if active) and release model resources from memory.
+
+        Args:
+            reason: Why the model is being unloaded:
+                - ``"auto_pause"``: a configured game/app is running; dictation is blocked
+                  until :meth:`reinitialize_after_resume` (or auto-pause resume).
+                - ``"idle_keepalive"``: idle keep-alive timeout; next dictation may
+                  lazy-reload via :meth:`ensure_model_loaded`.
+                - ``"manual"`` / other: unload only without setting pause/idle flags.
+        """
+        logger.info("Unloading speech model (reason=%s)", reason)
+
+        if self.state != RecognitionState.IDLE:
+            logger.info("Stopping active recognition before model unload")
+            self.stop_recognition()
+
+        with self._model_lock:
+            self.model = None
+            self.recognizer = None
+            if self._http_session is not None:
+                try:
+                    self._http_session.close()
+                except Exception:
+                    logger.debug("Error closing HTTP session during unload", exc_info=True)
+                self._http_session = None
+            self._model_initialized = False
+
+        if reason == "auto_pause":
+            self._auto_paused = True
+            self._idle_unloaded = False
+            logger.info("Speech model unloaded; dictation blocked until auto-pause clears")
+        elif reason == "idle_keepalive":
+            # Auto-pause owns lifecycle if both could apply
+            if not self._auto_paused:
+                self._idle_unloaded = True
+            logger.info("Speech model unloaded after idle keep-alive timeout")
+        else:
+            logger.info("Speech model unloaded")
+
+        try:
+            import gc
+
+            gc.collect()
+        except Exception:
+            pass
+
+    @property
+    def is_auto_paused(self) -> bool:
+        """True when the model was unloaded for auto-pause and not yet reloaded."""
+        return bool(self._auto_paused)
+
+    @property
+    def is_idle_unloaded(self) -> bool:
+        """True when the model was unloaded by idle keep-alive and not yet reloaded."""
+        return bool(self._idle_unloaded)
+
+    def ensure_model_loaded(self) -> bool:
+        """Ensure the speech model is loaded and ready for dictation.
+
+        Returns:
+            True if the model is ready after this call. Returns False when
+            auto-pause still owns the unload, or when reload fails.
+        """
+        if self.model_ready:
+            return True
+        if self._auto_paused:
+            logger.warning("Cannot load model: auto-pause is still active")
+            return False
+
+        try:
+            self.reinitialize_after_resume()
+        except Exception:
+            logger.error("ensure_model_loaded failed", exc_info=True)
+            return False
+
+        return self.model_ready
+
     def reinitialize_after_resume(self):
         """Reinitialize the speech engine after system resume from suspend.
 
         Stops any active recognition, releases stale model resources,
         and re-creates the engine so that the audio pipeline and model
         are in a clean state for new dictation.
+
+        Also used after auto-pause / idle keep-alive to reload the model.
         """
         logger.info("Reinitializing speech engine after system resume")
 
@@ -3101,6 +3336,8 @@ class SpeechRecognitionManager:
                     logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
                     return
 
+                self._auto_paused = False
+                self._idle_unloaded = False
                 logger.info("Speech engine reinitialized after resume")
             except Exception:
                 logger.error("Failed to reinitialize speech engine after resume", exc_info=True)

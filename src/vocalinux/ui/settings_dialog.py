@@ -6,10 +6,13 @@ and other relevant parameters.
 
 UX Design Notes:
 - Follows GNOME Human Interface Guidelines (HIG) for modern desktop look
-- Uses preference-page style layout with clearly grouped sections
+- Sidebar navigation (icon + label) with topic-based pages: Dictation,
+  Speech Model, Audio, Performance, Application, Advanced
+- Live settings search (Ctrl+F) filters rows across all pages in place
+- Persistent bottom status strip: recognition state, mic level, and a
+  dictation test that can verify any instant-applied change from any page
 - Settings apply immediately when changed (instant-apply pattern)
 - Close button provided for WM compatibility (some WMs hide title bar close)
-- Provides real-time progress feedback for recognition state
 - Multi-modal feedback (text + icon + audio level) for accessibility
 - Modal dialog for model downloads (explicit confirmation for large downloads)
 """
@@ -36,6 +39,7 @@ from ..utils.whispercpp_model_info import MODEL_SIZES as WHISPERCPP_MODEL_SIZES
 from ..utils.whispercpp_model_info import (
     WHISPERCPP_MODEL_INFO,
     detect_compute_backend,
+    detect_vulkan_devices,
     get_backend_display_name,
 )
 from ..utils.whispercpp_model_info import get_model_size as get_whispercpp_model_size
@@ -85,7 +89,7 @@ ENGINE_MODELS = {
 ENGINE_DISPLAY_NAMES = {
     "vosk": "Vosk",
     "whisper": "Whisper",
-    "whisper_cpp": "Whisper_cpp",
+    "whisper_cpp": "whisper.cpp",
     "remote_api": "Remote API",
 }
 
@@ -195,6 +199,9 @@ def _default_whispercpp_variant_for_size(model_size: str, language_id: str) -> O
 
     return variants[0]
 
+
+# Uniform width for right-hand row controls so they align down a page
+_CONTROL_WIDTH = 230
 
 MODEL_SIZE_TOOLTIP = (
     "Choose the largest model your computer can run comfortably. Tiny/Base are fastest, "
@@ -324,50 +331,71 @@ SYSTEM_MODELS_DIRS = [
 
 # CSS for modern styling
 SETTINGS_CSS = """
-/* Notebook (tab) styling */
-.notebook {
+/* Sidebar navigation (GNOME Settings style) */
+.settings-sidebar {
+    background-color: alpha(@theme_bg_color, 0.5);
+    border-right: 1px solid alpha(@borders, 0.5);
+}
+
+.settings-sidebar list {
     background-color: transparent;
-    border: none;
 }
 
-.notebook tab {
-    background-color: transparent;
-    border: none;
-    padding: 10px 16px;
-    color: @theme_unfocused_fg_color;
+.sidebar-row {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 1px 6px;
 }
 
-.notebook tab:hover {
-    background-color: alpha(@theme_selected_bg_color, 0.1);
+.sidebar-row:hover {
+    background-color: alpha(@theme_fg_color, 0.07);
 }
 
-.notebook tab:active {
-    background-color: alpha(@theme_selected_bg_color, 0.2);
+.sidebar-row:selected {
+    background-color: alpha(@theme_selected_bg_color, 0.85);
+    color: @theme_selected_fg_color;
 }
 
-.notebook tab:selected {
-    background-color: transparent;
-    color: @theme_fg_color;
-}
-
-.notebook tab label {
+.sidebar-row label {
     font-weight: 500;
     font-size: 0.95em;
 }
 
-.notebook tab:selected label {
-    font-weight: 600;
+.sidebar-match-count {
+    font-size: 0.8em;
+    color: @theme_unfocused_fg_color;
+    background-color: alpha(@theme_fg_color, 0.1);
+    border-radius: 10px;
+    padding: 1px 7px;
 }
 
-.notebook header {
-    background-color: alpha(@theme_bg_color, 0.5);
-    border-bottom: 1px solid alpha(@borders, 0.3);
-    box-shadow: 0 1px 3px alpha(@theme_bg_color, 0.2);
+.sidebar-row:selected .sidebar-match-count {
+    color: @theme_selected_fg_color;
+    background-color: alpha(@theme_selected_fg_color, 0.2);
 }
 
-/* Tab content area */
-.notebook stack {
-    background-color: transparent;
+.settings-search {
+    margin: 8px 6px 6px 6px;
+    border-radius: 8px;
+}
+
+/* Empty search results */
+.search-empty-title {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: @theme_unfocused_fg_color;
+}
+
+/* Persistent status strip at the bottom of the dialog */
+.status-strip {
+    background-color: @theme_base_color;
+    border-top: 1px solid alpha(@borders, 0.5);
+    padding: 8px 16px;
+}
+
+.status-strip-state {
+    font-weight: 500;
+    font-size: 0.9em;
 }
 
 /* Modern GNOME-style settings dialog */
@@ -475,17 +503,21 @@ spinbutton {
     margin-bottom: 6px;
 }
 
-/* Info box styling */
+/* Flat helper notices — muted surface, no accent strip */
 .info-box {
-    background-color: alpha(@theme_selected_bg_color, 0.1);
+    background-color: alpha(@theme_fg_color, 0.04);
+    border: 1px solid alpha(@borders, 0.45);
     border-radius: 8px;
-    padding: 12px;
-    border-left: 4px solid @theme_selected_bg_color;
+    padding: 10px 12px;
+}
+
+.info-box image {
+    opacity: 0.55;
 }
 
 .info-box-warning {
-    background-color: alpha(#e5a50a, 0.1);
-    border-left-color: #e5a50a;
+    background-color: alpha(#e5a50a, 0.08);
+    border-color: alpha(#e5a50a, 0.4);
 }
 
 /* Recognition status */
@@ -755,12 +787,29 @@ def _gdk_keyname_to_token(name: Optional[str]) -> Optional[str]:
     return None
 
 
+def _row_matches_query(query: str, title: str, subtitle: str = "", keywords=()) -> bool:
+    """Return whether a settings row matches a search query.
+
+    Matching is case-insensitive and checks the row title, subtitle, and any
+    extra keywords attached to the row.
+    """
+    query = (query or "").strip().casefold()
+    if not query:
+        return True
+    haystacks = [title or "", subtitle or "", *keywords]
+    return any(query in text.casefold() for text in haystacks)
+
+
 class PreferencesGroup(Gtk.Box):
     """A card-style group of preferences, similar to libadwaita's AdwPreferencesGroup."""
 
-    def __init__(self, title: str = "", description: str = ""):
+    def __init__(self, title: str = "", description: str = "", keywords=()):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.get_style_context().add_class("preferences-group")
+        self.title = title
+        self.description = description
+        self.keywords = tuple(keywords)
+        self.rows = []
 
         # Header with title
         if title:
@@ -777,6 +826,9 @@ class PreferencesGroup(Gtk.Box):
             if description:
                 desc_label = Gtk.Label(label=description, xalign=0, wrap=True)
                 desc_label.get_style_context().add_class("preference-row-subtitle")
+                # Align with the title, which carries 16px CSS padding.
+                desc_label.set_margin_start(16)
+                desc_label.set_margin_end(16)
                 header_box.pack_start(desc_label, False, False, 0)
 
             self.pack_start(header_box, False, False, 0)
@@ -790,6 +842,7 @@ class PreferencesGroup(Gtk.Box):
     def add_row(self, widget):
         """Add a widget as a row in the preferences group."""
         self.listbox.add(widget)
+        self.rows.append(widget)
 
 
 class PreferenceRow(Gtk.ListBoxRow):
@@ -801,10 +854,14 @@ class PreferenceRow(Gtk.ListBoxRow):
         subtitle: str = "",
         widget: Gtk.Widget = None,
         activatable: bool = False,
+        keywords=(),
     ):
         super().__init__()
         self.set_activatable(activatable)
         self.get_style_context().add_class("preference-row")
+        self.title = title
+        self.subtitle = subtitle
+        self.keywords = tuple(keywords)
 
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         hbox.set_margin_top(12)
@@ -825,7 +882,7 @@ class PreferenceRow(Gtk.ListBoxRow):
         if subtitle:
             self.subtitle_label = Gtk.Label(label=subtitle, xalign=0, wrap=True)
             self.subtitle_label.get_style_context().add_class("preference-row-subtitle")
-            self.subtitle_label.set_max_width_chars(40)
+            self.subtitle_label.set_max_width_chars(55)
             self.subtitle_label.set_line_wrap(True)
             self.subtitle_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
             text_box.pack_start(self.subtitle_label, False, False, 0)
@@ -841,8 +898,62 @@ class PreferenceRow(Gtk.ListBoxRow):
 
     def set_subtitle(self, subtitle: str):
         """Update the subtitle text."""
+        self.subtitle = subtitle
         if self.subtitle_label:
             self.subtitle_label.set_text(subtitle)
+
+    def matches_query(self, query: str) -> bool:
+        """Return whether this row matches a settings search query."""
+        return _row_matches_query(query, self.title, self.subtitle, self.keywords)
+
+
+class SettingsPage:
+    """One topic page in the settings dialog (sidebar entry + stack child).
+
+    Wraps the page content box and, after the page is built, records which
+    children are searchable PreferencesGroups vs. loose "extra" widgets
+    (info boxes, status labels) that are simply hidden while searching.
+    """
+
+    def __init__(self, name: str, title: str, icon_name: str):
+        self.name = name
+        self.title = title
+        self.icon_name = icon_name
+        self.groups = []
+        self.extras = []
+        self.sidebar_row = None
+        self.match_count_label = None
+
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.box.set_margin_top(16)
+        self.box.set_margin_bottom(16)
+        self.box.set_margin_start(16)
+        self.box.set_margin_end(16)
+
+    def collect_children(self):
+        """Classify built descendants into searchable groups and extras.
+
+        Most groups are direct page children, but gated sections such as the
+        Advanced decoding controls live inside a Gtk.Revealer. Walk nested
+        containers so unlocked settings are searchable too.
+        """
+        self.groups = []
+        self.extras = []
+
+        def collect_groups(widget):
+            if isinstance(widget, PreferencesGroup):
+                self.groups.append(widget)
+                return True
+            if isinstance(widget, Gtk.Container):
+                found = False
+                for child in widget.get_children():
+                    found = collect_groups(child) or found
+                return found
+            return False
+
+        for child in self.box.get_children():
+            if not collect_groups(child):
+                self.extras.append(child)
 
 
 class ModelDownloadDialog(Gtk.Dialog):
@@ -996,13 +1107,6 @@ class SettingsDialog(Gtk.Dialog):
         action_area.set_margin_start(16)
         action_area.set_margin_end(16)
         action_area.set_spacing(8)
-        self.advanced_reset_button = Gtk.Button(label="Reset to Defaults")
-        self.advanced_reset_button.set_tooltip_text(
-            "Restore the whisper.cpp advanced parameters to their default values"
-        )
-        self.advanced_reset_button.connect("clicked", self._on_reset_advanced_clicked)
-        action_area.pack_start(self.advanced_reset_button, False, False, 0)
-        action_area.set_child_secondary(self.advanced_reset_button, True)
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
@@ -1036,62 +1140,35 @@ class SettingsDialog(Gtk.Dialog):
         else:
             screen_height = 1080  # Default fallback
             screen_width = 1920
-        dialog_height = min(800, int(screen_height * 0.75))
-        dialog_width = min(700, int(screen_width * 0.8))
+        dialog_height = min(760, int(screen_height * 0.8))
+        dialog_width = min(880, int(screen_width * 0.85))
         self.set_default_size(dialog_width, dialog_height)
         self.get_style_context().add_class("settings-dialog")
 
-        # Create notebook for tabbed interface
-        notebook = Gtk.Notebook()
-        self.settings_notebook = notebook
-        notebook.set_show_tabs(True)
-        notebook.set_show_border(False)
-        notebook.get_style_context().add_class("notebook")
+        # Topic-based pages (GNOME HIG: group by topic, navigate via sidebar)
+        self._pages = [
+            SettingsPage("dictation", "Dictation", "input-keyboard-symbolic"),
+            SettingsPage("model", "Speech Model", "audio-input-microphone-symbolic"),
+            SettingsPage("audio", "Audio", "audio-card-symbolic"),
+            SettingsPage("performance", "Performance", "utilities-system-monitor-symbolic"),
+            SettingsPage("application", "Application", "preferences-system-symbolic"),
+            SettingsPage("advanced", "Advanced", "preferences-other-symbolic"),
+        ]
+        pages_by_name = {page.name: page for page in self._pages}
 
-        # Create tab content boxes
-        # Speech Engine tab (Engine, Model, Language)
-        self.speech_engine_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.speech_engine_tab.set_margin_top(16)
-        self.speech_engine_tab.set_margin_bottom(16)
-        self.speech_engine_tab.set_margin_start(16)
-        self.speech_engine_tab.set_margin_end(16)
+        # Aliases so the build methods keep targeting familiar boxes.
+        self.dictation_page = pages_by_name["dictation"]
+        self.shortcuts_tab = self.dictation_page.box
+        self.recognition_settings_tab = self.dictation_page.box
+        self.speech_engine_tab = pages_by_name["model"].box
+        self.audio_tab = pages_by_name["audio"].box
+        self.power_tab = pages_by_name["performance"].box
+        self.general_tab = pages_by_name["application"].box
+        self.advanced_tab = pages_by_name["advanced"].box
 
-        # Recognition Settings tab (VAD, Silence, Test)
-        self.recognition_settings_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.recognition_settings_tab.set_margin_top(16)
-        self.recognition_settings_tab.set_margin_bottom(16)
-        self.recognition_settings_tab.set_margin_start(16)
-        self.recognition_settings_tab.set_margin_end(16)
-
-        # Audio tab
-        self.audio_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.audio_tab.set_margin_top(16)
-        self.audio_tab.set_margin_bottom(16)
-        self.audio_tab.set_margin_start(16)
-        self.audio_tab.set_margin_end(16)
-
-        self.shortcuts_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.shortcuts_tab.set_margin_top(16)
-        self.shortcuts_tab.set_margin_bottom(16)
-        self.shortcuts_tab.set_margin_start(16)
-        self.shortcuts_tab.set_margin_end(16)
-
-        self.general_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.general_tab.set_margin_top(16)
-        self.general_tab.set_margin_bottom(16)
-        self.general_tab.set_margin_start(16)
-        self.general_tab.set_margin_end(16)
-
-        self.advanced_tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.advanced_tab.set_margin_top(16)
-        self.advanced_tab.set_margin_bottom(16)
-        self.advanced_tab.set_margin_start(16)
-        self.advanced_tab.set_margin_end(16)
-
-        # Add tabs to notebook (ordered by importance). Each tab is wrapped in a
-        # vertical ScrolledWindow: without one, the notebook's minimum height is
-        # the tallest tab's full content (~1000px), which overrides
-        # set_default_size and makes the dialog taller than the monitor.
+        # Each page is wrapped in a vertical ScrolledWindow: without one, the
+        # stack's minimum height is the tallest page's full content, which
+        # overrides set_default_size and can exceed the monitor.
         def _scrollable(tab):
             scroller = Gtk.ScrolledWindow()
             scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -1099,66 +1176,73 @@ class SettingsDialog(Gtk.Dialog):
             scroller.add(tab)
             return scroller
 
-        # Speech Engine tab - most important (what model/language to use)
-        speech_engine_label = Gtk.Label(label="Speech Engine")
-        speech_engine_label.set_tooltip_text("Speech recognition engine and model settings")
-        notebook.append_page(_scrollable(self.speech_engine_tab), speech_engine_label)
+        # Content stack + sidebar navigation with settings search
+        self.settings_stack = Gtk.Stack()
+        self.settings_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.settings_stack.set_transition_duration(120)
+        self.settings_stack.set_hexpand(True)
+        for page in self._pages:
+            self.settings_stack.add_titled(_scrollable(page.box), page.name, page.title)
+        self.settings_stack.add_named(self._build_search_empty_page(), "search-empty")
+        self.settings_stack.connect("notify::visible-child", self._on_settings_page_changed)
 
-        # Recognition Settings tab - second most important (how to recognize)
-        recognition_label = Gtk.Label(label="Recognition")
-        recognition_label.set_tooltip_text("Recognition behavior and test settings")
-        notebook.append_page(_scrollable(self.recognition_settings_tab), recognition_label)
+        sidebar_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        sidebar_box.get_style_context().add_class("settings-sidebar")
+        sidebar_box.set_size_request(200, -1)
 
-        # Audio tab - third (hardware configuration)
-        audio_label = Gtk.Label(label="Audio")
-        audio_label.set_tooltip_text("Microphone and audio settings")
-        notebook.append_page(_scrollable(self.audio_tab), audio_label)
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.set_placeholder_text("Search settings…")
+        self.search_entry.get_style_context().add_class("settings-search")
+        self.search_entry.connect("search-changed", self._on_search_changed)
+        sidebar_box.pack_start(self.search_entry, False, False, 0)
 
-        # Shortcuts tab
-        shortcuts_label = Gtk.Label(label="Shortcuts")
-        shortcuts_label.set_tooltip_text("Keyboard shortcuts")
-        notebook.append_page(_scrollable(self.shortcuts_tab), shortcuts_label)
+        self.sidebar_listbox = Gtk.ListBox()
+        self.sidebar_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        for page in self._pages:
+            self.sidebar_listbox.add(self._build_sidebar_row(page))
+        self.sidebar_listbox.connect("row-selected", self._on_sidebar_row_selected)
+        sidebar_box.pack_start(self.sidebar_listbox, True, True, 0)
 
-        # General tab - least important (application behavior)
-        general_label = Gtk.Label(label="General")
-        general_label.set_tooltip_text("General settings")
-        notebook.append_page(_scrollable(self.general_tab), general_label)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        main_box.pack_start(sidebar_box, False, False, 0)
+        main_box.pack_start(self.settings_stack, True, True, 0)
+        self.get_content_area().pack_start(main_box, True, True, 0)
 
-        # Advanced tab - whisper.cpp parameters and power-user features (remote API, etc.)
-        advanced_label = Gtk.Label(label="Advanced")
-        advanced_label.set_tooltip_text(
-            "Advanced whisper.cpp parameters and settings for power users"
-        )
-        self.advanced_page_num = notebook.append_page(
-            _scrollable(self.advanced_tab), advanced_label
-        )
-        notebook.connect("switch-page", self._on_settings_page_switched)
-
-        self.get_content_area().pack_start(notebook, True, True, 0)
+        # Search state: baseline visibility snapshot while a query is active.
+        self._search_baseline = None
+        self._search_previous_page = None
 
         # Set content_box to speech_engine_tab for backward compatibility
         self.content_box = self.speech_engine_tab
 
-        # Build UI sections into appropriate tabs
-        self._build_general_section()
-        self._build_audio_section()
+        # Build UI sections into their topic pages
+        self._build_shortcuts_section()
+        self._build_recognition_section()
         self._build_engine_section()
         self._build_remote_server_section()
-        self._build_recognition_section()
-        self._build_shortcuts_section()
+        self._build_audio_section()
+        self._build_auto_pause_section()
+        self._build_model_keepalive_section()
+        self._build_gpu_section()
+        self._build_general_section()
         self._build_advanced_section()
-        self._build_test_section()
+        self._build_status_strip()
+
+        # Record searchable groups vs. loose extras per page
+        for page in self._pages:
+            page.collect_children()
 
         # Load settings and populate UI
         self._load_and_apply_settings()
 
         self.connect("response", self._on_settings_dialog_response)
+        self.connect("key-press-event", self._on_dialog_key_press)
 
         # Show everything first
         self.show_all()
+        self.sidebar_listbox.select_row(self.sidebar_listbox.get_row_at_index(0))
 
         # Then update visibility of engine-specific elements
-        self._update_advanced_reset_button_visibility()
         self._update_engine_specific_ui()
 
         # Initialize recognition progress UI
@@ -1170,6 +1254,187 @@ class SettingsDialog(Gtk.Dialog):
         # Initialization complete - enable auto-apply
         self._initializing = False
 
+    # ------------------------------------------------------------------
+    # Navigation: sidebar, stack, and settings search
+    # ------------------------------------------------------------------
+
+    def _build_sidebar_row(self, page: SettingsPage) -> Gtk.ListBoxRow:
+        """Build one sidebar navigation row (icon + title + match badge)."""
+        row = Gtk.ListBoxRow()
+        row.get_style_context().add_class("sidebar-row")
+        row.page_name = page.name
+
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        icon = Gtk.Image.new_from_icon_name(page.icon_name, Gtk.IconSize.MENU)
+        hbox.pack_start(icon, False, False, 0)
+
+        label = Gtk.Label(label=page.title, xalign=0)
+        hbox.pack_start(label, True, True, 0)
+
+        match_label = Gtk.Label(label="")
+        match_label.get_style_context().add_class("sidebar-match-count")
+        match_label.set_no_show_all(True)
+        hbox.pack_end(match_label, False, False, 0)
+
+        row.add(hbox)
+        page.sidebar_row = row
+        page.match_count_label = match_label
+        return row
+
+    def _build_search_empty_page(self) -> Gtk.Widget:
+        """Build the stack page shown when a search has no results."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_valign(Gtk.Align.CENTER)
+        box.set_halign(Gtk.Align.CENTER)
+
+        icon = Gtk.Image.new_from_icon_name("edit-find-symbolic", Gtk.IconSize.DIALOG)
+        icon.set_opacity(0.4)
+        box.pack_start(icon, False, False, 0)
+
+        title = Gtk.Label(label="No matching settings")
+        title.get_style_context().add_class("search-empty-title")
+        box.pack_start(title, False, False, 0)
+
+        self.search_empty_label = Gtk.Label(label="Try a different search term.")
+        self.search_empty_label.get_style_context().add_class("preference-row-subtitle")
+        box.pack_start(self.search_empty_label, False, False, 0)
+        return box
+
+    def _on_sidebar_row_selected(self, listbox, row):
+        """Switch the stack to the page selected in the sidebar."""
+        if row is not None:
+            self.settings_stack.set_visible_child_name(row.page_name)
+
+    def _on_settings_page_changed(self, stack, pspec):
+        """Persist deferred edits when the visible settings page changes."""
+        if stack.get_visible_child_name() != "advanced":
+            self._flush_advanced_prompt_if_dirty()
+
+    def _on_dialog_key_press(self, widget, event):
+        """Dialog-level shortcuts: Ctrl+F focuses search, Ctrl+W closes, Esc clears search."""
+        keyname = (Gdk.keyval_name(event.keyval) or "").lower()
+        ctrl = bool(event.state & Gdk.ModifierType.CONTROL_MASK)
+
+        if ctrl and keyname == "f":
+            self.search_entry.grab_focus()
+            return True
+        if ctrl and keyname == "w":
+            self.response(Gtk.ResponseType.CLOSE)
+            return True
+        if keyname == "escape" and self.search_entry.get_text():
+            # First Esc clears the search; a second one closes the dialog
+            # through the default Gtk.Dialog binding.
+            self.search_entry.set_text("")
+            return True
+        return False
+
+    def _snapshot_search_baseline(self):
+        """Remember pre-search visibility so clearing the query restores it."""
+        visible_page = self.settings_stack.get_visible_child_name()
+        page_names = {page.name for page in self._pages}
+        self._search_previous_page = visible_page if visible_page in page_names else "dictation"
+
+        baseline = {"rows": {}, "groups": {}, "extras": {}}
+        for page in self._pages:
+            for group in page.groups:
+                visible = group.get_visible()
+                parent = group.get_parent()
+                while visible and parent is not None and parent is not page.box:
+                    if isinstance(parent, Gtk.Revealer) and not parent.get_reveal_child():
+                        visible = False
+                    else:
+                        visible = parent.get_visible()
+                    parent = parent.get_parent()
+                baseline["groups"][group] = visible
+                for row in group.rows:
+                    baseline["rows"][row] = row.get_visible()
+            for extra in page.extras:
+                baseline["extras"][extra] = extra.get_visible()
+        self._search_baseline = baseline
+
+    def _restore_search_baseline(self):
+        """Restore visibility recorded before the search started."""
+        if self._search_baseline is None:
+            return
+        for widgets in self._search_baseline.values():
+            for widget, visible in widgets.items():
+                widget.set_visible(visible)
+        self._search_baseline = None
+
+        for page in self._pages:
+            page.match_count_label.hide()
+            page.sidebar_row.set_sensitive(True)
+            page.sidebar_row.show()
+
+        # Engine-driven visibility is authoritative; re-apply it in case a
+        # control changed while the filter was active.
+        self._update_engine_specific_ui()
+
+        page = next(
+            (page for page in self._pages if page.name == self._search_previous_page),
+            self._pages[0],
+        )
+        self.sidebar_listbox.select_row(page.sidebar_row)
+        self.settings_stack.set_visible_child_name(page.name)
+        self._search_previous_page = None
+
+    def _on_search_changed(self, entry):
+        """Live-filter settings rows across all pages."""
+        query = entry.get_text().strip()
+
+        if not query:
+            self._restore_search_baseline()
+            return
+
+        if self._search_baseline is None:
+            self._snapshot_search_baseline()
+
+        baseline = self._search_baseline
+        first_match_page = None
+        for page in self._pages:
+            page_matches = 0
+            for group in page.groups:
+                if not baseline["groups"].get(group, True):
+                    # Whole group hidden by engine-specific logic; skip it.
+                    group.hide()
+                    continue
+                group_title_match = _row_matches_query(
+                    query, group.title, group.description, group.keywords
+                )
+                visible_rows = 0
+                for row in group.rows:
+                    if not baseline["rows"].get(row, True):
+                        row.hide()
+                        continue
+                    row_matches = group_title_match or (
+                        isinstance(row, PreferenceRow) and row.matches_query(query)
+                    )
+                    row.set_visible(row_matches)
+                    if row_matches:
+                        visible_rows += 1
+                group.set_visible(visible_rows > 0)
+                page_matches += visible_rows
+            for extra in page.extras:
+                extra.hide()
+
+            if page_matches > 0:
+                page.match_count_label.set_text(str(page_matches))
+                page.match_count_label.show()
+                page.sidebar_row.set_sensitive(True)
+                if first_match_page is None:
+                    first_match_page = page
+            else:
+                page.match_count_label.hide()
+                page.sidebar_row.set_sensitive(False)
+
+        if first_match_page is not None:
+            self.sidebar_listbox.select_row(first_match_page.sidebar_row)
+            self.settings_stack.set_visible_child_name(first_match_page.name)
+        else:
+            self.sidebar_listbox.unselect_all()
+            self.search_empty_label.set_text(f"No settings match \u201c{query}\u201d.")
+            self.settings_stack.set_visible_child_name("search-empty")
+
     def _build_audio_section(self):
         """Build the Audio Input section."""
         group = PreferencesGroup(title="Audio Input")
@@ -1180,7 +1445,7 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_device_combo.set_tooltip_text(
             "Select the microphone to use for voice recognition"
         )
-        self.audio_device_combo.set_size_request(250, -1)
+        self.audio_device_combo.set_size_request(_CONTROL_WIDTH, -1)
         _prevent_scroll_on_hover(self.audio_device_combo)
         device_box.pack_start(self.audio_device_combo, True, True, 0)
 
@@ -1194,38 +1459,24 @@ class SettingsDialog(Gtk.Dialog):
             title="Input Device",
             subtitle="Select the microphone for voice recognition",
             widget=device_box,
+            keywords=("microphone", "mic", "input"),
         )
         group.add_row(device_row)
 
-        # Audio level test row
-        level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        self.audio_level_bar = Gtk.LevelBar()
-        self.audio_level_bar.set_min_value(0)
-        self.audio_level_bar.set_max_value(100)
-        self.audio_level_bar.set_value(0)
-        self.audio_level_bar.set_size_request(150, -1)
-        level_box.pack_start(self.audio_level_bar, True, True, 0)
-
+        # Microphone test row; the live level shows in the status strip below.
         self.test_audio_btn = Gtk.Button(label="Test")
-        self.test_audio_btn.set_tooltip_text("Test the microphone for 2 seconds")
+        self.test_audio_btn.set_tooltip_text("Record 2 seconds and check the level")
         self.test_audio_btn.connect("clicked", self._on_test_audio_clicked)
-        level_box.pack_start(self.test_audio_btn, False, False, 0)
 
         level_row = PreferenceRow(
-            title="Audio Level",
-            subtitle="Test your microphone",
-            widget=level_box,
+            title="Microphone Test",
+            subtitle="Record 2 seconds; the level meter below shows the result",
+            widget=self.test_audio_btn,
+            keywords=("audio level", "check", "volume"),
         )
         group.add_row(level_row)
 
-        # Status label for audio testing (added below the group)
-        self.audio_test_status = Gtk.Label(label="", use_markup=True, xalign=0)
-        self.audio_test_status.set_margin_start(16)
-        self.audio_test_status.set_margin_top(4)
-        self.audio_test_status.get_style_context().add_class("status-info")
-
         self.audio_tab.pack_start(group, False, False, 0)
-        self.audio_tab.pack_start(self.audio_test_status, False, False, 0)
 
         # Sound Effects section
         sound_group = PreferencesGroup(title="Sound Effects")
@@ -1247,62 +1498,375 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
 
     def _build_general_section(self):
-        """Build the General section with autostart and UI settings."""
-        group = PreferencesGroup(title="General")
+        """Build the Application page: startup behavior."""
+        group = PreferencesGroup(title="Startup")
 
         self.autostart_switch = Gtk.Switch()
-        self.autostart_switch.set_tooltip_text("Start Vocalinux automatically when you log in")
         autostart_row = PreferenceRow(
             title="Start on Login",
             subtitle="Automatically start Vocalinux when you log in",
             widget=self.autostart_switch,
+            keywords=("autostart", "boot", "startup"),
         )
         group.add_row(autostart_row)
 
         self.start_minimized_switch = Gtk.Switch()
-        self.start_minimized_switch.set_tooltip_text("Start minimized to system tray")
         start_minimized_row = PreferenceRow(
             title="Start Minimized",
             subtitle="Start minimized to system tray instead of showing window",
             widget=self.start_minimized_switch,
+            keywords=("tray",),
         )
         group.add_row(start_minimized_row)
-
-        self.copy_to_clipboard_switch = Gtk.Switch()
-        self.copy_to_clipboard_switch.set_tooltip_text(
-            "Copy recognized text to clipboard after each transcription. "
-            "Useful if injection fails or you want to paste elsewhere."
-        )
-        copy_to_clipboard_row = PreferenceRow(
-            title="Copy to Clipboard",
-            subtitle="Always copy recognized text to clipboard for easy pasting",
-            widget=self.copy_to_clipboard_switch,
-        )
-        group.add_row(copy_to_clipboard_row)
-
-        self.restore_clipboard_switch = Gtk.Switch()
-        self.restore_clipboard_switch.set_tooltip_text(
-            "On Wayland with a non-US keyboard layout, Vocalinux pastes dictation "
-            "via the clipboard (ydotool cannot type your layout directly), which "
-            "normally overwrites whatever you had copied. When enabled, Vocalinux "
-            "restores your previous clipboard after pasting and marks the dictation "
-            "as sensitive so clipboard managers like KDE Klipper keep it out of "
-            "history. Restore timing is best-effort. Has no effect on X11 or when "
-            "'Copy to Clipboard' is on."
-        )
-        restore_clipboard_row = PreferenceRow(
-            title="Preserve Clipboard",
-            subtitle="Restore your clipboard after dictation is pasted (Wayland paste only)",
-            widget=self.restore_clipboard_switch,
-        )
-        group.add_row(restore_clipboard_row)
 
         self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
-        self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
-        self.restore_clipboard_switch.connect("state-set", self._on_restore_clipboard_toggled)
+
+    def _build_auto_pause_section(self):
+        """Build Auto-Pause settings: enable toggle + process name list."""
+        group = PreferencesGroup(
+            title="Auto-Pause for Games & Apps",
+            description=(
+                "While any app in the list is running, Vocalinux pauses dictation and "
+                "unloads the speech model to free CPU, GPU, and memory. Everything "
+                "resumes automatically when the app closes."
+            ),
+            keywords=("process", "program", "game"),
+        )
+
+        self.auto_pause_switch = Gtk.Switch()
+        self.auto_pause_switch.set_tooltip_text(
+            "Pause dictation and unload the speech model while any listed app is running"
+        )
+        enable_row = PreferenceRow(
+            title="Pause for Listed Apps",
+            subtitle="Free resources while any app below is running",
+            widget=self.auto_pause_switch,
+        )
+        group.add_row(enable_row)
+
+        # Add process name: entry + Add button
+        add_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        add_box.set_margin_top(8)
+        add_box.set_margin_bottom(4)
+        add_box.set_margin_start(16)
+        add_box.set_margin_end(16)
+
+        self.auto_pause_entry = Gtk.Entry()
+        self.auto_pause_entry.set_placeholder_text("Process name (e.g. overwatch, steam)")
+        self.auto_pause_entry.set_hexpand(True)
+        self.auto_pause_entry.set_tooltip_text(
+            "Process name, matched case-insensitively. "
+            "For Windows games under Wine/Proton, the .exe suffix is optional."
+        )
+        add_box.pack_start(self.auto_pause_entry, True, True, 0)
+
+        self.auto_pause_add_btn = Gtk.Button(label="Add")
+        self.auto_pause_add_btn.set_tooltip_text("Add this process name to the list")
+        self.auto_pause_add_btn.connect("clicked", self._on_auto_pause_add_clicked)
+        self.auto_pause_entry.connect("activate", self._on_auto_pause_add_clicked)
+        add_box.pack_start(self.auto_pause_add_btn, False, False, 0)
+
+        self.auto_pause_pick_btn = Gtk.Button(label="Choose Running App…")
+        self.auto_pause_pick_btn.set_tooltip_text("Pick from apps that are running right now")
+        self.auto_pause_pick_btn.connect("clicked", self._on_auto_pause_pick_running)
+        add_box.pack_start(self.auto_pause_pick_btn, False, False, 0)
+
+        # Custom row for the add controls (not a PreferenceRow)
+        add_row = Gtk.ListBoxRow()
+        add_row.set_activatable(False)
+        add_row.add(add_box)
+        group.add_row(add_row)
+
+        # List of configured apps; the empty-state text is an in-list
+        # placeholder so there is no blank hole when the list is empty.
+        self.auto_pause_listbox = Gtk.ListBox()
+        self.auto_pause_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.auto_pause_listbox.set_activate_on_single_click(False)
+
+        self.auto_pause_empty_label = Gtk.Label(
+            label="No apps in the list yet. Type a process name or choose a running app above.",
+            xalign=0.5,
+            wrap=True,
+            justify=Gtk.Justification.CENTER,
+        )
+        self.auto_pause_empty_label.get_style_context().add_class("preference-row-subtitle")
+        self.auto_pause_empty_label.set_margin_top(12)
+        self.auto_pause_empty_label.set_margin_bottom(12)
+        self.auto_pause_empty_label.set_margin_start(16)
+        self.auto_pause_empty_label.set_margin_end(16)
+        self.auto_pause_empty_label.show()
+        self.auto_pause_listbox.set_placeholder(self.auto_pause_empty_label)
+
+        list_scrolled = Gtk.ScrolledWindow()
+        list_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        list_scrolled.set_min_content_height(48)
+        list_scrolled.set_max_content_height(160)
+        list_scrolled.set_margin_start(8)
+        list_scrolled.set_margin_end(8)
+        list_scrolled.set_margin_bottom(8)
+        list_scrolled.add(self.auto_pause_listbox)
+
+        list_row = Gtk.ListBoxRow()
+        list_row.set_activatable(False)
+        list_row.add(list_scrolled)
+        group.add_row(list_row)
+
+        self.power_tab.pack_start(group, False, False, 0)
+
+        self.auto_pause_switch.connect("state-set", self._on_auto_pause_enabled_toggled)
+
+    def _update_auto_pause_sensitivity(self, enabled: bool) -> None:
+        """Gray out the app-list controls while auto-pause is disabled."""
+        for widget in (
+            self.auto_pause_entry,
+            self.auto_pause_add_btn,
+            self.auto_pause_pick_btn,
+            self.auto_pause_listbox,
+        ):
+            widget.set_sensitive(enabled)
+
+    def _get_auto_pause_apps(self) -> list:
+        """Return a clean list of configured auto-pause process names."""
+        apps = self.config_manager.get("auto_pause", "apps", []) or []
+        if not isinstance(apps, list):
+            return []
+        return [str(a).strip() for a in apps if a and str(a).strip()]
+
+    def _save_auto_pause_apps(self, apps: list) -> None:
+        # Deduplicate case-insensitively while preserving first-seen casing
+        seen = set()
+        cleaned = []
+        for name in apps:
+            key = name.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(name.strip())
+        self.config_manager.set("auto_pause", "apps", cleaned)
+        self.config_manager.save_settings()
+        self._refresh_auto_pause_list()
+
+    def _refresh_auto_pause_list(self) -> None:
+        """Rebuild the auto-pause app list UI from config."""
+        if not hasattr(self, "auto_pause_listbox"):
+            return
+
+        for child in list(self.auto_pause_listbox.get_children()):
+            self.auto_pause_listbox.remove(child)
+
+        apps = self._get_auto_pause_apps()
+        for name in apps:
+            row = Gtk.ListBoxRow()
+            row.set_activatable(False)
+            hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            hbox.set_margin_top(6)
+            hbox.set_margin_bottom(6)
+            hbox.set_margin_start(16)
+            hbox.set_margin_end(16)
+
+            label = Gtk.Label(label=name, xalign=0)
+            label.set_hexpand(True)
+            hbox.pack_start(label, True, True, 0)
+
+            remove_btn = Gtk.Button(label="Remove")
+            remove_btn.set_tooltip_text(f"Remove {name} from auto-pause list")
+            remove_btn.connect("clicked", self._on_auto_pause_remove_clicked, name)
+            hbox.pack_start(remove_btn, False, False, 0)
+
+            row.add(hbox)
+            self.auto_pause_listbox.add(row)
+
+        self.auto_pause_listbox.show_all()
+
+    def _on_auto_pause_enabled_toggled(self, widget, state):
+        enabled = bool(state)
+        self._update_auto_pause_sensitivity(enabled)
+        if self._initializing or self._applying_settings:
+            return False
+        logger.info("Auto-pause enabled toggled: %s", enabled)
+        self.config_manager.set("auto_pause", "enabled", enabled)
+        self.config_manager.save_settings()
+        return False
+
+    def _on_auto_pause_add_clicked(self, widget):
+        if self._initializing or self._applying_settings:
+            return
+        name = self.auto_pause_entry.get_text().strip()
+        if not name:
+            return
+        # Strip path if user pasted a full path
+        name = os.path.basename(name)
+        if name.lower().endswith(".exe"):
+            name = name[:-4]
+        apps = self._get_auto_pause_apps()
+        if name.lower() in {a.lower() for a in apps}:
+            self.auto_pause_entry.set_text("")
+            return
+        apps.append(name)
+        self._save_auto_pause_apps(apps)
+        self.auto_pause_entry.set_text("")
+        logger.info("Added auto-pause app: %s", name)
+
+    def _on_auto_pause_remove_clicked(self, widget, name: str):
+        if self._initializing or self._applying_settings:
+            return
+        apps = [a for a in self._get_auto_pause_apps() if a.lower() != name.lower()]
+        self._save_auto_pause_apps(apps)
+        logger.info("Removed auto-pause app: %s", name)
+
+    def _on_auto_pause_pick_running(self, widget):
+        """Show a simple dialog listing running process names to add."""
+        if self._initializing or self._applying_settings:
+            return
+
+        try:
+            import psutil
+        except ImportError:
+            logger.warning("psutil not available for process picker")
+            return
+
+        names: set[str] = set()
+        for proc in psutil.process_iter(["name"]):
+            try:
+                n = proc.info.get("name")
+                if n:
+                    base = os.path.basename(n)
+                    if base.lower().endswith(".exe"):
+                        base = base[:-4]
+                    names.add(base)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+
+        if not names:
+            return
+
+        dialog = Gtk.Dialog(title="Choose a Running App", transient_for=self, flags=0)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Add", Gtk.ResponseType.OK)
+        dialog.set_default_size(360, 400)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_margin_top(8)
+        scrolled.set_margin_bottom(8)
+        scrolled.set_margin_start(8)
+        scrolled.set_margin_end(8)
+
+        listbox = Gtk.ListBox()
+        listbox.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
+        already = {a.lower() for a in self._get_auto_pause_apps()}
+        for name in sorted(names, key=str.lower):
+            if name.lower() in already:
+                continue
+            row = Gtk.ListBoxRow()
+            label = Gtk.Label(label=name, xalign=0)
+            label.set_margin_start(8)
+            label.set_margin_end(8)
+            label.set_margin_top(4)
+            label.set_margin_bottom(4)
+            row.add(label)
+            listbox.add(row)
+        scrolled.add(listbox)
+        dialog.get_content_area().pack_start(scrolled, True, True, 0)
+        dialog.show_all()
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            selected = listbox.get_selected_rows()
+            apps = self._get_auto_pause_apps()
+            existing = {a.lower() for a in apps}
+            for row in selected:
+                label = row.get_child()
+                if isinstance(label, Gtk.Label):
+                    name = label.get_text().strip()
+                    if name and name.lower() not in existing:
+                        apps.append(name)
+                        existing.add(name.lower())
+            self._save_auto_pause_apps(apps)
+        dialog.destroy()
+
+    def _build_model_keepalive_section(self):
+        """Build idle unload settings: enable toggle + idle timeout."""
+        group = PreferencesGroup(
+            title="Unload When Idle",
+            description=(
+                "After a period of inactivity, unload the speech model to save memory "
+                "and battery — on hybrid-GPU laptops (NVIDIA Optimus) this lets the "
+                "GPU sleep. The next dictation reloads the model automatically, which "
+                "may take a moment on larger models."
+            ),
+        )
+
+        self.model_keepalive_switch = Gtk.Switch()
+        self.model_keepalive_switch.set_tooltip_text(
+            "Unload the speech model after the idle timeout to save memory and battery"
+        )
+        enable_row = PreferenceRow(
+            title="Unload Model When Idle",
+            subtitle="Free memory and GPU power after a period of inactivity",
+            widget=self.model_keepalive_switch,
+        )
+        group.add_row(enable_row)
+
+        self.model_keepalive_timeout_combo = Gtk.ComboBoxText()
+        self.model_keepalive_timeout_combo.set_size_request(_CONTROL_WIDTH, -1)
+        # id = seconds as string
+        for seconds, label in (
+            (60, "1 minute"),
+            (300, "5 minutes"),
+            (600, "10 minutes"),
+            (900, "15 minutes"),
+            (1800, "30 minutes"),
+        ):
+            self.model_keepalive_timeout_combo.append(str(seconds), label)
+        self.model_keepalive_timeout_combo.set_tooltip_text(
+            "How long to wait after the last dictation before unloading the model"
+        )
+        _prevent_scroll_on_hover(self.model_keepalive_timeout_combo)
+        timeout_row = PreferenceRow(
+            title="Idle Timeout",
+            subtitle="Unload the model after this much inactivity",
+            widget=self.model_keepalive_timeout_combo,
+        )
+        group.add_row(timeout_row)
+
+        self.power_tab.pack_start(group, False, False, 0)
+
+        self.model_keepalive_switch.connect("state-set", self._on_model_keepalive_enabled_toggled)
+        self.model_keepalive_timeout_combo.connect(
+            "changed", self._on_model_keepalive_timeout_changed
+        )
+
+    def _update_model_keepalive_sensitivity(self, enabled: bool) -> None:
+        """Gray out the idle timeout selector while idle unload is disabled."""
+        self.model_keepalive_timeout_combo.set_sensitive(enabled)
+
+    def _on_model_keepalive_enabled_toggled(self, widget, state):
+        enabled = bool(state)
+        self._update_model_keepalive_sensitivity(enabled)
+        if self._initializing or self._applying_settings:
+            return False
+        logger.info("Model keep-alive enabled toggled: %s", enabled)
+        self.config_manager.set("model_keepalive", "enabled", enabled)
+        self.config_manager.save_settings()
+        return False
+
+    def _on_model_keepalive_timeout_changed(self, widget):
+        if self._initializing or self._applying_settings:
+            return
+        active_id = self.model_keepalive_timeout_combo.get_active_id()
+        if not active_id:
+            return
+        try:
+            seconds = int(active_id)
+        except (TypeError, ValueError):
+            return
+        logger.info("Model keep-alive timeout set to %s seconds", seconds)
+        self.config_manager.set("model_keepalive", "idle_timeout_seconds", seconds)
+        self.config_manager.save_settings()
 
     def _on_autostart_toggled(self, widget, state):
         """Handle toggle of the autostart switch."""
@@ -1358,6 +1922,30 @@ class SettingsDialog(Gtk.Dialog):
         logger.info(f"Preserve clipboard {'enabled' if enabled else 'disabled'}")
         return False
 
+    def _on_auto_capitalize_toggled(self, widget, state):
+        """Handle toggle of the auto-capitalize switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Auto-capitalize toggled: {enabled}")
+        self.config_manager.set("text_injection", "auto_capitalize", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Auto-capitalize {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_append_trailing_space_toggled(self, widget, state):
+        """Handle toggle of the trailing space after dictation switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Append trailing space toggled: {enabled}")
+        self.config_manager.set("text_injection", "append_trailing_space", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Append trailing space {'enabled' if enabled else 'disabled'}")
+        return False
+
     def _on_sound_effects_toggled(self, widget, state):
         if self._initializing or self._applying_settings:
             return False
@@ -1375,7 +1963,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Engine selection
         self.engine_combo = Gtk.ComboBoxText()
-        self.engine_combo.set_size_request(180, -1)
+        self.engine_combo.set_size_request(_CONTROL_WIDTH, -1)
         _prevent_scroll_on_hover(self.engine_combo)
         engine_row = PreferenceRow(
             title="Engine",
@@ -1386,7 +1974,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Model size selection
         self.model_combo = Gtk.ComboBoxText()
-        self.model_combo.set_size_request(180, -1)
+        self.model_combo.set_size_request(_CONTROL_WIDTH, -1)
         self.model_combo.set_tooltip_text(MODEL_SIZE_TOOLTIP)
         _prevent_scroll_on_hover(self.model_combo)
         self.model_row = PreferenceRow(
@@ -1399,7 +1987,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # whisper.cpp specialization selection
         self.model_variant_combo = Gtk.ComboBoxText()
-        self.model_variant_combo.set_size_request(220, -1)
+        self.model_variant_combo.set_size_request(_CONTROL_WIDTH, -1)
         self.model_variant_combo.set_tooltip_text(MODEL_SPECIALIZATION_TOOLTIP)
         _prevent_scroll_on_hover(self.model_variant_combo)
         self.model_variant_row = PreferenceRow(
@@ -1412,7 +2000,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Language selection
         self.language_combo = Gtk.ComboBoxText()
-        self.language_combo.set_size_request(180, -1)
+        self.language_combo.set_size_request(_CONTROL_WIDTH, -1)
         self.language_combo.set_tooltip_text(LANGUAGE_TOOLTIP)
         _prevent_scroll_on_hover(self.language_combo)
         self.language_row = PreferenceRow(
@@ -1443,30 +2031,22 @@ class SettingsDialog(Gtk.Dialog):
         self.model_recommendation.get_style_context().add_class("tip-label")
         self.model_info_card.pack_start(self.model_recommendation, False, False, 0)
 
-        self.content_box.pack_start(self.model_info_card, False, False, 0)
-
-        # Language warning (for auto-detect)
-        self.language_warning = Gtk.Label(label="", use_markup=True, xalign=0)
-        self.language_warning.set_margin_start(16)
+        # Language warning (e.g. auto-detect, English-only models) lives in
+        # the card so there is a single explanation surface below the group.
+        self.language_warning = Gtk.Label(label="", use_markup=True, xalign=0, wrap=True)
         self.language_warning.get_style_context().add_class("status-warning")
-        self.content_box.pack_start(self.language_warning, False, False, 0)
+        self.language_warning.set_no_show_all(True)
+        self.model_info_card.pack_start(self.language_warning, False, False, 0)
 
-        # Legend
-        self.legend_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        self.legend_box.set_halign(Gtk.Align.CENTER)
-        self.legend_box.set_margin_top(4)
-        self.legend_box.set_margin_bottom(4)
+        # Symbol legend as a muted caption inside the card
+        legend = Gtk.Label(
+            label="✓ Downloaded    ↓ Will download    ★ Recommended",
+            xalign=0,
+        )
+        legend.get_style_context().add_class("tip-label")
+        self.model_info_card.pack_start(legend, False, False, 0)
 
-        for symbol, text in [
-            ("✓", "Downloaded"),
-            ("↓", "Will download"),
-            ("★", "Recommended"),
-        ]:
-            item = Gtk.Label(label=f"{symbol} {text}")
-            item.get_style_context().add_class("status-info")
-            self.legend_box.pack_start(item, False, False, 0)
-
-        self.content_box.pack_start(self.legend_box, False, False, 0)
+        self.content_box.pack_start(self.model_info_card, False, False, 0)
 
         # Connect signals
         self.engine_combo.connect("changed", self._on_engine_changed)
@@ -1565,8 +2145,8 @@ class SettingsDialog(Gtk.Dialog):
         threading.Thread(target=test_connection, daemon=True).start()
 
     def _build_recognition_section(self):
-        """Build the Recognition Settings section."""
-        group = PreferencesGroup(title="Recognition Settings")
+        """Build the Listening and Output groups on the Dictation page."""
+        group = PreferencesGroup(title="Listening")
 
         # VAD Sensitivity
         self.vad_spin = Gtk.SpinButton.new_with_range(1, 5, 1)
@@ -1574,14 +2154,15 @@ class SettingsDialog(Gtk.Dialog):
         _prevent_scroll_on_hover(self.vad_spin)
         silero_active = is_silero_available()
         vad_subtitle = (
-            "Sensitivity (1-5) -- backend: Silero neural VAD"
+            "Sensitivity to quiet speech (1-5) — Silero neural VAD"
             if silero_active
-            else "Sensitivity (1-5) -- backend: amplitude (install vocalinux[vad] for neural)"
+            else "Sensitivity to quiet speech (1-5) — amplitude backend"
         )
         self.vad_row = PreferenceRow(
-            title="VAD Sensitivity",
+            title="Microphone Sensitivity",
             subtitle=vad_subtitle,
             widget=self.vad_spin,
+            keywords=("vad", "voice activity detection"),
         )
         group.add_row(self.vad_row)
 
@@ -1591,13 +2172,18 @@ class SettingsDialog(Gtk.Dialog):
         self.silence_spin.set_tooltip_text("Wait time after silence before processing speech")
         _prevent_scroll_on_hover(self.silence_spin)
         silence_row = PreferenceRow(
-            title="Silence Timeout",
-            subtitle="Seconds of silence before processing",
+            title="Stop After Silence",
+            subtitle="Seconds of silence before processing what you said",
             widget=self.silence_spin,
+            keywords=("timeout", "pause"),
         )
         group.add_row(silence_row)
 
-        # Voice Commands Toggle
+        self.recognition_settings_tab.pack_start(group, False, False, 0)
+
+        # Output group: what happens with the recognized text
+        output_group = PreferencesGroup(title="Output")
+
         self.voice_commands_switch = Gtk.Switch()
         self.voice_commands_switch.set_tooltip_text(
             "Enable voice commands like 'new line', 'period', 'undo', etc.\n"
@@ -1605,12 +2191,78 @@ class SettingsDialog(Gtk.Dialog):
         )
         voice_commands_row = PreferenceRow(
             title="Voice Commands",
-            subtitle="Enable voice commands for punctuation and editing",
+            subtitle="Say 'new line', 'period', 'undo' while dictating",
             widget=self.voice_commands_switch,
+            keywords=("punctuation", "editing"),
         )
-        group.add_row(voice_commands_row)
+        output_group.add_row(voice_commands_row)
 
-        self.recognition_settings_tab.pack_start(group, False, False, 0)
+        self.auto_capitalize_switch = Gtk.Switch()
+        self.auto_capitalize_switch.set_tooltip_text(
+            "Automatically capitalize the first letter of each sentence. "
+            "Works after sentence-ending punctuation (period, exclamation, question mark). "
+            "Only applies to Vosk engine - Whisper models output proper capitalization automatically."
+        )
+        auto_capitalize_row = PreferenceRow(
+            title="Auto-Capitalize Sentences",
+            subtitle="Capitalize first letter after punctuation (Vosk only)",
+            widget=self.auto_capitalize_switch,
+            keywords=("capitalization", "casing", "sentence"),
+        )
+        output_group.add_row(auto_capitalize_row)
+
+        self.copy_to_clipboard_switch = Gtk.Switch()
+        self.copy_to_clipboard_switch.set_tooltip_text(
+            "Copy recognized text to clipboard after each transcription. "
+            "Useful if injection fails or you want to paste elsewhere."
+        )
+        copy_to_clipboard_row = PreferenceRow(
+            title="Copy to Clipboard",
+            subtitle="Always copy recognized text to clipboard for easy pasting",
+            widget=self.copy_to_clipboard_switch,
+            keywords=("paste",),
+        )
+        output_group.add_row(copy_to_clipboard_row)
+
+        self.restore_clipboard_switch = Gtk.Switch()
+        self.restore_clipboard_switch.set_tooltip_text(
+            "On Wayland with a non-US keyboard layout, Vocalinux pastes dictation "
+            "via the clipboard (ydotool cannot type your layout directly), which "
+            "normally overwrites whatever you had copied. When enabled, Vocalinux "
+            "restores your previous clipboard after pasting and marks the dictation "
+            "as sensitive so clipboard managers like KDE Klipper keep it out of "
+            "history. Restore timing is best-effort. Has no effect on X11 or when "
+            "'Copy to Clipboard' is on."
+        )
+        restore_clipboard_row = PreferenceRow(
+            title="Preserve Clipboard",
+            subtitle="Restore your clipboard after dictation is pasted (Wayland paste only)",
+            widget=self.restore_clipboard_switch,
+            keywords=("clipboard", "klipper", "wayland", "paste"),
+        )
+        output_group.add_row(restore_clipboard_row)
+
+        self.append_trailing_space_switch = Gtk.Switch()
+        self.append_trailing_space_switch.set_tooltip_text(
+            "Append a space after each completed transcription so the next "
+            "dictation session continues without gluing onto the previous text "
+            '(e.g. "Hello. This" instead of "Hello.This").'
+        )
+        append_trailing_space_row = PreferenceRow(
+            title="Trailing Space After Dictation",
+            subtitle="Insert a space after each completed transcription segment",
+            widget=self.append_trailing_space_switch,
+            keywords=("space", "spacing", "punctuation", "push-to-talk"),
+        )
+        output_group.add_row(append_trailing_space_row)
+
+        self.recognition_settings_tab.pack_start(output_group, False, False, 0)
+        self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
+        self.restore_clipboard_switch.connect("state-set", self._on_restore_clipboard_toggled)
+        self.auto_capitalize_switch.connect("state-set", self._on_auto_capitalize_toggled)
+        self.append_trailing_space_switch.connect(
+            "state-set", self._on_append_trailing_space_toggled
+        )
 
         if not silero_active:
             vad_info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1643,6 +2295,7 @@ class SettingsDialog(Gtk.Dialog):
         self.vad_spin.connect("value-changed", self._on_vad_changed)
         self.silence_spin.connect("value-changed", self._on_silence_changed)
         self.voice_commands_switch.connect("state-set", self._on_voice_commands_toggled)
+        self.auto_capitalize_switch.connect("state-set", self._on_auto_capitalize_toggled)
 
     def _build_shortcuts_section(self):
         """Build the Keyboard Shortcuts section."""
@@ -1653,7 +2306,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Mode selection (Toggle vs Push-to-Talk)
         self.shortcut_mode_combo = Gtk.ComboBoxText()
-        self.shortcut_mode_combo.set_size_request(200, -1)
+        self.shortcut_mode_combo.set_size_request(_CONTROL_WIDTH, -1)
         self.shortcut_mode_combo.set_tooltip_text(
             "Choose between toggle (double-tap) or push-to-talk mode"
         )
@@ -1677,7 +2330,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Shortcut selection combo
         self.shortcut_combo = Gtk.ComboBoxText()
-        self.shortcut_combo.set_size_request(200, -1)
+        self.shortcut_combo.set_size_request(_CONTROL_WIDTH, -1)
         self.shortcut_combo.set_tooltip_text("Select the keyboard shortcut for voice typing")
         _prevent_scroll_on_hover(self.shortcut_combo)
 
@@ -1730,7 +2383,10 @@ class SettingsDialog(Gtk.Dialog):
             title="Custom Shortcut",
             subtitle="Modifier + key combo (great for split keyboards)",
             widget=custom_box,
+            keywords=("record", "keybinding", "hotkey"),
         )
+        # Only shown while "Custom Shortcut" is selected in the preset combo.
+        self.custom_shortcut_row.set_no_show_all(True)
         group.add_row(self.custom_shortcut_row)
 
         # Key-capture state for the Record button.
@@ -1797,9 +2453,11 @@ class SettingsDialog(Gtk.Dialog):
         if self._is_preset_shortcut(shortcut):
             self._set_shortcut_combo_active_id(shortcut)
             self.custom_shortcut_entry.set_text("")
+            self.custom_shortcut_row.hide()
         else:
             self._set_shortcut_combo_active_id("__custom__")
             self.custom_shortcut_entry.set_text(shortcut)
+            self.custom_shortcut_row.show_all()
 
     def _report_shortcut_apply_result(self, display_name: str, applied: bool) -> None:
         """Show success/restart feedback after a shortcut change."""
@@ -2016,6 +2674,7 @@ class SettingsDialog(Gtk.Dialog):
             current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
             if not self._is_preset_shortcut(current):
                 self.custom_shortcut_entry.set_text(current)
+            self.custom_shortcut_row.show_all()
             self.custom_shortcut_entry.grab_focus()
             self.shortcut_info_label.set_markup(
                 "<i>Record or type a custom shortcut (e.g. alt+r), then click Set.</i>"
@@ -2024,6 +2683,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Preset selected: clear any leftover custom entry so UI matches config.
         self.custom_shortcut_entry.set_text("")
+        self.custom_shortcut_row.hide()
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
         self.config_manager.save_settings()
 
@@ -2036,24 +2696,62 @@ class SettingsDialog(Gtk.Dialog):
             applied = bool(self.shortcut_update_callback(shortcut_id, mode_id))
         self._report_shortcut_apply_result(display_name, applied)
 
-    def _build_test_section(self):
-        """Build the Test Recognition section."""
-        group = PreferencesGroup(title="Test Recognition")
+    def _build_status_strip(self):
+        """Build the persistent status strip at the bottom of the dialog.
 
-        # Test area inside the group's listbox as a custom row
-        test_container = Gtk.ListBoxRow()
-        test_container.set_activatable(False)
-        test_container.get_style_context().add_class("preference-row")
+        Always visible regardless of the selected page: recognition state,
+        live microphone level, and a dictation test button. Test output is
+        revealed inline, so any instant-applied change can be verified
+        immediately.
+        """
+        strip = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        strip.get_style_context().add_class("status-strip")
 
-        test_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        test_box.set_margin_top(12)
-        test_box.set_margin_bottom(12)
-        test_box.set_margin_start(16)
-        test_box.set_margin_end(16)
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
-        # Text view for test results
+        self.recognition_indicator = Gtk.Image.new_from_icon_name(
+            "media-record-symbolic", Gtk.IconSize.MENU
+        )
+        self.recognition_indicator.set_opacity(0.3)
+        bar.pack_start(self.recognition_indicator, False, False, 0)
+
+        self.recognition_status_label = Gtk.Label(label="Idle", xalign=0)
+        self.recognition_status_label.get_style_context().add_class("status-strip-state")
+        bar.pack_start(self.recognition_status_label, False, False, 0)
+
+        # One shared level bar: recognition progress and the microphone test
+        # both report into it (recognition_audio_level is a legacy alias).
+        self.audio_level_bar = Gtk.LevelBar()
+        self.audio_level_bar.set_min_value(0)
+        self.audio_level_bar.set_max_value(100)
+        self.audio_level_bar.set_value(0)
+        self.audio_level_bar.set_valign(Gtk.Align.CENTER)
+        self.recognition_audio_level = self.audio_level_bar
+        bar.pack_start(self.audio_level_bar, True, True, 0)
+
+        self.test_button = Gtk.Button(label="Test Dictation")
+        self.test_button.set_tooltip_text(
+            "Record 3 seconds of speech and show the transcription here"
+        )
+        self.test_button.connect("clicked", self._on_test_clicked)
+        bar.pack_end(self.test_button, False, False, 0)
+
+        strip.pack_start(bar, False, False, 0)
+
+        # One shared status line (audio test results and recognition info)
+        self.progress_info_label = Gtk.Label(label="", use_markup=True, xalign=0)
+        self.progress_info_label.get_style_context().add_class("status-info")
+        self.progress_info_label.set_line_wrap(True)
+        self.audio_test_status = self.progress_info_label
+        strip.pack_start(self.progress_info_label, False, False, 0)
+
+        # Test transcription output, revealed while testing
+        self.test_output_revealer = Gtk.Revealer()
+        self.test_output_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+
         scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.set_min_content_height(80)
+        scrolled_window.set_min_content_height(60)
+        scrolled_window.set_max_content_height(100)
         scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scrolled_window.get_style_context().add_class("test-area")
 
@@ -2064,59 +2762,11 @@ class SettingsDialog(Gtk.Dialog):
         self.test_textview.get_style_context().add_class("test-textview")
         self.test_buffer = self.test_textview.get_buffer()
         scrolled_window.add(self.test_textview)
-        test_box.pack_start(scrolled_window, True, True, 0)
+        self.test_output_revealer.add(scrolled_window)
 
-        # Test button
-        self.test_button = Gtk.Button(label="Start Test (3 seconds)")
-        self.test_button.get_style_context().add_class("suggested-action")
-        self.test_button.connect("clicked", self._on_test_clicked)
-        test_box.pack_start(self.test_button, False, False, 0)
+        strip.pack_start(self.test_output_revealer, False, False, 0)
 
-        test_container.add(test_box)
-        group.listbox.add(test_container)
-
-        self.recognition_settings_tab.pack_start(group, False, False, 0)
-
-        # Recognition Progress section
-        progress_group = PreferencesGroup(title="Recognition Status")
-
-        # Status row
-        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.recognition_status_label = Gtk.Label(label="Idle", xalign=0)
-        status_box.pack_start(self.recognition_status_label, True, True, 0)
-
-        self.recognition_indicator = Gtk.Image.new_from_icon_name(
-            "media-record-symbolic", Gtk.IconSize.MENU
-        )
-        self.recognition_indicator.set_opacity(0.3)
-        status_box.pack_end(self.recognition_indicator, False, False, 0)
-
-        status_row = PreferenceRow(
-            title="Status",
-            widget=status_box,
-        )
-        progress_group.add_row(status_row)
-
-        # Audio level row
-        self.recognition_audio_level = Gtk.LevelBar()
-        self.recognition_audio_level.set_min_value(0)
-        self.recognition_audio_level.set_max_value(100)
-        self.recognition_audio_level.set_value(0)
-        self.recognition_audio_level.set_size_request(150, -1)
-
-        level_row = PreferenceRow(
-            title="Audio Level",
-            widget=self.recognition_audio_level,
-        )
-        progress_group.add_row(level_row)
-
-        self.recognition_settings_tab.pack_start(progress_group, False, False, 0)
-
-        # Progress info label
-        self.progress_info_label = Gtk.Label(label="", use_markup=True, xalign=0)
-        self.progress_info_label.set_margin_start(16)
-        self.progress_info_label.set_margin_bottom(8)
-        self.recognition_settings_tab.pack_start(self.progress_info_label, False, False, 0)
+        self.get_content_area().pack_start(strip, False, False, 0)
 
     def _build_advanced_section(self):
         """Build the Advanced section with whisper.cpp parameters."""
@@ -2273,10 +2923,16 @@ class SettingsDialog(Gtk.Dialog):
         controls_box.pack_start(info_box, False, False, 0)
         controls_box.pack_start(group, False, False, 0)
 
-        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator.set_margin_top(8)
-        separator.set_margin_bottom(8)
-        controls_box.pack_start(separator, False, False, 0)
+        # In-page reset action for the decoding parameters above
+        self.advanced_reset_button = Gtk.Button(label="Reset to Defaults")
+        self.advanced_reset_button.set_tooltip_text(
+            "Restore the whisper.cpp advanced parameters to their default values"
+        )
+        self.advanced_reset_button.connect("clicked", self._on_reset_advanced_clicked)
+        reset_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        reset_row.set_halign(Gtk.Align.END)
+        reset_row.pack_start(self.advanced_reset_button, False, False, 0)
+        controls_box.pack_start(reset_row, False, False, 0)
 
         self.advanced_revealer.add(controls_box)
         self.advanced_tab.pack_start(self.advanced_revealer, False, False, 0)
@@ -2293,6 +2949,31 @@ class SettingsDialog(Gtk.Dialog):
         self.advanced_initial_prompt_buffer.connect("changed", self._on_advanced_prompt_changed)
 
         self.power_user_switch.connect("state-set", self._on_power_user_toggled)
+
+    def _build_gpu_section(self):
+        """Build the GPU device group on the Performance page.
+
+        Hardware selection, not a decoding knob — so it lives ungated on the
+        Performance page rather than behind the power-user unlock.
+        """
+        gpu_group = PreferencesGroup(title="Hardware Acceleration")
+        self.gpu_device_combo = Gtk.ComboBoxText()
+        self.gpu_device_combo.set_size_request(_CONTROL_WIDTH, -1)
+        self.gpu_device_combo.set_tooltip_text(
+            "Select which GPU to use for whisper.cpp Vulkan acceleration"
+        )
+        _prevent_scroll_on_hover(self.gpu_device_combo)
+        self._populate_gpu_devices()
+        gpu_row = PreferenceRow(
+            title="Vulkan GPU",
+            subtitle="Device used by the whisper.cpp engine",
+            widget=self.gpu_device_combo,
+            keywords=("graphics", "hardware", "acceleration", "device"),
+        )
+        gpu_group.add_row(gpu_row)
+        self.power_tab.pack_start(gpu_group, False, False, 0)
+
+        self.gpu_device_combo.connect("changed", self._on_advanced_param_changed)
 
     def _build_remote_server_section(self):
         """Build the Remote Server configuration section (shown when Remote API engine is selected)."""
@@ -2446,18 +3127,6 @@ class SettingsDialog(Gtk.Dialog):
         if response_id in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
             self._flush_advanced_prompt_if_dirty()
 
-    def _on_settings_page_switched(self, notebook, page, page_num):
-        """Update contextual footer actions when the active settings page changes."""
-        if page_num != self.advanced_page_num:
-            self._flush_advanced_prompt_if_dirty()
-        self._update_advanced_reset_button_visibility(page_num)
-
-    def _update_advanced_reset_button_visibility(self, page_num: int = None):
-        """Show the reset action only on the Advanced settings page."""
-        if page_num is None:
-            page_num = self.settings_notebook.get_current_page()
-        self.advanced_reset_button.set_visible(page_num == self.advanced_page_num)
-
     def _on_advanced_prompt_changed(self, buffer):
         """Track prompt edits without applying settings on every keystroke."""
         if self._initializing or self._applying_settings:
@@ -2495,6 +3164,7 @@ class SettingsDialog(Gtk.Dialog):
             self.advanced_entropy_thold_spin.set_value(defaults["whispercpp_entropy_thold"])
             self.advanced_logprob_thold_spin.set_value(defaults["whispercpp_logprob_thold"])
             self.advanced_no_speech_thold_spin.set_value(defaults["whispercpp_no_speech_thold"])
+            self.gpu_device_combo.set_active_id("-1")
         finally:
             self._applying_settings = False
 
@@ -2521,12 +3191,30 @@ class SettingsDialog(Gtk.Dialog):
         start_minimized = ui_settings.get("start_minimized", False)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
         restore_clipboard = text_injection_settings.get("restore_clipboard_after_paste", False)
+        auto_capitalize = text_injection_settings.get("auto_capitalize", True)
+        append_trailing_space = text_injection_settings.get("append_trailing_space", True)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.restore_clipboard_switch.set_active(restore_clipboard)
+        self.auto_capitalize_switch.set_active(auto_capitalize)
+        self.append_trailing_space_switch.set_active(append_trailing_space)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
+
+        auto_pause_settings = self.config_manager.get_settings().get("auto_pause", {})
+        auto_pause_enabled = bool(auto_pause_settings.get("enabled", False))
+        self.auto_pause_switch.set_active(auto_pause_enabled)
+        self._update_auto_pause_sensitivity(auto_pause_enabled)
+        self._refresh_auto_pause_list()
+
+        keepalive_settings = self.config_manager.get_settings().get("model_keepalive", {})
+        keepalive_enabled = bool(keepalive_settings.get("enabled", False))
+        self.model_keepalive_switch.set_active(keepalive_enabled)
+        self._update_model_keepalive_sensitivity(keepalive_enabled)
+        timeout_seconds = int(keepalive_settings.get("idle_timeout_seconds", 300) or 300)
+        if not self.model_keepalive_timeout_combo.set_active_id(str(timeout_seconds)):
+            self.model_keepalive_timeout_combo.set_active_id("300")
 
         available_engines = get_available_engines()
         available_count = 0
@@ -3008,8 +3696,9 @@ class SettingsDialog(Gtk.Dialog):
             )
             self.language_warning.show()
         elif lang_info.get("warning"):
+            lang_name = lang_info.get("name", "This language")
             self.language_warning.set_markup(
-                f"<span foreground='#e5a50a'>⚠ {lang_info['warning']}</span>"
+                f"<span foreground='#e5a50a'>⚠ {lang_name}: {lang_info['warning'].lower()}</span>"
             )
             self.language_warning.show()
         else:
@@ -3048,7 +3737,6 @@ class SettingsDialog(Gtk.Dialog):
             self.model_row.hide()
             self.model_variant_row.hide()
             self.model_info_card.hide()
-            self.legend_box.hide()
             self.remote_server_group.show_all()
             self.remote_status_label.show()
         else:
@@ -3057,7 +3745,6 @@ class SettingsDialog(Gtk.Dialog):
                 self.model_variant_row.show_all()
             else:
                 self.model_variant_row.hide()
-            self.legend_box.show_all()
             self.remote_server_group.hide()
             self.remote_status_label.hide()
 
@@ -3068,8 +3755,7 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_advanced_tab_sensitivity(self):
         """Enable or disable advanced settings based on selected engine."""
-        engine_text = self.engine_combo.get_active_text()
-        is_whispercpp = engine_text and engine_text.lower() == "whisper_cpp"
+        is_whispercpp = self._get_selected_engine() == "whisper_cpp"
 
         widgets = [
             self.advanced_no_timestamps_switch,
@@ -3316,6 +4002,11 @@ class SettingsDialog(Gtk.Dialog):
             "whispercpp_no_speech_thold": self.advanced_no_speech_thold_spin.get_value(),
         }
 
+        gpu_device_id = self.gpu_device_combo.get_active_id()
+        if gpu_device_id is not None:
+            gpu_device_val = int(gpu_device_id)
+            settings["whispercpp_gpu_device"] = None if gpu_device_val == -1 else gpu_device_val
+
         # Remote API additional settings
         if engine == "remote_api":
             settings["remote_api_url"] = self.remote_api_url_entry.get_text().strip()
@@ -3358,7 +4049,8 @@ class SettingsDialog(Gtk.Dialog):
 
         self._test_active = True
         self.test_button.set_sensitive(False)
-        self.test_button.set_label("Testing... Speak Now!")
+        self.test_button.set_label("Testing… Speak Now!")
+        self.test_output_revealer.set_reveal_child(True)
         self.test_buffer.set_text("")
         self._test_result = ""
 
@@ -3403,7 +4095,7 @@ class SettingsDialog(Gtk.Dialog):
 
         self._test_active = False
         self.test_button.set_sensitive(True)
-        self.test_button.set_label("Start Test (3 seconds)")
+        self.test_button.set_label("Test Dictation")
 
         self.update_recognition_progress("Idle")
 
@@ -3565,6 +4257,24 @@ For now, the engine has been reverted to VOSK."""
                 error_dialog.run()
                 error_dialog.destroy()
             return False
+
+    def _populate_gpu_devices(self):
+        """Populate the GPU device dropdown with available Vulkan devices."""
+        self.gpu_device_combo.remove_all()
+        self.gpu_device_combo.append("-1", "Auto (prefer discrete GPU)")
+
+        devices = detect_vulkan_devices()
+        for device in devices:
+            type_label = device["device_type"].capitalize()
+            label = f"[{device['index']}] {device['name']} ({type_label})"
+            self.gpu_device_combo.append(str(device["index"]), label)
+
+        saved_device = self.config_manager.get("advanced", "whispercpp_gpu_device", None)
+        if saved_device is None:
+            self.gpu_device_combo.set_active_id("-1")
+        else:
+            if not self.gpu_device_combo.set_active_id(str(saved_device)):
+                self.gpu_device_combo.set_active_id("-1")
 
     def _populate_audio_devices(self):
         """Populate the audio device dropdown with available input devices."""

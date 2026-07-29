@@ -1,6 +1,8 @@
 <div align="center">
 
-# <img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="36" height="36" alt="Vocalinux"> Vocalinux
+<img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="50" height="50" alt="Vocalinux"> 
+
+# Vocalinux
 
 **Voice-to-text for Linux, finally done right!**
 
@@ -29,8 +31,6 @@
 [![openSUSE](https://img.shields.io/badge/openSUSE-Tumbleweed-73BA25?logo=opensuse&logoColor=white)](docs/DISTRO_COMPATIBILITY.md)
 
 </div>
-
-![Vocalinux Users](https://github.com/user-attachments/assets/e3d8dd16-3d4f-408c-b899-93d85e98b107)
 
 Linux has always punched above its weight, except when it comes to voice typing. Vocalinux fixes that.
 
@@ -394,6 +394,17 @@ vocalinux/
 - [User Guide](docs/USER_GUIDE.md) - Complete user documentation
 - [Distribution Compatibility](docs/DISTRO_COMPATIBILITY.md) - Distro/session behavior and caveats
 - [Contributing](CONTRIBUTING.md) - Development setup and contribution guidelines
+
+## Repository mirrors
+
+GitHub is the **primary** forge for issues, pull requests, CI, and releases.
+
+| Role | URL |
+|------|-----|
+| Primary | https://github.com/jatinkrmalik/vocalinux |
+| Read-only mirror (Codeberg) | https://codeberg.org/jatinkrmalik/vocalinux |
+
+The Codeberg copy is a read-only source backup. Open issues and PRs on GitHub only.
 
 ## 🔊 Sound Customization
 

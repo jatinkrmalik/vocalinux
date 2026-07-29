@@ -8,6 +8,7 @@ import atexit
 import logging
 import sys
 
+from .utils.vosk_model_info import SUPPORTED_LANGUAGES
 from .version import __version__
 
 # Configure logging
@@ -19,6 +20,33 @@ logger = logging.getLogger(__name__)
 
 # Note: GTK-dependent modules (tray_indicator) are imported lazily after
 # dependency checking to provide better error messages for pip/pipx users
+
+# Keep CLI --language choices in sync with the Settings catalog.
+LANGUAGE_CHOICES = tuple(SUPPORTED_LANGUAGES.keys())
+
+
+def _should_append_trailing_space() -> bool:
+    """Return whether completed transcriptions should get a trailing space.
+
+    Reads config.json from disk on each call so Settings toggles take effect
+    immediately. TrayIndicator and main() each construct their own
+    ConfigManager, so an in-memory read from main's instance would miss
+    Settings writes (same pattern as TextInjector._should_copy_to_clipboard).
+    """
+    try:
+        import json
+        import os
+
+        from .utils.paths import config_dir
+
+        config_path = os.path.join(config_dir(), "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            return bool(config.get("text_injection", {}).get("append_trailing_space", True))
+    except Exception as e:
+        logger.debug(f"Could not read append_trailing_space setting: {e}")
+    return True
 
 
 def parse_arguments():
@@ -44,25 +72,10 @@ def parse_arguments():
     parser.add_argument(
         "--language",
         type=str,
-        choices=[
-            "auto",
-            "en-us",
-            "en-in",
-            "hi",
-            "es",
-            "fr",
-            "de",
-            "it",
-            "pt",
-            "ru",
-            "zh",
-            "ja",
-            "ko",
-            "ar",
-        ],
+        choices=LANGUAGE_CHOICES,
         help=(
-            "Speech recognition language (auto for auto-detect, en-us, "
-            "hi, es, fr, de, it, pt, ru, zh, etc.)"
+            "Speech recognition language (auto for auto-detect, or a code "
+            "from the Settings language catalog such as en-us, hu, ja, …)"
         ),
     )
     parser.add_argument(
@@ -263,6 +276,22 @@ def main():
         logger.error("Cannot start Vocalinux due to missing dependencies")
         sys.exit(1)
 
+    # Identity for WM class / AppIndicator title (otherwise shows as main.py)
+    import gi
+
+    gi.require_version("GLib", "2.0")
+    from gi.repository import GLib
+
+    GLib.set_prgname("vocalinux")
+    GLib.set_application_name("Vocalinux")
+    try:
+        gi.require_version("Gdk", "3.0")
+        from gi.repository import Gdk
+
+        Gdk.set_program_class("Vocalinux")
+    except Exception:
+        pass
+
     # Check if display is available before creating any GTK widgets
     if not check_display_available():
         sys.exit(1)
@@ -399,6 +428,7 @@ def main():
             whispercpp_logprob_thold=advanced_settings.get("whispercpp_logprob_thold", -1.0),
             whispercpp_no_speech_thold=advanced_settings.get("whispercpp_no_speech_thold", 0.6),
             whispercpp_n_threads=advanced_settings.get("whispercpp_n_threads", 0),
+            whispercpp_gpu_device=advanced_settings.get("whispercpp_gpu_device", None),
             remote_api_url=saved_settings.get("remote_api_url", ""),
             remote_api_key=saved_settings.get("remote_api_key", ""),
             remote_api_endpoint=saved_settings.get("remote_api_endpoint", "/inference"),
@@ -417,9 +447,9 @@ def main():
         #
         #   text_callback(text: str)
         #       Called on the recognition thread when a transcription segment
-        #       is finalised.  The wrapper below strips whitespace, inserts
-        #       inter-segment spaces, injects the text, and records it so
-        #       "delete that" can undo it.
+        #       is finalised.  The wrapper below strips whitespace, optionally
+        #       appends a trailing space (or legacy leading separator), injects
+        #       the text, and records it so "delete that" can undo it.
         #
         #   action_callback(action: str) -> bool
         #       Called when a voice command (e.g. "undo", "select all") is
@@ -435,21 +465,41 @@ def main():
             """Bridge between speech engine text events and the text injector.
 
             Called on the recognition thread with each finalised transcription
-            segment.  Strips leading/trailing whitespace (whisper tokenizer
-            sometimes prepends spaces), inserts a single space between
-            consecutive segments, then injects via TextInjector.
+            segment.  Strips leading whitespace and trailing spaces/tabs (but
+            preserves trailing newlines from voice commands), then either
+            appends a trailing space (default) or uses the legacy in-session
+            leading-space separator, and injects via TextInjector.
 
             Args:
                 text: Raw transcription segment from the speech engine.
             """
-            text_to_inject = text.strip()
+            # Preserve trailing newlines ("new line" / "new paragraph"); only
+            # strip spaces/tabs that whisper sometimes wraps around tokens.
+            text_to_inject = text.lstrip().rstrip(" \t")
             if not text_to_inject:
                 return
 
-            # Add a separating space between consecutive dictation segments,
-            # but never for the very first segment (avoids unwanted leading space
-            # when starting dictation in an empty text field).
-            if action_handler.last_injected_text and action_handler.last_injected_text.strip():
+            # Auto-capitalize sentences if enabled (Vosk only - Whisper outputs proper casing)
+            auto_capitalize = config_manager.get("text_injection", "auto_capitalize")
+            if auto_capitalize and speech_engine.engine == "vosk":
+                from vocalinux.speech_recognition.command_processor import capitalize_sentences
+
+                text_to_inject = capitalize_sentences(text_to_inject)
+
+            # Read from disk so the Settings toggle applies without restart
+            # (main and tray each own a ConfigManager instance).
+            append_trailing_space = _should_append_trailing_space()
+
+            if append_trailing_space:
+                # Put the separator into the previous field so the next session
+                # (push-to-talk / toggle) continues cleanly without needing
+                # cross-session memory — and without a leading space in empty
+                # fields. Skip after newlines from "new line" / "new paragraph".
+                if not text_to_inject.endswith((" ", "\t", "\n")):
+                    text_to_inject += " "
+                    logger.debug("Appended trailing space after transcription segment")
+            elif action_handler.last_injected_text and action_handler.last_injected_text.strip():
+                # Legacy: leading space between consecutive in-session segments.
                 text_to_inject = " " + text_to_inject
                 logger.debug("Added space separator before new segment")
 

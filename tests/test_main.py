@@ -90,23 +90,14 @@ class TestMainModule(unittest.TestCase):
             self.assertEqual(args.engine, "whisper")
 
     def test_parse_arguments_language_choices(self):
-        """Test that language only accepts valid choices."""
-        for lang in [
-            "auto",
-            "en-us",
-            "en-in",
-            "hi",
-            "es",
-            "fr",
-            "de",
-            "it",
-            "pt",
-            "ru",
-            "zh",
-            "ja",
-            "ko",
-            "ar",
-        ]:
+        """Test that language only accepts valid choices from the catalog."""
+        from vocalinux.main import LANGUAGE_CHOICES
+        from vocalinux.utils.vosk_model_info import SUPPORTED_LANGUAGES
+
+        self.assertEqual(LANGUAGE_CHOICES, tuple(SUPPORTED_LANGUAGES.keys()))
+        # Spot-check newly exposed languages (issue #565 and catalog expansion).
+        for lang in ["auto", "en-us", "hu", "ja", "ko", "ar", "nl", "pl", "uk"]:
+            self.assertIn(lang, LANGUAGE_CHOICES)
             with patch("sys.argv", ["vocalinux", "--language", lang]):
                 args = parse_arguments()
                 self.assertEqual(args.language, lang)
@@ -241,6 +232,7 @@ class TestMainModule(unittest.TestCase):
                 whispercpp_logprob_thold=-1.0,
                 whispercpp_no_speech_thold=0.6,
                 whispercpp_n_threads=0,
+                whispercpp_gpu_device=None,
                 remote_api_url="",
                 remote_api_key="",
                 remote_api_endpoint="/inference",
@@ -317,12 +309,151 @@ class TestMainModule(unittest.TestCase):
         text_callback("World")
 
         calls = [call.args[0] for call in mock_text_instance.inject_text.call_args_list]
-        self.assertEqual(calls, ["Hello.", " World"])
+        self.assertEqual(calls, ["Hello. ", "World "])
 
         state_callback(RecognitionState.IDLE)
         mock_text_instance.inject_text.reset_mock()
         text_callback("Next session")
-        mock_text_instance.inject_text.assert_called_once_with("Next session")
+        # Trailing space persists in the previous field; next session starts clean
+        # (no leading space) but still gets its own trailing space.
+        mock_text_instance.inject_text.assert_called_once_with("Next session ")
+
+    def _run_main_and_get_text_callback(
+        self,
+        *,
+        engine: str,
+        auto_capitalize: bool,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Boot main() with mocked deps and return the registered text callback."""
+        mock_check_deps.return_value = True
+
+        mock_config_instance = MagicMock()
+        mock_config_instance.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
+        mock_config_instance.get.side_effect = lambda section, key, default=None: (
+            auto_capitalize if section == "text_injection" and key == "auto_capitalize" else default
+        )
+        mock_config_manager.return_value = mock_config_instance
+
+        mock_speech_instance = MagicMock()
+        mock_speech_instance.engine = engine
+        mock_text_instance = MagicMock()
+        mock_text_instance.inject_text.return_value = True
+        mock_tray_instance = MagicMock()
+
+        mock_speech.return_value = mock_speech_instance
+        mock_text.return_value = mock_text_instance
+        mock_tray.return_value = mock_tray_instance
+
+        with patch("vocalinux.main.parse_arguments") as mock_parse:
+            mock_args = MagicMock()
+            mock_args.debug = False
+            mock_args.model = "medium"
+            mock_args.engine = engine
+            mock_args.language = "en-us"
+            mock_args.wayland = False
+            mock_args.start_minimized = False
+            mock_parse.return_value = mock_args
+
+            with patch("sys.argv", ["vocalinux", "--engine", engine]):
+                main()
+
+        text_callback = mock_speech_instance.register_text_callback.call_args.args[0]
+        return text_callback, mock_text_instance
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_vosk_auto_capitalize_applies_to_injected_text(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Vosk engine capitalizes sentences when auto_capitalize is enabled."""
+        text_callback, mock_text_instance = self._run_main_and_get_text_callback(
+            engine="vosk",
+            auto_capitalize=True,
+            mock_config_manager=mock_config_manager,
+            mock_tray=mock_tray,
+            mock_text=mock_text,
+            mock_speech=mock_speech,
+            mock_check_deps=mock_check_deps,
+        )
+
+        text_callback("hello world. goodbye")
+        mock_text_instance.inject_text.assert_called_once_with("Hello world. Goodbye ")
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_vosk_auto_capitalize_can_be_disabled(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Vosk leaves casing unchanged when auto_capitalize is disabled."""
+        text_callback, mock_text_instance = self._run_main_and_get_text_callback(
+            engine="vosk",
+            auto_capitalize=False,
+            mock_config_manager=mock_config_manager,
+            mock_tray=mock_tray,
+            mock_text=mock_text,
+            mock_speech=mock_speech,
+            mock_check_deps=mock_check_deps,
+        )
+
+        text_callback("hello world. goodbye")
+        mock_text_instance.inject_text.assert_called_once_with("hello world. goodbye ")
+
+    @patch("vocalinux.main.check_dependencies")
+    @patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+    @patch("vocalinux.text_injection.text_injector.TextInjector")
+    @patch("vocalinux.ui.tray_indicator.TrayIndicator")
+    @patch("vocalinux.ui.config_manager.ConfigManager")
+    @patch("vocalinux.ui.logging_manager.initialize_logging")
+    def test_whisper_skips_auto_capitalize(
+        self,
+        mock_init_logging,
+        mock_config_manager,
+        mock_tray,
+        mock_text,
+        mock_speech,
+        mock_check_deps,
+    ):
+        """Whisper engines keep model casing even when auto_capitalize is on."""
+        text_callback, mock_text_instance = self._run_main_and_get_text_callback(
+            engine="whisper_cpp",
+            auto_capitalize=True,
+            mock_config_manager=mock_config_manager,
+            mock_tray=mock_tray,
+            mock_text=mock_text,
+            mock_speech=mock_speech,
+            mock_check_deps=mock_check_deps,
+        )
+
+        text_callback("hello world. goodbye")
+        mock_text_instance.inject_text.assert_called_once_with("hello world. goodbye ")
 
     @patch("vocalinux.main.check_dependencies")
     @patch("vocalinux.ui.action_handler.ActionHandler")
@@ -757,7 +888,7 @@ class TestMainConfigPrecedence(unittest.TestCase):
 class TestTextCallbackSpacing(unittest.TestCase):
     """Test spacing logic in text_callback_wrapper."""
 
-    def _make_callback(self):
+    def _make_callback(self, append_trailing_space: bool = True):
         """Build text_callback_wrapper with mocked dependencies."""
         from vocalinux.ui.action_handler import ActionHandler
 
@@ -766,10 +897,13 @@ class TestTextCallbackSpacing(unittest.TestCase):
         action_handler = ActionHandler(text_system)
 
         def text_callback_wrapper(text: str):
-            text_to_inject = text.strip()
+            text_to_inject = text.lstrip().rstrip(" \t")
             if not text_to_inject:
                 return
-            if action_handler.last_injected_text and action_handler.last_injected_text.strip():
+            if append_trailing_space:
+                if not text_to_inject.endswith((" ", "\t", "\n")):
+                    text_to_inject += " "
+            elif action_handler.last_injected_text and action_handler.last_injected_text.strip():
                 text_to_inject = " " + text_to_inject
             success = text_system.inject_text(text_to_inject)
             if success:
@@ -781,25 +915,26 @@ class TestTextCallbackSpacing(unittest.TestCase):
 
         return text_callback_wrapper, on_state_change, text_system, action_handler
 
-    def test_first_segment_has_no_leading_space(self):
+    def test_first_segment_has_trailing_space(self):
         cb, _, text_system, _ = self._make_callback()
         cb("Hello world")
-        text_system.inject_text.assert_called_once_with("Hello world")
+        text_system.inject_text.assert_called_once_with("Hello world ")
 
-    def test_subsequent_segment_gets_space_separator(self):
+    def test_subsequent_segment_has_trailing_space_not_leading(self):
         cb, _, text_system, _ = self._make_callback()
         cb("Hello")
         cb("world")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
-        self.assertEqual(calls, ["Hello", " world"])
+        self.assertEqual(calls, ["Hello ", "world "])
 
-    def test_reset_clears_leading_space(self):
+    def test_cross_session_keeps_trailing_space_without_leading_space(self):
         cb, on_state_change, text_system, _ = self._make_callback()
         cb("first session")
         on_state_change(RecognitionState.IDLE)
         text_system.inject_text.reset_mock()
         cb("second session")
-        text_system.inject_text.assert_called_once_with("second session")
+        # No leading space (empty-field safe); trailing space still appended.
+        text_system.inject_text.assert_called_once_with("second session ")
 
     def test_whitespace_only_input_is_skipped(self):
         cb, _, text_system, _ = self._make_callback()
@@ -809,22 +944,27 @@ class TestTextCallbackSpacing(unittest.TestCase):
     def test_input_with_leading_space_is_stripped(self):
         cb, _, text_system, _ = self._make_callback()
         cb(" Hello world")
-        text_system.inject_text.assert_called_once_with("Hello world")
+        text_system.inject_text.assert_called_once_with("Hello world ")
 
-    def test_multiple_segments_all_get_separators(self):
+    def test_multiple_segments_all_get_trailing_spaces(self):
         cb, _, text_system, _ = self._make_callback()
         cb("one")
         cb("two")
         cb("three")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
-        self.assertEqual(calls, ["one", " two", " three"])
+        self.assertEqual(calls, ["one ", "two ", "three "])
 
     def test_space_after_punctuation_segment(self):
         cb, _, text_system, _ = self._make_callback()
         cb("Hello.")
         cb("World")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
-        self.assertEqual(calls, ["Hello.", " World"])
+        self.assertEqual(calls, ["Hello. ", "World "])
+
+    def test_newline_segment_does_not_get_trailing_space(self):
+        cb, _, text_system, _ = self._make_callback()
+        cb("Hello.\n")
+        text_system.inject_text.assert_called_once_with("Hello.\n")
 
     def test_processing_to_listening_keeps_segment_spacing(self):
         cb, on_state_change, text_system, _ = self._make_callback()
@@ -833,7 +973,156 @@ class TestTextCallbackSpacing(unittest.TestCase):
         on_state_change(RecognitionState.LISTENING)
         cb("World")
         calls = [c.args[0] for c in text_system.inject_text.call_args_list]
+        self.assertEqual(calls, ["Hello. ", "World "])
+
+    def test_legacy_mode_uses_leading_space_in_session(self):
+        cb, _, text_system, _ = self._make_callback(append_trailing_space=False)
+        cb("Hello.")
+        cb("World")
+        calls = [c.args[0] for c in text_system.inject_text.call_args_list]
         self.assertEqual(calls, ["Hello.", " World"])
+
+    def test_legacy_mode_clears_leading_space_across_sessions(self):
+        cb, on_state_change, text_system, _ = self._make_callback(append_trailing_space=False)
+        cb("first session")
+        on_state_change(RecognitionState.IDLE)
+        text_system.inject_text.reset_mock()
+        cb("second session")
+        text_system.inject_text.assert_called_once_with("second session")
+
+
+class TestShouldAppendTrailingSpace(unittest.TestCase):
+    """Test disk-backed trailing-space setting reader."""
+
+    def test_reads_setting_from_disk_with_true_default(self):
+        import json
+        import os
+        import tempfile
+
+        from vocalinux.main import _should_append_trailing_space
+
+        with tempfile.TemporaryDirectory() as d:
+            with patch("vocalinux.utils.paths.config_dir", return_value=d):
+                # No config file -> default True
+                self.assertTrue(_should_append_trailing_space())
+
+                cfg = os.path.join(d, "config.json")
+                with open(cfg, "w") as f:
+                    json.dump({"text_injection": {}}, f)
+                self.assertTrue(_should_append_trailing_space())
+
+                with open(cfg, "w") as f:
+                    json.dump({"text_injection": {"append_trailing_space": False}}, f)
+                self.assertFalse(_should_append_trailing_space())
+
+                with open(cfg, "w") as f:
+                    json.dump({"text_injection": {"append_trailing_space": True}}, f)
+                self.assertTrue(_should_append_trailing_space())
+
+    def test_returns_true_when_config_read_fails(self):
+        from vocalinux.main import _should_append_trailing_space
+
+        with patch("vocalinux.utils.paths.config_dir", side_effect=OSError("boom")):
+            self.assertTrue(_should_append_trailing_space())
+
+
+class TestMainCallbackTrailingSpaceEdges(unittest.TestCase):
+    """Exercise trailing-space edge paths through the real main() callback."""
+
+    def _boot_under_patches(self, *, append_trailing_space: bool = True, inject_ok: bool = True):
+        """Return (exit_stack, text_cb, mock_text) with patches still active."""
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(patch("vocalinux.main.check_dependencies", return_value=True))
+        mock_config_cls = stack.enter_context(patch("vocalinux.ui.config_manager.ConfigManager"))
+        mock_config = MagicMock()
+        mock_config.get_settings.return_value = {
+            "speech_recognition": {},
+            "general": {"first_run": False},
+        }
+        mock_config.get.return_value = False  # auto_capitalize off
+        mock_config_cls.return_value = mock_config
+
+        mock_speech_cls = stack.enter_context(
+            patch("vocalinux.speech_recognition.recognition_manager.SpeechRecognitionManager")
+        )
+        mock_speech = MagicMock()
+        mock_speech.engine = "whisper_cpp"
+        mock_speech_cls.return_value = mock_speech
+
+        mock_text_cls = stack.enter_context(
+            patch("vocalinux.text_injection.text_injector.TextInjector")
+        )
+        mock_text = MagicMock()
+        mock_text.inject_text.return_value = inject_ok
+        mock_text_cls.return_value = mock_text
+
+        mock_tray_cls = stack.enter_context(patch("vocalinux.ui.tray_indicator.TrayIndicator"))
+        mock_tray_cls.return_value = MagicMock()
+
+        stack.enter_context(patch("vocalinux.ui.logging_manager.initialize_logging"))
+        stack.enter_context(
+            patch(
+                "vocalinux.main._should_append_trailing_space",
+                return_value=append_trailing_space,
+            )
+        )
+        mock_parse = stack.enter_context(patch("vocalinux.main.parse_arguments"))
+        stack.enter_context(patch("sys.argv", ["vocalinux"]))
+
+        mock_args = MagicMock()
+        mock_args.debug = False
+        mock_args.model = "tiny"
+        mock_args.engine = "whisper_cpp"
+        mock_args.language = "en-us"
+        mock_args.wayland = False
+        mock_args.start_minimized = False
+        mock_parse.return_value = mock_args
+        main()
+
+        text_cb = mock_speech.register_text_callback.call_args.args[0]
+        return stack, text_cb, mock_text
+
+    def test_whitespace_only_is_skipped_through_main(self):
+        stack, text_cb, mock_text = self._boot_under_patches()
+        try:
+            text_cb("   \t  ")
+            mock_text.inject_text.assert_not_called()
+        finally:
+            stack.close()
+
+    def test_newline_segment_skips_trailing_space_through_main(self):
+        stack, text_cb, mock_text = self._boot_under_patches()
+        try:
+            text_cb("Hello.\n")
+            mock_text.inject_text.assert_called_once_with("Hello.\n")
+        finally:
+            stack.close()
+
+    def test_legacy_mode_adds_leading_space_in_session(self):
+        stack, text_cb, mock_text = self._boot_under_patches(append_trailing_space=False)
+        try:
+            text_cb("Hello.")
+            text_cb("World")
+            calls = [c.args[0] for c in mock_text.inject_text.call_args_list]
+            self.assertEqual(calls, ["Hello.", " World"])
+        finally:
+            stack.close()
+
+    def test_failed_inject_does_not_remember_text(self):
+        stack, text_cb, mock_text = self._boot_under_patches(
+            append_trailing_space=False, inject_ok=False
+        )
+        try:
+            text_cb("Hello.")
+            mock_text.inject_text.reset_mock()
+            mock_text.inject_text.return_value = True
+            text_cb("World")
+            # Failure means last_injected stays empty; next segment has no leading space
+            mock_text.inject_text.assert_called_once_with("World")
+        finally:
+            stack.close()
 
 
 if __name__ == "__main__":

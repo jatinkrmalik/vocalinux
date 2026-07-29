@@ -2110,21 +2110,32 @@ class TestCompositorIBusBridging(unittest.TestCase):
         return injector
 
     def test_bridged_desktops_prefer_ibus(self):
-        """GNOME/KDE/Cinnamon and unknown desktops should keep using IBus."""
+        """GNOME/Cinnamon and unknown desktops should keep using IBus.
+
+        KDE is covered separately: bridging also requires KWin VirtualKeyboard.
+        """
         injector = self._bare_injector()
-        for desktop in ("GNOME", "ubuntu:GNOME", "KDE", "X-Cinnamon", ""):
+        for desktop in ("GNOME", "ubuntu:GNOME", "X-Cinnamon", ""):
             with patch.dict(
                 "os.environ",
                 {
                     "XDG_CURRENT_DESKTOP": desktop,
                     "XDG_SESSION_DESKTOP": desktop,
                     "DESKTOP_SESSION": desktop,
+                    "KDE_FULL_SESSION": "",
                 },
+                clear=False,
             ):
                 self.assertTrue(injector._wayland_compositor_bridges_ibus(), desktop)
 
     def test_unbridged_compositors_skip_ibus(self):
-        """COSMIC and wlroots compositors do not deliver IBus commits to native apps."""
+        """COSMIC and wlroots compositors do not deliver IBus commits to native apps.
+
+        The ibus-wayland bridge is explicitly absent here; see
+        ``test_unbridged_compositors_use_ibus_when_bridge_running`` for the
+        opposite case. Patching it keeps the result independent of whether the
+        machine running the suite happens to have the bridge up.
+        """
         injector = self._bare_injector()
         for desktop in ("COSMIC", "sway", "Hyprland", "wayfire", "niri", "river"):
             with patch.dict(
@@ -2135,13 +2146,203 @@ class TestCompositorIBusBridging(unittest.TestCase):
                     "DESKTOP_SESSION": desktop,
                 },
             ):
-                self.assertFalse(injector._wayland_compositor_bridges_ibus(), desktop)
+                with patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=False):
+                    self.assertFalse(injector._wayland_compositor_bridges_ibus(), desktop)
+
+    def test_unbridged_compositors_use_ibus_when_bridge_running(self):
+        """ibus-wayland supplies the input-method-v2 relay these compositors lack (#607)."""
+        injector = self._bare_injector()
+        for desktop in ("COSMIC", "sway", "Hyprland", "wayfire", "niri", "river"):
+            with patch.dict(
+                "os.environ",
+                {
+                    "XDG_CURRENT_DESKTOP": desktop,
+                    "XDG_SESSION_DESKTOP": desktop,
+                    "DESKTOP_SESSION": desktop,
+                },
+            ):
+                with patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=True):
+                    self.assertTrue(injector._wayland_compositor_bridges_ibus(), desktop)
+
+    def test_bridge_probe_not_consulted_for_bridged_desktops(self):
+        """GNOME and friends never reach the probe; behaviour there is unchanged."""
+        injector = self._bare_injector()
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_CURRENT_DESKTOP": "GNOME",
+                "XDG_SESSION_DESKTOP": "GNOME",
+                "DESKTOP_SESSION": "GNOME",
+                "KDE_FULL_SESSION": "",
+            },
+            clear=False,
+        ):
+            with patch.object(TextInjector, "_ibus_wayland_bridge_running") as probe:
+                self.assertTrue(injector._wayland_compositor_bridges_ibus())
+                probe.assert_not_called()
+
+    def test_bridge_probe_detects_running_process(self):
+        """The probe shells out to pgrep -x ibus-wayland."""
+        with patch("subprocess.run", return_value=MagicMock(returncode=0)) as run:
+            self.assertTrue(TextInjector._ibus_wayland_bridge_running())
+        self.assertEqual(run.call_args[0][0], ["pgrep", "-x", "ibus-wayland"])
+
+        with patch("subprocess.run", return_value=MagicMock(returncode=1)):
+            self.assertFalse(TextInjector._ibus_wayland_bridge_running())
+
+    def test_bridge_probe_survives_missing_pgrep(self):
+        """No pgrep (or a hung one) must not raise -- just report 'no bridge'."""
+        for boom in (FileNotFoundError(), subprocess.TimeoutExpired("pgrep", 2)):
+            with patch("subprocess.run", side_effect=boom):
+                self.assertFalse(TextInjector._ibus_wayland_bridge_running())
 
     def test_non_wayland_always_bridges(self):
         """On X11/XWayland IBus works via XIM regardless of desktop."""
         injector = self._bare_injector(DesktopEnvironment.X11)
         with patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "COSMIC"}):
             self.assertTrue(injector._wayland_compositor_bridges_ibus())
+
+    def test_kde_wayland_virtual_keyboard_disabled_skips_ibus(self):
+        """KDE Wayland with KWin VirtualKeyboard disabled must not use IBus (#574)."""
+        injector = self._bare_injector()
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(injector, "_kde_virtual_keyboard_enabled", return_value=False):
+                self.assertFalse(injector._wayland_compositor_bridges_ibus())
+
+    def test_kde_wayland_virtual_keyboard_enabled_allows_ibus(self):
+        """KDE Wayland with KWin VirtualKeyboard enabled may still use IBus (#574)."""
+        injector = self._bare_injector()
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(injector, "_kde_virtual_keyboard_enabled", return_value=True):
+                self.assertTrue(injector._wayland_compositor_bridges_ibus())
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_kde_virtual_keyboard_enabled_parses_gdbus_true(self, mock_run):
+        """gdbus (<<true>>,) means VirtualKeyboard is enabled."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<true>>,)\n", stderr="")
+        injector = self._bare_injector()
+        self.assertTrue(injector._kde_virtual_keyboard_enabled())
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        self.assertEqual(args[0], "gdbus")
+        self.assertIn("org.kde.KWin", args)
+        self.assertIn("/VirtualKeyboard", args)
+
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    def test_kde_virtual_keyboard_enabled_parses_gdbus_false(self, mock_run):
+        """gdbus (<<false>>,) means VirtualKeyboard is disabled."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<false>>,)\n", stderr="")
+        injector = self._bare_injector()
+        self.assertFalse(injector._kde_virtual_keyboard_enabled())
+
+    @patch(
+        "vocalinux.text_injection.text_injector.subprocess.run",
+        side_effect=FileNotFoundError("gdbus"),
+    )
+    def test_kde_virtual_keyboard_enabled_false_when_gdbus_missing(self, _mock_run):
+        """Missing gdbus → treat as unbridged (conservative)."""
+        injector = self._bare_injector()
+        self.assertFalse(injector._kde_virtual_keyboard_enabled())
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_kde_wayland_vk_disabled_picks_ydotool_not_ibus(
+        self,
+        mock_which,
+        mock_run,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """Full path: KDE Wayland + VK disabled → ydotool, not IBus (#574)."""
+        mock_which.side_effect = lambda cmd: {
+            "ydotool": "/usr/bin/ydotool",
+            "ydotoold": "/usr/bin/ydotoold",
+        }.get(cmd)
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<false>>,)\n", stderr="")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "WAYLAND_DISPLAY": "wayland-0",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(TextInjector, "_is_ydotoold_running", return_value=True):
+                injector = TextInjector()
+
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
+        self.assertEqual(injector.wayland_tool, "ydotool")
+        mock_ibus_class.assert_not_called()
+
+    @patch("vocalinux.text_injection.text_injector.is_ibus_daemon_running", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_active_input_method", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True)
+    @patch("vocalinux.text_injection.text_injector.IBusTextInjector")
+    @patch("vocalinux.text_injection.text_injector.subprocess.run")
+    @patch("vocalinux.text_injection.text_injector.shutil.which")
+    def test_kde_wayland_vk_enabled_allows_ibus(
+        self,
+        mock_which,
+        mock_run,
+        mock_ibus_class,
+        mock_ibus_available,
+        mock_is_active,
+        mock_daemon,
+    ):
+        """Full path: KDE Wayland + VK enabled → IBus still selected when ready (#574)."""
+        mock_which.side_effect = lambda cmd: {
+            "ydotool": "/usr/bin/ydotool",
+            "ydotoold": "/usr/bin/ydotoold",
+        }.get(cmd)
+        mock_run.return_value = MagicMock(returncode=0, stdout="(<<true>>,)\n", stderr="")
+        mock_ibus_class.return_value = MagicMock()
+
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_SESSION_TYPE": "wayland",
+                "WAYLAND_DISPLAY": "wayland-0",
+                "XDG_CURRENT_DESKTOP": "KDE",
+                "XDG_SESSION_DESKTOP": "KDE",
+                "DESKTOP_SESSION": "plasma",
+                "KDE_FULL_SESSION": "true",
+            },
+        ):
+            with patch.object(TextInjector, "_is_ydotoold_running", return_value=True):
+                injector = TextInjector()
+            if injector._ibus_init_thread is not None:
+                injector._ibus_init_thread.join(timeout=5)
+
+        mock_ibus_class.assert_called_once()
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
 
     @patch("vocalinux.text_injection.text_injector.socket.socket")
     @patch("os.path.exists", return_value=True)
@@ -2270,7 +2471,11 @@ class TestCompositorIBusBridging(unittest.TestCase):
                 "DESKTOP_SESSION": "cosmic",
             },
         ):
-            injector = TextInjector()
+            # No ibus-wayland relay here, so COSMIC stays unbridged. Stated
+            # explicitly because mock_run returns returncode=0 for every
+            # subprocess, which the bridge probe would otherwise read as a hit.
+            with patch.object(TextInjector, "_ibus_wayland_bridge_running", return_value=False):
+                injector = TextInjector()
 
         self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
         self.assertEqual(injector.wayland_tool, "wtype")
@@ -2296,3 +2501,26 @@ class TestCompositorIBusBridging(unittest.TestCase):
             ):
                 injector = TextInjector()
         self.assertEqual(injector.wayland_tool, "ydotool")
+
+
+class TestForcedBackend(unittest.TestCase):
+    """VOCALINUX_FORCE_BACKEND overrides backend autodetection."""
+
+    def test_unset_or_auto_means_auto(self):
+        for value in ("", "auto", "  AUTO  "):
+            with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": value}):
+                self.assertEqual(TextInjector._forced_backend(), "auto")
+
+    def test_recognised_backends(self):
+        for value in ("ibus", "wtype", "ydotool"):
+            with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": value.upper()}):
+                self.assertEqual(TextInjector._forced_backend(), value)
+
+    def test_unknown_value_falls_back_to_auto(self):
+        """A typo must not silently pin the wrong backend."""
+        with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": "ibsu"}):
+            self.assertEqual(TextInjector._forced_backend(), "auto")
+
+    def test_missing_variable_means_auto(self):
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(TextInjector._forced_backend(), "auto")

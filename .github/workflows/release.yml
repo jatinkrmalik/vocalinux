@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -42,7 +42,10 @@ jobs:
             gobject-introspection \
             gir1.2-gtk-3.0 \
             gir1.2-appindicator3-0.1 \
-            gir1.2-ibus-1.0
+            gir1.2-ayatanaappindicator3-0.1 \
+            gir1.2-ibus-1.0 \
+            gir1.2-rsvg-2.0 \
+            librsvg2-common
 
       - name: Install build dependencies
         run: |
@@ -142,7 +145,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -163,7 +166,10 @@ jobs:
             gobject-introspection \
             gir1.2-gtk-3.0 \
             gir1.2-appindicator3-0.1 \
-            gir1.2-ibus-1.0
+            gir1.2-ayatanaappindicator3-0.1 \
+            gir1.2-ibus-1.0 \
+            gir1.2-rsvg-2.0 \
+            librsvg2-common
 
       - name: Install build dependencies
         run: |
@@ -204,7 +210,7 @@ jobs:
       url: https://pypi.org/project/vocalinux/
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -254,7 +260,7 @@ jobs:
 
       - name: Checkout code
         if: steps.aur.outputs.configured == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Bump PKGBUILD version
         if: steps.aur.outputs.configured == 'true'
@@ -281,14 +287,12 @@ jobs:
     name: Deploy Website
     runs-on: ubuntu-latest
     needs: [build-and-release, publish-pypi]
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: 'npm'
@@ -302,15 +306,15 @@ jobs:
         run: |
           VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)
           echo "Syncing version: $VERSION"
-          # Update softwareVersion where JSON-LD currently lives
-          if grep -q '"softwareVersion": "' web/src/app/page.tsx; then
-            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/page.tsx
+          # JSON-LD uses unquoted JS keys: softwareVersion: "x.y.z"
+          if grep -qE 'softwareVersion:\s*"' web/src/app/page.tsx; then
+            sed -i 's/softwareVersion: "[^"]*"/softwareVersion: "'"$VERSION"'"/' web/src/app/page.tsx
             echo "Updated page.tsx version:"
-            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/page.tsx
-          elif grep -q '"softwareVersion": "' web/src/app/layout.tsx; then
-            sed -i 's/"softwareVersion": "[^"]*"/"softwareVersion": "'"$VERSION"'"/' web/src/app/layout.tsx
+            grep -oP 'softwareVersion:\s*"\K[^"]+' web/src/app/page.tsx
+          elif grep -qE 'softwareVersion:\s*"' web/src/app/layout.tsx; then
+            sed -i 's/softwareVersion: "[^"]*"/softwareVersion: "'"$VERSION"'"/' web/src/app/layout.tsx
             echo "Updated layout.tsx version:"
-            grep -oP '"softwareVersion":\s*"\K[^"]+' web/src/app/layout.tsx
+            grep -oP 'softwareVersion:\s*"\K[^"]+' web/src/app/layout.tsx
           else
             echo "::warning::No softwareVersion field found in page.tsx or layout.tsx; skipping sync"
           fi

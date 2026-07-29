@@ -4,6 +4,9 @@ import { CheckCircle2, ChevronRight, Globe, Languages, Mic } from "lucide-react"
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
+const WHISPER_ENGINES = ["whisper.cpp", "Whisper"] as const;
+const ALL_ENGINES = ["whisper.cpp", "Whisper", "VOSK"] as const;
+
 const supportedLanguages = [
   {
     code: "en",
@@ -11,62 +14,39 @@ const supportedLanguages = [
     nativeName: "English",
     flag: "🇺🇸",
     description: "Full support across all engines (whisper.cpp, Whisper, VOSK)",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
+    engines: [...ALL_ENGINES],
   },
   {
-    code: "es",
-    name: "Spanish",
-    nativeName: "Español",
-    flag: "🇪🇸",
-    description: "Complete Spanish language support for dictation",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
+    code: "en-in",
+    name: "English (India)",
+    nativeName: "English (India)",
+    flag: "🇮🇳",
+    description: "Indian English dictation with a dedicated VOSK model",
+    engines: [...ALL_ENGINES],
   },
   {
-    code: "fr",
-    name: "French",
-    nativeName: "Français",
-    flag: "🇫🇷",
-    description: "French language voice typing and transcription",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
+    code: "ar",
+    name: "Arabic",
+    nativeName: "العربية",
+    flag: "🇸🇦",
+    description: "Arabic speech recognition across Whisper and VOSK",
+    engines: [...ALL_ENGINES],
   },
   {
-    code: "de",
-    name: "German",
-    nativeName: "Deutsch",
-    flag: "🇩🇪",
-    description: "German dictation with high accuracy",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
+    code: "bn",
+    name: "Bengali",
+    nativeName: "বাংলা",
+    flag: "🇧🇩",
+    description: "Bengali dictation with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
   },
   {
-    code: "it",
-    name: "Italian",
-    nativeName: "Italiano",
-    flag: "🇮🇹",
-    description: "Italian voice recognition and text dictation",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
-  },
-  {
-    code: "pt",
-    name: "Portuguese",
-    nativeName: "Português",
-    flag: "🇧🇷",
-    description: "Brazilian and European Portuguese support",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
-  },
-  {
-    code: "ru",
-    name: "Russian",
-    nativeName: "Русский",
-    flag: "🇷🇺",
-    description: "Russian language speech-to-text transcription",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
+    code: "ca",
+    name: "Catalan",
+    nativeName: "Català",
+    flag: "🇦🇩",
+    description: "Catalan voice typing with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
   },
   {
     code: "zh",
@@ -74,8 +54,71 @@ const supportedLanguages = [
     nativeName: "中文",
     flag: "🇨🇳",
     description: "Mandarin Chinese voice dictation support",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "cs",
+    name: "Czech",
+    nativeName: "Čeština",
+    flag: "🇨🇿",
+    description: "Czech dictation with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "da",
+    name: "Danish",
+    nativeName: "Dansk",
+    flag: "🇩🇰",
+    description: "Danish speech-to-text with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "nl",
+    name: "Dutch",
+    nativeName: "Nederlands",
+    flag: "🇳🇱",
+    description: "Dutch voice recognition across Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "fi",
+    name: "Finnish",
+    nativeName: "Suomi",
+    flag: "🇫🇮",
+    description: "Finnish dictation with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "fr",
+    name: "French",
+    nativeName: "Français",
+    flag: "🇫🇷",
+    description: "French language voice typing and transcription",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "de",
+    name: "German",
+    nativeName: "Deutsch",
+    flag: "🇩🇪",
+    description: "German dictation with high accuracy",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "el",
+    name: "Greek",
+    nativeName: "Ελληνικά",
+    flag: "🇬🇷",
+    description: "Greek speech recognition with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "he",
+    name: "Hebrew",
+    nativeName: "עברית",
+    flag: "🇮🇱",
+    description: "Hebrew dictation with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
   },
   {
     code: "hi",
@@ -83,10 +126,155 @@ const supportedLanguages = [
     nativeName: "हिन्दी",
     flag: "🇮🇳",
     description: "Hindi language voice typing and transcription",
-    engines: ["whisper.cpp", "Whisper", "VOSK"],
-    modelSizes: ["tiny", "base", "small", "medium", "large"],
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "hu",
+    name: "Hungarian",
+    nativeName: "Magyar",
+    flag: "🇭🇺",
+    description: "Hungarian dictation with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "id",
+    name: "Indonesian",
+    nativeName: "Bahasa Indonesia",
+    flag: "🇮🇩",
+    description: "Indonesian voice typing with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "it",
+    name: "Italian",
+    nativeName: "Italiano",
+    flag: "🇮🇹",
+    description: "Italian voice recognition and text dictation",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "ja",
+    name: "Japanese",
+    nativeName: "日本語",
+    flag: "🇯🇵",
+    description: "Japanese speech-to-text across Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "ko",
+    name: "Korean",
+    nativeName: "한국어",
+    flag: "🇰🇷",
+    description: "Korean dictation with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "no",
+    name: "Norwegian",
+    nativeName: "Norsk",
+    flag: "🇳🇴",
+    description: "Norwegian speech recognition with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "fa",
+    name: "Persian",
+    nativeName: "فارسی",
+    flag: "🇮🇷",
+    description: "Persian (Farsi) dictation with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "pl",
+    name: "Polish",
+    nativeName: "Polski",
+    flag: "🇵🇱",
+    description: "Polish voice typing with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "pt",
+    name: "Portuguese",
+    nativeName: "Português",
+    flag: "🇧🇷",
+    description: "Brazilian and European Portuguese support",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "ro",
+    name: "Romanian",
+    nativeName: "Română",
+    flag: "🇷🇴",
+    description: "Romanian dictation with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "ru",
+    name: "Russian",
+    nativeName: "Русский",
+    flag: "🇷🇺",
+    description: "Russian language speech-to-text transcription",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "es",
+    name: "Spanish",
+    nativeName: "Español",
+    flag: "🇪🇸",
+    description: "Complete Spanish language support for dictation",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "sv",
+    name: "Swedish",
+    nativeName: "Svenska",
+    flag: "🇸🇪",
+    description: "Swedish voice recognition with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "ta",
+    name: "Tamil",
+    nativeName: "தமிழ்",
+    flag: "🇮🇳",
+    description: "Tamil dictation with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "th",
+    name: "Thai",
+    nativeName: "ไทย",
+    flag: "🇹🇭",
+    description: "Thai speech-to-text with multilingual Whisper models",
+    engines: [...WHISPER_ENGINES],
+  },
+  {
+    code: "tr",
+    name: "Turkish",
+    nativeName: "Türkçe",
+    flag: "🇹🇷",
+    description: "Turkish dictation with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "uk",
+    name: "Ukrainian",
+    nativeName: "Українська",
+    flag: "🇺🇦",
+    description: "Ukrainian voice typing with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
+  },
+  {
+    code: "vi",
+    name: "Vietnamese",
+    nativeName: "Tiếng Việt",
+    flag: "🇻🇳",
+    description: "Vietnamese speech recognition with Whisper and VOSK",
+    engines: [...ALL_ENGINES],
   },
 ];
+
+const languageCount = supportedLanguages.length;
 
 const features = [
   {
@@ -96,9 +284,9 @@ const features = [
     icon: Globe,
   },
   {
-    title: "Multi-Engine Support",
+    title: "Engine-Aware Catalog",
     description:
-      "All supported languages work across whisper.cpp, OpenAI Whisper, and VOSK engines.",
+      "Whisper engines cover the full language list. VOSK appears only where an official model exists.",
     icon: Mic,
   },
   {
@@ -110,15 +298,19 @@ const features = [
 ];
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "Multilingual Voice Dictation - Spanish, French, German, & More | Vocalinux",
+  title: "Multilingual Voice Dictation - 30+ Languages | Vocalinux",
   description:
-    "Dictate in 9+ languages including Spanish, French, German, Italian, Portuguese, Russian, Chinese, and Hindi. Free offline multilingual voice typing for Linux.",
+    "Dictate in 30+ languages including Spanish, French, German, Hungarian, Japanese, Korean, Arabic, and more. Free offline multilingual voice typing for Linux.",
   path: "/languages",
   keywords: [
     "multilingual voice dictation",
     "Spanish voice typing",
     "French speech to text",
     "German dictation software",
+    "Hungarian voice recognition",
+    "Japanese speech to text",
+    "Korean voice typing",
+    "Arabic dictation",
     "Italian voice recognition",
     "Portuguese voice typing",
     "Russian speech recognition",
@@ -132,10 +324,10 @@ export default function LanguagesPage() {
   const articleJsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
-    headline: "Multilingual Voice Dictation for Linux - 9+ Languages Supported",
+    headline: `Multilingual Voice Dictation for Linux - ${languageCount}+ Languages Supported`,
     description:
-      "Complete guide to Vocalinux multilingual voice dictation. Dictate in Spanish, French, German, Italian, Portuguese, Russian, Chinese, Hindi, and more.",
-    dateModified: "2026-02-22",
+      "Complete guide to Vocalinux multilingual voice dictation. Dictate in Spanish, French, German, Hungarian, Japanese, Korean, Arabic, Hindi, and more.",
+    dateModified: "2026-07-29",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -162,14 +354,14 @@ export default function LanguagesPage() {
       <section>
         <p className="subpage-kicker">
           <Languages className="h-4 w-4" />
-          9+ Languages
+          {languageCount}+ Languages
         </p>
         <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Multilingual Voice Dictation for Linux
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
-          Dictate in your native language. Vocalinux supports 9+ languages with full offline
-          processing - no cloud required, no data leaves your machine.
+          Dictate in your native language. Vocalinux lists {languageCount} languages in Settings,
+          and whisper.cpp / Whisper can auto-detect many more - all offline, with no cloud upload.
         </p>
       </section>
 
@@ -232,7 +424,7 @@ export default function LanguagesPage() {
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                Use "Auto" for automatic language detection (whisper.cpp/Whisper)
+                Use &quot;Auto&quot; for automatic language detection (whisper.cpp/Whisper)
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
@@ -249,7 +441,7 @@ export default function LanguagesPage() {
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                "tiny" model works for all supported languages
+                Use a Standard multilingual whisper.cpp model for non-English dictation
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />

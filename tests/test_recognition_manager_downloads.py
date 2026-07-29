@@ -481,6 +481,50 @@ class TestAudioReconnection:
         assert second_delay > first_delay
         assert second_delay == first_delay * 2
 
+    def test_attempt_audio_reconnection_negotiation_fallback(self):
+        """When negotiation returns no stream, reconnect falls back to plain open."""
+        manager = _make_manager(engine="whisper_cpp")
+
+        mock_pyaudio_mod = MagicMock()
+        mock_pyaudio_mod.paInt16 = 8
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = b"\x00" * 1024
+        mock_audio_instance = MagicMock()
+        mock_audio_instance.open.return_value = mock_stream
+
+        with (
+            patch.dict("sys.modules", {"pyaudio": mock_pyaudio_mod}),
+            patch("time.sleep"),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 16000, None),
+            ),
+        ):
+            result = manager._attempt_audio_reconnection(mock_audio_instance)
+
+        assert result is True
+        assert manager._audio_stream == mock_stream
+        mock_audio_instance.open.assert_called_once()
+
+    def test_attempt_audio_reconnection_empty_read_closes_stream(self):
+        """A reconnected stream that returns no data must be closed safely."""
+        manager = _make_manager(engine="whisper_cpp")
+
+        mock_pyaudio_mod = MagicMock()
+        mock_pyaudio_mod.paInt16 = 8
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = b""
+        mock_audio_instance = MagicMock()
+        mock_audio_instance.open.return_value = mock_stream
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio_mod}):
+            with patch("time.sleep"):
+                result = manager._attempt_audio_reconnection(mock_audio_instance)
+
+        assert result is False
+        mock_stream.stop_stream.assert_called_once()
+        mock_stream.close.assert_called_once()
+
 
 class TestIBusEngineUtilities:
     """Test ibus_engine utility functions."""

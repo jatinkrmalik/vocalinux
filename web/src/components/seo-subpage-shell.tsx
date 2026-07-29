@@ -296,12 +296,12 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <a
+            <Link
               href="/#install"
               className="hidden h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground sm:inline-flex"
             >
               Install
-            </a>
+            </Link>
             <button
               type="button"
               onClick={(e) => {
@@ -347,13 +347,13 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
                   </div>
                 </div>
               ))}
-              <a
+              <Link
                 href="/#install"
                 onClick={() => setMobileMenuOpen(false)}
                 className="mt-2 flex items-center justify-center rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
               >
                 Install Vocalinux
-              </a>
+              </Link>
             </nav>
           </div>
         ) : null}
@@ -384,12 +384,12 @@ export function SeoSubpageShell({ children }: SeoSubpageShellProps) {
                 Home
                 <ChevronRight className="h-4 w-4" />
               </Link>
-              <a
+              <Link
                 href="/#install"
                 className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-500"
               >
                 Install
-              </a>
+              </Link>
               <a
                 href="https://github.com/jatinkrmalik/vocalinux"
                 target="_blank"

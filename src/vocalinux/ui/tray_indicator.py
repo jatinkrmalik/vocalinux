@@ -28,7 +28,9 @@ except (ImportError, ValueError):
 from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
 # Import local modules - Use protocols to avoid circular imports
+from ..auto_pause_monitor import DEFAULT_POLL_INTERVAL_SECONDS, AutoPauseMonitor
 from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, TextInjectorProtocol
+from ..model_keepalive import DEFAULT_IDLE_TIMEOUT_SECONDS, ModelKeepAlive
 from ..suspend_handler import SuspendHandler
 from ..utils.resource_manager import ResourceManager
 from .config_manager import ConfigManager
@@ -115,6 +117,18 @@ class TrayIndicator:
         }
         self.icon_names = _themed_icon_names()
 
+        # Prefer absolute icon paths outside Flatpak. StatusNotifier hosts often
+        # resolve IconName via the system hicolor theme and ignore IconThemePath,
+        # so a stale ~/.local/share/icons copy of vocalinux-microphone-off.svg
+        # (the old red placeholder) would win over the AppImage's bundled icons.
+        self._icon_keys = {
+            "default": (self.icon_names["default"] if FLATPAK_ID else self.icon_paths["default"]),
+            "active": (self.icon_names["active"] if FLATPAK_ID else self.icon_paths["active"]),
+            "processing": (
+                self.icon_names["processing"] if FLATPAK_ID else self.icon_paths["processing"]
+            ),
+        }
+
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
 
@@ -129,6 +143,23 @@ class TrayIndicator:
             on_suspend=self._on_system_suspend,
             on_resume=self._on_system_resume,
         )
+
+        # Auto-pause: unload model while configured games/apps are running
+        self._auto_pause_monitor = AutoPauseMonitor(
+            get_config=self._get_auto_pause_config,
+            on_pause=self._on_auto_pause,
+            on_resume=self._on_auto_resume,
+        )
+        self._auto_pause_monitor.start()
+
+        # Idle keep-alive: unload model after inactivity (battery / Optimus)
+        self._model_keepalive = ModelKeepAlive(
+            get_config=self._get_model_keepalive_config,
+            on_idle_unload=self._on_keepalive_idle_unload,
+            is_safe_to_unload=self._is_safe_for_keepalive_unload,
+        )
+        self._model_keepalive.start()
+        self._model_keepalive.bump()
 
         # Set up keyboard shortcuts with mode support
         self._setup_keyboard_shortcuts()
@@ -203,7 +234,7 @@ class TrayIndicator:
                 exists = os.path.exists(path)
                 logger.info(f"Icon '{name}' ({path}): {'exists' if exists else 'missing'}")
 
-        initial_icon = _themed_icon_names()["default"]
+        initial_icon = self._icon_keys["default"]
         try:
             if FLATPAK_ID:
                 self.indicator = AppIndicator3.Indicator.new(
@@ -220,6 +251,7 @@ class TrayIndicator:
                 )
                 self.indicator.set_icon_theme_path(ICON_DIR)
             self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+            self.indicator.set_title("Vocalinux")
         except Exception as e:
             logger.error(f"Failed to create AppIndicator: {e}")
             GLib.idle_add(self._show_appindicator_error_dialog, str(e))
@@ -423,6 +455,13 @@ class TrayIndicator:
         Args:
             state: The new recognition state
         """
+        keepalive = getattr(self, "_model_keepalive", None)
+        if keepalive is not None:
+            if state == RecognitionState.IDLE:
+                keepalive.bump()
+            else:
+                keepalive.cancel()
+
         # Update the UI in the GTK main thread
         GLib.idle_add(self._update_ui, state)
 
@@ -437,19 +476,19 @@ class TrayIndicator:
             return False
 
         if state == RecognitionState.IDLE:
-            self.indicator.set_icon_full(self.icon_names["default"], "Microphone off")
+            self.indicator.set_icon_full(self._icon_keys["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
-            self.indicator.set_icon_full(self.icon_names["active"], "Microphone on")
+            self.indicator.set_icon_full(self._icon_keys["active"], "Microphone on")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self.indicator.set_icon_full(self.icon_names["processing"], "Processing speech")
+            self.indicator.set_icon_full(self._icon_keys["processing"], "Processing speech")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
-            self.indicator.set_icon_full(self.icon_names["default"], "Error")
+            self.indicator.set_icon_full(self._icon_keys["default"], "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
 
@@ -560,8 +599,77 @@ class TrayIndicator:
         logger.debug("About clicked")
         show_about_dialog(parent=None)
 
+    def _get_auto_pause_config(self):
+        """Return (enabled, apps, poll_interval_seconds) for AutoPauseMonitor."""
+        enabled = self.config_manager.get_bool("auto_pause", "enabled", False)
+        apps = self.config_manager.get("auto_pause", "apps", []) or []
+        if not isinstance(apps, list):
+            apps = []
+        interval = self.config_manager.get_float(
+            "auto_pause", "poll_interval_seconds", float(DEFAULT_POLL_INTERVAL_SECONDS)
+        )
+        return enabled, apps, interval
+
+    def _get_model_keepalive_config(self):
+        """Return (enabled, idle_timeout_seconds) for ModelKeepAlive."""
+        enabled = self.config_manager.get_bool("model_keepalive", "enabled", False)
+        timeout = self.config_manager.get_float(
+            "model_keepalive",
+            "idle_timeout_seconds",
+            float(DEFAULT_IDLE_TIMEOUT_SECONDS),
+        )
+        return enabled, timeout
+
+    def _is_safe_for_keepalive_unload(self) -> bool:
+        """Keep-alive may unload only when idle and not under auto-pause."""
+        if getattr(self.speech_engine, "is_auto_paused", False) is True:
+            return False
+        if (
+            getattr(self, "_auto_pause_monitor", None) is not None
+            and self._auto_pause_monitor.paused
+        ):
+            return False
+        return self.speech_engine.state == RecognitionState.IDLE
+
+    def _on_keepalive_idle_unload(self):
+        """Unload speech model after idle keep-alive timeout."""
+        logger.info("Keep-alive idle timeout — unloading speech model")
+        unload = getattr(self.speech_engine, "unload_model", None)
+        if callable(unload):
+            unload(reason="idle_keepalive")
+
+    def _on_auto_pause(self):
+        """Unload speech model when a configured game/app is detected."""
+        logger.info("Auto-pause triggered — unloading speech model")
+        keepalive = getattr(self, "_model_keepalive", None)
+        if keepalive is not None:
+            keepalive.cancel()
+        unload = getattr(self.speech_engine, "unload_model", None)
+        if callable(unload):
+            unload(reason="auto_pause")
+        else:
+            # Fallback for engines that only expose reinit/stop
+            if self.speech_engine.state != RecognitionState.IDLE:
+                self.speech_engine.stop_recognition()
+
+    def _on_auto_resume(self):
+        """Reload speech model after configured games/apps have exited."""
+        logger.info("Auto-pause cleared — reloading speech model")
+        reinit = getattr(self.speech_engine, "reinitialize_after_resume", None)
+        if callable(reinit):
+            try:
+                reinit()
+            except Exception:
+                logger.error("Failed to reload speech engine after auto-pause", exc_info=True)
+        keepalive = getattr(self, "_model_keepalive", None)
+        if keepalive is not None:
+            keepalive.bump()
+
     def _on_system_suspend(self):
         """Stop active recognition before the system goes to sleep."""
+        keepalive = getattr(self, "_model_keepalive", None)
+        if keepalive is not None:
+            keepalive.cancel()
         if self.speech_engine.state != RecognitionState.IDLE:
             logger.info("System suspending — stopping active recognition")
             self.speech_engine.stop_recognition()
@@ -572,9 +680,16 @@ class TrayIndicator:
         Speech engine reinitializes after 2s (audio hardware recovers fast).
         Keyboard backend waits for /dev/input to settle using inotify-backed
         directory monitoring, with a timer fallback if monitoring unavailable.
+
+        If auto-pause still has a configured app running, skip speech reinit —
+        the auto-pause monitor owns model lifecycle until that app exits.
         """
         logger.info("System resumed — scheduling reinit")
-        GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
+        # Use `is True` so duck-typed mocks without a real bool flag still reinit.
+        if getattr(self.speech_engine, "is_auto_paused", False) is True:
+            logger.info("Skipping resume reinit: auto-pause still active")
+        else:
+            GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
         GLib.timeout_add_seconds(2, self._start_input_device_monitor)
 
     def _reinit_speech_after_resume(self):
@@ -582,6 +697,9 @@ class TrayIndicator:
             self.speech_engine.reinitialize_after_resume()
         except Exception:
             logger.error("Failed to reinitialize after resume", exc_info=True)
+        keepalive = getattr(self, "_model_keepalive", None)
+        if keepalive is not None:
+            keepalive.bump()
         return GLib.SOURCE_REMOVE
 
     def _start_input_device_monitor(self):
@@ -651,6 +769,12 @@ class TrayIndicator:
 
         if self._suspend_handler is not None:
             self._suspend_handler.shutdown()
+
+        if getattr(self, "_auto_pause_monitor", None) is not None:
+            self._auto_pause_monitor.shutdown()
+
+        if getattr(self, "_model_keepalive", None) is not None:
+            self._model_keepalive.shutdown()
 
         self._cleanup_input_monitor()
 
