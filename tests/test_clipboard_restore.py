@@ -418,6 +418,34 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         # First copy: injected text; second copy: immediate restore after failure
         self.assertEqual(copy_calls, ["injected text", "original content"])
 
+    def test_no_restore_when_paste_fails_and_clipboard_was_unreadable(self):
+        """No restore attempted when Ctrl+V fails and clipboard could not be read."""
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        copy_calls: list[str] = []
+
+        with patch.object(obj, "_read_clipboard", return_value=None):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: copy_calls.append(t) or True,
+            ):
+                with patch.object(
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
+                ):
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            side_effect=subprocess.CalledProcessError(1, ["ydotool", "key"]),
+                        ):
+                            result = obj._inject_via_clipboard_paste("text")
+
+        self.assertFalse(result)
+        # Only injection copy — no restore since clipboard was unreadable
+        self.assertEqual(copy_calls, ["text"])
+
     def test_empty_clipboard_is_cleared_after_injection(self):
         """When clipboard was empty before injection, it is cleared back to empty after paste."""
         obj = _make_injector()
