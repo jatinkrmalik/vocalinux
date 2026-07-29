@@ -154,6 +154,17 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         self.assertNotIn("self.custom_shortcut_row.show_all()", outside)
         self.assertNotIn("self.custom_shortcut_row.hide()", outside)
 
+    def test_separator_revert_syncs_custom_row_visibility(self):
+        """Clicking a combo separator must restore custom-row visibility too.
+
+        Otherwise selecting Custom Shortcut then a group separator leaves
+        Record/Set visible while the combo shows a preset again.
+        """
+        start = self.source_code.index("def _revert_shortcut_combo_to_saved")
+        end = self.source_code.index("\n    def ", start + 1)
+        body = self.source_code[start:end]
+        self.assertIn("self._sync_shortcut_selection_ui(current)", body)
+
 
 class TestKeyboardBackendsBase(unittest.TestCase):
     """Test cases for keyboard backends base module."""
