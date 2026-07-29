@@ -135,6 +135,25 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         self.assertIn("def _apply_custom_shortcut(self, shortcut: str)", self.source_code)
         self.assertIn("self._sync_shortcut_selection_ui(shortcut)", self.source_code)
 
+    def test_custom_shortcut_row_uses_visible_helper(self):
+        """Custom row show path must clear no_show_all before show_all.
+
+        Gtk.Widget.show_all() is a no-op while no_show_all is True, which hid
+        the Record/Set controls after the searchable-settings refactor.
+        """
+        self.assertIn("def _set_custom_shortcut_row_visible(self, visible: bool)", self.source_code)
+        self.assertIn("self._set_custom_shortcut_row_visible(True)", self.source_code)
+        self.assertIn("self._set_custom_shortcut_row_visible(False)", self.source_code)
+        helper_start = self.source_code.index("def _set_custom_shortcut_row_visible")
+        helper_end = self.source_code.index("\n    def ", helper_start + 1)
+        helper = self.source_code[helper_start:helper_end]
+        self.assertIn("set_no_show_all(False)", helper)
+        self.assertIn("show_all()", helper)
+        # Call sites must go through the helper, not bare show_all on the row.
+        outside = self.source_code[:helper_start] + self.source_code[helper_end:]
+        self.assertNotIn("self.custom_shortcut_row.show_all()", outside)
+        self.assertNotIn("self.custom_shortcut_row.hide()", outside)
+
 
 class TestKeyboardBackendsBase(unittest.TestCase):
     """Test cases for keyboard backends base module."""
