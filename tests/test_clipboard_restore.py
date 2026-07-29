@@ -148,6 +148,22 @@ class TestReadClipboard(unittest.TestCase):
                     result = obj._read_clipboard()
         self.assertEqual(result, arabic)
 
+    def test_wl_paste_used_as_fallback_on_x11(self):
+        """On X11, wl-paste is added as a last-resort candidate (XWayland environments)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector()
+        obj._session_environment = DesktopEnvironment.X11
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11", "WAYLAND_DISPLAY": ""}):
+            with patch(
+                "vocalinux.text_injection.text_injector.shutil.which",
+                return_value="/usr/bin/wl-paste",
+            ):
+                with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                    mock_run.return_value = MagicMock(returncode=0, stdout="x11 clipboard")
+                    result = obj._read_clipboard()
+        self.assertEqual(result, "x11 clipboard")
+
 
 class TestClipboardRestoreAfterInjection(unittest.TestCase):
     """Behavioural tests for the save/restore logic in _inject_via_clipboard_paste."""
