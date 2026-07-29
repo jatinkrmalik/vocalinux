@@ -305,6 +305,16 @@ class TestSpeechRecognition(unittest.TestCase):
         self.assertIsNone(hu["vosk"])
         self.assertNotIn("hu", VOSK_MODEL_INFO["small"]["languages"])
 
+    def test_resolve_whisper_language_maps_english_variants(self):
+        """Catalog ids like en-us/en-in must become Whisper's 'en' code."""
+        from vocalinux.speech_recognition.recognition_manager import resolve_whisper_language
+
+        self.assertEqual(resolve_whisper_language("en-us"), "en")
+        self.assertEqual(resolve_whisper_language("en-in"), "en")
+        self.assertEqual(resolve_whisper_language("hu"), "hu")
+        self.assertEqual(resolve_whisper_language("ja"), "ja")
+        self.assertIsNone(resolve_whisper_language("auto"))
+
     def test_vosk_init_italian_medium_model_resolves_correctly(self):
         """Selecting Italian + the 'medium' VOSK model must not crash (issue #550)."""
         manager = SpeechRecognitionManager(engine="vosk", language="it", model_size="medium")

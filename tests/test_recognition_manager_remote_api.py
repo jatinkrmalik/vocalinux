@@ -366,6 +366,18 @@ class TestRemoteAPITranscription(unittest.TestCase):
             # Should have been called with "en" (converted from "en-us")
             mock_server.assert_called_once_with(ANY, "en", ANY, ANY)
 
+    def test_transcribe_with_language_en_in_conversion(self):
+        """English (India) catalog id must map to Whisper code 'en'."""
+        from unittest.mock import patch
+
+        with patch.object(self.manager, "_try_whispercpp_server_api") as mock_server:
+            mock_server.return_value = "test"
+
+            self.manager.language = "en-in"
+            self.manager._transcribe_with_remote_api([b"audio"], self.manager._http_session)
+
+            mock_server.assert_called_once_with(ANY, "en", ANY, ANY)
+
     def test_transcribe_with_language_auto(self):
         """Test with auto language detection."""
         from unittest.mock import patch
