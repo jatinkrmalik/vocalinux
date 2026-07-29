@@ -275,6 +275,36 @@ class TestSpeechRecognition(unittest.TestCase):
                 "otherwise initialization crashes with a NoneType path error.",
             )
 
+    def test_supported_languages_vosk_entries_match_model_tables(self):
+        """Every catalog language with a VOSK model must appear in size tables."""
+        from vocalinux.utils.vosk_model_info import SUPPORTED_LANGUAGES
+
+        for lang_code, lang_info in SUPPORTED_LANGUAGES.items():
+            vosk_model = lang_info.get("vosk")
+            if not vosk_model:
+                continue
+            self.assertEqual(
+                VOSK_MODEL_INFO["small"]["languages"].get(lang_code),
+                vosk_model,
+                f"SUPPORTED_LANGUAGES['{lang_code}']['vosk'] must match "
+                f"VOSK_MODEL_INFO['small']['languages']['{lang_code}']",
+            )
+            for size in ("medium", "large"):
+                self.assertIn(
+                    lang_code,
+                    VOSK_MODEL_INFO[size]["languages"],
+                    f"VOSK language '{lang_code}' missing from '{size}' table",
+                )
+
+    def test_hungarian_is_whisper_only_in_catalog(self):
+        """Hungarian (issue #565) is exposed for Whisper engines, not VOSK."""
+        from vocalinux.utils.vosk_model_info import SUPPORTED_LANGUAGES
+
+        hu = SUPPORTED_LANGUAGES["hu"]
+        self.assertEqual(hu["whisper"], "hu")
+        self.assertIsNone(hu["vosk"])
+        self.assertNotIn("hu", VOSK_MODEL_INFO["small"]["languages"])
+
     def test_vosk_init_italian_medium_model_resolves_correctly(self):
         """Selecting Italian + the 'medium' VOSK model must not crash (issue #550)."""
         manager = SpeechRecognitionManager(engine="vosk", language="it", model_size="medium")

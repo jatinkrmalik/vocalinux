@@ -8,6 +8,7 @@ import atexit
 import logging
 import sys
 
+from .utils.vosk_model_info import SUPPORTED_LANGUAGES
 from .version import __version__
 
 # Configure logging
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 # Note: GTK-dependent modules (tray_indicator) are imported lazily after
 # dependency checking to provide better error messages for pip/pipx users
+
+# Keep CLI --language choices in sync with the Settings catalog.
+LANGUAGE_CHOICES = tuple(SUPPORTED_LANGUAGES.keys())
 
 
 def _should_append_trailing_space() -> bool:
@@ -68,25 +72,10 @@ def parse_arguments():
     parser.add_argument(
         "--language",
         type=str,
-        choices=[
-            "auto",
-            "en-us",
-            "en-in",
-            "hi",
-            "es",
-            "fr",
-            "de",
-            "it",
-            "pt",
-            "ru",
-            "zh",
-            "ja",
-            "ko",
-            "ar",
-        ],
+        choices=LANGUAGE_CHOICES,
         help=(
-            "Speech recognition language (auto for auto-detect, en-us, "
-            "hi, es, fr, de, it, pt, ru, zh, etc.)"
+            "Speech recognition language (auto for auto-detect, or a code "
+            "from the Settings language catalog such as en-us, hu, ja, …)"
         ),
     )
     parser.add_argument(
