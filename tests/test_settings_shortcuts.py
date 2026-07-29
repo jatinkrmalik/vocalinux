@@ -164,6 +164,8 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         end = self.source_code.index("\n    def ", start + 1)
         body = self.source_code[start:end]
         self.assertIn("self._sync_shortcut_selection_ui(current)", body)
+        # Also restore mode info text so the Record/Set hint does not linger.
+        self.assertIn("self._update_shortcut_ui_for_mode(mode_id)", body)
 
 
 class TestKeyboardBackendsBase(unittest.TestCase):

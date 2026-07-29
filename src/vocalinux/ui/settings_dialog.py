@@ -2632,15 +2632,18 @@ class SettingsDialog(Gtk.Dialog):
             )
 
     def _revert_shortcut_combo_to_saved(self) -> None:
-        """Restore combo + custom-row visibility to the saved active shortcut.
+        """Restore combo, custom-row visibility, and info text to the saved shortcut.
 
         Used when the user clicks a group separator in the shortcut combo.
         Must sync the custom row too: selecting Custom Shortcut reveals
         Record/Set, and a separator click must not leave those controls
-        visible while a preset is still the active binding.
+        visible while a preset is still the active binding. Also clear the
+        temporary Record/Set hint so the mode description matches the UI.
         """
         current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
         self._sync_shortcut_selection_ui(current)
+        mode_id = self.shortcut_mode_combo.get_active_id() or "toggle"
+        self._update_shortcut_ui_for_mode(mode_id)
 
     def _on_shortcut_changed(self, widget):
         """Handle shortcut selection change."""
