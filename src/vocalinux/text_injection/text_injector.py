@@ -1206,8 +1206,8 @@ class TextInjector:
         """
         Read the current clipboard content.
 
-        Returns the clipboard text, or None if it could not be read (e.g. the
-        clipboard is empty, holds non-text data, or no clipboard tool is available).
+        Returns the clipboard text, "" if the clipboard is verifiably empty,
+        or None if it could not be read (non-text data or no tool available).
         """
         host_is_wayland = (
             self._session_environment == DesktopEnvironment.WAYLAND
@@ -1238,6 +1238,15 @@ class TextInjector:
                 )
                 if result.returncode == 0:
                     return result.stdout
+                # wl-paste and xclip signal an empty clipboard with a non-zero
+                # exit code rather than empty stdout.  Detect those messages so
+                # callers can distinguish "empty" (restore to empty) from
+                # "unreadable" (skip restore).
+                stderr_lower = result.stderr.lower()
+                if "nothing is copied" in stderr_lower or (
+                    "target" in stderr_lower and "not available" in stderr_lower
+                ):
+                    return ""
             except (subprocess.TimeoutExpired, OSError, UnicodeDecodeError):
                 continue
 
@@ -1286,6 +1295,8 @@ class TextInjector:
             logger.info(f"Text injected via clipboard paste: '{text[:20]}...' ({len(text)} chars)")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.warning(f"Paste simulation failed: {e}")
+            if previous_clipboard is not None and not self._should_copy_to_clipboard():
+                self._copy_to_clipboard(previous_clipboard)
             return False
 
         # Restore the previous clipboard content after a short delay so the

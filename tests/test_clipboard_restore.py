@@ -76,8 +76,8 @@ class TestReadClipboard(unittest.TestCase):
             result = obj._read_clipboard()
         self.assertIsNone(result)
 
-    def test_returns_none_when_tool_exits_nonzero(self):
-        """Returns None when the tool exits with a non-zero code (e.g. clipboard empty)."""
+    def test_returns_none_when_tool_exits_nonzero_with_unknown_stderr(self):
+        """Returns None when exit code is non-zero and stderr has no recognised empty-clipboard message."""
         obj = _make_injector()
         with patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}):
             with patch(
@@ -85,7 +85,7 @@ class TestReadClipboard(unittest.TestCase):
                 return_value="/usr/bin/wl-paste",
             ):
                 with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=1, stdout="")
+                    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="some error")
                     result = obj._read_clipboard()
         self.assertIsNone(result)
 
@@ -274,8 +274,8 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         # Only one copy call — the injection. The old content must NOT be restored.
         self.assertEqual(copy_calls, ["dictated text"])
 
-    def test_no_restore_when_ctrl_v_fails(self):
-        """No restore thread is started when the Ctrl+V simulation itself fails."""
+    def test_clipboard_restored_when_ctrl_v_fails(self):
+        """Clipboard is restored immediately when Ctrl+V fails, not silently lost."""
         obj = _make_injector()
         obj.wayland_tool = "ydotool"
         copy_calls: list[str] = []
@@ -291,16 +291,17 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
                     "_ydotool_ctrl_v_command",
                     return_value=["ydotool", "key", "ctrl+v"],
                 ):
-                    with patch(
-                        "vocalinux.text_injection.text_injector.subprocess.run",
-                        side_effect=subprocess.CalledProcessError(1, ["ydotool", "key"]),
-                    ):
-                        result = obj._inject_via_clipboard_paste("text")
-                        time.sleep(0.5)
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            side_effect=subprocess.CalledProcessError(1, ["ydotool", "key"]),
+                        ):
+                            result = obj._inject_via_clipboard_paste("text")
+                            time.sleep(0.5)
 
         self.assertFalse(result)
-        # Text was copied to clipboard but restore must NOT happen: paste failed.
-        self.assertEqual(copy_calls, ["text"])
+        # First copy: injection; second copy: immediate restore after paste failure
+        self.assertEqual(copy_calls, ["text", "prev"])
 
     def test_restore_thread_is_a_daemon(self):
         """The restore thread is a daemon so it never blocks interpreter shutdown."""
@@ -388,6 +389,102 @@ class TestClipboardRestoreAfterInjection(unittest.TestCase):
         self.assertTrue(result)
         # The restore attempt was made but failed — no exception raised
         self.assertIn("previous_content", copy_calls)
+
+    def test_clipboard_restored_immediately_when_paste_fails(self):
+        """Original clipboard is restored right away when Ctrl+V fails, not after 300ms."""
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        copy_calls: list[str] = []
+
+        with patch.object(obj, "_read_clipboard", return_value="original content"):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: copy_calls.append(t) or True,
+            ):
+                with patch.object(
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
+                ):
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            side_effect=subprocess.CalledProcessError(1, ["ydotool", "key"]),
+                        ):
+                            result = obj._inject_via_clipboard_paste("injected text")
+
+        self.assertFalse(result)
+        # First copy: injected text; second copy: immediate restore after failure
+        self.assertEqual(copy_calls, ["injected text", "original content"])
+
+    def test_empty_clipboard_is_cleared_after_injection(self):
+        """When clipboard was empty before injection, it is cleared back to empty after paste."""
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        copy_calls: list[str] = []
+
+        with patch.object(obj, "_read_clipboard", return_value=""):
+            with patch.object(
+                obj,
+                "_copy_to_clipboard",
+                side_effect=lambda t: copy_calls.append(t) or True,
+            ):
+                with patch.object(
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
+                ):
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            result = obj._inject_via_clipboard_paste("new text")
+                            time.sleep(0.5)
+
+        self.assertTrue(result)
+        # Last copy call must be "" — restoring the empty state
+        self.assertEqual(copy_calls[-1], "")
+
+
+class TestReadClipboardEmptyDetection(unittest.TestCase):
+    """Tests for _read_clipboard() detecting empty clipboard via stderr patterns."""
+
+    def test_wl_paste_nothing_is_copied_returns_empty_string(self):
+        """Returns '' when wl-paste stderr says 'Nothing is copied'."""
+        obj = _make_injector()
+        with patch("shutil.which", return_value="/usr/bin/wl-paste"):
+            with patch(
+                "vocalinux.text_injection.text_injector.subprocess.run",
+                return_value=MagicMock(returncode=1, stdout="", stderr="Nothing is copied"),
+            ):
+                result = obj._read_clipboard()
+        self.assertEqual(result, "")
+
+    def test_xclip_target_not_available_returns_empty_string(self):
+        """Returns '' when xclip stderr says target STRING not available."""
+        obj = _make_injector()
+        obj._session_environment = None  # non-Wayland so xclip is tried
+        with patch(
+            "shutil.which", side_effect=lambda cmd: "/usr/bin/xclip" if cmd == "xclip" else None
+        ):
+            with patch(
+                "vocalinux.text_injection.text_injector.subprocess.run",
+                return_value=MagicMock(
+                    returncode=1, stdout="", stderr="Error: target STRING not available"
+                ),
+            ):
+                with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "WAYLAND_DISPLAY": ""}):
+                    result = obj._read_clipboard()
+        self.assertEqual(result, "")
+
+    def test_non_empty_clipboard_error_still_returns_none(self):
+        """A non-zero exit code with unknown stderr does not trigger empty detection."""
+        obj = _make_injector()
+        with patch("shutil.which", return_value=None):
+            result = obj._read_clipboard()
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":
