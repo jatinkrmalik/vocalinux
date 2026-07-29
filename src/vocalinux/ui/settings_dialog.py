@@ -9,10 +9,10 @@ UX Design Notes:
 - Sidebar navigation (icon + label) with topic-based pages: Dictation,
   Speech Model, Audio, Performance, Application, Advanced
 - Live settings search (Ctrl+F) filters rows across all pages in place
-- Persistent bottom status strip: recognition state, mic level, and a
-  dictation test that can verify any instant-applied change from any page
+- Sidebar footer (always visible from any page): recognition state, mic
+  level, a dictation test, and the Close action
 - Settings apply immediately when changed (instant-apply pattern)
-- Close button provided for WM compatibility (some WMs hide title bar close)
+- In-window Close button for WM compatibility (some WMs hide title bar close)
 - Multi-modal feedback (text + icon + audio level) for accessibility
 - Modal dialog for model downloads (explicit confirmation for large downloads)
 """
@@ -375,7 +375,17 @@ SETTINGS_CSS = """
 }
 
 .settings-search {
-    margin: 8px 6px 6px 6px;
+    margin: 8px 6px 14px 6px;
+    border-radius: 8px;
+}
+
+/* Sidebar footer: dictation status, test action, and dialog close */
+.sidebar-footer {
+    padding: 10px 6px 12px 6px;
+}
+
+.sidebar-footer button {
+    min-height: 30px;
     border-radius: 8px;
 }
 
@@ -386,13 +396,7 @@ SETTINGS_CSS = """
     color: @theme_unfocused_fg_color;
 }
 
-/* Persistent status strip at the bottom of the dialog */
-.status-strip {
-    background-color: @theme_base_color;
-    border-top: 1px solid alpha(@borders, 0.5);
-    padding: 8px 16px;
-}
-
+/* Recognition state label in the sidebar footer */
 .status-strip-state {
     font-weight: 500;
     font-size: 0.9em;
@@ -1095,18 +1099,12 @@ class SettingsDialog(Gtk.Dialog):
         shortcut_update_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
-        self.set_decorated(True)  # Force window decorations (close button) on all WMs
+        # Force window decorations (title-bar close) on all WMs. An in-window
+        # Close button also lives in the sidebar footer so the dialog always
+        # has a visible way to dismiss it, even on window managers that hide
+        # the title-bar close button for Gtk.Dialog windows (fixes #323).
+        self.set_decorated(True)
 
-        # Add a Close action button so the dialog always has a visible way to
-        # dismiss it, even on window managers that hide the title-bar close
-        # button for Gtk.Dialog windows without action buttons (fixes #323).
-        self.add_button("Close", Gtk.ResponseType.CLOSE)
-        action_area = self.get_action_area()
-        action_area.set_margin_top(8)
-        action_area.set_margin_bottom(12)
-        action_area.set_margin_start(16)
-        action_area.set_margin_end(16)
-        action_area.set_spacing(8)
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
@@ -1123,7 +1121,7 @@ class SettingsDialog(Gtk.Dialog):
         # Setup CSS styling
         _setup_css()
 
-        # Dialog configuration - Close button added above for WM compatibility
+        # Dialog configuration - Close button lives in the sidebar footer (see #323)
         # Calculate dialog size
         display = Gdk.Display.get_default()
         if display:
@@ -1146,13 +1144,15 @@ class SettingsDialog(Gtk.Dialog):
         self.get_style_context().add_class("settings-dialog")
 
         # Topic-based pages (GNOME HIG: group by topic, navigate via sidebar)
+        # Icons stick to the stock Adwaita symbolic set so they resolve on
+        # every distro (some system-monitor icons only ship with Yaru).
         self._pages = [
             SettingsPage("dictation", "Dictation", "input-keyboard-symbolic"),
             SettingsPage("model", "Speech Model", "audio-input-microphone-symbolic"),
-            SettingsPage("audio", "Audio", "audio-card-symbolic"),
-            SettingsPage("performance", "Performance", "utilities-system-monitor-symbolic"),
+            SettingsPage("audio", "Audio", "audio-speakers-symbolic"),
+            SettingsPage("performance", "Performance", "power-profile-performance-symbolic"),
             SettingsPage("application", "Application", "preferences-system-symbolic"),
-            SettingsPage("advanced", "Advanced", "preferences-other-symbolic"),
+            SettingsPage("advanced", "Advanced", "applications-engineering-symbolic"),
         ]
         pages_by_name = {page.name: page for page in self._pages}
 
@@ -1226,7 +1226,7 @@ class SettingsDialog(Gtk.Dialog):
         self._build_gpu_section()
         self._build_general_section()
         self._build_advanced_section()
-        self._build_status_strip()
+        self._build_sidebar_footer(sidebar_box)
 
         # Record searchable groups vs. loose extras per page
         for page in self._pages:
@@ -2665,28 +2665,34 @@ class SettingsDialog(Gtk.Dialog):
             applied = bool(self.shortcut_update_callback(shortcut_id, mode_id))
         self._report_shortcut_apply_result(display_name, applied)
 
-    def _build_status_strip(self):
-        """Build the persistent status strip at the bottom of the dialog.
+    def _build_sidebar_footer(self, sidebar_box: Gtk.Box):
+        """Build the sidebar footer: dictation status, test action, and Close.
 
         Always visible regardless of the selected page: recognition state,
-        live microphone level, and a dictation test button. Test output is
-        revealed inline, so any instant-applied change can be verified
-        immediately.
+        live microphone level, a dictation test button, and the dialog's
+        in-window Close button. Test output is revealed inline, so any
+        instant-applied change can be verified immediately.
         """
-        strip = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        strip.get_style_context().add_class("status-strip")
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator.set_margin_start(8)
+        separator.set_margin_end(8)
+        sidebar_box.pack_start(separator, False, False, 0)
 
-        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        footer.get_style_context().add_class("sidebar-footer")
+
+        status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
 
         self.recognition_indicator = Gtk.Image.new_from_icon_name(
             "media-record-symbolic", Gtk.IconSize.MENU
         )
         self.recognition_indicator.set_opacity(0.3)
-        bar.pack_start(self.recognition_indicator, False, False, 0)
+        status_row.pack_start(self.recognition_indicator, False, False, 0)
 
         self.recognition_status_label = Gtk.Label(label="Idle", xalign=0)
         self.recognition_status_label.get_style_context().add_class("status-strip-state")
-        bar.pack_start(self.recognition_status_label, False, False, 0)
+        status_row.pack_start(self.recognition_status_label, False, False, 0)
+        footer.pack_start(status_row, False, False, 0)
 
         # One shared level bar: recognition progress and the microphone test
         # both report into it (recognition_audio_level is a legacy alias).
@@ -2696,23 +2702,21 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_level_bar.set_value(0)
         self.audio_level_bar.set_valign(Gtk.Align.CENTER)
         self.recognition_audio_level = self.audio_level_bar
-        bar.pack_start(self.audio_level_bar, True, True, 0)
+        footer.pack_start(self.audio_level_bar, False, False, 0)
 
         self.test_button = Gtk.Button(label="Test Dictation")
         self.test_button.set_tooltip_text(
             "Record 3 seconds of speech and show the transcription here"
         )
         self.test_button.connect("clicked", self._on_test_clicked)
-        bar.pack_end(self.test_button, False, False, 0)
-
-        strip.pack_start(bar, False, False, 0)
+        footer.pack_start(self.test_button, False, False, 0)
 
         # One shared status line (audio test results and recognition info)
         self.progress_info_label = Gtk.Label(label="", use_markup=True, xalign=0)
         self.progress_info_label.get_style_context().add_class("status-info")
         self.progress_info_label.set_line_wrap(True)
         self.audio_test_status = self.progress_info_label
-        strip.pack_start(self.progress_info_label, False, False, 0)
+        footer.pack_start(self.progress_info_label, False, False, 0)
 
         # Test transcription output, revealed while testing
         self.test_output_revealer = Gtk.Revealer()
@@ -2733,9 +2737,20 @@ class SettingsDialog(Gtk.Dialog):
         scrolled_window.add(self.test_textview)
         self.test_output_revealer.add(scrolled_window)
 
-        strip.pack_start(self.test_output_revealer, False, False, 0)
+        footer.pack_start(self.test_output_revealer, False, False, 0)
 
-        self.get_content_area().pack_start(strip, False, False, 0)
+        # In-window Close so the dialog can always be dismissed, even on WMs
+        # that hide the title-bar close button for Gtk.Dialog windows (#323).
+        close_button = Gtk.Button(label="Close")
+        close_button.set_tooltip_text("Close settings (Ctrl+W)")
+        close_button.connect("clicked", self._on_close_clicked)
+        footer.pack_start(close_button, False, False, 0)
+
+        sidebar_box.pack_start(footer, False, False, 0)
+
+    def _on_close_clicked(self, button):
+        """Close the dialog through the normal response path (same as title-bar X)."""
+        self.response(Gtk.ResponseType.CLOSE)
 
     def _build_advanced_section(self):
         """Build the Advanced section with whisper.cpp parameters."""
