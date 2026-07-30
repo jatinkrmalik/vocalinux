@@ -56,6 +56,9 @@ No internet required. No data leaves your machine. Just speak and type.
 
 ### Also in this release
 
+- Settings: dictation status / mic level / Test Dictation / Close live in the sidebar footer (#618)
+- Settings: Custom Shortcut Record/Set controls show again (#619)
+- Languages: English (India) maps to Whisper code `en` (#617)
 - CLI `--version` (#563)
 - Bluetooth mic probing no longer corrupts the heap / crashes on SCO capture devices (#599)
 - IBus engine teardown when parent destroy fails (#613)

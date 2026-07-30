@@ -57,7 +57,7 @@ const releaseMap = [
   {
     version: "v0.15.0",
     highlights:
-      "ibus-wayland on previously unbridged compositors, safer IBus teardown, Bluetooth mic capture crash fix, xdotool focus preserve, and searchable sidebar settings.",
+      "Searchable settings with sidebar dictation footer, ibus-wayland on previously unbridged compositors, safer IBus teardown, Bluetooth mic capture crash fix, custom-shortcut Record/Set restore, and xdotool focus preserve.",
   },
   {
     version: "v0.12.0-beta",

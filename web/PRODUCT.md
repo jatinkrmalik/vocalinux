@@ -19,7 +19,7 @@ Offline-first Linux voice typing with real desktop integration (system tray, X11
 ## Operating context
 
 - Install via a one-line shell installer, AppImage from GitHub Releases, AUR, or local Flatpak build; then run from PATH, app menu, or the AppImage binary
-- System tray indicator and settings GUI (GTK) with searchable sidebar navigation
+- System tray indicator and settings GUI (GTK) with searchable sidebar navigation and an always-visible sidebar footer for dictation status / Test Dictation / Close
 - Dictation into terminals, browsers, IDEs, office apps
 - Engines and models chosen for hardware (CPU, optional Vulkan GPU with discrete-device preference)
 - Guides and comparison pages on vocalinux.com; source on GitHub

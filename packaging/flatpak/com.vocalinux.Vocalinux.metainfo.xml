@@ -107,7 +107,7 @@
   <releases>
     <release version="0.15.0" date="2026-07-28">
       <description>
-        <p>Searchable sidebar settings, AppImage packages for x86_64 and aarch64, expanded speech-language catalog (including Hungarian), sentence capitalization and trailing spaces for continuous dictation, auto-pause and idle model unload, Vulkan discrete-GPU selection, ibus-wayland support on previously unbridged compositors, Bluetooth mic capture crash fix, and desktop reliability fixes.</p>
+        <p>Searchable sidebar settings with dictation controls in the sidebar footer, AppImage packages for x86_64 and aarch64, expanded speech-language catalog (including Hungarian), sentence capitalization and trailing spaces for continuous dictation, auto-pause and idle model unload, Vulkan discrete-GPU selection, ibus-wayland support on previously unbridged compositors, Bluetooth mic capture crash fix, custom-shortcut Record/Set restore, and desktop reliability fixes.</p>
       </description>
     </release>
     <release version="0.14.2" date="2026-07-17">

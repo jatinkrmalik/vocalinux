@@ -24,6 +24,7 @@ This guide explains how to update Vocalinux to the latest version.
 - **Searchable sidebar settings** — Topic pages in a sidebar with live search instead of seven notebook tabs (#601)
 - **AppImage packaging** — Relocatable x86_64 and aarch64 AppImages built in the release workflow (#573, #602)
 - **Expanded speech languages** — Hungarian plus many high-demand Whisper languages in Settings/CLI; official Alphacephei VOSK models where available; Whisper-only languages stay hidden in the VOSK dropdown (#616 by @jatinkrmalik, fixes #565)
+- **Sidebar dictation controls** — Recognition status, mic level, Test Dictation, and Close stay visible in the settings sidebar footer while switching pages (#618)
 - **Sentence capitalization** — Capitalize at the start of dictation and after sentence-ending punctuation (#554, closes #553)
 - **Trailing space between utterances** — Completed transcriptions leave a trailing space so the next session does not glue onto the previous sentence (#608, fixes #605)
 - **Auto-pause apps + model keep-alive** — Optional unload while selected processes run; idle timeout unload for battery/Optimus laptops (#592, closes #445, #591)
@@ -33,6 +34,8 @@ This guide explains how to update Vocalinux to the latest version.
 
 ### Bug Fixes
 
+- **Settings**: Restore Custom Shortcut entry / Record / Set controls after the sidebar settings refactor (#619)
+- **Languages**: Map English (India) (`en-in`) to Whisper code `en` for whisper.cpp / Whisper / remote API (#617)
 - **Audio**: Stop Bluetooth mic probing from corrupting the heap — one PortAudio open per capture session, stop-before-close, no stereo probe on mono-only devices (#599, fixes #567)
 - **IBus**: Keep engine teardown correct when parent `do_destroy` fails (#613 by @eiseleb47, fixes #606)
 - **Settings UI**: Flatten info notices so helper text matches the rest of the dialog (#615)
