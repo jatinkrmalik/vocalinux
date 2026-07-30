@@ -90,23 +90,14 @@ class TestMainModule(unittest.TestCase):
             self.assertEqual(args.engine, "whisper")
 
     def test_parse_arguments_language_choices(self):
-        """Test that language only accepts valid choices."""
-        for lang in [
-            "auto",
-            "en-us",
-            "en-in",
-            "hi",
-            "es",
-            "fr",
-            "de",
-            "it",
-            "pt",
-            "ru",
-            "zh",
-            "ja",
-            "ko",
-            "ar",
-        ]:
+        """Test that language only accepts valid choices from the catalog."""
+        from vocalinux.main import LANGUAGE_CHOICES
+        from vocalinux.utils.vosk_model_info import SUPPORTED_LANGUAGES
+
+        self.assertEqual(LANGUAGE_CHOICES, tuple(SUPPORTED_LANGUAGES.keys()))
+        # Spot-check newly exposed languages (issue #565 and catalog expansion).
+        for lang in ["auto", "en-us", "hu", "ja", "ko", "ar", "nl", "pl", "uk"]:
+            self.assertIn(lang, LANGUAGE_CHOICES)
             with patch("sys.argv", ["vocalinux", "--language", lang]):
                 args = parse_arguments()
                 self.assertEqual(args.language, lang)
