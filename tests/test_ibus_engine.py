@@ -239,12 +239,12 @@ class TestGetCurrentEngine(unittest.TestCase):
     ):
         """Test that 'No global engine' in stderr triggers GNOME fallback."""
         mock_run.return_value = MagicMock(stdout="", stderr="No global engine\n", returncode=1)
-        mock_gnome_fallback.return_value = "xkb:br::"
+        mock_gnome_fallback.return_value = "libpinyin"
 
         from vocalinux.text_injection.ibus_engine import get_current_engine
 
         result = get_current_engine()
-        self.assertEqual(result, "xkb:br::")
+        self.assertEqual(result, "libpinyin")
         mock_gnome_fallback.assert_called_once()
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine_gnome_fallback")
@@ -256,29 +256,29 @@ class TestGetCurrentEngine(unittest.TestCase):
     ):
         """Test that xkb:us::eng on GNOME/Wayland triggers gsettings fallback (#497)."""
         mock_run.return_value = MagicMock(stdout="xkb:us::eng\n", stderr="", returncode=0)
-        mock_gnome_fallback.return_value = "xkb:br::"
+        mock_gnome_fallback.return_value = "libpinyin"
 
         from vocalinux.text_injection.ibus_engine import get_current_engine
 
         result = get_current_engine()
-        self.assertEqual(result, "xkb:br::")
+        self.assertEqual(result, "libpinyin")
         mock_gnome_fallback.assert_called_once()
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine_gnome_fallback")
     @patch("vocalinux.text_injection.ibus_engine._is_gnome_session", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine._is_wayland_session", return_value=True)
     @patch("subprocess.run")
-    def test_get_current_engine_keeps_us_default_when_gnome_fails(
+    def test_get_current_engine_rejects_suspicious_us_when_gnome_fails(
         self, mock_run, mock_wayland, mock_gnome, mock_gnome_fallback
     ):
-        """Test that we keep xkb:us::eng when GNOME fallback returns None."""
+        """Test that an unverified xkb:us::eng default is not used for restoration."""
         mock_run.return_value = MagicMock(stdout="xkb:us::eng\n", stderr="", returncode=0)
         mock_gnome_fallback.return_value = None
 
         from vocalinux.text_injection.ibus_engine import get_current_engine
 
         result = get_current_engine()
-        self.assertEqual(result, "xkb:us::eng")
+        self.assertIsNone(result)
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine_gnome_fallback")
     @patch("vocalinux.text_injection.ibus_engine._is_gnome_session", return_value=False)
@@ -309,7 +309,7 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_gsettings_sources_failure_returns_none(self, mock_run):
+    def test_gsettings_mru_sources_failure_returns_none(self, mock_run):
         """Test that gsettings failure returns None."""
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
 
@@ -320,8 +320,8 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_empty_sources_returns_none(self, mock_run):
-        """Test that empty input-sources list returns None."""
+    def test_empty_mru_sources_returns_none(self, mock_run):
+        """Test that an empty mru-sources list returns None."""
         mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
@@ -331,82 +331,64 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_xkb_source_returns_ibus_engine_name(self, mock_run):
-        """Test that an xkb source is converted to IBus engine format."""
+    def test_xkb_source_returns_none(self, mock_run):
+        """Test that an XKB source is not converted into an unverified IBus engine."""
         sources_output = "[('xkb', 'br'), ('xkb', 'us+altgr-intl')]"
-        current_output = "uint32 0"
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stdout=sources_output, stderr=""),
-            MagicMock(returncode=0, stdout=current_output, stderr=""),
-        ]
+        mock_run.return_value = MagicMock(returncode=0, stdout=sources_output, stderr="")
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
 
         result = get_current_engine_gnome_fallback()
-        self.assertEqual(result, "xkb:br::")
+        self.assertIsNone(result)
+        self.assertEqual(mock_run.call_args.args[0][-1], "mru-sources")
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_xkb_source_with_variant(self, mock_run):
-        """Test that an xkb source with variant is parsed correctly."""
+    def test_xkb_source_with_variant_returns_none(self, mock_run):
+        """Test that an XKB variant is not fabricated into an IBus engine name."""
         sources_output = "[('xkb', 'us+altgr-intl')]"
-        current_output = "uint32 0"
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stdout=sources_output, stderr=""),
-            MagicMock(returncode=0, stdout=current_output, stderr=""),
-        ]
+        mock_run.return_value = MagicMock(returncode=0, stdout=sources_output, stderr="")
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
 
         result = get_current_engine_gnome_fallback()
-        self.assertEqual(result, "xkb:us::altgr-intl")
+        self.assertIsNone(result)
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
     def test_ibus_source_returns_engine_id(self, mock_run):
         """Test that an ibus source returns the engine ID directly."""
-        sources_output = "[('ibus', 'anthy')]"
-        current_output = "uint32 0"
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stdout=sources_output, stderr=""),
-            MagicMock(returncode=0, stdout=current_output, stderr=""),
-        ]
+        sources_output = "[('ibus', 'libpinyin')]"
+        mock_run.return_value = MagicMock(returncode=0, stdout=sources_output, stderr="")
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
 
         result = get_current_engine_gnome_fallback()
-        self.assertEqual(result, "anthy")
+        self.assertEqual(result, "libpinyin")
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_current_index_selects_correct_source(self, mock_run):
-        """Test that the current index from gsettings selects the right source."""
-        sources_output = "[('xkb', 'us'), ('xkb', 'br')]"
-        current_output = "uint32 1"
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stdout=sources_output, stderr=""),
-            MagicMock(returncode=0, stdout=current_output, stderr=""),
-        ]
+    def test_first_mru_source_is_used(self, mock_run):
+        """Test that the most recently used IBus source is selected."""
+        sources_output = "[('ibus', 'libpinyin'), ('ibus', 'anthy')]"
+        mock_run.return_value = MagicMock(returncode=0, stdout=sources_output, stderr="")
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
 
         result = get_current_engine_gnome_fallback()
-        self.assertEqual(result, "xkb:br::")
+        self.assertEqual(result, "libpinyin")
+        mock_run.assert_called_once()
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_current_failure_defaults_to_index_zero(self, mock_run):
-        """Test that if gsettings get current fails, index 0 is used."""
-        sources_output = "[('xkb', 'br'), ('xkb', 'us')]"
-        mock_run.side_effect = [
-            MagicMock(returncode=0, stdout=sources_output, stderr=""),
-            MagicMock(returncode=1, stdout="", stderr=""),
-        ]
+    def test_typed_empty_mru_sources_returns_none(self, mock_run):
+        """Test that gsettings' typed empty-list output is handled safely."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="@a(ss) []", stderr="")
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
 
         result = get_current_engine_gnome_fallback()
-        self.assertEqual(result, "xkb:br::")
+        self.assertIsNone(result)
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
@@ -665,7 +647,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.start_engine_process", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBusTextInjector._wait_for_engine_ready")
-    def test_prepare_engine_captures_current_engine(
+    def test_prepare_engine_does_not_cache_restore_engine(
         self,
         mock_wait_ready,
         mock_start_engine,
@@ -673,15 +655,17 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_is_active,
         mock_get_current,
     ):
-        """Test prepare_engine captures the current engine for later restore."""
+        """Test warmup does not cache an engine that can become stale before injection."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
         injector = IBusTextInjector(auto_activate=False)
         injector.prepare_engine()
 
-        self.assertEqual(injector._previous_engine, "xkb:fr::fra")
+        self.assertIsNone(injector._previous_engine)
+        mock_get_current.assert_not_called()
+        mock_is_active.assert_not_called()
 
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:fr::fra")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="libpinyin")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("socket.socket")
@@ -714,7 +698,47 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_sock.sendall.assert_called_once_with("Bonjour".encode("utf-8"))
         self.assertEqual(
             [call.args[0] for call in mock_switch.call_args_list],
-            [ENGINE_NAME, "xkb:fr::fra"],
+            [ENGINE_NAME, "libpinyin"],
+        )
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="libpinyin")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", side_effect=[True, False])
+    @patch("socket.socket")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_inject_text_logs_restore_failure_after_successful_commit(
+        self,
+        mock_ensure_dir,
+        mock_socket_path,
+        mock_socket_cls,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
+    ):
+        """Test a restore failure is logged without retrying committed text."""
+        from vocalinux.text_injection.ibus_engine import ENGINE_NAME, IBusTextInjector
+
+        mock_socket_path.exists.return_value = True
+        mock_sock = MagicMock()
+        mock_sock.__enter__.return_value = mock_sock
+        mock_sock.__exit__.return_value = None
+        mock_sock.recv.return_value = b"OK"
+        mock_socket_cls.return_value = mock_sock
+
+        injector = IBusTextInjector(auto_activate=False)
+        with self.assertLogs("vocalinux.text_injection.ibus_engine", level="ERROR") as logs:
+            result = injector.inject_text("你好")
+
+        self.assertTrue(result)
+        self.assertEqual(
+            [call.args[0] for call in mock_switch.call_args_list],
+            [ENGINE_NAME, "libpinyin"],
+        )
+        self.assertIn(
+            "Failed to restore IBus engine after injection: libpinyin",
+            "\n".join(logs.output),
         )
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
@@ -724,7 +748,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    def test_inject_text_uses_captured_engine_when_get_current_fails(
+    def test_inject_text_ignores_stale_cached_engine_when_get_current_fails(
         self,
         mock_ensure_dir,
         mock_socket_path,
@@ -733,8 +757,8 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_is_active,
         mock_get_current,
     ):
-        """Test inject_text uses _previous_engine when get_current_engine returns None."""
-        from vocalinux.text_injection.ibus_engine import ENGINE_NAME, IBusTextInjector
+        """Test a startup-time engine is not used when the current engine is unknown."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
         mock_socket_path.exists.return_value = True
         mock_sock = MagicMock()
@@ -747,11 +771,9 @@ class TestIBusTextInjector(unittest.TestCase):
         injector._previous_engine = "xkb:de::deu"
         result = injector.inject_text("Hallo")
 
-        self.assertTrue(result)
-        self.assertEqual(
-            [call.args[0] for call in mock_switch.call_args_list],
-            [ENGINE_NAME, "xkb:de::deu"],
-        )
+        self.assertFalse(result)
+        mock_switch.assert_not_called()
+        mock_socket_cls.assert_not_called()
 
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
@@ -912,7 +934,7 @@ class TestIBusTextInjector(unittest.TestCase):
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
-    def test_inject_text_activates_without_restore_when_engine_unknown(
+    def test_inject_text_does_not_activate_when_engine_unknown(
         self,
         mock_socket_path,
         mock_ensure_dir,
@@ -920,7 +942,7 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_is_active,
         mock_get_current,
     ):
-        """Test inject_text activates engine but doesn't restore when current engine is unknown."""
+        """Test injection falls back without changing IBus when restoration is unknown."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
         mock_socket_path.exists.return_value = True
@@ -933,44 +955,8 @@ class TestIBusTextInjector(unittest.TestCase):
             injector = IBusTextInjector(auto_activate=False)
             result = injector.inject_text("Hello")
 
-        self.assertTrue(result)
-        # Should activate engine once, no restore (previous engine unknown)
-        mock_switch.assert_called_once_with("vocalinux")
-
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
-    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
-    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
-    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
-    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
-    def test_inject_text_no_engine_retries_when_no_previous_engine(
-        self, mock_ensure_dir, mock_switch, mock_is_active, mock_get_current
-    ):
-        """Test NO_ENGINE retries even when previous engine could not be captured."""
-        from vocalinux.text_injection.ibus_engine import IBusTextInjector
-
-        server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        server_sock.bind(str(self.socket_path))
-        server_sock.listen(3)
-
-        def handle_connection():
-            for _ in range(3):
-                conn, _ = server_sock.accept()
-                with conn:
-                    conn.recv(65536)
-                    conn.sendall(b"NO_ENGINE")
-
-        server_thread = threading.Thread(target=handle_connection, daemon=True)
-        server_thread.start()
-
-        with patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH", self.socket_path):
-            with patch("vocalinux.text_injection.ibus_engine.time"):
-                injector = IBusTextInjector(auto_activate=False)
-                result = injector.inject_text("Hello")
-
-        server_sock.close()
         self.assertFalse(result)
-        # Should have tried to activate engine once at start, then re-activated on each retry
-        self.assertEqual(mock_switch.call_count, 3)
+        mock_switch.assert_not_called()
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:fr::fra")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
