@@ -331,28 +331,37 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_xkb_source_returns_none(self, mock_run):
-        """Test that an XKB source is not converted into an unverified IBus engine."""
+    def test_xkb_source_returns_registered_engine(self, mock_run):
+        """Test that an XKB source resolves to an exact registered IBus engine."""
         sources_output = "[('xkb', 'br'), ('xkb', 'us+altgr-intl')]"
-        mock_run.return_value = MagicMock(returncode=0, stdout=sources_output, stderr="")
+        engines_output = "xkb:us::eng\nxkb:br::por\nxkb:br:nodeadkeys:por\n"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=engines_output, stderr=""),
+        ]
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
 
         result = get_current_engine_gnome_fallback()
-        self.assertIsNone(result)
-        self.assertEqual(mock_run.call_args.args[0][-1], "mru-sources")
+        self.assertEqual(result, "xkb:br::por")
+        self.assertEqual(mock_run.call_args_list[0].args[0][-1], "mru-sources")
+        self.assertEqual(mock_run.call_args_list[1].args[0], ["ibus", "list-engine", "--name-only"])
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_xkb_source_with_variant_returns_none(self, mock_run):
-        """Test that an XKB variant is not fabricated into an IBus engine name."""
+    def test_xkb_source_with_variant_returns_registered_engine(self, mock_run):
+        """Test that an XKB variant resolves only to a registered engine name."""
         sources_output = "[('xkb', 'us+altgr-intl')]"
-        mock_run.return_value = MagicMock(returncode=0, stdout=sources_output, stderr="")
+        engines_output = "xkb:us::eng\nxkb:us:altgr-intl:eng\n"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=engines_output, stderr=""),
+        ]
 
         from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
 
         result = get_current_engine_gnome_fallback()
-        self.assertIsNone(result)
+        self.assertEqual(result, "xkb:us:altgr-intl:eng")
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
@@ -368,8 +377,8 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
-    def test_first_mru_source_is_used(self, mock_run):
-        """Test that the most recently used IBus source is selected."""
+    def test_first_mru_source_is_current_gnome_source(self, mock_run):
+        """Test that the first MRU entry is treated as GNOME's current source."""
         sources_output = "[('ibus', 'libpinyin'), ('ibus', 'anthy')]"
         mock_run.return_value = MagicMock(returncode=0, stdout=sources_output, stderr="")
 
@@ -378,6 +387,54 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
         result = get_current_engine_gnome_fallback()
         self.assertEqual(result, "libpinyin")
         mock_run.assert_called_once()
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_current_xkb_source_does_not_scan_later_ibus_entry(self, mock_run):
+        """Test that a later IBus MRU entry does not replace the current XKB source."""
+        sources_output = "[('xkb', 'br'), ('ibus', 'libpinyin')]"
+        engines_output = "xkb:br::por\n"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=engines_output, stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertEqual(result, "xkb:br::por")
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_unregistered_xkb_source_returns_none(self, mock_run):
+        """Test that an XKB source without an exact registered engine is rejected."""
+        sources_output = "[('xkb', 'cn')]"
+        engines_output = "xkb:us::eng\nxkb:br::por\n"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=engines_output, stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_multiple_registered_xkb_engines_use_first_exact_match(self, mock_run):
+        """Test that language-only duplicates keep the first exact XKB match."""
+        sources_output = "[('xkb', 'us+altgr-intl')]"
+        engines_output = "xkb:us:altgr-intl:eng\nxkb:us:altgr-intl:deu\n"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=sources_output, stderr=""),
+            MagicMock(returncode=0, stdout=engines_output, stderr=""),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertEqual(result, "xkb:us:altgr-intl:eng")
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
@@ -803,7 +860,7 @@ class TestIBusTextInjector(unittest.TestCase):
         result = injector.inject_text("Hello")
         self.assertFalse(result)
 
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:us::eng")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:br::por")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
@@ -811,8 +868,8 @@ class TestIBusTextInjector(unittest.TestCase):
     def test_inject_text_success(
         self, mock_ensure_dir, mock_switch, mock_is_active, mock_get_current
     ):
-        """Test successful text injection via socket."""
-        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+        """Test successful text injection restores a verified XKB engine."""
+        from vocalinux.text_injection.ibus_engine import ENGINE_NAME, IBusTextInjector
 
         # Create a mock server socket
         server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -835,6 +892,10 @@ class TestIBusTextInjector(unittest.TestCase):
 
         server_sock.close()
         self.assertTrue(result)
+        self.assertEqual(
+            [call.args[0] for call in mock_switch.call_args_list],
+            [ENGINE_NAME, "xkb:br::por"],
+        )
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:fr::fra")
     @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
