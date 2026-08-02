@@ -331,6 +331,37 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
+    def test_invalid_current_source_shape_returns_none(self, mock_run):
+        """Test that a malformed current MRU tuple is rejected."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="[('ibus', 'libpinyin', 'extra')]",
+            stderr="",
+        )
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_invalid_current_source_values_return_none(self, mock_run):
+        """Test that non-string and empty current source values are rejected."""
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        for sources_output in ("[(1, 'libpinyin')]", "[('ibus', 1)]", "[('ibus', '')]"):
+            with self.subTest(sources_output=sources_output):
+                mock_run.return_value = MagicMock(
+                    returncode=0,
+                    stdout=sources_output,
+                    stderr="",
+                )
+                result = get_current_engine_gnome_fallback()
+                self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
     def test_xkb_source_returns_registered_engine(self, mock_run):
         """Test that an XKB source resolves to an exact registered IBus engine."""
         sources_output = "[('xkb', 'br'), ('xkb', 'us+altgr-intl')]"
@@ -420,6 +451,41 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
         result = get_current_engine_gnome_fallback()
         self.assertIsNone(result)
 
+    def test_empty_xkb_source_id_returns_none(self):
+        """Test that an empty XKB source ID is rejected before listing engines."""
+        from vocalinux.text_injection.ibus_engine import _resolve_registered_xkb_engine
+
+        result = _resolve_registered_xkb_engine("")
+        self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_xkb_engine_listing_failure_returns_none(self, mock_run):
+        """Test that a failed IBus engine listing keeps the source unknown."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="[('xkb', 'br')]", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr="failed"),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_xkb_engine_listing_exception_returns_none(self, mock_run):
+        """Test that a missing IBus CLI keeps the XKB source unknown."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="[('xkb', 'br')]", stderr=""),
+            FileNotFoundError("ibus not found"),
+        ]
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
+
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
     def test_multiple_registered_xkb_engines_use_first_exact_match(self, mock_run):
@@ -435,6 +501,21 @@ class TestGetCurrentEngineGnomeFallback(unittest.TestCase):
 
         result = get_current_engine_gnome_fallback()
         self.assertEqual(result, "xkb:us:altgr-intl:eng")
+
+    @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
+    @patch("subprocess.run")
+    def test_unknown_current_source_type_returns_none(self, mock_run):
+        """Test that a non-IBus, non-XKB GNOME source is not used for restoration."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="[('fcitx', 'mozc')]",
+            stderr="",
+        )
+
+        from vocalinux.text_injection.ibus_engine import get_current_engine_gnome_fallback
+
+        result = get_current_engine_gnome_fallback()
+        self.assertIsNone(result)
 
     @patch.dict("os.environ", {"XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("subprocess.run")
