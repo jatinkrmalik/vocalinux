@@ -28,11 +28,13 @@ Use this checklist for every release:
 - [ ] `SECURITY.md` - Update supported versions table
 
 ### Website
-- [ ] `web/src/app/page.tsx` - Update `softwareVersion` in schema (around line 68)
-- [ ] `web/src/app/page.tsx` - Update version badge in header (around line 293)
+- [ ] `web/src/app/page.tsx` - Update `softwareVersion` in schema
+- [ ] `web/src/app/page.tsx` - Update version badge / live version surfaces if present
 - [ ] `web/src/app/changelog/page.tsx` - Add new release entry to changelog
 - [ ] `web/package.json` - Update version field
 - [ ] `web/package-lock.json` - Keep top-level/version metadata aligned with `web/package.json`
+- [ ] `web/PRODUCT.md` - Keep capabilities aligned with shipped features
+- [ ] Confirm install docs/website mention **AppImage** when this release ships AppImages
 
 ### Testing & Verification
 - [ ] Run `make test` - All tests pass
@@ -107,6 +109,54 @@ When shipping bug fixes only (PATCH bump, same MINOR):
 - **SECURITY.md** supported versions table usually stays on the minor line (`0.14.x`) without a row per patch.
 - **AUR PKGBUILD**: bump `pkgver` / `_tag`; leave `sha256sums=('SKIP')` until the tag tarball exists. The release workflow runs `updpkgsums` when publishing to the AUR.
 - **Dates**: patch release dates must not predate the previous release in changelog / AppStream / version history.
+
+### GitHub Release Notes Writing Rules
+
+Use these rules for every GitHub Release body (and for the draft pasted into the release-prep PR). Website changelog entries stay shorter; see below.
+
+#### Sources of truth
+
+- Delta commits: `git log vPREV..HEAD` plus merged PR titles/bodies.
+- Closed issues via PR `Fixes` / `Closes` references only — do not invent issue numbers.
+- Do not invent benchmarks, user counts, testimonials, or features not in the tree.
+
+#### Required structure
+
+1. `# Vocalinux vX.Y.Z` title
+2. One to three plain sentences: what this release is for (no hype)
+3. `## Highlights` — markdown table, about 4–8 rows
+4. `## New Features` — bullets with PR + author; include issue closes when real
+5. `## Bug Fixes` — group by area (IBus, Installer, AUR, Text injection, …)
+6. Optional: `## Improvements`, `## Docs`, `## Packaging`
+7. `## Thanks` — external PR authors and issue reporters by `@handle`
+8. `## Install / Upgrade` — `install.sh`, AUR, PyPI, **AppImage**, Flatpak status (honest)
+9. Footer compare link: `https://github.com/jatinkrmalik/vocalinux/compare/vPREV...vX.Y.Z`
+
+#### Include / exclude
+
+- **Include:** user-visible features, install/packaging changes, desktop reliability fixes, docs that change user instructions.
+- **Exclude or demote:** Dependabot-only bumps, CI matrix tweaks, agent-env docs, pure refactors — short “CI / maintenance” subsection at most.
+
+#### Attribution and voice
+
+- Feature/fix bullets: `(#N by @author; fixes #M reported by @reporter)` when known.
+- Practical, specific, Linux-native. Name the symptom users hit.
+- Avoid promotional filler (“seamless”, “pivotal”, “game-changer”, fake significance).
+
+#### Website changelog vs GitHub Release
+
+- **Website** (`web/src/app/changelog/page.tsx`): 3–10 concise user-facing bullets for the new entry.
+- **GitHub Release**: fuller narrative + install block + thanks. Draft in the release-prep **PR body**; paste/edit onto the release after the tag workflow runs (workflow install stub + generated notes are a starting point only).
+
+#### Minor vs patch (reminder)
+
+- **Minor** (e.g. `0.15.0`): rewrite README / UPDATE “What’s New” for the new series; full website changelog entry; AppStream release note summarizes the series.
+- **Patch** (e.g. `0.15.1`): keep series feature table; add “Bug fixes in this patch” only; website changelog lists delta only.
+
+#### Draft delivery
+
+- Release-prep PRs should include a `## Draft GitHub Release Notes` section in the PR description for review before tag.
+- Do not tag from the prep branch alone; tag after merge to `main`.
 
 ### Step 3: Update Documentation
 
@@ -358,6 +408,7 @@ git push origin v0.5.1-beta
 | 0.14.0-beta | 2026-07-13 | Beta | Configurable modifier+key hotkeys, FunASR/SenseVoice remote-API support, GNOME/KDE Wayland IBus reliability fixes, audio crash fix, hybrid-CPU efficiency fix |
 | 0.14.1 | 2026-07-17 | Stable | Flatpak packaging, AUR package, layout-aware hotkeys, installer/text-injection fixes |
 | 0.14.2 | 2026-07-17 | Stable | IBus engine launch + FocusIn gate; settings tabs scroll to fit monitor |
+| 0.15.0 | 2026-07-28 | Stable | Searchable settings + sidebar dictation footer, AppImage, expanded languages, dictation polish, auto-pause/keepalive, Vulkan device selection, ibus-wayland, Bluetooth mic + shortcut UI fixes |
 
 ## Questions?
 

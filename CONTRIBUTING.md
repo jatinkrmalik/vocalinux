@@ -241,7 +241,7 @@ The test server supports both API formats:
 
 **To test in Vocalinux:**
 1. Start the test server
-2. Open Vocalinux Settings → Speech Engine tab
+2. Open Vocalinux Settings → Speech Engine (sidebar)
 3. Select **Remote API** from the engine dropdown
 4. Set Server URL to `http://localhost:8080`
 5. Choose API Endpoint format (whisper.cpp or OpenAI)

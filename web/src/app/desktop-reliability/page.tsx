@@ -48,12 +48,17 @@ const reliabilityFeatures = [
   {
     title: "Tray and settings polish",
     description:
-      "Bundled resources, lower dialog height, and an explicit close button improve behavior across desktop environments.",
+      "Bundled resources, searchable sidebar settings, and an explicit close button improve behavior across desktop environments.",
     icon: Wrench,
   },
 ];
 
 const releaseMap = [
+  {
+    version: "v0.15.0",
+    highlights:
+      "Searchable settings with sidebar dictation footer, ibus-wayland on previously unbridged compositors, safer IBus teardown, Bluetooth mic capture crash fix, custom-shortcut Record/Set restore, and xdotool focus preserve.",
+  },
   {
     version: "v0.12.0-beta",
     highlights:

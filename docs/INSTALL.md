@@ -27,6 +27,20 @@ That's it! The installer handles everything automatically:
 git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
 ```
 
+### AppImage (no install, no root)
+
+Download the `.AppImage` for your CPU (`x86_64` or `aarch64`) from
+[GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases), then:
+
+```bash
+chmod +x Vocalinux-*-x86_64.AppImage   # or aarch64
+./Vocalinux-*-x86_64.AppImage
+```
+
+AppImage still needs host text-injection tools (`xdotool` on X11; `wtype` /
+`ydotool` / clipboard tools on Wayland), same as the PyPI path. Prefer the
+one-liner installer above when you want system deps and models set up for you.
+
 ### From PyPI
 
 The PyPI package installs the Python application and Python dependencies, but it

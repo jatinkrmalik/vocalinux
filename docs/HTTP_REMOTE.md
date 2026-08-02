@@ -98,7 +98,7 @@ The remote engine is a power-user option in the **Speech Engine** settings.
    - **Model**: model identifier sent to OpenAI-compatible servers. Use `whisper-1` for classic Whisper servers, or `sensevoice` for FunASR/SenseVoice.
 4. Click **Test Connection** — a successful test means the URL is reachable and credentials (if any) are accepted. A failure here is just a warning; Vocalinux will still try again on the first transcription.
 
-Settings auto-save and re-initialise the engine immediately, so you can start dictating as soon as the test passes. Toggling the switch off restores the local engine selected on the Speech Engine tab.
+Settings auto-save and re-initialise the engine immediately, so you can start dictating as soon as the test passes. Toggling the switch off restores the local engine selected on the Speech Engine page in Settings.
 
 ### Via the config file
 
