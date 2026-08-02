@@ -135,6 +135,38 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         self.assertIn("def _apply_custom_shortcut(self, shortcut: str)", self.source_code)
         self.assertIn("self._sync_shortcut_selection_ui(shortcut)", self.source_code)
 
+    def test_custom_shortcut_row_uses_visible_helper(self):
+        """Custom row show path must clear no_show_all before show_all.
+
+        Gtk.Widget.show_all() is a no-op while no_show_all is True, which hid
+        the Record/Set controls after the searchable-settings refactor.
+        """
+        self.assertIn("def _set_custom_shortcut_row_visible(self, visible: bool)", self.source_code)
+        self.assertIn("self._set_custom_shortcut_row_visible(True)", self.source_code)
+        self.assertIn("self._set_custom_shortcut_row_visible(False)", self.source_code)
+        helper_start = self.source_code.index("def _set_custom_shortcut_row_visible")
+        helper_end = self.source_code.index("\n    def ", helper_start + 1)
+        helper = self.source_code[helper_start:helper_end]
+        self.assertIn("set_no_show_all(False)", helper)
+        self.assertIn("show_all()", helper)
+        # Call sites must go through the helper, not bare show_all on the row.
+        outside = self.source_code[:helper_start] + self.source_code[helper_end:]
+        self.assertNotIn("self.custom_shortcut_row.show_all()", outside)
+        self.assertNotIn("self.custom_shortcut_row.hide()", outside)
+
+    def test_separator_revert_syncs_custom_row_visibility(self):
+        """Clicking a combo separator must restore custom-row visibility too.
+
+        Otherwise selecting Custom Shortcut then a group separator leaves
+        Record/Set visible while the combo shows a preset again.
+        """
+        start = self.source_code.index("def _revert_shortcut_combo_to_saved")
+        end = self.source_code.index("\n    def ", start + 1)
+        body = self.source_code[start:end]
+        self.assertIn("self._sync_shortcut_selection_ui(current)", body)
+        # Also restore mode info text so the Record/Set hint does not linger.
+        self.assertIn("self._update_shortcut_ui_for_mode(mode_id)", body)
+
 
 class TestKeyboardBackendsBase(unittest.TestCase):
     """Test cases for keyboard backends base module."""

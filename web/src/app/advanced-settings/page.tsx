@@ -108,7 +108,7 @@ export default function AdvancedSettingsPage() {
       <section>
         <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <SlidersHorizontal className="h-4 w-4" />
-          v0.11.0 Advanced Tab
+          Advanced settings
         </p>
         <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Advanced Whisper.cpp Settings for Linux Dictation
@@ -116,7 +116,8 @@ export default function AdvancedSettingsPage() {
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           Vocalinux keeps the default setup simple, but power users can unlock
           advanced whisper.cpp decoding controls for anti-hallucination tuning,
-          initial prompts, and Remote API server configuration.
+          initial prompts, Remote API server configuration, Vulkan GPU device
+          selection, and optional model keep-alive unload.
         </p>
       </section>
 

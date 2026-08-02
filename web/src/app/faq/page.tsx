@@ -22,7 +22,7 @@ const faqCategories = [
     questions: [
       {
         q: "How do I install Vocalinux?",
-        a: "Run the one-liner installer: curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash. The installer handles all dependencies and configuration automatically.",
+        a: "Run the one-liner installer: curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash. The installer handles dependencies and configuration. You can also download an AppImage from GitHub Releases if you prefer a no-root portable binary (host xdotool/wtype/ydotool still required for text injection).",
       },
       {
         q: "Which Linux distributions are supported?",
@@ -114,7 +114,7 @@ const faqCategories = [
       },
       {
         q: "Can I use GPU acceleration?",
-        a: "Yes! whisper.cpp supports GPU acceleration via Vulkan, which works with AMD, Intel, and NVIDIA GPUs. The installer auto-detects your hardware.",
+        a: "Yes. whisper.cpp supports GPU acceleration via Vulkan on AMD, Intel, and NVIDIA. On multi-GPU machines Vocalinux prefers a discrete device when possible; you can pick a device under Advanced settings.",
       },
       {
         q: "What model size should I use?",

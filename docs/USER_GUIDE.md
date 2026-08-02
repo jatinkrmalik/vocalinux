@@ -36,6 +36,10 @@ Vocalinux supports login autostart using the standard Linux desktop-session mech
 4. **Speak clearly**: As you speak, your words will be transcribed into the currently focused application
 5. **Stop voice typing**: Click the tray icon and select "Stop Voice Typing" when you're done, double-tap again in toggle mode, or release the key in push-to-talk mode
 
+### Dictation formatting
+
+Vocalinux capitalizes the start of dictation and letters after `.`, `!`, or `?`. Each completed utterance also leaves a trailing space so the next push-to-talk or toggle session does not glue onto the previous sentence (`Hello.This` → `Hello. This`).
+
 ### Understanding the Status Icons
 
 - **Microphone off** (gray): Voice typing is inactive
@@ -112,7 +116,7 @@ Vocalinux now offers **three speech recognition engines**:
 ### Changing Engine and Model
 
 1. Open settings from the tray icon menu (right-click)
-2. Go to the "Speech Engine" tab
+2. Open the **Speech Engine** page in the settings sidebar (search works if you prefer)
 3. Select your **Speech Engine**:
    - whisper_cpp (recommended)
    - whisper
@@ -152,11 +156,20 @@ English-only whisper.cpp specializations limit the language selector to English.
 - **CUDA** (NVIDIA only) - Fallback if Vulkan not available
 - **CPU** - Always works as fallback
 
+On multi-GPU machines, Vocalinux prefers a **discrete** Vulkan device when one is present. You can override the device under **Advanced** settings (`whispercpp_gpu_device`).
+
 To check which backend is being used, look for these log messages when starting Vocalinux:
 ```
 [INFO] whisper.cpp using Vulkan GPU backend: AMD Radeon RX 6800
 [INFO] whisper.cpp configured with n_threads=16
 ```
+
+### Auto-pause and model keep-alive
+
+Optional power-saving controls live under settings:
+
+- **Auto-pause apps** — unload the speech model while configured apps/games are running, then reload when they exit
+- **Model keep-alive** — unload the model after a configurable idle timeout so idle dictation does not keep GPU/CPU resources warm
 
 ## Troubleshooting
 
