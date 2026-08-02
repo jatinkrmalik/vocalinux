@@ -80,11 +80,11 @@ describe("Screenshots page and assets", () => {
   });
 
   it("includes captioned settings and product sections", () => {
-    expect(pageSource).toContain("Speech Engine");
-    expect(pageSource).toContain("Recognition");
+    expect(pageSource).toContain("Speech Model");
+    expect(pageSource).toContain("Dictation");
     expect(pageSource).toContain("Audio");
     expect(pageSource).toContain("Shortcuts");
-    expect(pageSource).toContain("General");
+    expect(pageSource).toContain("Application");
     expect(pageSource).toContain("Advanced");
     expect(pageSource).toContain("Transcription in action");
     expect(pageSource).toContain("About");

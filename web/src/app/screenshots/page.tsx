@@ -46,8 +46,8 @@ const productShots: Screenshot[] = [
 const settingsShots: Screenshot[] = [
   {
     src: "/screenshots/settings-speech-engine.png",
-    alt: "Speech Engine settings tab",
-    title: "Speech Engine",
+    alt: "Vocalinux Speech Model settings with sidebar navigation",
+    title: "Speech Model",
     description:
       "Choose whisper.cpp, Whisper, VOSK, or Remote API and pick a model.",
     width: 1504,
@@ -55,15 +55,15 @@ const settingsShots: Screenshot[] = [
   },
   {
     src: "/screenshots/settings-recognition.png",
-    alt: "Recognition settings tab",
-    title: "Recognition",
-    description: "Language, voice commands, and recognition behavior.",
+    alt: "Vocalinux Dictation settings page",
+    title: "Dictation",
+    description: "Shortcuts, modes, and everyday dictation controls.",
     width: 1504,
     height: 2146,
   },
   {
     src: "/screenshots/settings-audio.png",
-    alt: "Audio settings tab",
+    alt: "Vocalinux Audio settings page",
     title: "Audio",
     description: "Input device, feedback sounds, and capture options.",
     width: 1504,
@@ -71,7 +71,7 @@ const settingsShots: Screenshot[] = [
   },
   {
     src: "/screenshots/settings-shortcuts.png",
-    alt: "Shortcuts and hotkeys settings tab",
+    alt: "Vocalinux Dictation shortcuts in settings",
     title: "Shortcuts & Hotkeys",
     description: "Toggle mode, push-to-talk, and custom key bindings.",
     width: 1504,
@@ -79,15 +79,15 @@ const settingsShots: Screenshot[] = [
   },
   {
     src: "/screenshots/settings-general.png",
-    alt: "General settings tab",
-    title: "General",
-    description: "Autostart, UI preferences, and everyday defaults.",
+    alt: "Vocalinux Application settings page",
+    title: "Application",
+    description: "Autostart, start minimized, and everyday defaults.",
     width: 1504,
     height: 2146,
   },
   {
     src: "/screenshots/settings-advanced.png",
-    alt: "Advanced tuning and settings tab",
+    alt: "Vocalinux Advanced settings page",
     title: "Advanced",
     description: "Power-user decoding controls and Remote Server options.",
     width: 1504,
@@ -116,7 +116,7 @@ export default function ScreenshotsPage() {
     name: "Vocalinux Screenshots",
     description:
       "Product and settings screenshots of Vocalinux, offline voice dictation for Linux.",
-    dateModified: "2026-07-15",
+    dateModified: "2026-08-02",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -143,17 +143,15 @@ export default function ScreenshotsPage() {
       <section>
         <p className="border-primary/30 bg-primary/10 mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium text-primary">
           <Camera className="h-4 w-4" />
-          Settings gallery (refresh pending)
+          v0.15 UI
         </p>
         <h1 className="mb-5 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Vocalinux Screenshots
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           A look at offline voice dictation on Linux: tray controls, debugging
-          tools, and the settings dialog. Click any image to expand it and browse
-          the gallery. Product shots are current; some settings images still show
-          the older tabbed layout while the app uses a searchable sidebar in
-          v0.15.0+.
+          tools, and the searchable sidebar settings UI from v0.15. Click any
+          image to expand it and browse the gallery.
         </p>
       </section>
 
