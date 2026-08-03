@@ -1465,12 +1465,17 @@ install_preferred_appindicator() {
     local legacy_pkg="$3"
     local checker="$4"
 
-    if "$checker" "$ayatana_pkg" || "$checker" "$legacy_pkg"; then
+    if "$checker" "$ayatana_pkg"; then
         return 0
     fi
 
     if $install_cmd "$ayatana_pkg" 2>/dev/null; then
         print_info "Installed $ayatana_pkg (Ayatana AppIndicator; required for a working KDE tray icon)"
+        return 0
+    fi
+
+    if "$checker" "$legacy_pkg"; then
+        print_info "$ayatana_pkg not available; $legacy_pkg is already installed but may not show a tray icon on KDE Plasma"
         return 0
     fi
 
