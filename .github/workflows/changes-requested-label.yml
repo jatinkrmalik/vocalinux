@@ -1,0 +1,108 @@
+name: Label Changes Requested
+
+on:
+  pull_request_target:
+    types: [synchronize]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Changes Requested label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = "Changes Requested";
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+
+            async function ensureLabel() {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: label });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: label,
+                  color: "d93f0b",
+                  description: "A reviewer has requested changes on this pull request",
+                });
+              }
+            }
+
+            async function hasChangesRequested() {
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner,
+                repo,
+                pull_number: prNumber,
+              });
+
+              const latestByUser = new Map();
+              for (const review of reviews) {
+                if (review.state === "PENDING") {
+                  continue;
+                }
+                latestByUser.set(review.user.login, review);
+              }
+
+              return [...latestByUser.values()].some(
+                (review) => review.state === "CHANGES_REQUESTED"
+              );
+            }
+
+            async function addLabel() {
+              await ensureLabel();
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: prNumber,
+                labels: [label],
+              });
+            }
+
+            async function removeLabel() {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: label,
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
+            if (context.eventName === "pull_request_review") {
+              const review = context.payload.review;
+
+              if (review.state === "changes_requested") {
+                await addLabel();
+                return;
+              }
+
+              if (review.state === "approved" || context.payload.action === "dismissed") {
+                if (!(await hasChangesRequested())) {
+                  await removeLabel();
+                }
+              }
+
+              return;
+            }
+
+            if (
+              context.eventName === "pull_request_target" &&
+              context.payload.action === "synchronize"
+            ) {
+              await removeLabel();
+            }
