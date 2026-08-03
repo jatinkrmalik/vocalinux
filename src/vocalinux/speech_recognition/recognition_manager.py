@@ -7,6 +7,7 @@ currently supporting VOSK, Whisper, and whisper.cpp.
 
 import ctypes
 import importlib.util
+import inspect
 import json
 import logging
 import os
@@ -1298,11 +1299,26 @@ class SpeechRecognitionManager:
 
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
         if gpu_device is not None and gpu_device >= 0:
-            compatible_kwargs["context_params"] = {"gpu_device": gpu_device}
+            try:
+                supports_context_params = (
+                    "context_params" in inspect.signature(Model.__init__).parameters
+                )
+            except (TypeError, ValueError) as exc:
+                supports_context_params = False
+                logger.debug(f"Could not inspect pywhispercpp Model signature: {exc}")
+
+            if supports_context_params:
+                compatible_kwargs["context_params"] = {"gpu_device": gpu_device}
+            else:
+                logger.warning(
+                    "pywhispercpp does not support context_params; "
+                    "upgrade pywhispercpp to enable GPU device selection. "
+                    "Falling back to default device."
+                )
 
         try:
             return Model(model_path, **compatible_kwargs)
-        except TypeError as exc:
+        except (TypeError, AttributeError) as exc:
             # Older pywhispercpp releases (< ~1.4.0) do not accept context_params.
             # Retry without GPU device selection so the engine still loads.
             if "context_params" in compatible_kwargs and (
