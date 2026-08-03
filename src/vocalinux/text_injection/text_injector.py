@@ -131,10 +131,7 @@ class TextInjector:
             and self.wayland_tool == "wtype"
         ):
             try:
-                # Try a test with wtype
-                result = subprocess.run(
-                    ["wtype", "test"], stderr=subprocess.PIPE, text=True, check=False
-                )
+                result = self._probe_wtype_support()
                 error_output = result.stderr.lower()
                 if "compositor does not support" in error_output or result.returncode != 0:
                     logger.warning(
@@ -177,6 +174,16 @@ class TextInjector:
                 self._ibus_injector.stop()
                 self._ibus_injector = None
             self._ibus_ready = False
+
+    def _probe_wtype_support(self) -> subprocess.CompletedProcess:
+        """Probe wtype support without typing visible text."""
+        return subprocess.run(
+            ["wtype", ""],
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            timeout=2,
+        )
 
     def _detect_environment(self) -> DesktopEnvironment:
         """
@@ -836,12 +843,7 @@ class TextInjector:
         # Check for wtype with compositor support
         if shutil.which("wtype"):
             try:
-                result = subprocess.run(
-                    ["wtype", "test"],
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=False,
-                )
+                result = self._probe_wtype_support()
                 error_output = result.stderr.lower()
                 if "compositor does not support" not in error_output and result.returncode == 0:
                     self.wayland_tool = "wtype"
