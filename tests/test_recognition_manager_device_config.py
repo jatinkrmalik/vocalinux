@@ -953,6 +953,34 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
             assert len(self.OldSignatureModel.calls) == 1
             assert "context_params" not in self.OldSignatureModel.calls[0][1]
 
+    def test_gpu_device_skips_context_params_when_signature_inspection_fails(self):
+        """If Model.__init__ cannot be inspected, skip context_params safely."""
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=1)
+        manager.model_size = "tiny"
+
+        mock_pywhispercpp = MagicMock()
+        self.OldSignatureModel.calls = []
+        mock_pywhispercpp.Model = self.OldSignatureModel
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp,
+            },
+        ):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.inspect.signature",
+                side_effect=ValueError("no signature"),
+            ):
+                result = manager._load_model_with_compatible_params(
+                    "/fake/model.bin", {}, gpu_device=1
+                )
+
+        assert isinstance(result, self.OldSignatureModel)
+        assert len(self.OldSignatureModel.calls) == 1
+        assert "context_params" not in self.OldSignatureModel.calls[0][1]
+
     def test_gpu_device_context_params_fallback_on_attribute_error(self):
         """AttributeError from pywhispercpp context_params is retried without it."""
         manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=1)
