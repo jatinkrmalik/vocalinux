@@ -153,14 +153,10 @@ def check_dependencies():
             logger.error("  Then log out and back in. Ubuntu includes this by default.")
             logger.error("")
             logger.error("  Fedora:")
-            logger.error(
-                "    sudo dnf install python3-gobject gtk3 libayatana-appindicator-gtk3"
-            )
+            logger.error("    sudo dnf install python3-gobject gtk3 libayatana-appindicator-gtk3")
             logger.error("")
             logger.error("  Arch Linux:")
-            logger.error(
-                "    sudo pacman -S python-gobject gtk3 libayatana-appindicator"
-            )
+            logger.error("    sudo pacman -S python-gobject gtk3 libayatana-appindicator")
             logger.error("")
             logger.error("  openSUSE Tumbleweed:")
             logger.error(
