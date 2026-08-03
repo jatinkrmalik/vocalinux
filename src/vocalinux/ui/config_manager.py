@@ -96,6 +96,10 @@ DEFAULT_CONFIG = {
         "whispercpp_n_threads": 0,  # 0 = auto-detect optimal thread count; set to override
         "whispercpp_gpu_device": None,  # None = auto-select discrete GPU; int = specific device index
     },
+    "updates": {
+        # "stable" follows GitHub /releases/latest; "nightly" follows nightly-YYYY-MM-DD tags.
+        "channel": "stable",
+    },
 }
 
 
