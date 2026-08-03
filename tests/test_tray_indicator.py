@@ -133,6 +133,17 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_config_manager_class = self.patcher_config_manager.start()
         self.mock_config_manager_class.return_value = self.mock_config_manager
 
+        # Default D-Bus ListNames to include StatusNotifierWatcher so constructing
+        # TrayIndicator (which idle_add's _init_indicator) does not open the
+        # missing-watcher dialog during setUp. Individual tests can override.
+        self.patcher_dbus_proxy = patch(
+            "vocalinux.ui.tray_indicator.Gio.DBusProxy.new_for_bus_sync"
+        )
+        self.mock_dbus_proxy_factory = self.patcher_dbus_proxy.start()
+        mock_proxy = MagicMock()
+        mock_proxy.call_sync.return_value.unpack.return_value = (["org.kde.StatusNotifierWatcher"],)
+        self.mock_dbus_proxy_factory.return_value = mock_proxy
+
         # Import and create TrayIndicator
         from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -148,6 +159,7 @@ class TestTrayIndicator(unittest.TestCase):
         self.patcher_listdir.stop()
         self.patcher_makedirs.stop()
         self.patcher_config_manager.stop()
+        self.patcher_dbus_proxy.stop()
         self.patcher_settings_dialog.stop()
         self.thread_patcher.stop()
         self.ksm_patcher.stop()
@@ -507,6 +519,7 @@ class TestTrayIndicator(unittest.TestCase):
             return default
 
         self.mock_config_manager.get_bool.side_effect = get_bool
+        self.mock_config_manager.get_bool.reset_mock()
 
         with patch.object(
             self.tray_indicator,
@@ -527,11 +540,11 @@ class TestTrayIndicator(unittest.TestCase):
         mock_checkbox.get_active.return_value = True
         self.mock_config_manager.reset_mock()
 
-        with patch("vocalinux.ui.tray_indicator.Gtk") as patched_gtk:
-            patched_gtk.MessageDialog.return_value = mock_dialog
-            patched_gtk.CheckButton.return_value = mock_checkbox
+        # Use the module-level Gtk mock (same object the module imported).
+        mock_gtk.MessageDialog.return_value = mock_dialog
+        mock_gtk.CheckButton.return_value = mock_checkbox
 
-            result = self.tray_indicator._show_missing_watcher_dialog()
+        result = self.tray_indicator._show_missing_watcher_dialog()
 
         self.assertEqual(result, False)
         mock_dialog.get_message_area.return_value.pack_start.assert_called_once_with(
