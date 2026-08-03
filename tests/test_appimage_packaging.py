@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "packaging" / "appimage" / "build.sh"
 
@@ -25,7 +24,7 @@ def test_appimage_build_ships_transitive_typelibs():
     text = BUILD_SH.read_text()
     assert "TYPELIBS=(" in text
     # Must not wipe linuxdeploy's typelib set down to a partial allowlist.
-    assert "rm -rf \"$APPDIR/usr/lib/girepository-1.0\"" not in text
+    assert 'rm -rf "$APPDIR/usr/lib/girepository-1.0"' not in text
     assert "keeping linuxdeploy extras" in text or "Ensuring required typelibs" in text
     for typelib in REQUIRED_TYPELIBS:
         assert typelib in text, f"missing typelib seed {typelib} in {BUILD_SH}"
