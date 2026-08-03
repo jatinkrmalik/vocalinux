@@ -290,13 +290,19 @@ Native stack per platform; same offline-first design.
 
 Bug reports, docs, and code are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [good first issues](https://github.com/jatinkrmalik/vocalinux/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 
-<a href="https://github.com/jatinkrmalik/vocalinux/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=jatinkrmalik/vocalinux" alt="Contributors" />
-</a>
-
 - [Report a bug](https://github.com/jatinkrmalik/vocalinux/issues/new?template=bug_report.md)
 - [Request a feature](https://github.com/jatinkrmalik/vocalinux/issues/new?template=feature_request.md)
 - [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)
+
+### Contributors
+
+People who have shipped code, docs, and fixes to this repo (including active and past contributors):
+
+<a href="https://github.com/jatinkrmalik/vocalinux/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=jatinkrmalik/vocalinux" alt="Vocalinux contributors" />
+</a>
+
+Full graph: [github.com/jatinkrmalik/vocalinux/graphs/contributors](https://github.com/jatinkrmalik/vocalinux/graphs/contributors)
 
 ## Repository mirrors
 
