@@ -104,7 +104,8 @@ def check_dependencies():
 
         gi.require_version("Gtk", "3.0")
         from gi.repository import Gtk  # noqa: F401
-    except (ImportError, ValueError):
+    except (ImportError, ValueError) as e:
+        logger.debug("GTK import failed: %s", e)
         missing_system_deps.append(
             "GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)"
         )
@@ -116,13 +117,15 @@ def check_dependencies():
 
         gi.require_version("AyatanaAppIndicator3", "0.1")
         from gi.repository import AyatanaAppIndicator3  # noqa: F401
-    except (ImportError, ValueError):
+    except (ImportError, ValueError) as e:
+        logger.debug("AyatanaAppIndicator3 import failed: %s", e)
         try:
             import gi
 
             gi.require_version("AppIndicator3", "0.1")
             from gi.repository import AppIndicator3  # noqa: F401
-        except (ImportError, ValueError):
+        except (ImportError, ValueError) as e2:
+            logger.debug("AppIndicator3 import failed: %s", e2)
             missing_system_deps.append(
                 "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
             )
