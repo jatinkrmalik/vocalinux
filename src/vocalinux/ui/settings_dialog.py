@@ -73,6 +73,28 @@ def _raw_audio_device_name(device_name: Optional[str]) -> Optional[str]:
     return device_name.removesuffix(" (default)")
 
 
+def _resolve_audio_device_selection(
+    devices: list,
+    saved_index: Optional[int],
+    saved_name: Optional[str],
+) -> Optional[int]:
+    """Resolve a saved audio device to a currently listed index.
+
+    Returns the matched device index, or None when the saved device is gone
+    (caller should fall back to System Default).
+    """
+    saved_raw_name = _raw_audio_device_name(saved_name)
+    if saved_raw_name:
+        for idx, name, _is_default in devices:
+            if name == saved_raw_name:
+                return idx
+    if saved_index is not None:
+        for idx, _name, _is_default in devices:
+            if idx == saved_index:
+                return saved_index
+    return None
+
+
 # Define available models for each engine
 ENGINE_MODELS = {
     "vosk": [
@@ -4310,22 +4332,29 @@ For now, the engine has been reverted to VOSK."""
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")
         else:
-            # Try to match by saved device name first (more stable across reboots)
-            matched = False
-            if saved_device_name:
-                for idx, name, _ in devices:
-                    if name == saved_device_name:
-                        self.audio_device_combo.set_active_id(str(idx))
-                        matched = True
-                        break
-            if not matched:
-                # Fall back to stored index
-                if not self.audio_device_combo.set_active_id(str(saved_device)):
-                    logger.warning(
-                        f"Saved audio device {saved_device} "
-                        f"(name: {saved_device_name}) no longer available"
-                    )
-                    self.audio_device_combo.set_active_id("-1")
+            matched_index = _resolve_audio_device_selection(
+                devices, saved_device, saved_device_name
+            )
+            if matched_index is not None:
+                self.audio_device_combo.set_active_id(str(matched_index))
+                # Migrate legacy configs that stored the UI "(default)" suffix.
+                saved_raw_name = _raw_audio_device_name(saved_device_name)
+                if saved_device_name and saved_raw_name and saved_device_name != saved_raw_name:
+                    self.config_manager.set("audio", "device_name", saved_raw_name)
+                    self.config_manager.set("audio", "device_index", matched_index)
+                    self.config_manager.save_settings()
+            else:
+                logger.warning(
+                    f"Saved audio device {saved_device} "
+                    f"(name: {saved_device_name}) no longer available"
+                )
+                self.audio_device_combo.set_active_id("-1")
+                # Keep combo, config, and engine aligned on System Default.
+                self.config_manager.set("audio", "device_index", None)
+                self.config_manager.set("audio", "device_name", None)
+                self.config_manager.save_settings()
+                if self.speech_engine is not None:
+                    self.speech_engine.set_audio_device(None, None)
 
         logger.info(f"Found {len(devices)} audio input devices")
 

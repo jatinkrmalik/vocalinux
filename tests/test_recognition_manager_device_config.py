@@ -158,11 +158,22 @@ class TestAudioDeviceDetection(unittest.TestCase):
 
     def test_settings_persist_raw_audio_device_name(self):
         """Settings should persist raw PortAudio names, not UI-only suffixes."""
-        from vocalinux.ui.settings_dialog import _raw_audio_device_name
+        from vocalinux.ui.settings_dialog import (
+            _raw_audio_device_name,
+            _resolve_audio_device_selection,
+        )
 
         assert _raw_audio_device_name("USB Microphone (default)") == "USB Microphone"
         assert _raw_audio_device_name("USB Microphone") == "USB Microphone"
         assert _raw_audio_device_name(None) is None
+
+        devices = [(3, "USB Microphone", True), (5, "Webcam Mic", False)]
+        # Legacy configs may still store the UI-only "(default)" suffix.
+        assert _resolve_audio_device_selection(devices, 3, "USB Microphone (default)") == 3
+        assert _resolve_audio_device_selection(devices, 99, "Webcam Mic") == 5
+        # Filtered-out / missing devices resolve to System Default.
+        assert _resolve_audio_device_selection(devices, 1, "DeepFilterNet") is None
+        assert _resolve_audio_device_selection(devices, 1, None) is None
 
     def test_is_bluetooth_device_detection(self):
         """Bluetooth headset/mic names should be recognized (Issue #567)."""
