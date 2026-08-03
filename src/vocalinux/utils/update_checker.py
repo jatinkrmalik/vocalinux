@@ -19,6 +19,8 @@ _PRE_RELEASE_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 _NIGHTLY_TAG_RE = re.compile(r"^nightly-(\d{4}-\d{2}-\d{2})$", re.IGNORECASE)
+# Nightly CI embeds the build day as ``.devYYYYMMDD[+sha]`` (see release names).
+_DEV_DATE_RE = re.compile(r"(?:^|[.+-])dev(\d{8})(?:[.+-]|$)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -94,10 +96,18 @@ def is_newer_version(current: str, latest: str) -> bool:
 
 
 def _nightly_date(tag_or_version: str) -> Optional[str]:
-    """Return YYYY-MM-DD from a nightly tag, or None."""
+    """Return YYYY-MM-DD from a nightly tag or ``.devYYYYMMDD`` version, or None."""
     text = tag_or_version.strip()
     match = _NIGHTLY_TAG_RE.match(text) or _NIGHTLY_TAG_RE.match(normalize_version(text))
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+
+    # Installed nightlies report versions like ``0.14.2.dev20260802+27ecf88``.
+    dev_match = _DEV_DATE_RE.search(text)
+    if not dev_match:
+        return None
+    raw = dev_match.group(1)
+    return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}"
 
 
 def is_update_available(
@@ -110,7 +120,7 @@ def is_update_available(
         if current_tag == latest.tag_name or normalize_version(current_tag) == latest.version:
             return False
         current_nightly = _nightly_date(current_tag)
-        latest_nightly = _nightly_date(latest.tag_name)
+        latest_nightly = _nightly_date(latest.tag_name) or _nightly_date(latest.name)
         if current_nightly and latest_nightly:
             return latest_nightly > current_nightly
         # Stable (or other) install following the nightly channel → offer latest nightly.

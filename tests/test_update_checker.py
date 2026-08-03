@@ -64,7 +64,7 @@ class TestChannels:
         release = ReleaseInfo(
             tag_name="nightly-2026-08-02",
             version="nightly-2026-08-02",
-            name="nightly-2026-08-02",
+            name="Nightly Build - 0.14.2.dev20260802+27ecf88",
             html_url="https://github.com/jatinkrmalik/vocalinux/releases/tag/nightly-2026-08-02",
             body="",
             published_at="2026-08-02T00:00:00Z",
@@ -73,6 +73,9 @@ class TestChannels:
         )
         assert is_update_available("nightly-2026-08-01", release, "nightly")
         assert not is_update_available("nightly-2026-08-02", release, "nightly")
+        # Installed nightlies use .devYYYYMMDD[+sha], not the GitHub tag name.
+        assert not is_update_available("0.14.2.dev20260802+27ecf88", release, "nightly")
+        assert is_update_available("0.14.2.dev20260801+aaaaaaa", release, "nightly")
         # Stable installs following nightly should be offered the latest nightly.
         assert is_update_available("0.15.0", release, "nightly")
 

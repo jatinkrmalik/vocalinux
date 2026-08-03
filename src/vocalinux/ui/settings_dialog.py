@@ -3291,6 +3291,7 @@ class SettingsDialog(Gtk.Dialog):
             self.latest_release_row.set_subtitle("Unavailable")
             self.open_release_btn.set_sensitive(True)
             self.open_release_btn.set_tooltip_text("Open the Vocalinux project page")
+            self.open_release_btn.get_style_context().remove_class("suggested-action")
             self.release_notes_group.hide()
             return False
 
