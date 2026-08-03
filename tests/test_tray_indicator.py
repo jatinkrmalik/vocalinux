@@ -513,38 +513,40 @@ class TestTrayIndicator(unittest.TestCase):
                 mock_dialog.assert_called_once()
 
     def test_init_indicator_missing_watcher_respects_opt_out(self):
-        def get_bool(section, key, default=False):
-            if section == "ui" and key == "show_missing_tray_warning":
-                return False
-            return default
+        get_bool = MagicMock(
+            side_effect=lambda section, key, default=False: (
+                False if (section, key) == ("ui", "show_missing_tray_warning") else default
+            )
+        )
+        self.tray_indicator.config_manager.get_bool = get_bool
+        scheduled = []
 
-        self.mock_config_manager.get_bool.side_effect = get_bool
-        self.mock_config_manager.get_bool.reset_mock()
+        def record_idle(func, *args):
+            scheduled.append(func)
+            return False  # do not execute callbacks
 
         with patch.object(
             self.tray_indicator,
             "_check_status_notifier_watcher",
             return_value=False,
         ):
-            with patch.object(self.tray_indicator, "_show_missing_watcher_dialog") as mock_dialog:
+            with patch("vocalinux.ui.tray_indicator.GLib.idle_add", side_effect=record_idle):
                 result = self.tray_indicator._init_indicator()
-                self.assertEqual(result, False)
-                mock_dialog.assert_not_called()
-                self.mock_config_manager.get_bool.assert_any_call(
-                    "ui", "show_missing_tray_warning", True
-                )
+
+        self.assertEqual(result, False)
+        get_bool.assert_any_call("ui", "show_missing_tray_warning", True)
+        self.assertNotIn(self.tray_indicator._show_missing_watcher_dialog, scheduled)
 
     def test_missing_watcher_dialog_dont_show_again_saves_opt_out(self):
         mock_dialog = MagicMock()
         mock_checkbox = MagicMock()
         mock_checkbox.get_active.return_value = True
-        self.mock_config_manager.reset_mock()
+        config = MagicMock()
+        self.tray_indicator.config_manager = config
 
-        # Use the module-level Gtk mock (same object the module imported).
-        mock_gtk.MessageDialog.return_value = mock_dialog
-        mock_gtk.CheckButton.return_value = mock_checkbox
-
-        result = self.tray_indicator._show_missing_watcher_dialog()
+        with patch("vocalinux.ui.tray_indicator.Gtk.MessageDialog", return_value=mock_dialog):
+            with patch("vocalinux.ui.tray_indicator.Gtk.CheckButton", return_value=mock_checkbox):
+                result = self.tray_indicator._show_missing_watcher_dialog()
 
         self.assertEqual(result, False)
         mock_dialog.get_message_area.return_value.pack_start.assert_called_once_with(
@@ -555,10 +557,8 @@ class TestTrayIndicator(unittest.TestCase):
         response_callback = mock_dialog.connect.call_args[0][1]
         response_callback(mock_dialog, None)
 
-        self.mock_config_manager.set.assert_called_once_with(
-            "ui", "show_missing_tray_warning", False
-        )
-        self.mock_config_manager.save_settings.assert_called_once()
+        config.set.assert_called_once_with("ui", "show_missing_tray_warning", False)
+        config.save_settings.assert_called_once()
         mock_dialog.destroy.assert_called_once()
 
     def test_init_indicator_creation_failure_shows_error_dialog(self):
