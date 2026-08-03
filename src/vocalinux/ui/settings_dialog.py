@@ -65,6 +65,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _raw_audio_device_name(device_name: Optional[str]) -> Optional[str]:
+    """Return the persisted device name without UI-only suffixes."""
+    if device_name is None:
+        return None
+    return device_name.removesuffix(" (default)")
+
+
 # Define available models for each engine
 ENGINE_MODELS = {
     "vosk": [
@@ -4336,7 +4344,8 @@ For now, the engine has been reverted to VOSK."""
             return
 
         device_index = int(device_id)
-        device_name = self.audio_device_combo.get_active_text()
+        device_label = self.audio_device_combo.get_active_text()
+        device_name = _raw_audio_device_name(device_label)
 
         if device_index == -1:
             self.config_manager.set("audio", "device_index", None)
@@ -4353,7 +4362,7 @@ For now, the engine has been reverted to VOSK."""
             self.speech_engine.set_audio_device(device_index, device_name)
 
         logger.info(f"Audio device changed to: [{device_index}] {device_name}")
-        self.audio_test_status.set_markup(f"<i>Selected: {device_name}</i>")
+        self.audio_test_status.set_markup(f"<i>Selected: {device_label}</i>")
 
     def _on_test_audio_clicked(self, widget):
         """Handle test audio button click."""
