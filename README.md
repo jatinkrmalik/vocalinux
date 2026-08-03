@@ -441,11 +441,11 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [x] ~~Multi-language support (FR, DE, RU)~~ ✅
 - [x] ~~whisper.cpp integration (default engine)~~ ✅
 - [x] ~~Vulkan GPU support~~ ✅
-- [ ] In-app update mechanism
-- [ ] Application-specific commands
-- [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
-- [ ] Debian/Ubuntu package (.deb)
+- [x] In-app update mechanism ✅
 - [x] ~~Wayland support via IBus~~ ✅
+- [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
+- [ ] Application-specific commands
+- [ ] Debian/Ubuntu package (.deb)
 - [ ] Voice command customization
 
 ## 🌐 The Voca Ecosystem
