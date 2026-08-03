@@ -104,7 +104,7 @@ Vocalinux in action. Settings gallery shots may lag the searchable sidebar UI fr
   <tr>
     <td align="center">
       <img src="resources/screenshots/05-about-view.png" alt="About View" width="350"><br>
-      <em>About dialog with version info</em>
+      <em>About &amp; Updates in Settings</em>
     </td>
     <td align="center">
       <img src="resources/screenshots/03-log-viewer.png" alt="Log Viewer" width="350"><br>
