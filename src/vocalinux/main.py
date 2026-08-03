@@ -109,18 +109,19 @@ def check_dependencies():
             "GTK3 (install with: sudo apt install python3-gi gir1.2-gtk-3.0)"
         )
 
-    # Check for AppIndicator3 / Ayatana AppIndicator
+    # Prefer Ayatana AppIndicator (maintained; registers on KDE Plasma).
+    # Legacy Canonical AppIndicator3 is only accepted as a fallback.
     try:
         import gi
 
-        gi.require_version("AppIndicator3", "0.1")
-        from gi.repository import AppIndicator3  # noqa: F401
+        gi.require_version("AyatanaAppIndicator3", "0.1")
+        from gi.repository import AyatanaAppIndicator3  # noqa: F401
     except (ImportError, ValueError):
         try:
             import gi
 
-            gi.require_version("AyatanaAppIndicator3", "0.1")
-            from gi.repository import AyatanaAppIndicator3  # noqa: F401
+            gi.require_version("AppIndicator3", "0.1")
+            from gi.repository import AppIndicator3  # noqa: F401
         except (ImportError, ValueError):
             missing_system_deps.append(
                 "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
@@ -152,10 +153,14 @@ def check_dependencies():
             logger.error("  Then log out and back in. Ubuntu includes this by default.")
             logger.error("")
             logger.error("  Fedora:")
-            logger.error("    sudo dnf install python3-gobject gtk3 libappindicator-gtk3")
+            logger.error(
+                "    sudo dnf install python3-gobject gtk3 libayatana-appindicator-gtk3"
+            )
             logger.error("")
             logger.error("  Arch Linux:")
-            logger.error("    sudo pacman -S python-gobject gtk3 libappindicator")
+            logger.error(
+                "    sudo pacman -S python-gobject gtk3 libayatana-appindicator"
+            )
             logger.error("")
             logger.error("  openSUSE Tumbleweed:")
             logger.error(
