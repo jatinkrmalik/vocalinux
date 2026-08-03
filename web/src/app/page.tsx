@@ -519,14 +519,14 @@ export default function HomePage() {
                 <ThemeScreenshotImage
                   src="/screenshots/00-transcription.png"
                   srcDark="/screenshots/dark/00-transcription.png"
-                  alt="Vocalinux Speech Model settings in the searchable sidebar UI"
-                  width={960}
-                  height={720}
+                  alt="Vocalinux dictating into a text editor with the tray menu open"
+                  width={2518}
+                  height={2057}
                   priority
                   className="h-auto w-full"
                 />
                 <figcaption className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
-                  <span>Searchable sidebar settings</span>
+                  <span>Dictation into any focused app</span>
                   <Link
                     href="/screenshots/"
                     className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary"
@@ -628,8 +628,8 @@ export default function HomePage() {
                   src="/screenshots/settings-speech-engine.png"
                   srcDark="/screenshots/dark/settings-speech-engine.png"
                   alt="Vocalinux settings dialog showing speech engine options"
-                  width={960}
-                  height={720}
+                  width={2128}
+                  height={1698}
                   className="absolute inset-0 h-full w-full object-cover object-top"
                 />
               </div>
@@ -670,8 +670,8 @@ export default function HomePage() {
                 src="/screenshots/02-system-tray.png"
                 srcDark="/screenshots/dark/02-system-tray.png"
                 alt="Vocalinux system tray icon and menu"
-                width={233}
-                height={355}
+                width={315}
+                height={466}
                 className="mx-auto h-auto max-h-[18rem] w-auto object-contain sm:max-h-[20rem]"
               />
               <figcaption className="border-t border-border px-4 py-2.5 text-sm text-muted-foreground">

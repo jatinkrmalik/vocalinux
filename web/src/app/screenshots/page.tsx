@@ -8,17 +8,19 @@ import {
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
-const SETTINGS_SIZE = { width: 960, height: 720 } as const;
+/** Pixel size of the captured settings/log dialog screenshots. */
+const SETTINGS_SIZE = { width: 2128, height: 1698 } as const;
 
 const productShots: Screenshot[] = [
   {
     src: "/screenshots/00-transcription.png",
     srcDark: "/screenshots/dark/00-transcription.png",
-    alt: "Vocalinux Speech Model settings in the searchable sidebar UI",
-    title: "Settings overview",
+    alt: "Vocalinux dictating into a text editor with the tray menu open",
+    title: "Dictation in action",
     description:
-      "Searchable sidebar settings with speech engine and model controls.",
-    ...SETTINGS_SIZE,
+      "Voice typing into a focused app while the tray menu shows listening state.",
+    width: 2518,
+    height: 2057,
   },
   {
     src: "/screenshots/02-system-tray.png",
@@ -26,8 +28,8 @@ const productShots: Screenshot[] = [
     alt: "Vocalinux system tray menu with voice typing controls",
     title: "System tray",
     description: "Tray menu for start/stop, settings, logs, and about.",
-    width: 237,
-    height: 407,
+    width: 315,
+    height: 466,
   },
   {
     src: "/screenshots/03-log-viewer.png",

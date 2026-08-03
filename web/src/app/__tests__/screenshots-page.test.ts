@@ -97,10 +97,11 @@ describe("Screenshots page and assets", () => {
     expect(pageSource).toContain("Performance");
     expect(pageSource).toContain("Application");
     expect(pageSource).toContain("Advanced");
-    expect(pageSource).toContain("Settings overview");
+    expect(pageSource).toContain("Dictation in action");
     expect(pageSource).toContain("About");
     expect(pageSource).toContain("update checker");
     expect(pageSource).not.toContain("Shortcuts & Hotkeys");
     expect(pageSource).not.toContain("About dialog");
+    expect(pageSource).not.toContain("Settings overview");
   });
 });

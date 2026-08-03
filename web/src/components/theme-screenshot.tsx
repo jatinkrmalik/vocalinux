@@ -14,6 +14,10 @@ type CommonProps = {
  * Renders light and dark screenshot variants. Visibility follows the
  * `dark` class on `<html>` from next-themes, so the active theme's image
  * shows without a hydration flash.
+ *
+ * Default loading is "eager" for both siblings so the inactive theme is
+ * already fetched when the user toggles. Callers can still pass "lazy"
+ * for below-the-fold galleries (both siblings share the value).
  */
 export function ThemeScreenshotImg({
   src,
@@ -22,7 +26,7 @@ export function ThemeScreenshotImg({
   width,
   height,
   className = "",
-  loading = "lazy",
+  loading = "eager",
 }: CommonProps & {
   width: number;
   height: number;
@@ -62,27 +66,39 @@ type ThemeScreenshotNextProps = CommonProps &
     alt: string;
   };
 
-/** next/image twin for homepage embeds that already use Image. */
+/**
+ * next/image twin for homepage embeds that already use Image.
+ *
+ * `priority` only applies to the light (default) image so Next preloads a
+ * single LCP candidate. The dark twin uses eager loading so theme toggles
+ * still have the asset ready without a second priority preload.
+ */
 export function ThemeScreenshotImage({
   src,
   srcDark,
   alt,
   className = "",
+  priority,
+  loading,
   ...rest
 }: ThemeScreenshotNextProps) {
   const shared = `${className}`.trim();
+  const darkLoading = priority ? "eager" : loading;
   return (
     <>
       <Image
         src={src}
         alt={alt}
         className={`${shared} dark:hidden`.trim()}
+        priority={priority}
+        loading={priority ? undefined : loading}
         {...rest}
       />
       <Image
         src={srcDark}
         alt={alt}
         className={`${shared} hidden dark:block`.trim()}
+        loading={darkLoading}
         {...rest}
       />
     </>
