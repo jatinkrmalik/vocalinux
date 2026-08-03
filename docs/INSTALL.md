@@ -1,30 +1,34 @@
-# Installation Guide
+# Installation guide
 
-This guide provides detailed instructions for installing Vocalinux on Linux systems.
+Detailed installation instructions for Vocalinux on Linux. For a short overview, see the [project README](../README.md).
 
-## 🚀 Quick Start
+## Quick start
 
-### One-liner Installation (Recommended)
+### Recommended installer
+
+Download, review if you like, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh
+bash /tmp/vl.sh
 ```
 
-> **Note**: Always installs the latest release with **whisper.cpp** (our default engine). For a specific version, check [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases).
+This installs the latest release with **whisper.cpp** by default. For a specific version, see [GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases) or pass `--tag=...`.
 
-That's it! The installer handles everything automatically:
-- ✅ Installs whisper.cpp (~1-2 minutes, no heavy dependencies!)
-- ✅ Auto-detects your GPU (AMD, Intel, NVIDIA all supported)
-- ✅ Installs neural VAD support when ONNX Runtime is available
-- ✅ Downloads the default whisper.cpp tiny model (~74MB)
-- ✅ Configures everything automatically
+The installer:
 
-> ⏱️ **Installation Time**: ~1-2 minutes (vs 5-10 minutes with old Whisper AI)
+- Installs whisper.cpp (typically ~1–2 minutes; no full PyTorch stack)
+- Detects GPU/Vulkan support (AMD, Intel, NVIDIA)
+- Installs neural VAD when ONNX Runtime is available
+- Downloads the default whisper.cpp tiny model (~74MB)
+- Sets up desktop integration and launch wrappers
 
-### From Source
+### From source
 
 ```bash
-git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
+git clone https://github.com/jatinkrmalik/vocalinux.git
+cd vocalinux
+./install.sh
 ```
 
 ### AppImage (no install, no root)
@@ -136,33 +140,31 @@ On Ubuntu 24.04+ or Pop!_OS, install `libgirepository-2.0-dev` if
 | **Disk Space** | ~200MB (including whisper.cpp model) |
 | **RAM** | 4GB minimum, works great with 8GB |
 
-### GPU Support (Optional)
+### GPU support (optional)
 
-**whisper.cpp** supports GPU acceleration via **Vulkan**, which works with:
-- ✅ AMD GPUs (RX series, integrated graphics)
-- ✅ Intel GPUs (Arc, integrated graphics)
-- ✅ NVIDIA GPUs (RTX, GTX series)
+**whisper.cpp** uses **Vulkan** when available:
 
-No special drivers needed - if your GPU supports Vulkan, whisper.cpp will use it automatically!
+- AMD (RX series and integrated)
+- Intel (Arc and integrated)
+- NVIDIA (RTX / GTX)
 
-To check Vulkan support: `vulkaninfo --summary`
+If Vulkan is present, whisper.cpp selects it automatically. Check with: `vulkaninfo --summary`
 
-## Installation Options
+## Installation options
 
-### Interactive Installation (Recommended)
-
-The new interactive installer guides you through engine selection:
+### Interactive installation (recommended)
 
 ```bash
 ./install.sh
 ```
 
-**Choose your engine:**
-1. **whisper.cpp** ⭐ (Recommended) - Fast, works with any GPU via Vulkan
-2. **Whisper** (OpenAI) - PyTorch-based, NVIDIA GPU only
-3. **VOSK** - Lightweight, works on older systems
+Engine choices:
 
-The installer will auto-detect your hardware and recommend the best option!
+1. **whisper.cpp** (recommended) — Fast; Vulkan on AMD, Intel, and NVIDIA
+2. **Whisper** (OpenAI) — PyTorch-based; NVIDIA/CUDA
+3. **VOSK** — Lightweight; older or low-RAM systems
+
+The installer detects hardware and recommends an engine.
 
 ### Automatic Installation
 
@@ -700,16 +702,17 @@ gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 
 ## Updating Vocalinux
 
-Already have Vocalinux installed? See the [Update Guide](UPDATE.md) for instructions on upgrading to the latest version.
+See the [Update guide](UPDATE.md).
 
-Quick update command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh
+bash /tmp/vl.sh
 ```
 
-## Getting Help
+## Getting help
 
-- 📖 [User Guide](USER_GUIDE.md)
-- 📖 [Update Guide](UPDATE.md)
-- 🐛 [Report Issues](https://github.com/jatinkrmalik/vocalinux/issues)
-- 💬 [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)
+- [User guide](USER_GUIDE.md)
+- [Update guide](UPDATE.md)
+- [Documentation index](README.md)
+- [Report issues](https://github.com/jatinkrmalik/vocalinux/issues)
+- [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)

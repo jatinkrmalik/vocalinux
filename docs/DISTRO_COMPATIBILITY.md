@@ -1,84 +1,68 @@
-# Linux Distribution Compatibility
+# Linux distribution compatibility
 
-## Implementation Status
+How Vocalinux behaves across distributions, what is tested, and what to install manually when needed.
 
-The cross-distribution compatibility improvements have been implemented in phases:
+For install steps, prefer [INSTALL.md](INSTALL.md). Flatpak packaging (useful on immutable or non-standard layouts): [packaging/flatpak/README.md](../packaging/flatpak/README.md).
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1 | ✅ Complete | Dynamic GI_TYPELIB_PATH detection using pkg-config, multi-arch support, ALSA library fallbacks |
-| Phase 2 | ✅ Complete | Enhanced distro detection (Gentoo, Alpine, Void, Solus, Mageia) |
-| Phase 3 | ✅ Complete | System dependency checker, improved error messages |
-| Phase 4 | ✅ Complete | CI test matrix, pkg-config as core dependency |
-| **Phase 5** | ✅ **Complete** | **Fixed remaining hardcoded GI_TYPELIB_PATH values in install.sh and CI workflow** |
-| **Phase 6** | ✅ **Complete** | **Added wrapper script verification tests, updated documentation** |
-| **Phase 7** | ✅ **Complete** | **Flatpak packaging (whisper.cpp engine) for universal distribution support — see [`packaging/flatpak/`](../packaging/flatpak/README.md). Flathub submission in progress.** |
-| Phase 8 | 📋 Planned | Snap packaging for Ubuntu Software Store |
+## Cross-distro behavior
 
-## Technical Implementation
+The installer and launch wrappers handle most path differences:
 
-### Dynamic GI_TYPELIB_PATH Detection
+**GI_TYPELIB_PATH detection**
 
-The installer now uses a robust multi-step approach to detect the correct GI_TYPELIB_PATH across different distributions:
+1. Primary: `pkg-config --variable=typelibdir gobject-introspection-1.0`
+2. Fallbacks (priority order): Debian/Ubuntu multi-arch paths, Fedora/RHEL `lib64`, Arch/generic `/usr/lib`, then `/usr/local/lib`
+3. Architectures covered include x86_64, ARM64, ARMHF, RISC-V, POWER, and s390x
 
-1. **Primary Method**: Uses `pkg-config --variable=typelibdir gobject-introspection-1.0` (most reliable)
-2. **Fallback Paths**: Checks common distribution-specific paths in priority order:
-   - Ubuntu/Debian multi-arch: `/usr/lib/x86_64-linux-gnu/girepository-1.0`
-   - ARM64: `/usr/lib/aarch64-linux-gnu/girepository-1.0`
-   - Fedora/RHEL: `/usr/lib64/girepository-1.0`
-   - Arch/Generic: `/usr/lib/girepository-1.0`
-   - Local installs: `/usr/local/lib/girepository-1.0`
+**Launch wrappers** (`~/.local/bin/vocalinux`, `~/.local/bin/vocalinux-gui`)
 
-3. **Architecture Support**: Detected paths for x86_64, ARM64, ARMHF, RISC-V, POWER, and s390x
+- Set `GI_TYPELIB_PATH`
+- Handle input-group permissions for Wayland shortcuts where applicable
 
-### Wrapper Scripts
+**Desktop entry** is written with the detected typelib path so the app menu launch matches the CLI.
 
-The installer creates wrapper scripts (`~/.local/bin/vocalinux` and `~/.local/bin/vocalinux-gui`) that:
-- Set the correct `GI_TYPELIB_PATH` environment variable
-- Handle input group permissions for Wayland keyboard shortcuts
-- Provide seamless cross-distro compatibility
-
-### Desktop Entry
-
-The `.desktop` entry is automatically configured with the detected `GI_TYPELIB_PATH`, ensuring the application launches correctly from the application menu regardless of distribution.
-
-## Officially Supported Distributions
-
-These distributions are tested and known to work well with Vocalinux:
+## Officially supported
 
 | Distribution | Version | Status | Notes |
 |--------------|---------|--------|-------|
-| Ubuntu | 22.04+ | ✅ Full Support | Primary target, most thoroughly tested |
-| Debian | 11+, Testing | ✅ Full Support | Well tested, use Ayatana AppIndicator on Debian 11+ |
-| Fedora | 39+ | ✅ Good Support | Uses lib64 paths, fully supported |
-| Arch Linux | Rolling | ✅ Good Support | Community tested, rolling release compatible |
-| openSUSE | Tumbleweed | ✅ Good Support | Good support with zypper package manager |
+| Ubuntu | 22.04+ | Full support | Primary test target |
+| Debian | 11+, Testing | Full support | Ayatana AppIndicator on Debian 11+ |
+| Fedora | 39+ | Good support | `lib64` paths |
+| Arch Linux | Rolling | Good support | AUR package available |
+| openSUSE | Tumbleweed | Good support | zypper; versioned Python package names |
 
-## Experimental Support
+## Ubuntu / Debian derivatives and Arch derivatives
 
-These distributions may work but have known limitations or are less tested:
+| Distribution | Status | Notes |
+|--------------|--------|-------|
+| Linux Mint | Good support | Ubuntu-based |
+| Pop!_OS | Good support | Ubuntu-based |
+| elementary OS | Good support | Ubuntu-based |
+| Zorin OS | Good support | Ubuntu-based |
+| Manjaro | Good support | Arch-based |
+| EndeavourOS | Good support | Arch-based |
 
-| Distribution | Status | Known Issues |
-|--------------|--------|--------------|
-| Gentoo | ⚠️ Experimental | No package manager support, manual install required. Packages are compiled from source which takes longer. |
-| Alpine Linux | ⚠️ Experimental | Uses musl libc (not glibc). Some Python packages may not have pre-built wheels and may need to be compiled. |
-| Void Linux | ⚠️ Experimental | Untested, manual install required. Uses xbps package manager. |
-| Solus | ⚠️ Experimental | Untested, manual install required. Uses eopkg package manager. |
-| Mageia | ⚠️ Experimental | Untested, uses dnf/urpmi package managers. |
-| Linux Mint | ✅ Good Support | Based on Ubuntu, inherits Ubuntu compatibility |
-| Pop!_OS | ✅ Good Support | Based on Ubuntu, inherits Ubuntu compatibility |
-| elementary OS | ✅ Good Support | Based on Ubuntu, inherits Ubuntu compatibility |
-| Zorin OS | ✅ Good Support | Based on Ubuntu, inherits Ubuntu compatibility |
-| Manjaro | ✅ Good Support | Based on Arch, inherits Arch compatibility |
-| EndeavourOS | ✅ Good Support | Based on Arch, inherits Arch compatibility |
+## Experimental
 
-## Not Supported
+Less tested; may need manual dependency installs:
 
-These distributions are known to be incompatible:
+| Distribution | Status | Notes |
+|--------------|--------|-------|
+| Gentoo | Experimental | Source builds; longer install |
+| Alpine Linux | Experimental | musl libc; some wheels may need compile |
+| Void Linux | Experimental | xbps; limited testing |
+| Solus | Experimental | eopkg; limited testing |
+| Mageia | Experimental | dnf/urpmi; limited testing |
 
-| Distribution | Status | Reason |
-|--------------|--------|--------|
-| NixOS | ❌ Not Supported | Completely different filesystem layout (/nix/store), incompatible with standard installer |
+## Limited or alternate install paths
+
+| Distribution | Notes |
+|--------------|--------|
+| NixOS | The standard `install.sh` path does not match the Nix store layout. Prefer a [local Flatpak build](../packaging/flatpak/README.md) or a self-managed Python env with system GI packages available. |
+| Fedora Silverblue / immutable | Prefer Flatpak or toolbox-style workflows; see Flatpak packaging docs. |
+| Steam Deck | Flatpak or AppImage are the practical paths. |
+
+Snap packaging is not available yet.
 
 ## Requirements by Distribution
 
@@ -219,7 +203,8 @@ packages, creates the virtual environment, installs Vocalinux, sets up desktop
 integration, and downloads the default speech model:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh
+bash /tmp/vl.sh
 ```
 
 ### Important: Install System Packages First
@@ -346,7 +331,8 @@ during setup.
 
 For the best experience with automatic dependency handling, use the official installer:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jatinkrmalik/vocalinux/main/install.sh -o /tmp/vl.sh
+bash /tmp/vl.sh
 ```
 
 This installer automatically detects your distribution and installs all required system packages.
