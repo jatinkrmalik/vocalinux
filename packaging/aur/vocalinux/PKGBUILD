@@ -14,7 +14,7 @@ depends=(
   'python>=3.9'
   'python-gobject'
   'gtk3'
-  'libappindicator-gtk3'
+  'libayatana-appindicator'
   'ibus'
   'gobject-introspection'
   'python-cairo'
