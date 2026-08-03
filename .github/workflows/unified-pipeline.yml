@@ -200,6 +200,7 @@ jobs:
             gir1.2-appindicator3-0.1 \
             gir1.2-ayatanaappindicator3-0.1 \
             gir1.2-notify-0.7 \
+            gir1.2-dbusmenu-glib-0.4 \
             gir1.2-ibus-1.0 \
             gir1.2-rsvg-2.0 \
             librsvg2-common \
