@@ -785,15 +785,43 @@ class TestWhispercppInitialization(unittest.TestCase):
 class TestWhispercppGpuDeviceSelection(unittest.TestCase):
     """Test whisper.cpp GPU device selection logic."""
 
+    class ContextParamsModel:
+        calls = []
+
+        def __init__(self, model_path, context_params=None, **kwargs):
+            call_kwargs = dict(kwargs)
+            if context_params is not None:
+                call_kwargs["context_params"] = context_params
+            self.__class__.calls.append((model_path, call_kwargs))
+
+    class OldSignatureModel:
+        calls = []
+
+        def __init__(self, model_path, **kwargs):
+            self.__class__.calls.append((model_path, dict(kwargs)))
+
+    class AttributeErrorContextParamsModel:
+        calls = []
+
+        def __init__(self, model_path, context_params=None, **kwargs):
+            call_kwargs = dict(kwargs)
+            if context_params is not None:
+                call_kwargs["context_params"] = context_params
+            self.__class__.calls.append((model_path, call_kwargs))
+            if context_params is not None:
+                raise AttributeError(
+                    "'whisper_full_params' object has no attribute 'context_params'"
+                )
+
     def test_gpu_device_auto_select_discrete(self):
         """Test auto-selection of discrete GPU when configured as None."""
         manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
         manager.model_size = "tiny"
 
         mock_pywhispercpp = MagicMock()
-        mock_model = MagicMock()
-        mock_pywhispercpp.Model = MagicMock(return_value=mock_model)
-        mock_pywhispercpp.model.Model = MagicMock(return_value=mock_model)
+        self.ContextParamsModel.calls = []
+        mock_pywhispercpp.Model = self.ContextParamsModel
+        mock_pywhispercpp.model.Model = self.ContextParamsModel
 
         mock_psutil = MagicMock()
         mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
@@ -843,7 +871,7 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                             return_value=1,
                                         ):
                                             manager._init_whispercpp()
-                                            assert mock_pywhispercpp.Model.call_args.kwargs.get(
+                                            assert self.ContextParamsModel.calls[-1][1].get(
                                                 "context_params"
                                             ) == {"gpu_device": 1}
 
@@ -853,9 +881,9 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
         manager.model_size = "tiny"
 
         mock_pywhispercpp = MagicMock()
-        mock_model = MagicMock()
-        mock_pywhispercpp.Model = MagicMock(return_value=mock_model)
-        mock_pywhispercpp.model.Model = MagicMock(return_value=mock_model)
+        self.ContextParamsModel.calls = []
+        mock_pywhispercpp.Model = self.ContextParamsModel
+        mock_pywhispercpp.model.Model = self.ContextParamsModel
 
         mock_psutil = MagicMock()
         mock_psutil.virtual_memory.return_value.total = 8 * 1024 * 1024 * 1024
@@ -900,24 +928,18 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                         return_value=vulkan_devices,
                                     ):
                                         manager._init_whispercpp()
-                                        assert mock_pywhispercpp.Model.call_args.kwargs.get(
+                                        assert self.ContextParamsModel.calls[-1][1].get(
                                             "context_params"
                                         ) == {"gpu_device": 0}
 
-    def test_gpu_device_context_params_fallback_on_old_pywhispercpp(self):
-        """Test graceful fallback when pywhispercpp rejects context_params."""
+    def test_gpu_device_skips_context_params_for_old_pywhispercpp_signature(self):
+        """Old pywhispercpp signatures must not receive context_params."""
         manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=1)
         manager.model_size = "tiny"
 
         mock_pywhispercpp = MagicMock()
-        mock_model = MagicMock()
-
-        def _model_side_effect(*args, **kwargs):
-            if kwargs.get("context_params"):
-                raise TypeError("Model() got an unexpected keyword argument 'context_params'")
-            return mock_model
-
-        mock_pywhispercpp.Model.side_effect = _model_side_effect
+        self.OldSignatureModel.calls = []
+        mock_pywhispercpp.Model = self.OldSignatureModel
 
         with patch.dict(
             "sys.modules",
@@ -927,12 +949,61 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
             },
         ):
             result = manager._load_model_with_compatible_params("/fake/model.bin", {}, gpu_device=1)
-            assert result is mock_model
-            assert mock_pywhispercpp.Model.call_count == 2
-            assert mock_pywhispercpp.Model.call_args_list[0].kwargs.get("context_params") == {
+            assert isinstance(result, self.OldSignatureModel)
+            assert len(self.OldSignatureModel.calls) == 1
+            assert "context_params" not in self.OldSignatureModel.calls[0][1]
+
+    def test_gpu_device_skips_context_params_when_signature_inspection_fails(self):
+        """If Model.__init__ cannot be inspected, skip context_params safely."""
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=1)
+        manager.model_size = "tiny"
+
+        mock_pywhispercpp = MagicMock()
+        self.OldSignatureModel.calls = []
+        mock_pywhispercpp.Model = self.OldSignatureModel
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp,
+            },
+        ):
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager.inspect.signature",
+                side_effect=ValueError("no signature"),
+            ):
+                result = manager._load_model_with_compatible_params(
+                    "/fake/model.bin", {}, gpu_device=1
+                )
+
+        assert isinstance(result, self.OldSignatureModel)
+        assert len(self.OldSignatureModel.calls) == 1
+        assert "context_params" not in self.OldSignatureModel.calls[0][1]
+
+    def test_gpu_device_context_params_fallback_on_attribute_error(self):
+        """AttributeError from pywhispercpp context_params is retried without it."""
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=1)
+        manager.model_size = "tiny"
+
+        mock_pywhispercpp = MagicMock()
+        self.AttributeErrorContextParamsModel.calls = []
+        mock_pywhispercpp.Model = self.AttributeErrorContextParamsModel
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "pywhispercpp": mock_pywhispercpp,
+                "pywhispercpp.model": mock_pywhispercpp,
+            },
+        ):
+            result = manager._load_model_with_compatible_params("/fake/model.bin", {}, gpu_device=1)
+            assert isinstance(result, self.AttributeErrorContextParamsModel)
+            assert len(self.AttributeErrorContextParamsModel.calls) == 2
+            assert self.AttributeErrorContextParamsModel.calls[0][1].get("context_params") == {
                 "gpu_device": 1
             }
-            assert "context_params" not in mock_pywhispercpp.Model.call_args_list[1].kwargs
+            assert "context_params" not in self.AttributeErrorContextParamsModel.calls[1][1]
 
     def test_gpu_device_not_set_for_cpu_backend(self):
         """Test that GPU device selection is skipped on CPU backend."""
