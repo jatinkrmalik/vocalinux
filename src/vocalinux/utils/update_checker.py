@@ -188,33 +188,36 @@ def fetch_latest_release(
                 return None
             return _release_from_payload(data, channel, repo_url)
 
-        response = requests.get(
-            f"{api_base}/releases",
-            headers=headers,
-            params={"per_page": 30},
-            timeout=timeout,
-        )
-        if response.status_code == 403:
-            logger.warning("GitHub API rate-limited or forbidden for %s", api_base)
-            return None
-        response.raise_for_status()
-        releases = response.json()
+        # Page through releases so a burst of non-nightly tags cannot hide the
+        # newest nightly beyond the first response page.
+        max_pages = 10
+        for page in range(1, max_pages + 1):
+            response = requests.get(
+                f"{api_base}/releases",
+                headers=headers,
+                params={"per_page": 30, "page": page},
+                timeout=timeout,
+            )
+            if response.status_code == 403:
+                logger.warning("GitHub API rate-limited or forbidden for %s", api_base)
+                return None
+            response.raise_for_status()
+            releases = response.json()
+            if not isinstance(releases, list) or not releases:
+                break
+
+            for item in releases:
+                if not isinstance(item, dict) or item.get("draft"):
+                    continue
+                tag_name = str(item.get("tag_name") or "")
+                if _NIGHTLY_TAG_RE.match(tag_name):
+                    return _release_from_payload(item, channel, repo_url)
+
+        logger.warning("No nightly release found for %s", api_base)
+        return None
     except (requests.exceptions.RequestException, ValueError) as exc:
         logger.warning("Failed to fetch latest release: %s", exc)
         return None
-
-    if not isinstance(releases, list):
-        return None
-
-    for item in releases:
-        if not isinstance(item, dict) or item.get("draft"):
-            continue
-        tag_name = str(item.get("tag_name") or "")
-        if _NIGHTLY_TAG_RE.match(tag_name):
-            return _release_from_payload(item, channel, repo_url)
-
-    logger.warning("No nightly release found for %s", api_base)
-    return None
 
 
 def format_release_notes(body: str) -> str:

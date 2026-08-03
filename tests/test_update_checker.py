@@ -195,3 +195,50 @@ class TestFetchLatestRelease:
         assert release.channel == "nightly"
         mock_requests.get.assert_called_once()
         assert mock_requests.get.call_args[0][0].endswith("/releases")
+
+    def test_nightly_channel_pages_past_non_nightly_releases(self):
+        """Newest nightly can sit beyond the first /releases page."""
+        page1 = [
+            {
+                "tag_name": f"v0.15.{i}",
+                "name": f"v0.15.{i}",
+                "html_url": f"https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.15.{i}",
+                "body": "",
+                "published_at": "2026-08-03T00:00:00Z",
+                "prerelease": False,
+                "draft": False,
+            }
+            for i in range(30, 0, -1)
+        ]
+        page2 = [
+            {
+                "tag_name": "nightly-2026-08-01",
+                "name": "nightly-2026-08-01",
+                "html_url": (
+                    "https://github.com/jatinkrmalik/vocalinux/releases/tag/nightly-2026-08-01"
+                ),
+                "body": "Nightly",
+                "published_at": "2026-08-01T05:00:00Z",
+                "prerelease": True,
+                "draft": False,
+            }
+        ]
+        responses = []
+        for payload in (page1, page2):
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = payload
+            responses.append(mock_response)
+
+        mock_requests = MagicMock()
+        mock_requests.get.side_effect = responses
+        mock_requests.exceptions.RequestException = Exception
+
+        with patch.dict("sys.modules", {"requests": mock_requests}):
+            release = fetch_latest_release(channel="nightly")
+
+        assert release is not None
+        assert release.tag_name == "nightly-2026-08-01"
+        assert mock_requests.get.call_count == 2
+        assert mock_requests.get.call_args_list[0].kwargs["params"]["page"] == 1
+        assert mock_requests.get.call_args_list[1].kwargs["params"]["page"] == 2

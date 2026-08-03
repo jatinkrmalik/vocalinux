@@ -846,7 +846,13 @@ def _row_matches_query(query: str, title: str, subtitle: str = "", keywords=()) 
 class PreferencesGroup(Gtk.Box):
     """A card-style group of preferences, similar to libadwaita's AdwPreferencesGroup."""
 
-    def __init__(self, title: str = "", description: str = "", keywords=()):
+    def __init__(
+        self,
+        title: str = "",
+        description: str = "",
+        keywords=(),
+        header_icon: Optional[Gtk.Widget] = None,
+    ):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.get_style_context().add_class("preferences-group")
         self.title = title
@@ -854,17 +860,13 @@ class PreferencesGroup(Gtk.Box):
         self.keywords = tuple(keywords)
         self.rows = []
 
-        # Header with title
+        # Header with title (optional icon aligned to the top-right)
         if title:
-            header_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            header_box.set_margin_top(12)
-            header_box.set_margin_bottom(4)
-            header_box.set_margin_start(16)
-            header_box.set_margin_end(16)
+            text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
 
             title_label = Gtk.Label(label=title, xalign=0)
             title_label.get_style_context().add_class("preferences-group-title")
-            header_box.pack_start(title_label, False, False, 0)
+            text_box.pack_start(title_label, False, False, 0)
 
             if description:
                 desc_label = Gtk.Label(label=description, xalign=0, wrap=True)
@@ -872,7 +874,23 @@ class PreferencesGroup(Gtk.Box):
                 # Align with the title, which carries 16px CSS padding.
                 desc_label.set_margin_start(16)
                 desc_label.set_margin_end(16)
-                header_box.pack_start(desc_label, False, False, 0)
+                text_box.pack_start(desc_label, False, False, 0)
+
+            if header_icon is not None:
+                header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                header_box.set_margin_top(12)
+                header_box.set_margin_bottom(4)
+                header_box.set_margin_start(16)
+                header_box.set_margin_end(16)
+                header_box.pack_start(text_box, True, True, 0)
+                header_icon.set_valign(Gtk.Align.CENTER)
+                header_box.pack_end(header_icon, False, False, 0)
+            else:
+                header_box = text_box
+                header_box.set_margin_top(12)
+                header_box.set_margin_bottom(4)
+                header_box.set_margin_start(16)
+                header_box.set_margin_end(16)
 
             self.pack_start(header_box, False, False, 0)
 
@@ -1159,6 +1177,7 @@ class SettingsDialog(Gtk.Dialog):
         self._advanced_prompt_dirty = False
         self._about_release_url = ""
         self._update_check_in_progress = False
+        self._update_check_generation = 0
         self._update_auto_checked = False
         self._initial_page = initial_page
 
@@ -3056,10 +3075,26 @@ class SettingsDialog(Gtk.Dialog):
 
     def _build_about_section(self):
         """Build the About page using the same PreferenceRow cards as other pages."""
+        from gi.repository import GdkPixbuf
+
+        from ..utils.resource_manager import ResourceManager
+
+        about_icon = None
+        logo_path = ResourceManager().get_icon_path("vocalinux")
+        if os.path.exists(logo_path):
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
+                scaled = pixbuf.scale_simple(48, 48, GdkPixbuf.InterpType.BILINEAR)
+                about_icon = Gtk.Image.new_from_pixbuf(scaled)
+                about_icon.set_pixel_size(48)
+            except Exception as exc:
+                logger.warning("Failed to load About icon: %s", exc)
+
         app_group = PreferencesGroup(
             title="Vocalinux",
             description=__description__,
             keywords=("about", "version", "app"),
+            header_icon=about_icon,
         )
 
         self.about_version_label = Gtk.Label(label=__version__)
@@ -3142,7 +3177,7 @@ class SettingsDialog(Gtk.Dialog):
         self.open_release_btn.connect("clicked", self._on_open_release_clicked)
         self.latest_release_row = PreferenceRow(
             title="Latest Release",
-            subtitle="—",
+            subtitle="-",
             widget=self.open_release_btn,
             keywords=("latest", "download", "changelog"),
         )
@@ -3191,20 +3226,28 @@ class SettingsDialog(Gtk.Dialog):
 
     def _start_update_check(self):
         """Kick off a background GitHub release lookup."""
-        if self._update_check_in_progress:
-            return
-
         channel = self._current_update_channel()
-        self._update_check_in_progress = True
+        self._update_check_generation += 1
+        generation = self._update_check_generation
         self.check_updates_btn.set_sensitive(False)
         self.check_updates_btn.set_label("…")
         self.update_status_row.set_subtitle(f"Checking GitHub ({channel})…")
-        threading.Thread(target=self._update_check_worker, args=(channel,), daemon=True).start()
 
-    def _update_check_worker(self, channel: str):
+        # Invalidate any in-flight result; that worker will restart on completion.
+        if self._update_check_in_progress:
+            return
+
+        self._update_check_in_progress = True
+        threading.Thread(
+            target=self._update_check_worker,
+            args=(channel, generation),
+            daemon=True,
+        ).start()
+
+    def _update_check_worker(self, channel: str, generation: int):
         """Worker thread: fetch latest release for ``channel`` and compare versions."""
         release = fetch_latest_release(channel=channel)
-        GLib.idle_add(self._apply_update_check_result, release, channel)
+        GLib.idle_add(self._apply_update_check_result, release, channel, generation)
 
     def _dialog_is_alive(self) -> bool:
         """Return False when the settings dialog has been destroyed."""
@@ -3213,12 +3256,28 @@ class SettingsDialog(Gtk.Dialog):
         except Exception:
             return False
 
-    def _apply_update_check_result(self, release, channel: Optional[str] = None):
+    def _apply_update_check_result(
+        self,
+        release,
+        channel: Optional[str] = None,
+        generation: Optional[int] = None,
+    ):
         """Update About-page UI from a release lookup result."""
         if not self._dialog_is_alive():
             return False
 
         channel = normalize_channel(channel or self._current_update_channel())
+        current_channel = self._current_update_channel()
+        # Drop stale results after a channel switch (or a newer check request).
+        if generation is not None and generation != self._update_check_generation:
+            self._update_check_in_progress = False
+            self._start_update_check()
+            return False
+        if channel != current_channel:
+            self._update_check_in_progress = False
+            self._start_update_check()
+            return False
+
         self._update_check_in_progress = False
         self.check_updates_btn.set_sensitive(True)
         self.check_updates_btn.set_label("Check")
