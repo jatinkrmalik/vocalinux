@@ -99,6 +99,8 @@ describe("Screenshots page and assets", () => {
     expect(pageSource).toContain("Advanced");
     expect(pageSource).toContain("Settings overview");
     expect(pageSource).toContain("About");
+    expect(pageSource).toContain("update checker");
     expect(pageSource).not.toContain("Shortcuts & Hotkeys");
+    expect(pageSource).not.toContain("About dialog");
   });
 });

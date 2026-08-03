@@ -26,17 +26,8 @@ const productShots: Screenshot[] = [
     alt: "Vocalinux system tray menu with voice typing controls",
     title: "System tray",
     description: "Tray menu for start/stop, settings, logs, and about.",
-    width: 233,
-    height: 355,
-  },
-  {
-    src: "/screenshots/05-about-view.png",
-    srcDark: "/screenshots/dark/05-about-view.png",
-    alt: "Vocalinux About dialog",
-    title: "About",
-    description: "Version info, credits, and project links.",
-    width: 404,
-    height: 644,
+    width: 237,
+    height: 407,
   },
   {
     src: "/screenshots/03-log-viewer.png",
@@ -98,12 +89,21 @@ const settingsShots: Screenshot[] = [
     description: "Power-user decoding controls and Remote Server options.",
     ...SETTINGS_SIZE,
   },
+  {
+    src: "/screenshots/05-about-view.png",
+    srcDark: "/screenshots/dark/05-about-view.png",
+    alt: "Vocalinux About settings page with update checker",
+    title: "About",
+    description:
+      "Version info plus Stable/Nightly update checks from GitHub Releases.",
+    ...SETTINGS_SIZE,
+  },
 ];
 
 export const metadata: Metadata = buildPageMetadata({
   title: "Vocalinux Screenshots | Linux Voice Dictation UI",
   description:
-    "See Vocalinux in action: system tray, about dialog, log viewer, and settings pages for speech model, dictation, audio, performance, application, and advanced options. Light and dark themes included.",
+    "See Vocalinux in action: system tray, log viewer, and settings pages for speech model, dictation, audio, performance, application, advanced options, and about/updates. Light and dark themes included.",
   path: "/screenshots",
   keywords: [
     "Vocalinux screenshots",
@@ -121,7 +121,7 @@ export default function ScreenshotsPage() {
     name: "Vocalinux Screenshots",
     description:
       "Product and settings screenshots of Vocalinux, offline voice dictation for Linux.",
-    dateModified: "2026-08-03",
+    dateModified: "2026-08-03", // refreshed after About moved into Settings sidebar
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
