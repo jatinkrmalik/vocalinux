@@ -34,6 +34,14 @@ from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 from ..common_types import RecognitionState  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
 from ..utils.paths import models_dir  # noqa: E402
+from ..utils.update_checker import (  # noqa: E402
+    DEFAULT_UPDATE_CHANNEL,
+    fetch_latest_release,
+    format_release_notes,
+    is_trusted_release_url,
+    is_update_available,
+    normalize_channel,
+)
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO  # noqa: E402
 from ..utils.whispercpp_model_info import MODEL_SIZES as WHISPERCPP_MODEL_SIZES
 from ..utils.whispercpp_model_info import (
@@ -47,6 +55,7 @@ from ..utils.whispercpp_model_info import get_model_variants as get_whispercpp_m
 from ..utils.whispercpp_model_info import get_recommended_model as get_recommended_whispercpp_model
 from ..utils.whispercpp_model_info import is_english_only_model as is_english_only_whispercpp_model
 from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_model_downloaded
+from ..version import __copyright__, __description__, __url__, __version__  # noqa: E402
 from .config_manager import DEFAULT_CONFIG  # noqa: E402
 from .keyboard_backends import (  # noqa: E402
     SHORTCUT_DISPLAY_NAMES,
@@ -64,6 +73,36 @@ if TYPE_CHECKING:
     from .config_manager import ConfigManager  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+
+def _raw_audio_device_name(device_name: Optional[str]) -> Optional[str]:
+    """Return the persisted device name without UI-only suffixes."""
+    if device_name is None:
+        return None
+    return device_name.removesuffix(" (default)")
+
+
+def _resolve_audio_device_selection(
+    devices: list,
+    saved_index: Optional[int],
+    saved_name: Optional[str],
+) -> Optional[int]:
+    """Resolve a saved audio device to a currently listed index.
+
+    Returns the matched device index, or None when the saved device is gone
+    (caller should fall back to System Default).
+    """
+    saved_raw_name = _raw_audio_device_name(saved_name)
+    if saved_raw_name:
+        for idx, name, _is_default in devices:
+            if name == saved_raw_name:
+                return idx
+    if saved_index is not None:
+        for idx, _name, _is_default in devices:
+            if idx == saved_index:
+                return saved_index
+    return None
+
 
 # Define available models for each engine
 ENGINE_MODELS = {
@@ -807,7 +846,13 @@ def _row_matches_query(query: str, title: str, subtitle: str = "", keywords=()) 
 class PreferencesGroup(Gtk.Box):
     """A card-style group of preferences, similar to libadwaita's AdwPreferencesGroup."""
 
-    def __init__(self, title: str = "", description: str = "", keywords=()):
+    def __init__(
+        self,
+        title: str = "",
+        description: str = "",
+        keywords=(),
+        header_icon: Optional[Gtk.Widget] = None,
+    ):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.get_style_context().add_class("preferences-group")
         self.title = title
@@ -815,17 +860,13 @@ class PreferencesGroup(Gtk.Box):
         self.keywords = tuple(keywords)
         self.rows = []
 
-        # Header with title
+        # Header with title (optional icon aligned to the top-right)
         if title:
-            header_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            header_box.set_margin_top(12)
-            header_box.set_margin_bottom(4)
-            header_box.set_margin_start(16)
-            header_box.set_margin_end(16)
+            text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
 
             title_label = Gtk.Label(label=title, xalign=0)
             title_label.get_style_context().add_class("preferences-group-title")
-            header_box.pack_start(title_label, False, False, 0)
+            text_box.pack_start(title_label, False, False, 0)
 
             if description:
                 desc_label = Gtk.Label(label=description, xalign=0, wrap=True)
@@ -833,7 +874,23 @@ class PreferencesGroup(Gtk.Box):
                 # Align with the title, which carries 16px CSS padding.
                 desc_label.set_margin_start(16)
                 desc_label.set_margin_end(16)
-                header_box.pack_start(desc_label, False, False, 0)
+                text_box.pack_start(desc_label, False, False, 0)
+
+            if header_icon is not None:
+                header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                header_box.set_margin_top(12)
+                header_box.set_margin_bottom(4)
+                header_box.set_margin_start(16)
+                header_box.set_margin_end(16)
+                header_box.pack_start(text_box, True, True, 0)
+                header_icon.set_valign(Gtk.Align.CENTER)
+                header_box.pack_end(header_icon, False, False, 0)
+            else:
+                header_box = text_box
+                header_box.set_margin_top(12)
+                header_box.set_margin_bottom(4)
+                header_box.set_margin_start(16)
+                header_box.set_margin_end(16)
 
             self.pack_start(header_box, False, False, 0)
 
@@ -1097,6 +1154,7 @@ class SettingsDialog(Gtk.Dialog):
         config_manager: "ConfigManager",
         speech_engine: "SpeechRecognitionManager",
         shortcut_update_callback: callable = None,
+        initial_page: Optional[str] = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         # Force window decorations (title-bar close) on all WMs. An in-window
@@ -1117,6 +1175,11 @@ class SettingsDialog(Gtk.Dialog):
         )
         self._applying_settings = False  # Flag to prevent recursive settings application
         self._advanced_prompt_dirty = False
+        self._about_release_url = ""
+        self._update_check_in_progress = False
+        self._update_check_generation = 0
+        self._update_auto_checked = False
+        self._initial_page = initial_page
 
         # Setup CSS styling
         _setup_css()
@@ -1153,6 +1216,7 @@ class SettingsDialog(Gtk.Dialog):
             SettingsPage("performance", "Performance", "power-profile-performance-symbolic"),
             SettingsPage("application", "Application", "preferences-system-symbolic"),
             SettingsPage("advanced", "Advanced", "applications-engineering-symbolic"),
+            SettingsPage("about", "About", "help-about-symbolic"),
         ]
         pages_by_name = {page.name: page for page in self._pages}
 
@@ -1165,6 +1229,7 @@ class SettingsDialog(Gtk.Dialog):
         self.power_tab = pages_by_name["performance"].box
         self.general_tab = pages_by_name["application"].box
         self.advanced_tab = pages_by_name["advanced"].box
+        self.about_tab = pages_by_name["about"].box
 
         # Each page is wrapped in a vertical ScrolledWindow: without one, the
         # stack's minimum height is the tallest page's full content, which
@@ -1226,6 +1291,7 @@ class SettingsDialog(Gtk.Dialog):
         self._build_gpu_section()
         self._build_general_section()
         self._build_advanced_section()
+        self._build_about_section()
         self._build_sidebar_footer(sidebar_box)
 
         # Record searchable groups vs. loose extras per page
@@ -1240,7 +1306,12 @@ class SettingsDialog(Gtk.Dialog):
 
         # Show everything first
         self.show_all()
-        self.sidebar_listbox.select_row(self.sidebar_listbox.get_row_at_index(0))
+        # Release notes stay hidden until a successful update check.
+        self.release_notes_group.hide()
+        if self._initial_page:
+            self.navigate_to_page(self._initial_page)
+        else:
+            self.sidebar_listbox.select_row(self.sidebar_listbox.get_row_at_index(0))
 
         # Then update visibility of engine-specific elements
         self._update_engine_specific_ui()
@@ -1257,6 +1328,14 @@ class SettingsDialog(Gtk.Dialog):
     # ------------------------------------------------------------------
     # Navigation: sidebar, stack, and settings search
     # ------------------------------------------------------------------
+
+    def navigate_to_page(self, page_name: str) -> bool:
+        """Select a settings page by its internal name (e.g. ``about``)."""
+        for page in self._pages:
+            if page.name == page_name and page.sidebar_row is not None:
+                self.sidebar_listbox.select_row(page.sidebar_row)
+                return True
+        return False
 
     def _build_sidebar_row(self, page: SettingsPage) -> Gtk.ListBoxRow:
         """Build one sidebar navigation row (icon + title + match badge)."""
@@ -1307,8 +1386,25 @@ class SettingsDialog(Gtk.Dialog):
 
     def _on_settings_page_changed(self, stack, pspec):
         """Persist deferred edits when the visible settings page changes."""
-        if stack.get_visible_child_name() != "advanced":
+        visible = stack.get_visible_child_name()
+        if visible != "advanced":
             self._flush_advanced_prompt_if_dirty()
+        if visible == "about" and not self._update_auto_checked:
+            self._update_auto_checked = True
+            self._start_update_check()
+
+    def _open_web_url(self, url: str) -> None:
+        """Open a trusted project URL in the user's default browser."""
+        if not url or not is_trusted_release_url(url):
+            logger.warning("Refusing to open untrusted URL: %s", url)
+            return
+        try:
+            if hasattr(Gtk, "show_uri_on_window"):
+                Gtk.show_uri_on_window(self, url, Gdk.CURRENT_TIME)
+            else:
+                Gtk.show_uri(None, url, Gdk.CURRENT_TIME)
+        except Exception as exc:
+            logger.warning("Failed to open URL %s: %s", url, exc)
 
     def _on_dialog_key_press(self, widget, event):
         """Dialog-level shortcuts: Ctrl+F focuses search, Ctrl+W closes, Esc clears search."""
@@ -1498,8 +1594,8 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
 
     def _build_general_section(self):
-        """Build the Application page: startup behavior."""
-        group = PreferencesGroup(title="Startup")
+        """Build the Application page: general behavior."""
+        group = PreferencesGroup(title="General")
 
         self.autostart_switch = Gtk.Switch()
         autostart_row = PreferenceRow(
@@ -1519,10 +1615,20 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(start_minimized_row)
 
+        self.missing_tray_warning_switch = Gtk.Switch()
+        missing_tray_warning_row = PreferenceRow(
+            title="Warn if tray support is not detected",
+            subtitle="Show a warning when Vocalinux cannot detect AppIndicator support",
+            widget=self.missing_tray_warning_switch,
+            keywords=("tray", "appindicator", "warning"),
+        )
+        group.add_row(missing_tray_warning_row)
+
         self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
+        self.missing_tray_warning_switch.connect("state-set", self._on_missing_tray_warning_toggled)
 
     def _build_auto_pause_section(self):
         """Build Auto-Pause settings: enable toggle + process name list."""
@@ -1896,6 +2002,17 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("ui", "start_minimized", enabled)
         self.config_manager.save_settings()
         logger.info(f"Start minimized {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_missing_tray_warning_toggled(self, widget, state):
+        """Handle toggle of the missing tray support warning switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Missing tray warning toggled: {enabled}")
+        self.config_manager.set("ui", "show_missing_tray_warning", enabled)
+        self.config_manager.save_settings()
         return False
 
     def _on_copy_to_clipboard_toggled(self, widget, state):
@@ -2956,6 +3073,261 @@ class SettingsDialog(Gtk.Dialog):
 
         self.power_user_switch.connect("state-set", self._on_power_user_toggled)
 
+    def _build_about_section(self):
+        """Build the About page using the same PreferenceRow cards as other pages."""
+        from gi.repository import GdkPixbuf
+
+        from ..utils.resource_manager import ResourceManager
+
+        about_icon = None
+        logo_path = ResourceManager().get_icon_path("vocalinux")
+        if os.path.exists(logo_path):
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(logo_path)
+                scaled = pixbuf.scale_simple(48, 48, GdkPixbuf.InterpType.BILINEAR)
+                about_icon = Gtk.Image.new_from_pixbuf(scaled)
+                about_icon.set_pixel_size(48)
+            except Exception as exc:
+                logger.warning("Failed to load About icon: %s", exc)
+
+        app_group = PreferencesGroup(
+            title="Vocalinux",
+            description=__description__,
+            keywords=("about", "version", "app"),
+            header_icon=about_icon,
+        )
+
+        self.about_version_label = Gtk.Label(label=__version__)
+        self.about_version_label.set_selectable(True)
+        self.about_version_label.get_style_context().add_class("preference-row-subtitle")
+        version_row = PreferenceRow(
+            title="Version",
+            subtitle="Currently installed Vocalinux build",
+            widget=self.about_version_label,
+            keywords=("version", "build"),
+        )
+        app_group.add_row(version_row)
+
+        website_btn = Gtk.Button(label="Open")
+        website_btn.set_size_request(100, -1)
+        website_btn.set_tooltip_text("Open the Vocalinux GitHub page")
+        website_btn.connect("clicked", lambda *_: self._open_web_url(__url__))
+        website_row = PreferenceRow(
+            title="Website",
+            subtitle="Source code, issues, and documentation on GitHub",
+            widget=website_btn,
+            keywords=("github", "website", "repo"),
+        )
+        app_group.add_row(website_row)
+
+        license_row = PreferenceRow(
+            title="License",
+            subtitle=f"GNU GPL v3 · {__copyright__}",
+            keywords=("license", "gpl", "copyright"),
+        )
+        app_group.add_row(license_row)
+        self.about_tab.pack_start(app_group, False, False, 0)
+
+        updates_group = PreferencesGroup(
+            title="Updates",
+            description="Choose a release channel, then check GitHub for a newer build.",
+            keywords=("update", "version", "release", "upgrade", "appimage", "nightly", "channel"),
+        )
+
+        self.update_channel_combo = Gtk.ComboBoxText()
+        self.update_channel_combo.set_size_request(_CONTROL_WIDTH, -1)
+        self.update_channel_combo.append("stable", "Stable")
+        self.update_channel_combo.append("nightly", "Nightly")
+        self.update_channel_combo.set_tooltip_text(
+            "Stable uses the latest numbered release. Nightly uses the newest nightly-YYYY-MM-DD build."
+        )
+        _prevent_scroll_on_hover(self.update_channel_combo)
+        saved_channel = normalize_channel(
+            self.config_manager.get_str("updates", "channel", DEFAULT_UPDATE_CHANNEL)
+        )
+        self.update_channel_combo.set_active_id(saved_channel)
+        channel_row = PreferenceRow(
+            title="Channel",
+            subtitle="Stable for releases, Nightly for dated development builds",
+            widget=self.update_channel_combo,
+            keywords=("channel", "stable", "nightly", "beta"),
+        )
+        updates_group.add_row(channel_row)
+
+        self.check_updates_btn = Gtk.Button(label="Check")
+        self.check_updates_btn.set_size_request(100, -1)
+        self.check_updates_btn.set_tooltip_text(
+            "Look up the latest release for this channel on GitHub"
+        )
+        self.check_updates_btn.connect("clicked", self._on_check_updates_clicked)
+        self.update_status_row = PreferenceRow(
+            title="Status",
+            subtitle="Not checked yet",
+            widget=self.check_updates_btn,
+            keywords=("status", "check"),
+        )
+        updates_group.add_row(self.update_status_row)
+
+        self.open_release_btn = Gtk.Button(label="Open")
+        self.open_release_btn.set_size_request(100, -1)
+        self.open_release_btn.set_sensitive(False)
+        self.open_release_btn.set_tooltip_text(
+            "Open the release page in your browser for download links and install steps"
+        )
+        self.open_release_btn.connect("clicked", self._on_open_release_clicked)
+        self.latest_release_row = PreferenceRow(
+            title="Latest Release",
+            subtitle="-",
+            widget=self.open_release_btn,
+            keywords=("latest", "download", "changelog"),
+        )
+        updates_group.add_row(self.latest_release_row)
+        self.about_tab.pack_start(updates_group, False, False, 0)
+
+        self.update_channel_combo.connect("changed", self._on_update_channel_changed)
+
+        self.release_notes_group = PreferencesGroup(
+            title="What's New",
+            keywords=("changelog", "what's new", "release notes"),
+        )
+        self.release_notes_row = PreferenceRow(
+            title="Release notes",
+            subtitle="Notes appear here after a successful update check.",
+            keywords=("notes", "changelog"),
+        )
+        # Allow a longer wrap than typical preference subtitles.
+        if self.release_notes_row.subtitle_label is not None:
+            self.release_notes_row.subtitle_label.set_max_width_chars(72)
+        self.release_notes_group.add_row(self.release_notes_row)
+        self.about_tab.pack_start(self.release_notes_group, False, False, 0)
+        self.release_notes_group.hide()
+
+    def _current_update_channel(self) -> str:
+        """Return the selected update channel id."""
+        channel_id = self.update_channel_combo.get_active_id()
+        return normalize_channel(channel_id or DEFAULT_UPDATE_CHANNEL)
+
+    def _on_update_channel_changed(self, widget):
+        """Persist channel choice and refresh the update check."""
+        if self._initializing or self._applying_settings:
+            return
+        channel = self._current_update_channel()
+        self.config_manager.set("updates", "channel", channel)
+        self.config_manager.save_settings()
+        self._start_update_check()
+
+    def _on_check_updates_clicked(self, widget):
+        """Manual re-check from the About page."""
+        self._start_update_check()
+
+    def _on_open_release_clicked(self, widget):
+        """Open the latest or pending release page in the browser."""
+        self._open_web_url(self._about_release_url)
+
+    def _start_update_check(self):
+        """Kick off a background GitHub release lookup."""
+        channel = self._current_update_channel()
+        self._update_check_generation += 1
+        generation = self._update_check_generation
+        self.check_updates_btn.set_sensitive(False)
+        self.check_updates_btn.set_label("…")
+        self.update_status_row.set_subtitle(f"Checking GitHub ({channel})…")
+
+        # Invalidate any in-flight result; that worker will restart on completion.
+        if self._update_check_in_progress:
+            return
+
+        self._update_check_in_progress = True
+        threading.Thread(
+            target=self._update_check_worker,
+            args=(channel, generation),
+            daemon=True,
+        ).start()
+
+    def _update_check_worker(self, channel: str, generation: int):
+        """Worker thread: fetch latest release for ``channel`` and compare versions."""
+        release = fetch_latest_release(channel=channel)
+        GLib.idle_add(self._apply_update_check_result, release, channel, generation)
+
+    def _dialog_is_alive(self) -> bool:
+        """Return False when the settings dialog has been destroyed."""
+        try:
+            return bool(self.get_realized())
+        except Exception:
+            return False
+
+    def _apply_update_check_result(
+        self,
+        release,
+        channel: Optional[str] = None,
+        generation: Optional[int] = None,
+    ):
+        """Update About-page UI from a release lookup result."""
+        if not self._dialog_is_alive():
+            return False
+
+        channel = normalize_channel(channel or self._current_update_channel())
+        current_channel = self._current_update_channel()
+        # Drop stale results after a channel switch (or a newer check request).
+        if generation is not None and generation != self._update_check_generation:
+            self._update_check_in_progress = False
+            self._start_update_check()
+            return False
+        if channel != current_channel:
+            self._update_check_in_progress = False
+            self._start_update_check()
+            return False
+
+        self._update_check_in_progress = False
+        self.check_updates_btn.set_sensitive(True)
+        self.check_updates_btn.set_label("Check")
+
+        if release is None:
+            self._about_release_url = __url__
+            missing = "nightly build" if channel == "nightly" else "stable release"
+            self.update_status_row.set_subtitle(
+                f"Could not find a {missing}. Check your connection, or try again later."
+            )
+            self.latest_release_row.set_subtitle("Unavailable")
+            self.open_release_btn.set_sensitive(True)
+            self.open_release_btn.set_tooltip_text("Open the Vocalinux project page")
+            self.open_release_btn.get_style_context().remove_class("suggested-action")
+            self.release_notes_group.hide()
+            return False
+
+        self._about_release_url = (
+            release.html_url if is_trusted_release_url(release.html_url) else __url__
+        )
+        update_available = is_update_available(__version__, release, channel)
+        release_label = release.tag_name
+        if release.published_at:
+            release_label = f"{release.tag_name} · {release.published_at[:10]}"
+        if channel == "nightly" and release.prerelease:
+            release_label = f"{release_label} (nightly)"
+
+        if update_available:
+            self.update_status_row.set_subtitle(
+                f"Update available on {channel} (running {__version__})"
+            )
+            self.open_release_btn.get_style_context().add_class("suggested-action")
+        else:
+            self.update_status_row.set_subtitle(f"Up to date on {channel}")
+            self.open_release_btn.get_style_context().remove_class("suggested-action")
+
+        self.latest_release_row.set_subtitle(release_label)
+        self.open_release_btn.set_sensitive(True)
+        self.open_release_btn.set_tooltip_text(
+            "Open the release page in your browser for download links and install steps"
+        )
+
+        notes = format_release_notes(release.body)
+        # Keep the card readable; full notes remain on the release page.
+        if len(notes) > 900:
+            notes = notes[:900].rstrip() + "…"
+        self.release_notes_row.set_subtitle(notes)
+        self.release_notes_group.show()
+        return False
+
     def _build_gpu_section(self):
         """Build the GPU device group on the Performance page.
 
@@ -3195,12 +3567,14 @@ class SettingsDialog(Gtk.Dialog):
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
+        show_missing_tray_warning = ui_settings.get("show_missing_tray_warning", True)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
         auto_capitalize = text_injection_settings.get("auto_capitalize", True)
         append_trailing_space = text_injection_settings.get("append_trailing_space", True)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
+        self.missing_tray_warning_switch.set_active(show_missing_tray_warning)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.auto_capitalize_switch.set_active(auto_capitalize)
         self.append_trailing_space_switch.set_active(append_trailing_space)
@@ -4302,22 +4676,29 @@ For now, the engine has been reverted to VOSK."""
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")
         else:
-            # Try to match by saved device name first (more stable across reboots)
-            matched = False
-            if saved_device_name:
-                for idx, name, _ in devices:
-                    if name == saved_device_name:
-                        self.audio_device_combo.set_active_id(str(idx))
-                        matched = True
-                        break
-            if not matched:
-                # Fall back to stored index
-                if not self.audio_device_combo.set_active_id(str(saved_device)):
-                    logger.warning(
-                        f"Saved audio device {saved_device} "
-                        f"(name: {saved_device_name}) no longer available"
-                    )
-                    self.audio_device_combo.set_active_id("-1")
+            matched_index = _resolve_audio_device_selection(
+                devices, saved_device, saved_device_name
+            )
+            if matched_index is not None:
+                self.audio_device_combo.set_active_id(str(matched_index))
+                # Migrate legacy configs that stored the UI "(default)" suffix.
+                saved_raw_name = _raw_audio_device_name(saved_device_name)
+                if saved_device_name and saved_raw_name and saved_device_name != saved_raw_name:
+                    self.config_manager.set("audio", "device_name", saved_raw_name)
+                    self.config_manager.set("audio", "device_index", matched_index)
+                    self.config_manager.save_settings()
+            else:
+                logger.warning(
+                    f"Saved audio device {saved_device} "
+                    f"(name: {saved_device_name}) no longer available"
+                )
+                self.audio_device_combo.set_active_id("-1")
+                # Keep combo, config, and engine aligned on System Default.
+                self.config_manager.set("audio", "device_index", None)
+                self.config_manager.set("audio", "device_name", None)
+                self.config_manager.save_settings()
+                if self.speech_engine is not None:
+                    self.speech_engine.set_audio_device(None, None)
 
         logger.info(f"Found {len(devices)} audio input devices")
 
@@ -4336,7 +4717,8 @@ For now, the engine has been reverted to VOSK."""
             return
 
         device_index = int(device_id)
-        device_name = self.audio_device_combo.get_active_text()
+        device_label = self.audio_device_combo.get_active_text()
+        device_name = _raw_audio_device_name(device_label)
 
         if device_index == -1:
             self.config_manager.set("audio", "device_index", None)
@@ -4353,7 +4735,7 @@ For now, the engine has been reverted to VOSK."""
             self.speech_engine.set_audio_device(device_index, device_name)
 
         logger.info(f"Audio device changed to: [{device_index}] {device_name}")
-        self.audio_test_status.set_markup(f"<i>Selected: {device_name}</i>")
+        self.audio_test_status.set_markup(f"<i>Selected: {device_label}</i>")
 
     def _on_test_audio_clicked(self, widget):
         """Handle test audio button click."""

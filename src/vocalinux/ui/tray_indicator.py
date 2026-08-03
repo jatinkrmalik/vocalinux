@@ -267,7 +267,8 @@ class TrayIndicator:
                 "No StatusNotifierWatcher on D-Bus session bus; tray icon may not appear. "
                 "On GNOME, install gnome-shell-extension-appindicator."
             )
-            GLib.idle_add(self._show_missing_watcher_dialog)
+            if self.config_manager.get_bool("ui", "show_missing_tray_warning", True):
+                GLib.idle_add(self._show_missing_watcher_dialog)
 
         # Create the menu
         self.menu = Gtk.Menu()
@@ -344,8 +345,18 @@ class TrayIndicator:
             "\n"
             "Keyboard shortcuts will still work even without the tray icon."
         )
-        dialog.connect("response", lambda d, _: d.destroy())
-        dialog.show()
+        dont_show_again = Gtk.CheckButton(label="Don't show again")
+        dont_show_again.set_margin_top(8)
+        dialog.get_message_area().pack_start(dont_show_again, False, False, 0)
+
+        def on_response(d, _response):
+            if dont_show_again.get_active():
+                self.config_manager.set("ui", "show_missing_tray_warning", False)
+                self.config_manager.save_settings()
+            d.destroy()
+
+        dialog.connect("response", on_response)
+        dialog.show_all()
         return False
 
     def _show_appindicator_error_dialog(self, error_detail: str):
@@ -543,6 +554,18 @@ class TrayIndicator:
         # Show the dialog (non-modal)
         dialog.show()
 
+    def _show_settings_page(self, page_name: str):
+        """Open settings focused on a specific sidebar page."""
+        dialog = SettingsDialog(
+            parent=None,
+            config_manager=self.config_manager,
+            speech_engine=self.speech_engine,
+            shortcut_update_callback=self.update_shortcut,
+            initial_page=page_name,
+        )
+        dialog.connect("response", self._on_settings_dialog_response)
+        dialog.show()
+
     def _on_logs_clicked(self, widget):
         """Handle click on the View Logs menu item."""
         logger.debug("View Logs clicked")
@@ -599,10 +622,8 @@ class TrayIndicator:
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
-        from .about_dialog import show_about_dialog
-
         logger.debug("About clicked")
-        show_about_dialog(parent=None)
+        self._show_settings_page("about")
 
     def _get_auto_pause_config(self):
         """Return (enabled, apps, poll_interval_seconds) for AutoPauseMonitor."""

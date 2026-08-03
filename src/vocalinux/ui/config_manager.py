@@ -54,6 +54,7 @@ DEFAULT_CONFIG = {
     "ui": {
         "start_minimized": False,
         "show_notifications": True,
+        "show_missing_tray_warning": True,
     },
     "general": {
         "autostart": False,
@@ -94,6 +95,10 @@ DEFAULT_CONFIG = {
         "whispercpp_no_speech_thold": 0.6,
         "whispercpp_n_threads": 0,  # 0 = auto-detect optimal thread count; set to override
         "whispercpp_gpu_device": None,  # None = auto-select discrete GPU; int = specific device index
+    },
+    "updates": {
+        # "stable" follows GitHub /releases/latest; "nightly" follows nightly-YYYY-MM-DD tags.
+        "channel": "stable",
     },
 }
 

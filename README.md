@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="50" height="50" alt="Vocalinux"> 
+<img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="50" height="50" alt="Vocalinux">
 
 # Vocalinux
 
@@ -93,21 +93,21 @@ Vocalinux in action. Settings gallery shots may lag the searchable sidebar UI fr
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="resources/screenshots/00-transcription.png" alt="Transcription in Action" width="350"><br>
+      <img src="web/public/screenshots/00-transcription.png" alt="Transcription in Action" width="350"><br>
       <em>Real-time voice-to-text transcription</em>
     </td>
     <td align="center" width="50%">
-      <img src="resources/screenshots/02-system-tray.png" alt="System Tray" width="350"><br>
+      <img src="web/public/screenshots/02-system-tray.png" alt="System Tray" width="350"><br>
       <em>System tray with listening indicator</em>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="resources/screenshots/05-about-view.png" alt="About View" width="350"><br>
-      <em>About dialog with version info</em>
+      <img src="web/public/screenshots/05-about-view.png" alt="About View" width="350"><br>
+      <em>About &amp; Updates in Settings</em>
     </td>
     <td align="center">
-      <img src="resources/screenshots/03-log-viewer.png" alt="Log Viewer" width="350"><br>
+      <img src="web/public/screenshots/03-log-viewer.png" alt="Log Viewer" width="350"><br>
       <em>Log viewer for debugging</em>
     </td>
   </tr>
@@ -118,29 +118,29 @@ Vocalinux in action. Settings gallery shots may lag the searchable sidebar UI fr
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="resources/screenshots/settings-speech-engine.png" alt="Speech Engine settings" width="260"><br>
+      <img src="web/public/screenshots/settings-speech-engine.png" alt="Speech Engine settings" width="260"><br>
       <em>Speech Engine</em>
     </td>
     <td align="center" width="33%">
-      <img src="resources/screenshots/settings-recognition.png" alt="Recognition settings" width="260"><br>
+      <img src="web/public/screenshots/settings-recognition.png" alt="Recognition settings" width="260"><br>
       <em>Recognition</em>
     </td>
     <td align="center" width="33%">
-      <img src="resources/screenshots/settings-audio.png" alt="Audio settings" width="260"><br>
+      <img src="web/public/screenshots/settings-audio.png" alt="Audio settings" width="260"><br>
       <em>Audio</em>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="resources/screenshots/settings-shortcuts.png" alt="Shortcuts and hotkeys" width="260"><br>
-      <em>Shortcuts &amp; Hotkeys</em>
+      <img src="web/public/screenshots/settings-performance.png" alt="Performance settings" width="260"><br>
+      <em>Performance</em>
     </td>
     <td align="center">
-      <img src="resources/screenshots/settings-general.png" alt="General settings" width="260"><br>
+      <img src="web/public/screenshots/settings-general.png" alt="General settings" width="260"><br>
       <em>General</em>
     </td>
     <td align="center">
-      <img src="resources/screenshots/settings-advanced.png" alt="Advanced tuning and settings" width="260"><br>
+      <img src="web/public/screenshots/settings-advanced.png" alt="Advanced tuning and settings" width="260"><br>
       <em>Advanced</em>
     </td>
   </tr>
@@ -441,11 +441,11 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [x] ~~Multi-language support (FR, DE, RU)~~ ✅
 - [x] ~~whisper.cpp integration (default engine)~~ ✅
 - [x] ~~Vulkan GPU support~~ ✅
-- [ ] In-app update mechanism
-- [ ] Application-specific commands
-- [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
-- [ ] Debian/Ubuntu package (.deb)
+- [x] In-app update mechanism ✅
 - [x] ~~Wayland support via IBus~~ ✅
+- [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
+- [ ] Application-specific commands
+- [ ] Debian/Ubuntu package (.deb)
 - [ ] Voice command customization
 
 ## 🌐 The Voca Ecosystem
