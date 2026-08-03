@@ -11,11 +11,11 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 const productShots: Screenshot[] = [
   {
     src: "/screenshots/00-transcription.png",
-    alt: "Vocalinux real-time transcription in action",
-    title: "Transcription in action",
-    description: "Dictate into any Linux app with real-time voice-to-text.",
-    width: 2565,
-    height: 2018,
+    alt: "Vocalinux Speech Model settings in the searchable sidebar UI",
+    title: "Settings overview",
+    description: "Searchable sidebar settings with speech engine and model controls.",
+    width: 856,
+    height: 856,
   },
   {
     src: "/screenshots/02-system-tray.png",
@@ -30,16 +30,16 @@ const productShots: Screenshot[] = [
     alt: "Vocalinux About dialog",
     title: "About",
     description: "Version info, credits, and project links.",
-    width: 1012,
-    height: 854,
+    width: 776,
+    height: 776,
   },
   {
     src: "/screenshots/03-log-viewer.png",
     alt: "Vocalinux log viewer dialog",
     title: "Log viewer",
     description: "Inspect runtime logs when diagnosing dictation issues.",
-    width: 1904,
-    height: 1578,
+    width: 856,
+    height: 856,
   },
 ];
 
@@ -50,55 +50,55 @@ const settingsShots: Screenshot[] = [
     title: "Speech Model",
     description:
       "Choose whisper.cpp, Whisper, VOSK, or Remote API and pick a model.",
-    width: 1504,
-    height: 2146,
+    width: 856,
+    height: 856,
   },
   {
     src: "/screenshots/settings-recognition.png",
     alt: "Vocalinux Dictation settings page",
     title: "Dictation",
     description: "Shortcuts, modes, and everyday dictation controls.",
-    width: 1504,
-    height: 2146,
+    width: 856,
+    height: 856,
   },
   {
     src: "/screenshots/settings-audio.png",
     alt: "Vocalinux Audio settings page",
     title: "Audio",
     description: "Input device, feedback sounds, and capture options.",
-    width: 1504,
-    height: 2146,
+    width: 856,
+    height: 856,
   },
   {
     src: "/screenshots/settings-shortcuts.png",
-    alt: "Vocalinux Dictation shortcuts in settings",
+    alt: "Vocalinux Dictation shortcuts with custom Record and Set controls",
     title: "Shortcuts & Hotkeys",
     description: "Toggle mode, push-to-talk, and custom key bindings.",
-    width: 1504,
-    height: 2146,
+    width: 856,
+    height: 856,
   },
   {
     src: "/screenshots/settings-general.png",
     alt: "Vocalinux Application settings page",
     title: "Application",
     description: "Autostart, start minimized, and everyday defaults.",
-    width: 1504,
-    height: 2146,
+    width: 856,
+    height: 856,
   },
   {
     src: "/screenshots/settings-advanced.png",
-    alt: "Vocalinux Advanced settings page",
+    alt: "Vocalinux Advanced settings with whisper.cpp decoding controls",
     title: "Advanced",
     description: "Power-user decoding controls and Remote Server options.",
-    width: 1504,
-    height: 2146,
+    width: 856,
+    height: 856,
   },
 ];
 
 export const metadata: Metadata = buildPageMetadata({
   title: "Vocalinux Screenshots | Linux Voice Dictation UI",
   description:
-    "See Vocalinux in action: system tray, about dialog, log viewer, and settings pages for speech engine, recognition, audio, shortcuts, general, and advanced options.",
+    "See Vocalinux in action: system tray, about dialog, log viewer, and settings pages for speech model, dictation, audio, shortcuts, application, and advanced options.",
   path: "/screenshots",
   keywords: [
     "Vocalinux screenshots",
@@ -116,7 +116,7 @@ export default function ScreenshotsPage() {
     name: "Vocalinux Screenshots",
     description:
       "Product and settings screenshots of Vocalinux, offline voice dictation for Linux.",
-    dateModified: "2026-08-02",
+    dateModified: "2026-08-03",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
@@ -177,7 +177,7 @@ export default function ScreenshotsPage() {
           </Link>
           <Link
             href="/advanced-settings/"
-            className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-border bg-background px-5 py-3 text-sm font-semibold transition-colors hover:bg-muted hover:bg-muted"
+            className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-border bg-background px-5 py-3 text-sm font-semibold transition-colors hover:bg-muted"
           >
             Advanced settings guide
             <ChevronRight className="h-4 w-4" />

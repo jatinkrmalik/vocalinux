@@ -86,7 +86,7 @@ describe("Screenshots page and assets", () => {
     expect(pageSource).toContain("Shortcuts");
     expect(pageSource).toContain("Application");
     expect(pageSource).toContain("Advanced");
-    expect(pageSource).toContain("Transcription in action");
+    expect(pageSource).toContain("Settings overview");
     expect(pageSource).toContain("About");
   });
 });
