@@ -75,27 +75,27 @@ Missing system packages: see [INSTALL.md](INSTALL.md) or [DISTRO_COMPATIBILITY.m
 | **Dictation polish** | Auto-capitalize after `.` / `!` / `?`; append a trailing space after each completed utterance (#554, #608) |
 | **Auto-pause + keep-alive** | Unload the model while configured apps run, or after an idle timeout (#592) |
 | **Vulkan GPU selection** | Prefer a discrete GPU automatically; pick a device under Advanced settings (#590) |
-| **ibus-wayland** | Prefer IBus on previously “unbridged” compositors when `ibus-wayland` is running (#614) |
+| **ibus-wayland** | Prefer IBus on previously "unbridged" compositors when `ibus-wayland` is running (#614) |
 | **CLI `--version`** | Print the installed version and exit (#563) |
 
 ### New Features
 
-- **Searchable sidebar settings** — Topic pages in a sidebar with live search instead of seven notebook tabs (#601)
-- **AppImage packaging** — Relocatable x86_64 and aarch64 AppImages built in the release workflow (#573, #602)
-- **Expanded speech languages** — Hungarian plus many high-demand Whisper languages in Settings/CLI; official Alphacephei VOSK models where available; Whisper-only languages stay hidden in the VOSK dropdown (#616 by @jatinkrmalik, fixes #565)
-- **Sidebar dictation controls** — Recognition status, mic level, Test Dictation, and Close stay visible in the settings sidebar footer while switching pages (#618)
-- **Sentence capitalization** — Capitalize at the start of dictation and after sentence-ending punctuation (#554, closes #553)
-- **Trailing space between utterances** — Completed transcriptions leave a trailing space so the next session does not glue onto the previous sentence (#608, fixes #605)
-- **Auto-pause apps + model keep-alive** — Optional unload while selected processes run; idle timeout unload for battery/Optimus laptops (#592, closes #445, #591)
-- **Vulkan discrete GPU auto-select + manual device** — Prefer discrete devices; override in Advanced settings (#590, closes #589)
-- **IBus via ibus-wayland** — On compositors previously treated as unbridged, use IBus when `ibus-wayland` is available (#614 by @eiseleb47, closes #607)
-- **`vocalinux --version`** — Print package version (#563, closes #555)
+- **Searchable sidebar settings**: Topic pages in a sidebar with live search instead of seven notebook tabs (#601)
+- **AppImage packaging**: Relocatable x86_64 and aarch64 AppImages built in the release workflow (#573, #602)
+- **Expanded speech languages**: Hungarian plus many high-demand Whisper languages in Settings/CLI; official Alphacephei VOSK models where available; Whisper-only languages stay hidden in the VOSK dropdown (#616 by @jatinkrmalik, fixes #565)
+- **Sidebar dictation controls**: Recognition status, mic level, Test Dictation, and Close stay visible in the settings sidebar footer while switching pages (#618)
+- **Sentence capitalization**: Capitalize at the start of dictation and after sentence-ending punctuation (#554, closes #553)
+- **Trailing space between utterances**: Completed transcriptions leave a trailing space so the next session does not glue onto the previous sentence (#608, fixes #605)
+- **Auto-pause apps + model keep-alive**: Optional unload while selected processes run; idle timeout unload for battery/Optimus laptops (#592, closes #445, #591)
+- **Vulkan discrete GPU auto-select + manual device**: Prefer discrete devices; override in Advanced settings (#590, closes #589)
+- **IBus via ibus-wayland**: On compositors previously treated as unbridged, use IBus when `ibus-wayland` is available (#614 by @eiseleb47, closes #607)
+- **`vocalinux --version`**: Print package version (#563, closes #555)
 
 ### Bug Fixes
 
 - **Settings**: Restore Custom Shortcut entry / Record / Set controls after the sidebar settings refactor (#619)
 - **Languages**: Map English (India) (`en-in`) to Whisper code `en` for whisper.cpp / Whisper / remote API (#617)
-- **Audio**: Stop Bluetooth mic probing from corrupting the heap — one PortAudio open per capture session, stop-before-close, no stereo probe on mono-only devices (#599, fixes #567)
+- **Audio**: Stop Bluetooth mic probing from corrupting the heap (one PortAudio open per capture session, stop-before-close, no stereo probe on mono-only devices) (#599, fixes #567)
 - **IBus**: Keep engine teardown correct when parent `do_destroy` fails (#613 by @eiseleb47, fixes #606)
 - **Settings UI**: Flatten info notices so helper text matches the rest of the dialog (#615)
 - **KDE Plasma Wayland**: Skip unbridged IBus when `ibus-wayland` is not present so injection does not silently fail (#577, fixes #574)
@@ -127,7 +127,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 
 | Feature | Description |
 |---------|-------------|
-| **Configurable Shortcuts** | Bind any modifier combination to a key — e.g. `Alt+R`, `Ctrl+Shift+V`, or `Super+F10` |
+| **Configurable Shortcuts** | Bind any modifier combination to a key (for example `Alt+R`, `Ctrl+Shift+V`, or `Super+F10`) |
 | **FunASR / SenseVoice Remote API** | Remote-API engine supports FunASR and SenseVoice via OpenAI-compatible endpoints |
 | **Flatpak packaging** | Universal Flatpak (whisper.cpp) with sandbox-aware paths, global hotkeys, and Wayland paste injection |
 | **AUR package** | Official Arch packaging and CI publish path |
@@ -158,8 +158,8 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 
 ### New Features
 
-- **Flatpak packaging** — GNOME Platform 50, whisper.cpp + Vulkan, ydotool/wl-copy injection, evdev global shortcuts; build via `packaging/flatpak/` (#484, closes #167)
-- **AUR release package** — PKGBUILD and CI publish for Arch Linux (#518)
+- **Flatpak packaging**: GNOME Platform 50, whisper.cpp + Vulkan, ydotool/wl-copy injection, evdev global shortcuts; build via `packaging/flatpak/` (#484, closes #167)
+- **AUR release package**: PKGBUILD and CI publish for Arch Linux (#518)
 
 ### Bug Fixes
 
@@ -183,7 +183,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 
 | Feature | Description |
 |---------|-------------|
-| **Configurable Shortcuts** | Bind any modifier combination to a key — e.g. `Alt+R`, `Ctrl+Shift+V`, or `Super+F10` |
+| **Configurable Shortcuts** | Bind any modifier combination to a key (for example `Alt+R`, `Ctrl+Shift+V`, or `Super+F10`) |
 | **FunASR / SenseVoice Remote API** | Remote-API engine now supports FunASR and SenseVoice models via OpenAI-compatible endpoints |
 | **GNOME Wayland IBus Reliability** | Text injection works again on GNOME Wayland with bare `xkb` layouts and engine restore fallbacks are fixed |
 | **Audio Crash Fix** | Recording no longer crashes when the system audio device index changes between sessions |
@@ -191,22 +191,22 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 
 ### New features
 
-- **Configurable modifier+key hotkeys** — The Settings dialog now lets you set custom shortcuts using any combination of Ctrl, Alt, Shift, and Super plus a letter/number key. The legacy defaults still work, and you can now bind combinations like `Alt+R` or `Ctrl+Shift+V` (#493)
-- **Remote API FunASR/SenseVoice support** — OpenAI-compatible remote endpoints can specify FunASR/SenseVoice model names (e.g. `sensevoice`) and return richer response shapes; SenseVoice metadata labels are stripped before text injection (#468)
+- **Configurable modifier+key hotkeys**: The Settings dialog now lets you set custom shortcuts using any combination of Ctrl, Alt, Shift, and Super plus a letter/number key. The legacy defaults still work, and you can now bind combinations like `Alt+R` or `Ctrl+Shift+V` (#493)
+- **Remote API FunASR/SenseVoice support**: OpenAI-compatible remote endpoints can specify FunASR/SenseVoice model names (e.g. `sensevoice`) and return richer response shapes; SenseVoice metadata labels are stripped before text injection (#468)
 
 ### Bug fixes
 
 - **GNOME Wayland/IBus**: Restore text injection when only a bare `xkb` engine is configured; the engine restore fallback now picks the correct IM engine instead of silently dropping text (#506, #500)
 - **KDE Wayland/IBus**: Restore the KDE Plasma Wayland IBus text-injection path that was regressed in recent compositor-detection changes (#502)
 - **Wayland injection**: Wait for held modifiers (Ctrl/Alt/Shift/Super) to release before injecting text, preventing accidental shortcut triggers and garbled output on modifier-heavy workflows (#494)
-- **Shortcuts UI**: Keep preset and custom shortcut selection exclusive — selecting a preset now clears the custom field, and setting a custom combo selects the "Custom Shortcut" preset (#509)
+- **Shortcuts UI**: Keep preset and custom shortcut selection exclusive. Selecting a preset now clears the custom field, and setting a custom combo selects the "Custom Shortcut" preset (#509)
 - **whisper.cpp**: Stop defaulting to all CPU cores on hybrid processors (Intel Performance + Efficient cores), which caused UI lag and excess battery drain (#492)
 - **Audio**: Fix a crash on recording start when the selected audio device index no longer matches the current system enumeration (#499)
 - **Installer**: Include `xsel` as a fallback for the Wayland clipboard path when `xclip` is unavailable (#496)
 
 ### Improvements
 
-- **Code style** — Removed an outdated long comment about whisper.cpp default thread counts (#505)
+- **Code style**: Removed an outdated long comment about whisper.cpp default thread counts (#505)
 
 See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.0-beta).
 
@@ -225,7 +225,7 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 
 ### New features
 
-- **Guided whisper.cpp model variants** — The Settings dialog now splits whisper.cpp selection into **Model Size** and **Specialization**, exposing English-only, quantized (Q5/Q8), Large v3 Turbo, and legacy large models with language-aware recommendations and hover guidance. Exact model IDs (e.g. `medium.en-q5_0`, `large-v3-turbo`) can also be passed to `--model` (#465)
+- **Guided whisper.cpp model variants**: The Settings dialog now splits whisper.cpp selection into **Model Size** and **Specialization**, exposing English-only, quantized (Q5/Q8), Large v3 Turbo, and legacy large models with language-aware recommendations and hover guidance. Exact model IDs (e.g. `medium.en-q5_0`, `large-v3-turbo`) can also be passed to `--model` (#465)
 
 ### Bug fixes
 
@@ -263,8 +263,8 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 
 ### New features
 
-- **Remote API speech recognition engine** — Configure compatible remote transcription services alongside local engines (#335)
-- **Silero VAD** — Neural voice activity detection filters silence-only buffers when ONNX Runtime support is installed (#447)
+- **Remote API speech recognition engine**: Configure compatible remote transcription services alongside local engines (#335)
+- **Silero VAD**: Neural voice activity detection filters silence-only buffers when ONNX Runtime support is installed (#447)
 
 ### Bug fixes
 
@@ -278,15 +278,15 @@ See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/
 
 ### Improvements
 
-- **Developer docs** — Remote API test server instructions for backend testing (#455)
-- **Community** — GitHub Sponsors funding configuration added
-- **Behavioral coverage** — CUDA diagnostics and release-facing reliability fixes include targeted tests
+- **Developer docs**: Remote API test server instructions for backend testing (#455)
+- **Community**: GitHub Sponsors funding configuration added
+- **Behavioral coverage**: CUDA diagnostics and release-facing reliability fixes include targeted tests
 
 See the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.12.0-beta).
 
 ---
 
-## Older releases (v0.8–v0.11)
+## Older releases (v0.8-v0.11)
 
 Detailed notes for v0.11 and earlier live on GitHub Releases:
 

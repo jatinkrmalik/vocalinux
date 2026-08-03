@@ -118,41 +118,41 @@ Use these rules for every GitHub Release body (and for the draft pasted into the
 #### Sources of truth
 
 - Delta commits: `git log vPREV..HEAD` plus merged PR titles/bodies.
-- Closed issues via PR `Fixes` / `Closes` references only — do not invent issue numbers.
+- Closed issues via PR `Fixes` / `Closes` references only: do not invent issue numbers.
 - Do not invent benchmarks, user counts, testimonials, or features not in the tree.
 
 #### Required structure
 
 1. `# Vocalinux vX.Y.Z` title
-2. One to three plain sentences: what this release is for (no hype)
-3. `## Highlights` — markdown table, about 4–8 rows
-4. `## New Features` — bullets with PR + author; include issue closes when real
-5. `## Bug Fixes` — group by area (IBus, Installer, AUR, Text injection, …)
+2. One to three plain sentences on what this release is for (no hype)
+3. `## Highlights`: markdown table, about 4-8 rows
+4. `## New Features`: bullets with PR + author; include issue closes when real
+5. `## Bug Fixes`: group by area (IBus, Installer, AUR, Text injection, ...)
 6. Optional: `## Improvements`, `## Docs`, `## Packaging`
-7. `## Thanks` — external PR authors and issue reporters by `@handle`
-8. `## Install / Upgrade` — `install.sh`, AUR, PyPI, **AppImage**, Flatpak status (honest)
+7. `## Thanks`: external PR authors and issue reporters by `@handle`
+8. `## Install / Upgrade`: `install.sh`, AUR, PyPI, **AppImage**, Flatpak status (honest)
 9. Footer compare link: `https://github.com/jatinkrmalik/vocalinux/compare/vPREV...vX.Y.Z`
 
 #### Include / exclude
 
 - **Include:** user-visible features, install/packaging changes, desktop reliability fixes, docs that change user instructions.
-- **Exclude or demote:** Dependabot-only bumps, CI matrix tweaks, agent-env docs, pure refactors — short “CI / maintenance” subsection at most.
+- **Exclude or demote:** Dependabot-only bumps, CI matrix tweaks, agent-env docs, pure refactors. At most a short "CI / maintenance" subsection.
 
 #### Attribution and voice
 
 - Feature/fix bullets: `(#N by @author; fixes #M reported by @reporter)` when known.
 - Practical, specific, Linux-native. Name the symptom users hit.
-- Avoid promotional filler (“seamless”, “pivotal”, “game-changer”, fake significance).
+- Avoid promotional filler ("seamless", "pivotal", "game-changer", fake significance).
 
 #### Website changelog vs GitHub Release
 
-- **Website** (`web/src/app/changelog/page.tsx`): 3–10 concise user-facing bullets for the new entry.
+- **Website** (`web/src/app/changelog/page.tsx`): 3-10 concise user-facing bullets for the new entry.
 - **GitHub Release**: fuller narrative + install block + thanks. Draft in the release-prep **PR body**; paste/edit onto the release after the tag workflow runs (workflow install stub + generated notes are a starting point only).
 
 #### Minor vs patch (reminder)
 
-- **Minor** (e.g. `0.15.0`): rewrite README / UPDATE “What’s New” for the new series; full website changelog entry; AppStream release note summarizes the series.
-- **Patch** (e.g. `0.15.1`): keep series feature table; add “Bug fixes in this patch” only; website changelog lists delta only.
+- **Minor** (e.g. `0.15.0`): rewrite README / UPDATE "What's New" for the new series; full website changelog entry; AppStream release note summarizes the series.
+- **Patch** (e.g. `0.15.1`): keep series feature table; add "Bug fixes in this patch" only; website changelog lists delta only.
 
 #### Draft delivery
 

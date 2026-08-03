@@ -22,18 +22,18 @@ Vocalinux turns speech into typed text in whatever app has focus. It runs fully 
 
 No cloud account. No telemetry. Dictate on your machine.
 
-**Current release:** [v0.15.0](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.15.0) — searchable settings, AppImage packages, expanded languages, dictation polish, power-saving model unload, and Vulkan GPU selection. See [docs/UPDATE.md](docs/UPDATE.md) for details.
+**Current release:** [v0.15.0](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.15.0). Highlights include searchable settings, AppImage packages, more languages, dictation spacing/capitalization polish, power-saving model unload, and Vulkan GPU selection. Details: [docs/UPDATE.md](docs/UPDATE.md).
 
 ## Features
 
-- **Offline by default** — Local speech engines; audio stays on your device
-- **X11 and Wayland** — Text injection via xdotool, IBus, wtype, ydotool, or clipboard fallback
-- **Three engines** — whisper.cpp (default), OpenAI Whisper, or VOSK, plus optional remote HTTP API
-- **GPU acceleration** — Vulkan for AMD, Intel, and NVIDIA with whisper.cpp
-- **Toggle or push-to-talk** — Configurable shortcuts, including modifier+key combos
-- **System tray + settings** — Searchable sidebar UI, status icons, audio feedback
-- **Start on login** — XDG autostart (desktop session, not a systemd service)
-- **Packaging options** — install script, AppImage, AUR, PyPI, local Flatpak build
+- **Offline by default**: Local speech engines; audio stays on your device
+- **X11 and Wayland**: Text injection via xdotool, IBus, wtype, ydotool, or clipboard fallback
+- **Three engines**: whisper.cpp (default), OpenAI Whisper, or VOSK, plus optional remote HTTP API
+- **GPU acceleration**: Vulkan for AMD, Intel, and NVIDIA with whisper.cpp
+- **Toggle or push-to-talk**: Configurable shortcuts, including modifier+key combos
+- **System tray + settings**: Searchable sidebar UI, status icons, audio feedback
+- **Start on login**: XDG autostart (desktop session, not a systemd service)
+- **Packaging options**: install script, AppImage, AUR, PyPI, local Flatpak build
 
 ## Screenshots
 
@@ -108,7 +108,7 @@ bash /tmp/vl.sh
 
 Prefer to review the script first: open `/tmp/vl.sh` before running it, or clone the repo and run `./install.sh` locally.
 
-The installer detects hardware, recommends an engine, downloads a default model (~74MB for whisper.cpp tiny), and installs desktop integration. Typical install time with whisper.cpp is about 1–2 minutes.
+The installer detects hardware, recommends an engine, downloads a default model (~74MB for whisper.cpp tiny), and installs desktop integration. Typical install time with whisper.cpp is about 1-2 minutes.
 
 | Engine | When to use |
 |--------|-------------|
@@ -284,7 +284,7 @@ Planned:
 | macOS | [VocaMac](https://vocamac.com) ([GitHub](https://github.com/jatinkrmalik/vocamac)) | Beta |
 | Windows | [VocaWin](https://vocawin.com) ([GitHub](https://github.com/jatinkrmalik/vocawin)) | Planned |
 
-Native stack per platform; same offline-first design.
+Each platform uses native tech. Same offline-first idea.
 
 ## Contributing
 
@@ -296,13 +296,13 @@ Bug reports, docs, and code are welcome. Start with [CONTRIBUTING.md](CONTRIBUTI
 
 ### Contributors
 
-People who have shipped code, docs, and fixes to this repo (including active and past contributors):
+Thanks to everyone who has contributed code, docs, or fixes (active and past):
 
 <a href="https://github.com/jatinkrmalik/vocalinux/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=jatinkrmalik/vocalinux" alt="Vocalinux contributors" />
 </a>
 
-Full graph: [github.com/jatinkrmalik/vocalinux/graphs/contributors](https://github.com/jatinkrmalik/vocalinux/graphs/contributors)
+See the full list on [GitHub Contributors](https://github.com/jatinkrmalik/vocalinux/graphs/contributors).
 
 ## Repository mirrors
 

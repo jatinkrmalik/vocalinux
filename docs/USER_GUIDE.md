@@ -89,8 +89,8 @@ whisper.cpp prefers Vulkan when available, then other backends, then CPU. On mul
 
 Under Settings:
 
-- **Auto-pause apps** — unload the model while listed apps run
-- **Model keep-alive** — unload after idle timeout to free GPU/CPU
+- **Auto-pause apps**: unload the model while listed apps run
+- **Model keep-alive**: unload after idle timeout to free GPU/CPU
 
 ## Tips for better recognition
 

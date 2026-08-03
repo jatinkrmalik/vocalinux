@@ -14,7 +14,7 @@ Release history for Vocalinux.
 
 **[v0.15.0](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.15.0)** (2026-07-28)
 
-Searchable sidebar settings, AppImage packages, expanded speech languages, dictation capitalization/spacing polish, auto-pause and model keep-alive, Vulkan GPU device selection, ibus-wayland improvements, and assorted reliability fixes.
+Searchable sidebar settings, AppImage packages, more speech languages, better continuous dictation spacing and capitalization, auto-pause and model keep-alive, Vulkan GPU device selection, ibus-wayland improvements, plus a batch of reliability fixes.
 
 See [docs/UPDATE.md](docs/UPDATE.md#whats-new-in-v0150) for the full highlight table and bug list, or the [GitHub Release](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.15.0).
 

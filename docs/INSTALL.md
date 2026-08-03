@@ -25,7 +25,7 @@ Installs the latest release with **whisper.cpp** by default. For a pinned versio
 
 The installer:
 
-- Installs whisper.cpp (typically ~1–2 minutes; no full PyTorch stack)
+- Installs whisper.cpp (typically ~1-2 minutes; no full PyTorch stack)
 - Detects GPU / Vulkan (AMD, Intel, NVIDIA)
 - Installs neural VAD when ONNX Runtime is available
 - Downloads the default whisper.cpp tiny model (~74MB)
@@ -44,8 +44,8 @@ The installer:
 
 | Engine | When to use | Typical install |
 |--------|-------------|-----------------|
-| **whisper.cpp** (default) | Best default; Vulkan GPU | ~1–2 min, ~74MB model |
-| **Whisper** (OpenAI) | PyTorch / CUDA | ~5–10 min, large download |
+| **whisper.cpp** (default) | Best default; Vulkan GPU | ~1-2 min, ~74MB model |
+| **Whisper** (OpenAI) | PyTorch / CUDA | ~5-10 min, large download |
 | **VOSK** | Low RAM / minimal | ~30 sec, ~40MB |
 
 Useful flags: `--tag=TAG`, `--skip-models`, `--rebuild-whispercpp`, `--no-rebuild-whispercpp`, `--venv-dir=PATH`, `--test`.

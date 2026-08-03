@@ -34,9 +34,9 @@ If email is unavailable, use [GitHub private vulnerability reporting](https://gi
 
 ## Privacy design
 
-Vocalinux is built for local-first dictation:
+Vocalinux is designed for local-first dictation:
 
-- **Offline by default** — whisper.cpp, Whisper, and VOSK process audio on-device
+- **Offline by default**: whisper.cpp, Whisper, and VOSK process audio on-device
 - **No usage telemetry** in the installed application
 - **No account** required for local engines
 - Models download once and stay in local cache
