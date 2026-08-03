@@ -65,6 +65,17 @@ export default function InstallGuidesPage() {
             {installCommand}
           </code>
         </div>
+        <p className="mt-4 text-sm text-muted-foreground">
+          Prefer no installer? Download an{" "}
+          <a
+            href="https://github.com/jatinkrmalik/vocalinux/releases"
+            className="font-semibold text-primary hover:underline"
+          >
+            AppImage
+          </a>{" "}
+          for x86_64 or aarch64 from GitHub Releases (host text-injection tools
+          still required).
+        </p>
       </section>
 
       <section className="mt-12 grid gap-4 md:grid-cols-3">

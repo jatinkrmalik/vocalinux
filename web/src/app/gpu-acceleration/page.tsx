@@ -201,6 +201,9 @@ export default function GpuAccelerationPage() {
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
           If you see your GPU name, you&apos;re ready for accelerated dictation!
+          On multi-GPU machines Vocalinux prefers a discrete Vulkan device when
+          one is present; pick a specific device under Advanced settings if you
+          need to override auto-select.
         </p>
       </section>
 

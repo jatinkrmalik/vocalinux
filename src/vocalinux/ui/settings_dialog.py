@@ -2398,6 +2398,22 @@ class SettingsDialog(Gtk.Dialog):
         """Return True if shortcut is one of the built-in double-tap presets."""
         return shortcut in SUPPORTED_SHORTCUTS
 
+    def _set_custom_shortcut_row_visible(self, visible: bool) -> None:
+        """Show or hide the custom shortcut entry / Record / Set controls.
+
+        The row uses ``no_show_all`` so a dialog-level ``show_all()`` does not
+        reveal it while a preset is selected. ``Gtk.Widget.show_all()`` is a
+        no-op when that flag is set, so clear it before showing (and restore it
+        when hiding). Matches the ``language_warning`` pattern of pairing
+        ``no_show_all`` with an explicit show path.
+        """
+        if visible:
+            self.custom_shortcut_row.set_no_show_all(False)
+            self.custom_shortcut_row.show_all()
+        else:
+            self.custom_shortcut_row.hide()
+            self.custom_shortcut_row.set_no_show_all(True)
+
     def _set_shortcut_combo_active_id(self, active_id: str) -> None:
         """Select a combo item without firing the changed handler."""
         # Handler may not be connected yet (during section build).
@@ -2422,11 +2438,11 @@ class SettingsDialog(Gtk.Dialog):
         if self._is_preset_shortcut(shortcut):
             self._set_shortcut_combo_active_id(shortcut)
             self.custom_shortcut_entry.set_text("")
-            self.custom_shortcut_row.hide()
+            self._set_custom_shortcut_row_visible(False)
         else:
             self._set_shortcut_combo_active_id("__custom__")
             self.custom_shortcut_entry.set_text(shortcut)
-            self.custom_shortcut_row.show_all()
+            self._set_custom_shortcut_row_visible(True)
 
     def _report_shortcut_apply_result(self, display_name: str, applied: bool) -> None:
         """Show success/restart feedback after a shortcut change."""
@@ -2616,12 +2632,18 @@ class SettingsDialog(Gtk.Dialog):
             )
 
     def _revert_shortcut_combo_to_saved(self) -> None:
-        """Restore the combo selection to match the saved active shortcut."""
+        """Restore combo, custom-row visibility, and info text to the saved shortcut.
+
+        Used when the user clicks a group separator in the shortcut combo.
+        Must sync the custom row too: selecting Custom Shortcut reveals
+        Record/Set, and a separator click must not leave those controls
+        visible while a preset is still the active binding. Also clear the
+        temporary Record/Set hint so the mode description matches the UI.
+        """
         current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
-        if self._is_preset_shortcut(current):
-            self._set_shortcut_combo_active_id(current)
-        else:
-            self._set_shortcut_combo_active_id("__custom__")
+        self._sync_shortcut_selection_ui(current)
+        mode_id = self.shortcut_mode_combo.get_active_id() or "toggle"
+        self._update_shortcut_ui_for_mode(mode_id)
 
     def _on_shortcut_changed(self, widget):
         """Handle shortcut selection change."""
@@ -2643,7 +2665,7 @@ class SettingsDialog(Gtk.Dialog):
             current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
             if not self._is_preset_shortcut(current):
                 self.custom_shortcut_entry.set_text(current)
-            self.custom_shortcut_row.show_all()
+            self._set_custom_shortcut_row_visible(True)
             self.custom_shortcut_entry.grab_focus()
             self.shortcut_info_label.set_markup(
                 "<i>Record or type a custom shortcut (e.g. alt+r), then click Set.</i>"
@@ -2652,7 +2674,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Preset selected: clear any leftover custom entry so UI matches config.
         self.custom_shortcut_entry.set_text("")
-        self.custom_shortcut_row.hide()
+        self._set_custom_shortcut_row_visible(False)
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
         self.config_manager.save_settings()
 
