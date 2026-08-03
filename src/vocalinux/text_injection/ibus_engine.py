@@ -338,87 +338,113 @@ def _is_gnome_session() -> bool:
     return "GNOME" in desktop.upper()
 
 
-def get_current_engine_gnome_fallback() -> Optional[str]:
-    """
-    Get the current keyboard layout as an IBus engine name via GNOME settings.
-
-    On GNOME/Wayland, IBus may have no global engine (input sources are managed
-    by Mutter, not ibus-daemon). In that case ``ibus engine`` returns nothing
-    or a misleading ``xkb:us::eng`` default. This function reads the actual
-    keyboard layout from ``org.gnome.desktop.input-sources`` via gsettings.
-
-    Returns:
-        IBus-format engine name (e.g. ``xkb:br::``) or None if not GNOME
-        or if gsettings fails.
-    """
+def _get_gnome_current_source() -> Optional[tuple[str, str]]:
+    """Return GNOME's current input source from the MRU list."""
     if not _is_gnome_session():
         return None
 
     try:
-        sources_result = subprocess.run(
-            ["gsettings", "get", "org.gnome.desktop.input-sources", "sources"],
+        result = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.input-sources", "mru-sources"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        if sources_result.returncode != 0:
-            logger.debug("gsettings get sources failed; not using GNOME fallback")
+        if result.returncode != 0:
+            logger.debug("gsettings get mru-sources failed; not using GNOME fallback")
             return None
 
         import ast
 
-        sources = ast.literal_eval(sources_result.stdout.strip())
-        if not sources:
-            logger.debug("GNOME input-sources list is empty")
+        sources_text = result.stdout.strip()
+        if sources_text.startswith("@a(ss) "):
+            sources_text = sources_text[len("@a(ss) ") :]
+        sources = ast.literal_eval(sources_text)
+        if not isinstance(sources, (list, tuple)) or not sources:
+            logger.debug("GNOME mru-sources list is empty or invalid")
             return None
 
-        # Get the current index
-        current_result = subprocess.run(
-            ["gsettings", "get", "org.gnome.desktop.input-sources", "current"],
+        source = sources[0]
+        if not isinstance(source, (list, tuple)) or len(source) != 2:
+            logger.debug("GNOME current input source has an invalid shape")
+            return None
+
+        source_type, source_id = source
+        if not isinstance(source_type, str) or not isinstance(source_id, str) or not source_id:
+            logger.debug("GNOME current input source has invalid values")
+            return None
+        return source_type, source_id
+    except (subprocess.SubprocessError, OSError, TypeError, ValueError, SyntaxError) as e:
+        logger.debug(f"GNOME fallback via gsettings failed: {e}")
+        return None
+
+
+def _resolve_registered_xkb_engine(source_id: str) -> Optional[str]:
+    """Resolve a GNOME XKB source to a registered IBus engine ID."""
+    layout, _, variant = source_id.partition("+")
+    if not layout:
+        return None
+
+    try:
+        result = subprocess.run(
+            ["ibus", "list-engine", "--name-only"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        if current_result.returncode != 0:
-            current_idx = 0
-        else:
-            # ponytail: gsettings prints "uint32 N" or just "N" — split()[-1] handles both
-            current_idx = int(current_result.stdout.strip().split()[-1])
+        if result.returncode != 0:
+            logger.debug("ibus list-engine failed; cannot verify the GNOME XKB source")
+            return None
 
-        if current_idx < 0 or current_idx >= len(sources):
-            current_idx = 0
+        matches = []
+        for engine_name in result.stdout.splitlines():
+            engine_name = engine_name.strip()
+            parts = engine_name.split(":")
+            if len(parts) == 4 and parts[0] == "xkb" and parts[1] == layout and parts[2] == variant:
+                matches.append(engine_name)
 
-        source_type, source_id = sources[current_idx]
+        if matches:
+            # Multiple engine IDs can share an identical XKB layout/variant and
+            # differ only in language metadata. The first registered match keeps
+            # the same keyboard map without fabricating an engine name.
+            logger.debug(f"GNOME XKB source '{source_id}' maps to registered engine '{matches[0]}'")
+            return matches[0]
 
-        # GNOME uses ('xkb', 'br+dyn') or ('ibus', 'anthy') tuples.
-        # For xkb sources, build an IBus engine name like xkb:<layout>::<variant>
-        if source_type == "xkb":
-            layout, _, variant = source_id.partition("+")
-            if variant:
-                engine_name = f"xkb:{layout}::{variant}"
-            else:
-                engine_name = f"xkb:{layout}::"
-            logger.debug(
-                f"GNOME fallback: current source index {current_idx}, "
-                f"engine name: {engine_name}"
-            )
-            return engine_name
-        elif source_type == "ibus":
-            # IBus IM engine — return the engine ID directly
-            logger.debug(f"GNOME fallback: current source is IBus engine '{source_id}'")
-            return source_id
+        logger.debug(f"GNOME XKB source '{source_id}' has no registered IBus engine")
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.debug(f"Could not list registered IBus engines: {e}")
+    return None
 
-        logger.debug(f"GNOME fallback: unknown source type '{source_type}'")
+
+def get_current_engine_gnome_fallback() -> Optional[str]:
+    """
+    Get a verified IBus engine for GNOME's current input source.
+
+    On GNOME/Wayland, IBus may have no global engine (input sources are managed
+    by Mutter, not ibus-daemon). GNOME's ``current`` key is deprecated and
+    ignored, so the first entry in ``mru-sources`` is used as the current source.
+
+    Explicit IBus source IDs are returned directly. XKB source IDs are matched
+    against registered IBus engines; names such as ``xkb:cn::`` are never
+    fabricated because a failed restoration can leave Vocalinux active.
+
+    Returns:
+        A verified IBus engine ID, or None if the current source cannot be
+        mapped reliably to one.
+    """
+    source = _get_gnome_current_source()
+    if not source:
         return None
 
-    except (
-        subprocess.SubprocessError,
-        FileNotFoundError,
-        ValueError,
-        SyntaxError,
-    ) as e:
-        logger.debug(f"GNOME fallback via gsettings failed: {e}")
-        return None
+    source_type, source_id = source
+    if source_type == "ibus":
+        logger.debug(f"GNOME fallback: current source is IBus engine '{source_id}'")
+        return source_id
+    if source_type == "xkb":
+        return _resolve_registered_xkb_engine(source_id)
+
+    logger.debug(f"GNOME fallback: unknown source type '{source_type}'")
+    return None
 
 
 def get_current_engine() -> Optional[str]:
@@ -427,9 +453,8 @@ def get_current_engine() -> Optional[str]:
 
     On GNOME/Wayland, IBus may have no global engine set (Mutter manages input
     sources). In that case ``ibus engine`` can return a misleading
-    ``xkb:us::eng`` default that doesn't match the user's actual keyboard
-    layout. We detect this and fall back to reading the layout from GNOME's
-    gsettings so the real layout is preserved during engine restore.
+    ``xkb:us::eng`` default. GNOME sources are accepted only when they are
+    explicit IBus IDs or map to a registered XKB engine.
 
     Returns:
         The IBus engine name, or None if it cannot be determined.
@@ -448,7 +473,8 @@ def get_current_engine() -> Optional[str]:
         stderr_lower = result.stderr.lower() if result.stderr else ""
         if "no global engine" in stderr_lower:
             logger.debug(
-                "ibus engine reports 'No global engine'; " "attempting GNOME gsettings fallback"
+                "ibus engine reports 'No global engine'; "
+                "checking GNOME's most recent IBus source"
             )
             return get_current_engine_gnome_fallback()
 
@@ -468,12 +494,18 @@ def get_current_engine() -> Optional[str]:
                     "attempting GNOME gsettings fallback (see #497)"
                 )
                 gnome_engine = get_current_engine_gnome_fallback()
-                if gnome_engine and gnome_engine != engine:
+                if gnome_engine:
                     logger.debug(
                         f"GNOME gsettings reports different engine: "
                         f"{gnome_engine} (was {engine})"
                     )
                     return gnome_engine
+
+                logger.debug(
+                    "GNOME did not report a restorable IBus source; "
+                    "ignoring the suspicious xkb:us::eng default"
+                )
+                return None
 
             return engine
     except (subprocess.SubprocessError, FileNotFoundError):
@@ -1175,13 +1207,6 @@ class IBusTextInjector:
         the user's normal IBus/XKB engine active preserves dead-key composition and
         layout-specific behavior during ordinary typing.
         """
-        # Capture the current engine before starting the Vocalinux process
-        # so inject_text() can restore it after committing text
-        if not is_engine_active():
-            self._previous_engine = get_current_engine()
-            if self._previous_engine:
-                logger.debug(f"Captured current engine for later restore: {self._previous_engine}")
-
         if not start_engine_process():
             raise IBusSetupError("Failed to start IBus engine process. Check logs for details.")
 
@@ -1318,18 +1343,18 @@ class IBusTextInjector:
 
         restore_engine: Optional[str] = None
         if not is_engine_active():
-            current_engine = get_current_engine() or self._previous_engine
-            if current_engine:
-                restore_engine = current_engine
-                logger.debug(
-                    "Temporarily activating Vocalinux IBus engine "
-                    f"(will restore {current_engine})"
+            current_engine = get_current_engine()
+            if not current_engine:
+                logger.warning(
+                    "Could not determine a restorable IBus engine; "
+                    "using the non-IBus text injection fallback"
                 )
-            else:
-                logger.debug(
-                    "Could not determine current IBus engine; "
-                    "activating Vocalinux engine without restore"
-                )
+                return False
+
+            restore_engine = current_engine
+            logger.debug(
+                f"Temporarily activating Vocalinux IBus engine (will restore {current_engine})"
+            )
             if not switch_engine(ENGINE_NAME):
                 logger.error("Failed to activate Vocalinux IBus engine for injection")
                 return False
@@ -1434,7 +1459,10 @@ class IBusTextInjector:
         finally:
             if restore_engine:
                 logger.debug(f"Restoring IBus engine after injection: {restore_engine}")
-                switch_engine(restore_engine)
+                if not switch_engine(restore_engine):
+                    logger.error(f"Failed to restore IBus engine after injection: {restore_engine}")
+                else:
+                    logger.debug(f"Restored IBus engine after injection: {restore_engine}")
             else:
                 logger.debug(
                     "Skipping engine restoration after injection — "
