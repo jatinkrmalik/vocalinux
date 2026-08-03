@@ -42,11 +42,11 @@ function ScreenshotCard({
   onOpen: () => void;
 }) {
   return (
-    <figure className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+    <figure className="flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
       <button
         type="button"
         onClick={onOpen}
-        className="group relative block w-full cursor-zoom-in bg-zinc-50 p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:bg-zinc-900/50"
+        className="group relative flex min-h-0 w-full flex-1 cursor-zoom-in items-center justify-center bg-zinc-50 p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:bg-zinc-900/50"
         aria-label={`View larger: ${shot.title}`}
       >
         <ThemeScreenshotImg
@@ -55,7 +55,7 @@ function ScreenshotCard({
           alt={shot.alt}
           width={shot.width}
           height={shot.height}
-          className="mx-auto h-auto w-full rounded-lg object-contain transition-transform duration-200 group-hover:scale-[1.02]"
+          className="mx-auto h-auto max-h-64 w-full rounded-lg object-contain transition-transform duration-200 group-hover:scale-[1.02]"
         />
         <span className="pointer-events-none absolute bottom-4 right-4 inline-flex items-center gap-1.5 rounded-full bg-zinc-900/80 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:bg-zinc-100/90 dark:text-zinc-900">
           <Expand className="h-3.5 w-3.5" />
@@ -229,7 +229,7 @@ export function ScreenshotGallery({
           <ImageIcon className="h-5 w-5 text-primary" />
           <h2 className="text-2xl font-bold">Product</h2>
         </div>
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 items-stretch gap-6 sm:grid-cols-3">
           {productShots.map((shot, index) => (
             <ScreenshotCard
               key={shot.src}
