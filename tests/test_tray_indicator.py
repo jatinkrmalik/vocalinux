@@ -107,6 +107,8 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_speech_engine.state = RecognitionState.IDLE
         self.mock_text_injector = MagicMock()
         self.mock_config_manager = MagicMock()
+        self.mock_config_manager.get_bool.side_effect = lambda section, key, default=False: default
+        self.mock_config_manager.get_str.side_effect = lambda section, key, default="": default
 
         # Patch os path functions
         self.patcher_path_exists = patch("os.path.exists", return_value=True)
@@ -131,6 +133,17 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_config_manager_class = self.patcher_config_manager.start()
         self.mock_config_manager_class.return_value = self.mock_config_manager
 
+        # Default D-Bus ListNames to include StatusNotifierWatcher so constructing
+        # TrayIndicator (which idle_add's _init_indicator) does not open the
+        # missing-watcher dialog during setUp. Individual tests can override.
+        self.patcher_dbus_proxy = patch(
+            "vocalinux.ui.tray_indicator.Gio.DBusProxy.new_for_bus_sync"
+        )
+        self.mock_dbus_proxy_factory = self.patcher_dbus_proxy.start()
+        mock_proxy = MagicMock()
+        mock_proxy.call_sync.return_value.unpack.return_value = (["org.kde.StatusNotifierWatcher"],)
+        self.mock_dbus_proxy_factory.return_value = mock_proxy
+
         # Import and create TrayIndicator
         from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -146,6 +159,7 @@ class TestTrayIndicator(unittest.TestCase):
         self.patcher_listdir.stop()
         self.patcher_makedirs.stop()
         self.patcher_config_manager.stop()
+        self.patcher_dbus_proxy.stop()
         self.patcher_settings_dialog.stop()
         self.thread_patcher.stop()
         self.ksm_patcher.stop()
@@ -497,6 +511,55 @@ class TestTrayIndicator(unittest.TestCase):
                 result = self.tray_indicator._init_indicator()
                 self.assertEqual(result, False)
                 mock_dialog.assert_called_once()
+
+    def test_init_indicator_missing_watcher_respects_opt_out(self):
+        get_bool = MagicMock(
+            side_effect=lambda section, key, default=False: (
+                False if (section, key) == ("ui", "show_missing_tray_warning") else default
+            )
+        )
+        self.tray_indicator.config_manager.get_bool = get_bool
+        scheduled = []
+
+        def record_idle(func, *args):
+            scheduled.append(func)
+            return False  # do not execute callbacks
+
+        with patch.object(
+            self.tray_indicator,
+            "_check_status_notifier_watcher",
+            return_value=False,
+        ):
+            with patch("vocalinux.ui.tray_indicator.GLib.idle_add", side_effect=record_idle):
+                result = self.tray_indicator._init_indicator()
+
+        self.assertEqual(result, False)
+        get_bool.assert_any_call("ui", "show_missing_tray_warning", True)
+        self.assertNotIn(self.tray_indicator._show_missing_watcher_dialog, scheduled)
+
+    def test_missing_watcher_dialog_dont_show_again_saves_opt_out(self):
+        mock_dialog = MagicMock()
+        mock_checkbox = MagicMock()
+        mock_checkbox.get_active.return_value = True
+        config = MagicMock()
+        self.tray_indicator.config_manager = config
+
+        with patch("vocalinux.ui.tray_indicator.Gtk.MessageDialog", return_value=mock_dialog):
+            with patch("vocalinux.ui.tray_indicator.Gtk.CheckButton", return_value=mock_checkbox):
+                result = self.tray_indicator._show_missing_watcher_dialog()
+
+        self.assertEqual(result, False)
+        mock_dialog.get_message_area.return_value.pack_start.assert_called_once_with(
+            mock_checkbox, False, False, 0
+        )
+        mock_dialog.show_all.assert_called_once()
+
+        response_callback = mock_dialog.connect.call_args[0][1]
+        response_callback(mock_dialog, None)
+
+        config.set.assert_called_once_with("ui", "show_missing_tray_warning", False)
+        config.save_settings.assert_called_once()
+        mock_dialog.destroy.assert_called_once()
 
     def test_init_indicator_creation_failure_shows_error_dialog(self):
         with patch(

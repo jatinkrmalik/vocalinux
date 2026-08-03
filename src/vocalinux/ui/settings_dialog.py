@@ -65,6 +65,36 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _raw_audio_device_name(device_name: Optional[str]) -> Optional[str]:
+    """Return the persisted device name without UI-only suffixes."""
+    if device_name is None:
+        return None
+    return device_name.removesuffix(" (default)")
+
+
+def _resolve_audio_device_selection(
+    devices: list,
+    saved_index: Optional[int],
+    saved_name: Optional[str],
+) -> Optional[int]:
+    """Resolve a saved audio device to a currently listed index.
+
+    Returns the matched device index, or None when the saved device is gone
+    (caller should fall back to System Default).
+    """
+    saved_raw_name = _raw_audio_device_name(saved_name)
+    if saved_raw_name:
+        for idx, name, _is_default in devices:
+            if name == saved_raw_name:
+                return idx
+    if saved_index is not None:
+        for idx, _name, _is_default in devices:
+            if idx == saved_index:
+                return saved_index
+    return None
+
+
 # Define available models for each engine
 ENGINE_MODELS = {
     "vosk": [
@@ -1498,8 +1528,8 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
 
     def _build_general_section(self):
-        """Build the Application page: startup behavior."""
-        group = PreferencesGroup(title="Startup")
+        """Build the Application page: general behavior."""
+        group = PreferencesGroup(title="General")
 
         self.autostart_switch = Gtk.Switch()
         autostart_row = PreferenceRow(
@@ -1519,10 +1549,20 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(start_minimized_row)
 
+        self.missing_tray_warning_switch = Gtk.Switch()
+        missing_tray_warning_row = PreferenceRow(
+            title="Warn if tray support is not detected",
+            subtitle="Show a warning when Vocalinux cannot detect AppIndicator support",
+            widget=self.missing_tray_warning_switch,
+            keywords=("tray", "appindicator", "warning"),
+        )
+        group.add_row(missing_tray_warning_row)
+
         self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
+        self.missing_tray_warning_switch.connect("state-set", self._on_missing_tray_warning_toggled)
 
     def _build_auto_pause_section(self):
         """Build Auto-Pause settings: enable toggle + process name list."""
@@ -1896,6 +1936,17 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("ui", "start_minimized", enabled)
         self.config_manager.save_settings()
         logger.info(f"Start minimized {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_missing_tray_warning_toggled(self, widget, state):
+        """Handle toggle of the missing tray support warning switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Missing tray warning toggled: {enabled}")
+        self.config_manager.set("ui", "show_missing_tray_warning", enabled)
+        self.config_manager.save_settings()
         return False
 
     def _on_copy_to_clipboard_toggled(self, widget, state):
@@ -2398,6 +2449,22 @@ class SettingsDialog(Gtk.Dialog):
         """Return True if shortcut is one of the built-in double-tap presets."""
         return shortcut in SUPPORTED_SHORTCUTS
 
+    def _set_custom_shortcut_row_visible(self, visible: bool) -> None:
+        """Show or hide the custom shortcut entry / Record / Set controls.
+
+        The row uses ``no_show_all`` so a dialog-level ``show_all()`` does not
+        reveal it while a preset is selected. ``Gtk.Widget.show_all()`` is a
+        no-op when that flag is set, so clear it before showing (and restore it
+        when hiding). Matches the ``language_warning`` pattern of pairing
+        ``no_show_all`` with an explicit show path.
+        """
+        if visible:
+            self.custom_shortcut_row.set_no_show_all(False)
+            self.custom_shortcut_row.show_all()
+        else:
+            self.custom_shortcut_row.hide()
+            self.custom_shortcut_row.set_no_show_all(True)
+
     def _set_shortcut_combo_active_id(self, active_id: str) -> None:
         """Select a combo item without firing the changed handler."""
         # Handler may not be connected yet (during section build).
@@ -2422,11 +2489,11 @@ class SettingsDialog(Gtk.Dialog):
         if self._is_preset_shortcut(shortcut):
             self._set_shortcut_combo_active_id(shortcut)
             self.custom_shortcut_entry.set_text("")
-            self.custom_shortcut_row.hide()
+            self._set_custom_shortcut_row_visible(False)
         else:
             self._set_shortcut_combo_active_id("__custom__")
             self.custom_shortcut_entry.set_text(shortcut)
-            self.custom_shortcut_row.show_all()
+            self._set_custom_shortcut_row_visible(True)
 
     def _report_shortcut_apply_result(self, display_name: str, applied: bool) -> None:
         """Show success/restart feedback after a shortcut change."""
@@ -2616,12 +2683,18 @@ class SettingsDialog(Gtk.Dialog):
             )
 
     def _revert_shortcut_combo_to_saved(self) -> None:
-        """Restore the combo selection to match the saved active shortcut."""
+        """Restore combo, custom-row visibility, and info text to the saved shortcut.
+
+        Used when the user clicks a group separator in the shortcut combo.
+        Must sync the custom row too: selecting Custom Shortcut reveals
+        Record/Set, and a separator click must not leave those controls
+        visible while a preset is still the active binding. Also clear the
+        temporary Record/Set hint so the mode description matches the UI.
+        """
         current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
-        if self._is_preset_shortcut(current):
-            self._set_shortcut_combo_active_id(current)
-        else:
-            self._set_shortcut_combo_active_id("__custom__")
+        self._sync_shortcut_selection_ui(current)
+        mode_id = self.shortcut_mode_combo.get_active_id() or "toggle"
+        self._update_shortcut_ui_for_mode(mode_id)
 
     def _on_shortcut_changed(self, widget):
         """Handle shortcut selection change."""
@@ -2643,7 +2716,7 @@ class SettingsDialog(Gtk.Dialog):
             current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
             if not self._is_preset_shortcut(current):
                 self.custom_shortcut_entry.set_text(current)
-            self.custom_shortcut_row.show_all()
+            self._set_custom_shortcut_row_visible(True)
             self.custom_shortcut_entry.grab_focus()
             self.shortcut_info_label.set_markup(
                 "<i>Record or type a custom shortcut (e.g. alt+r), then click Set.</i>"
@@ -2652,7 +2725,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Preset selected: clear any leftover custom entry so UI matches config.
         self.custom_shortcut_entry.set_text("")
-        self.custom_shortcut_row.hide()
+        self._set_custom_shortcut_row_visible(False)
         self.config_manager.set("shortcuts", "toggle_recognition", shortcut_id)
         self.config_manager.save_settings()
 
@@ -3173,12 +3246,14 @@ class SettingsDialog(Gtk.Dialog):
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
+        show_missing_tray_warning = ui_settings.get("show_missing_tray_warning", True)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
         auto_capitalize = text_injection_settings.get("auto_capitalize", True)
         append_trailing_space = text_injection_settings.get("append_trailing_space", True)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
+        self.missing_tray_warning_switch.set_active(show_missing_tray_warning)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.auto_capitalize_switch.set_active(auto_capitalize)
         self.append_trailing_space_switch.set_active(append_trailing_space)
@@ -4280,22 +4355,29 @@ For now, the engine has been reverted to VOSK."""
         if saved_device is None:
             self.audio_device_combo.set_active_id("-1")
         else:
-            # Try to match by saved device name first (more stable across reboots)
-            matched = False
-            if saved_device_name:
-                for idx, name, _ in devices:
-                    if name == saved_device_name:
-                        self.audio_device_combo.set_active_id(str(idx))
-                        matched = True
-                        break
-            if not matched:
-                # Fall back to stored index
-                if not self.audio_device_combo.set_active_id(str(saved_device)):
-                    logger.warning(
-                        f"Saved audio device {saved_device} "
-                        f"(name: {saved_device_name}) no longer available"
-                    )
-                    self.audio_device_combo.set_active_id("-1")
+            matched_index = _resolve_audio_device_selection(
+                devices, saved_device, saved_device_name
+            )
+            if matched_index is not None:
+                self.audio_device_combo.set_active_id(str(matched_index))
+                # Migrate legacy configs that stored the UI "(default)" suffix.
+                saved_raw_name = _raw_audio_device_name(saved_device_name)
+                if saved_device_name and saved_raw_name and saved_device_name != saved_raw_name:
+                    self.config_manager.set("audio", "device_name", saved_raw_name)
+                    self.config_manager.set("audio", "device_index", matched_index)
+                    self.config_manager.save_settings()
+            else:
+                logger.warning(
+                    f"Saved audio device {saved_device} "
+                    f"(name: {saved_device_name}) no longer available"
+                )
+                self.audio_device_combo.set_active_id("-1")
+                # Keep combo, config, and engine aligned on System Default.
+                self.config_manager.set("audio", "device_index", None)
+                self.config_manager.set("audio", "device_name", None)
+                self.config_manager.save_settings()
+                if self.speech_engine is not None:
+                    self.speech_engine.set_audio_device(None, None)
 
         logger.info(f"Found {len(devices)} audio input devices")
 
@@ -4314,7 +4396,8 @@ For now, the engine has been reverted to VOSK."""
             return
 
         device_index = int(device_id)
-        device_name = self.audio_device_combo.get_active_text()
+        device_label = self.audio_device_combo.get_active_text()
+        device_name = _raw_audio_device_name(device_label)
 
         if device_index == -1:
             self.config_manager.set("audio", "device_index", None)
@@ -4331,7 +4414,7 @@ For now, the engine has been reverted to VOSK."""
             self.speech_engine.set_audio_device(device_index, device_name)
 
         logger.info(f"Audio device changed to: [{device_index}] {device_name}")
-        self.audio_test_status.set_markup(f"<i>Selected: {device_name}</i>")
+        self.audio_test_status.set_markup(f"<i>Selected: {device_label}</i>")
 
     def _on_test_audio_clicked(self, widget):
         """Handle test audio button click."""
