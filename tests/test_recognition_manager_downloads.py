@@ -401,11 +401,13 @@ class TestAudioReconnection:
         mock_resolve_default.assert_called_once_with(mock_audio_instance, None)
 
     def test_attempt_audio_reconnection_no_resolved_device(self):
-        """Test reconnection fails when no resolver finds an input device."""
+        """When no safe device is enumerated, reconnect via system default."""
         manager = _make_manager(engine="whisper_cpp", audio_device_name="Missing Mic")
 
         mock_pyaudio_mod = MagicMock()
+        mock_pyaudio_mod.paInt16 = 8
         mock_audio_instance = MagicMock()
+        mock_stream = MagicMock()
 
         with (
             patch.dict("sys.modules", {"pyaudio": mock_pyaudio_mod}),
@@ -418,11 +420,15 @@ class TestAudioReconnection:
                 "vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device",
                 return_value=None,
             ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 16000, mock_stream),
+            ) as mock_open,
         ):
             result = manager._attempt_audio_reconnection(mock_audio_instance)
 
-        assert result is False
-        mock_audio_instance.open.assert_not_called()
+        assert result is True
+        mock_open.assert_called_once_with(mock_audio_instance, None)
 
     def test_attempt_audio_reconnection_max_attempts(self):
         """Test reconnection stops after max attempts."""

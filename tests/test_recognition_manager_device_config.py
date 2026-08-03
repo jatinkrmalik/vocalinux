@@ -32,10 +32,14 @@ from vocalinux.speech_recognition.recognition_manager import (
     _get_supported_channels,
     _get_supported_sample_rate,
     _is_bluetooth_device,
+    _is_virtual_device,
     _open_capture_stream,
+    _resolve_valid_input_device,
     _safe_close_stream,
     get_audio_input_devices,
-    test_audio_input,
+)
+from vocalinux.speech_recognition.recognition_manager import (
+    test_audio_input as _run_test_audio_input,
 )
 
 
@@ -51,6 +55,209 @@ def _make_manager(engine="whisper_cpp", **kw):
 
 class TestAudioDeviceDetection(unittest.TestCase):
     """Test audio device enumeration functions."""
+
+    def test_is_virtual_device_filters_pipewire_pseudo_sources(self):
+        """PipeWire pseudo sources from issue #624 should not be opened by index."""
+        unsafe_names = [
+            "default",
+            "DeepFilterNet Source",
+            "paplay",
+            "pipewire",
+            "PipeWire filter-chain source",
+            "Monitor of Built-in Audio Analog Stereo",
+            "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+            "Null Sink",
+            "dummy",
+            "speech-dispatcher-dummy",
+        ]
+
+        for name in unsafe_names:
+            assert _is_virtual_device(name), name
+
+        assert not _is_virtual_device("USB Microphone")
+        assert not _is_virtual_device("Built-in Audio Analog Stereo")
+        assert not _is_virtual_device("Built-in Mic (PipeWire)")
+        assert not _is_virtual_device("")
+
+    def test_get_audio_input_devices_filters_unsafe_virtual_sources(self):
+        """Device enumeration should hide unsafe virtual sources but keep real mics."""
+        mock_audio = MagicMock()
+        mock_audio.get_device_count.return_value = 4
+        mock_audio.get_default_input_device_info.return_value = {"index": 2}
+        devices = [
+            {"index": 0, "name": "DeepFilterNet Source", "maxInputChannels": 2},
+            {"index": 1, "name": "Monitor of Built-in Audio Analog Stereo", "maxInputChannels": 2},
+            {"index": 2, "name": "USB Microphone", "maxInputChannels": 1},
+            {"index": 3, "name": "default", "maxInputChannels": 32},
+        ]
+        mock_audio.get_device_info_by_index.side_effect = lambda i: devices[i]
+        mock_pyaudio = MagicMock(PyAudio=MagicMock(return_value=mock_audio))
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            assert get_audio_input_devices() == [(2, "USB Microphone", True)]
+
+    def test_resolve_valid_input_device_skips_stale_virtual_index(self):
+        """A saved virtual source index should fall back to a physical microphone."""
+        mock_audio = MagicMock()
+        mock_audio.get_device_count.return_value = 3
+        mock_audio.get_default_input_device_info.return_value = {"index": 1}
+        devices = [
+            {"index": 0, "name": "DeepFilterNet Source", "maxInputChannels": 2},
+            {"index": 1, "name": "default", "maxInputChannels": 32},
+            {"index": 2, "name": "USB Microphone", "maxInputChannels": 1},
+        ]
+        mock_audio.get_device_info_by_index.side_effect = lambda i: devices[i]
+
+        assert _resolve_valid_input_device(mock_audio, preferred_index=0) == 2
+
+    def test_system_default_selection_uses_no_explicit_device_index(self):
+        """System Default should still open through PortAudio's default device path."""
+        manager = _make_manager(
+            engine="whisper_cpp", audio_device_index=None, audio_device_name=None
+        )
+        manager.should_record = True
+        manager.state = RecognitionState.LISTENING
+        manager.silence_timeout = 0.05
+        manager._silero_vad = None
+
+        mock_stream = MagicMock()
+
+        def _read_once(*_args, **_kwargs):
+            manager.should_record = False
+            return b"\x00" * 2048
+
+        mock_stream.read.side_effect = _read_once
+
+        mock_audio = MagicMock()
+        mock_audio.get_device_count.return_value = 1
+        mock_audio.get_device_info_by_index.return_value = {
+            "index": 0,
+            "name": "default",
+            "maxInputChannels": 32,
+        }
+        mock_audio.get_default_input_device_info.return_value = {"index": 0, "name": "default"}
+
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with (
+            patch.dict("sys.modules", {"pyaudio": mock_pyaudio}),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 16000, mock_stream),
+            ) as mock_open,
+            patch(
+                "vocalinux.speech_recognition.recognition_manager.play_error_sound",
+            ),
+        ):
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            manager._record_audio()
+
+        mock_open.assert_called_once_with(mock_audio, None)
+
+    def test_record_audio_falls_back_to_system_default_when_no_safe_device(self):
+        """Stale/unsafe saved devices should reopen via PortAudio system default."""
+        manager = _make_manager(
+            engine="whisper_cpp",
+            audio_device_index=0,
+            audio_device_name="DeepFilterNet Source",
+        )
+        manager.should_record = True
+        manager.state = RecognitionState.LISTENING
+        manager.silence_timeout = 0.05
+        manager._silero_vad = None
+
+        mock_stream = MagicMock()
+
+        def _read_once(*_args, **_kwargs):
+            manager.should_record = False
+            return b"\x00" * 2048
+
+        mock_stream.read.side_effect = _read_once
+        mock_audio = MagicMock()
+        mock_audio.get_device_count.return_value = 1
+        mock_audio.get_device_info_by_index.return_value = {
+            "index": 0,
+            "name": "DeepFilterNet Source",
+            "maxInputChannels": 2,
+        }
+        mock_audio.get_default_input_device_info.return_value = {
+            "index": 0,
+            "name": "default",
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with (
+            patch.dict("sys.modules", {"pyaudio": mock_pyaudio}),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._resolve_device_by_name",
+                return_value=None,
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._resolve_valid_input_device",
+                return_value=None,
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 16000, mock_stream),
+            ) as mock_open,
+            patch("vocalinux.speech_recognition.recognition_manager.play_error_sound"),
+        ):
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            manager._record_audio()
+
+        mock_open.assert_called_once_with(mock_audio, None)
+        mock_audio.get_default_input_device_info.assert_called()
+
+    def test_test_audio_input_system_default_fallback_open_omits_device_index(self):
+        """Fallback mic-test open for System Default must omit input_device_index."""
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = b"\x00\x01" * 1024
+        mock_audio = MagicMock()
+        mock_audio.open.return_value = mock_stream
+        mock_audio.get_default_input_device_info.return_value = {
+            "index": 7,
+            "name": "default",
+            "defaultSampleRate": 48000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 48000, None),
+            ):
+                result = _run_test_audio_input(device_index=None, duration=0.1)
+
+        assert result["success"] is True
+        kwargs = mock_audio.open.call_args.kwargs
+        assert "input_device_index" not in kwargs
+
+    def test_settings_persist_raw_audio_device_name(self):
+        """Settings should persist raw PortAudio names, not UI-only suffixes."""
+        from vocalinux.ui.settings_dialog import (
+            _raw_audio_device_name,
+            _resolve_audio_device_selection,
+        )
+
+        assert _raw_audio_device_name("USB Microphone (default)") == "USB Microphone"
+        assert _raw_audio_device_name("USB Microphone") == "USB Microphone"
+        assert _raw_audio_device_name(None) is None
+
+        devices = [(3, "USB Microphone", True), (5, "Webcam Mic", False)]
+        # Legacy configs may still store the UI-only "(default)" suffix.
+        assert _resolve_audio_device_selection(devices, 3, "USB Microphone (default)") == 3
+        assert _resolve_audio_device_selection(devices, 99, "Webcam Mic") == 5
+        # Filtered-out / missing devices resolve to System Default.
+        assert _resolve_audio_device_selection(devices, 1, "DeepFilterNet") is None
+        assert _resolve_audio_device_selection(devices, 1, None) is None
 
     def test_is_bluetooth_device_detection(self):
         """Bluetooth headset/mic names should be recognized (Issue #567)."""
@@ -192,6 +399,38 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_stream.stop_stream.assert_called_once()
         mock_stream.close.assert_called_once()
 
+    def test_test_audio_input_system_default_keeps_null_device_index(self):
+        """System Default must open PortAudio without an explicit device index."""
+        from vocalinux.speech_recognition.recognition_manager import test_audio_input
+
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = b"\x00\x01" * 1024
+        mock_audio = MagicMock()
+        mock_audio.open.return_value = mock_stream
+        mock_audio.get_default_input_device_info.return_value = {
+            "index": 7,
+            "name": "default",
+            "defaultSampleRate": 48000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 48000, mock_stream),
+            ) as mock_open:
+                result = test_audio_input(device_index=None, duration=0.1)
+
+        assert result["success"] is True
+        mock_open.assert_called_once_with(mock_audio, None)
+        # Display metadata can still report the host default index/name.
+        assert result["device_index"] == 7
+        assert result["device_name"] == "default"
+
     def test_test_audio_input_negotiation_fallback_open(self):
         """When negotiation returns no stream, mic test falls back to a plain open."""
         mock_stream = MagicMock()
@@ -214,7 +453,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
                 "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
                 return_value=(1, 16000, None),
             ):
-                result = test_audio_input(device_index=14, duration=0.1)
+                result = _run_test_audio_input(device_index=14, duration=0.1)
 
         assert result["success"] is True
         mock_audio.open.assert_called_once()
@@ -237,7 +476,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
                 "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
                 return_value=(1, 16000, None),
             ):
-                result = test_audio_input(device_index=14, duration=0.1)
+                result = _run_test_audio_input(device_index=14, duration=0.1)
 
         assert result["success"] is False
         assert "Cannot open audio stream" in result["error"]
