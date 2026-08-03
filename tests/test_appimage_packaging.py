@@ -14,10 +14,11 @@ REQUIRED_TYPELIBS = (
     "GModule-2.0",
     "Dbusmenu-0.4",
     "fontconfig-2.0",
-    "AppIndicator3-0.1",
-    "AyatanaAppIndicator3-0.1",
     "Notify-0.7",
 )
+
+# Tray stacks are alternates: seed both, require at least one at build time.
+INDICATOR_TYPELIBS = ("AppIndicator3-0.1", "AyatanaAppIndicator3-0.1")
 
 
 def test_appimage_build_ships_transitive_typelibs():
@@ -28,6 +29,11 @@ def test_appimage_build_ships_transitive_typelibs():
     assert "keeping linuxdeploy extras" in text or "Ensuring required typelibs" in text
     for typelib in REQUIRED_TYPELIBS:
         assert typelib in text, f"missing typelib seed {typelib} in {BUILD_SH}"
+    for typelib in INDICATOR_TYPELIBS:
+        assert typelib in text, f"missing indicator typelib seed {typelib}"
+    assert "INDICATOR_TYPELIBS=" in text
+    assert "indicator_found" in text
+    assert "Need at least one of:" in text
 
 
 def test_appimage_build_bundles_gi_runtime_libs():

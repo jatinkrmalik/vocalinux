@@ -43,6 +43,10 @@ TYPELIBS=(
   IBus-1.0 Rsvg-2.0
 )
 
+# Runtime only needs one tray stack (same as check_dependencies). Ship whichever
+# the build host has; fail only if neither typelib is present.
+INDICATOR_TYPELIBS=(AppIndicator3-0.1 AyatanaAppIndicator3-0.1)
+
 # Shared libs loaded via GI at runtime (not linked into python3), so
 # linuxdeploy will not discover them from -e python3 alone.
 GI_RUNTIME_LIBS=(
@@ -107,18 +111,41 @@ copy_typelibs() {
   local dest="$1"
   local require_all="${2:-0}"
   mkdir -p "$dest"
-  local typelib found missing=()
+  local typelib found missing=() indicator_found=0
   for typelib in "${TYPELIBS[@]}"; do
     found="$(find /usr/lib /usr/lib64 -name "${typelib}.typelib" 2>/dev/null | head -1 || true)"
     if [ -n "$found" ]; then
       cp "$found" "$dest/"
+      case " ${INDICATOR_TYPELIBS[*]} " in
+        *" ${typelib} "*) indicator_found=1 ;;
+      esac
     else
       missing+=("$typelib")
     fi
   done
-  if [ "$require_all" = "1" ] && [ "${#missing[@]}" -gt 0 ]; then
+
+  # AppIndicator3 / AyatanaAppIndicator3 are alternates; drop them from the
+  # hard-fail list when at least one copied successfully.
+  local hard_missing=()
+  for typelib in "${missing[@]}"; do
+    case " ${INDICATOR_TYPELIBS[*]} " in
+      *" ${typelib} "*)
+        if [ "$indicator_found" -eq 0 ]; then
+          hard_missing+=("$typelib")
+        fi
+        ;;
+      *)
+        hard_missing+=("$typelib")
+        ;;
+    esac
+  done
+
+  if [ "$require_all" = "1" ] && [ "${#hard_missing[@]}" -gt 0 ]; then
     echo "Missing required typelibs on the build host:" >&2
-    printf '  - %s\n' "${missing[@]}" >&2
+    printf '  - %s\n' "${hard_missing[@]}" >&2
+    if [ "$indicator_found" -eq 0 ]; then
+      echo "Need at least one of: ${INDICATOR_TYPELIBS[*]}" >&2
+    fi
     echo "Install the matching gir1.2-* packages and retry." >&2
     exit 1
   fi
