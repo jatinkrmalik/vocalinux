@@ -264,22 +264,17 @@ class TestTrayIndicator(unittest.TestCase):
             mock_dialog_instance.show.assert_called_once()
 
     def test_about_dialog(self):
-        """Test about dialog creation."""
-        with patch("vocalinux.ui.about_dialog.Gtk") as patched_gtk:
-            mock_about_dialog = MagicMock()
-            patched_gtk.AboutDialog.return_value = mock_about_dialog
-            mock_about_dialog.run.side_effect = lambda: None
-            patched_gtk.License.GPL_3_0 = 1
+        """Test About opens Settings focused on the About page."""
+        with patch("vocalinux.ui.tray_indicator.SettingsDialog") as mock_dialog_class:
+            mock_dialog_instance = MagicMock()
+            mock_dialog_class.return_value = mock_dialog_instance
 
-            with patch("vocalinux.ui.about_dialog.GdkPixbuf") as patched_pixbuf:
-                mock_pixbuf = MagicMock()
-                patched_pixbuf.Pixbuf.new_from_file.return_value = mock_pixbuf
+            self.tray_indicator._on_about_clicked(None)
 
-                self.tray_indicator._on_about_clicked(None)
-
-                mock_about_dialog.set_program_name.assert_called_with("Vocalinux")
-                mock_about_dialog.run.assert_called_once()
-                mock_about_dialog.destroy.assert_called_once()
+            mock_dialog_class.assert_called_once()
+            kwargs = mock_dialog_class.call_args.kwargs
+            self.assertEqual(kwargs.get("initial_page"), "about")
+            mock_dialog_instance.show.assert_called_once()
 
     def test_validate_resources_missing_resources_dir(self):
         """Test validation when resources directory doesn't exist."""
@@ -448,25 +443,16 @@ class TestTrayIndicator(unittest.TestCase):
                     self.tray_indicator.run()
                     mock_quit.assert_called_once()
 
-    def test_about_dialog_logo_scaling_error(self):
-        """Test about dialog handles logo scaling errors gracefully."""
-        with patch("vocalinux.ui.about_dialog.Gtk") as patched_gtk:
-            mock_about_dialog = MagicMock()
-            patched_gtk.AboutDialog.return_value = mock_about_dialog
-            mock_about_dialog.run.return_value = None
-            patched_gtk.License.GPL_3_0 = 1
+    def test_about_opens_settings_without_raising(self):
+        """Test About menu item opens settings even if dialog construction is mocked."""
+        with patch("vocalinux.ui.tray_indicator.SettingsDialog") as mock_dialog_class:
+            mock_dialog_instance = MagicMock()
+            mock_dialog_class.return_value = mock_dialog_instance
 
-            with patch("vocalinux.ui.about_dialog.GdkPixbuf") as patched_pixbuf:
-                # Simulate error loading pixbuf
-                patched_pixbuf.Pixbuf.new_from_file.side_effect = Exception("Load error")
+            self.tray_indicator._on_about_clicked(None)
 
-                # Should not raise exception
-                self.tray_indicator._on_about_clicked(None)
-
-                mock_about_dialog.run.assert_called_once()
-                mock_about_dialog.destroy.assert_called_once()
-                # set_logo should NOT be called due to the error
-                mock_about_dialog.set_logo.assert_not_called()
+            mock_dialog_instance.connect.assert_called()
+            mock_dialog_instance.show.assert_called_once()
 
     def test_check_status_notifier_watcher_true_when_present(self):
         mock_proxy = MagicMock()
