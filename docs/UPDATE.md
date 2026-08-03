@@ -304,6 +304,8 @@ Full history: https://github.com/jatinkrmalik/vocalinux/releases
 ## Need help?
 
 - [Installation guide](INSTALL.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
 - [User guide](USER_GUIDE.md)
+- [Support](../SUPPORT.md)
 - [Report issues](https://github.com/jatinkrmalik/vocalinux/issues)
 - [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)

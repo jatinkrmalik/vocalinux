@@ -37,7 +37,7 @@ No cloud account. No telemetry. Dictate on your machine.
 
 ## Screenshots
 
-Settings gallery shots may lag the searchable sidebar UI from v0.15.0. Full gallery: [vocalinux.com/screenshots](https://vocalinux.com/screenshots/).
+Full gallery (including dark theme): [vocalinux.com/screenshots](https://vocalinux.com/screenshots/).
 
 ### Product
 
@@ -231,14 +231,18 @@ Neural VAD (Silero) is used when `onnxruntime` is available; install via `pip in
 
 | Document | Description |
 |----------|-------------|
-| [Installation](docs/INSTALL.md) | Full install paths, options, troubleshooting |
+| [Installation](docs/INSTALL.md) | Installer, AppImage, AUR, Flatpak, running |
+| [Manual / PyPI install](docs/INSTALL_MANUAL.md) | Package lists and pip workflows |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common failures |
 | [User guide](docs/USER_GUIDE.md) | Dictation, engines, models, tips |
 | [Update guide](docs/UPDATE.md) | Upgrade steps and release notes |
+| [Changelog](CHANGELOG.md) | Release history pointers |
+| [Support](SUPPORT.md) | Where to get help |
 | [Distribution compatibility](docs/DISTRO_COMPATIBILITY.md) | Distro matrix and session notes |
 | [Remote HTTP API](docs/HTTP_REMOTE.md) | Offload transcription to a server |
 | [Contributing](CONTRIBUTING.md) | Dev setup, style, PR process |
 | [Security](SECURITY.md) | Supported versions and vulnerability reporting |
-| [Release process](docs/RELEASE_PROCESS.md) | Maintainer release checklist |
+| [Docs index](docs/README.md) | Full documentation map |
 
 ## Privacy and security
 

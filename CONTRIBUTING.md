@@ -221,6 +221,7 @@ Maintainers follow [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) (version f
 
 ## Community
 
+- [SUPPORT.md](SUPPORT.md) — where to get help
 - [GitHub Discussions](https://github.com/jatinkrmalik/vocalinux/discussions)
 - [GitHub Issues](https://github.com/jatinkrmalik/vocalinux/issues)
 - [@jatinkrmalik on X](https://x.com/jatinkrmalik)

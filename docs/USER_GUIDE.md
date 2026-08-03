@@ -114,12 +114,8 @@ vocalinux --start-minimized
 
 ## Troubleshooting
 
-Run with debug logging:
-
 ```bash
 vocalinux --debug
 ```
 
-Install, audio, tray, and injection issues: [INSTALL.md](INSTALL.md) troubleshooting section. Distro-specific notes: [DISTRO_COMPATIBILITY.md](DISTRO_COMPATIBILITY.md). Updates: [UPDATE.md](UPDATE.md).
-
-Still stuck? [GitHub Issues](https://github.com/jatinkrmalik/vocalinux/issues) or [Discussions](https://github.com/jatinkrmalik/vocalinux/discussions).
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for tray, audio, injection, and model issues. Distro notes: [DISTRO_COMPATIBILITY.md](DISTRO_COMPATIBILITY.md). Updates: [UPDATE.md](UPDATE.md). Help channels: [SUPPORT.md](../SUPPORT.md).
