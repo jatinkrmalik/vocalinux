@@ -12,6 +12,7 @@ describe("Screenshots page and assets", () => {
   const shellPath = path.join(webRoot, "src/components/seo-subpage-shell.tsx");
   const homePath = path.join(webRoot, "src/app/page.tsx");
   const publicScreenshotsDir = path.join(webRoot, "public/screenshots");
+  const darkScreenshotsDir = path.join(publicScreenshotsDir, "dark");
 
   const expectedAssets = [
     "00-transcription.png",
@@ -21,7 +22,7 @@ describe("Screenshots page and assets", () => {
     "settings-speech-engine.png",
     "settings-recognition.png",
     "settings-audio.png",
-    "settings-shortcuts.png",
+    "settings-performance.png",
     "settings-general.png",
     "settings-advanced.png",
   ];
@@ -51,6 +52,7 @@ describe("Screenshots page and assets", () => {
     expect(gallerySource).toContain('role="dialog"');
     expect(gallerySource).toContain("aria-modal");
     expect(gallerySource).toContain("View larger");
+    expect(gallerySource).toContain("ThemeScreenshotImg");
   });
 
   it("references every public screenshot asset from the page source", () => {
@@ -59,7 +61,15 @@ describe("Screenshots page and assets", () => {
       expect(fs.existsSync(assetPath)).toBe(true);
       expect(fs.statSync(assetPath).size).toBeGreaterThan(1000);
       expect(pageSource).toContain(`/screenshots/${file}`);
+
+      const darkPath = path.join(darkScreenshotsDir, file);
+      expect(fs.existsSync(darkPath)).toBe(true);
+      expect(fs.statSync(darkPath).size).toBeGreaterThan(1000);
+      expect(pageSource).toContain(`/screenshots/dark/${file}`);
     }
+    expect(fs.existsSync(path.join(publicScreenshotsDir, "settings-shortcuts.png"))).toBe(
+      false,
+    );
   });
 
   it("links to the gallery and only embeds a few product shots on home", () => {
@@ -67,10 +77,11 @@ describe("Screenshots page and assets", () => {
     expect(homeSource).toContain('href: "/screenshots/"');
     expect(homeSource).toContain('href="/screenshots/"');
     expect(homeSource).toContain("/screenshots/00-transcription.png");
+    expect(homeSource).toContain("/screenshots/dark/00-transcription.png");
     expect(homeSource).not.toContain("/screenshots/05-about-view.png");
     expect(homeSource).not.toContain("/screenshots/settings-recognition.png");
     expect(homeSource).not.toContain("/screenshots/settings-audio.png");
-    expect(homeSource).not.toContain("/screenshots/settings-shortcuts.png");
+    expect(homeSource).not.toContain("/screenshots/settings-performance.png");
     expect(homeSource).not.toContain("/screenshots/settings-advanced.png");
   });
 
@@ -80,13 +91,17 @@ describe("Screenshots page and assets", () => {
   });
 
   it("includes captioned settings and product sections", () => {
-    expect(pageSource).toContain("Speech Engine");
-    expect(pageSource).toContain("Recognition");
+    expect(pageSource).toContain("Speech Model");
+    expect(pageSource).toContain("Dictation");
     expect(pageSource).toContain("Audio");
-    expect(pageSource).toContain("Shortcuts");
-    expect(pageSource).toContain("General");
+    expect(pageSource).toContain("Performance");
+    expect(pageSource).toContain("Application");
     expect(pageSource).toContain("Advanced");
-    expect(pageSource).toContain("Transcription in action");
+    expect(pageSource).toContain("Dictation in action");
     expect(pageSource).toContain("About");
+    expect(pageSource).toContain("update checker");
+    expect(pageSource).not.toContain("Shortcuts & Hotkeys");
+    expect(pageSource).not.toContain("About dialog");
+    expect(pageSource).not.toContain("Settings overview");
   });
 });

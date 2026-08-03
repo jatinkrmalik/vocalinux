@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import {
   Check,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { VocalinuxLogo } from "@/components/optimized-image";
+import { ThemeScreenshotImage } from "@/components/theme-screenshot";
 
 // Always uses main/install.sh. The installer dynamically resolves the latest release tag via GitHub API
 const installCommands = {
@@ -516,16 +516,17 @@ export default function HomePage() {
                 aria-hidden
               />
               <figure className="shot-frame relative">
-                <Image
+                <ThemeScreenshotImage
                   src="/screenshots/00-transcription.png"
-                  alt="Vocalinux tray overlay showing live speech transcription on Linux"
-                  width={1280}
-                  height={800}
+                  srcDark="/screenshots/dark/00-transcription.png"
+                  alt="Vocalinux dictating into a text editor with the tray menu open"
+                  width={2518}
+                  height={2057}
                   priority
                   className="h-auto w-full"
                 />
                 <figcaption className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
-                  <span>Live transcription overlay</span>
+                  <span>Dictation into any focused app</span>
                   <Link
                     href="/screenshots/"
                     className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary"
@@ -616,19 +617,19 @@ export default function HomePage() {
           </div>
 
           {/*
-            Paired layout: crop the tall settings shot to a fixed frame so it
-            matches a full feature rail (all six items), instead of three short
-            cards stranded beside a full dialog screenshot.
+            Paired layout: settings shot stretches with the feature rail.
+            object-contain keeps the full dialog visible (no side crop).
           */}
           <div className="grid items-stretch gap-5 lg:grid-cols-12 lg:gap-6">
             <figure className="shot-frame flex h-full min-h-0 flex-col lg:col-span-7">
               <div className="relative min-h-[16rem] flex-1 overflow-hidden bg-zinc-950 sm:min-h-[18rem]">
-                <Image
+                <ThemeScreenshotImage
                   src="/screenshots/settings-speech-engine.png"
+                  srcDark="/screenshots/dark/settings-speech-engine.png"
                   alt="Vocalinux settings dialog showing speech engine options"
-                  width={1200}
-                  height={800}
-                  className="absolute inset-0 h-full w-full object-cover object-top"
+                  width={2128}
+                  height={1698}
+                  className="absolute inset-0 h-full w-full object-contain p-2 sm:p-3"
                 />
               </div>
               <figcaption className="shrink-0 border-t border-border px-4 py-2.5 text-sm text-muted-foreground">
@@ -664,12 +665,13 @@ export default function HomePage() {
 
           <div className="mt-5 grid items-stretch gap-5 lg:grid-cols-12 lg:gap-6">
             <figure className="shot-frame lg:col-span-5">
-              <Image
+              <ThemeScreenshotImage
                 src="/screenshots/02-system-tray.png"
+                srcDark="/screenshots/dark/02-system-tray.png"
                 alt="Vocalinux system tray icon and menu"
-                width={900}
-                height={700}
-                className="h-auto max-h-[18rem] w-full object-cover object-top sm:max-h-[20rem]"
+                width={315}
+                height={466}
+                className="mx-auto h-auto max-h-[18rem] w-auto object-contain sm:max-h-[20rem]"
               />
               <figcaption className="border-t border-border px-4 py-2.5 text-sm text-muted-foreground">
                 Tray status while you work
