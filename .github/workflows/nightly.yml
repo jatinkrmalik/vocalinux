@@ -47,8 +47,6 @@ jobs:
             gir1.2-ibus-1.0 \
             gir1.2-rsvg-2.0 \
             librsvg2-common \
-            libappindicator3-1 \
-            libayatana-appindicator3-1 \
             libdbusmenu-gtk3-4 \
             libnotify4
 
@@ -297,8 +295,6 @@ jobs:
             gir1.2-ibus-1.0 \
             gir1.2-rsvg-2.0 \
             librsvg2-common \
-            libappindicator3-1 \
-            libayatana-appindicator3-1 \
             libdbusmenu-gtk3-4 \
             libnotify4
 
