@@ -302,8 +302,6 @@ Thanks to everyone who has contributed code, docs, or fixes (active and past):
   <img src="https://contrib.rocks/image?repo=jatinkrmalik/vocalinux" alt="Vocalinux contributors" />
 </a>
 
-See the full list on [GitHub Contributors](https://github.com/jatinkrmalik/vocalinux/graphs/contributors).
-
 ## Repository mirrors
 
 GitHub is the primary forge for issues, PRs, CI, and releases.
