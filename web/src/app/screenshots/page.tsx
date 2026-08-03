@@ -8,97 +8,102 @@ import {
 import { SeoSubpageShell } from "@/components/seo-subpage-shell";
 import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
+const SETTINGS_SIZE = { width: 960, height: 720 } as const;
+
 const productShots: Screenshot[] = [
   {
     src: "/screenshots/00-transcription.png",
+    srcDark: "/screenshots/dark/00-transcription.png",
     alt: "Vocalinux Speech Model settings in the searchable sidebar UI",
     title: "Settings overview",
-    description: "Searchable sidebar settings with speech engine and model controls.",
-    width: 856,
-    height: 856,
+    description:
+      "Searchable sidebar settings with speech engine and model controls.",
+    ...SETTINGS_SIZE,
   },
   {
     src: "/screenshots/02-system-tray.png",
-    alt: "Vocalinux system tray listening indicator",
+    srcDark: "/screenshots/dark/02-system-tray.png",
+    alt: "Vocalinux system tray menu with voice typing controls",
     title: "System tray",
-    description: "Tray icon shows idle, listening, and processing states.",
-    width: 565,
-    height: 453,
+    description: "Tray menu for start/stop, settings, logs, and about.",
+    width: 233,
+    height: 355,
   },
   {
     src: "/screenshots/05-about-view.png",
+    srcDark: "/screenshots/dark/05-about-view.png",
     alt: "Vocalinux About dialog",
     title: "About",
     description: "Version info, credits, and project links.",
-    width: 776,
-    height: 776,
+    width: 404,
+    height: 644,
   },
   {
     src: "/screenshots/03-log-viewer.png",
+    srcDark: "/screenshots/dark/03-log-viewer.png",
     alt: "Vocalinux log viewer dialog",
     title: "Log viewer",
     description: "Inspect runtime logs when diagnosing dictation issues.",
-    width: 856,
-    height: 856,
+    ...SETTINGS_SIZE,
   },
 ];
 
 const settingsShots: Screenshot[] = [
   {
     src: "/screenshots/settings-speech-engine.png",
+    srcDark: "/screenshots/dark/settings-speech-engine.png",
     alt: "Vocalinux Speech Model settings with sidebar navigation",
     title: "Speech Model",
     description:
       "Choose whisper.cpp, Whisper, VOSK, or Remote API and pick a model.",
-    width: 856,
-    height: 856,
+    ...SETTINGS_SIZE,
   },
   {
     src: "/screenshots/settings-recognition.png",
+    srcDark: "/screenshots/dark/settings-recognition.png",
     alt: "Vocalinux Dictation settings page",
     title: "Dictation",
-    description: "Shortcuts, modes, and everyday dictation controls.",
-    width: 856,
-    height: 856,
+    description: "Shortcuts, listening controls, and dictation output options.",
+    ...SETTINGS_SIZE,
   },
   {
     src: "/screenshots/settings-audio.png",
+    srcDark: "/screenshots/dark/settings-audio.png",
     alt: "Vocalinux Audio settings page",
     title: "Audio",
     description: "Input device, feedback sounds, and capture options.",
-    width: 856,
-    height: 856,
+    ...SETTINGS_SIZE,
   },
   {
-    src: "/screenshots/settings-shortcuts.png",
-    alt: "Vocalinux Dictation shortcuts with custom Record and Set controls",
-    title: "Shortcuts & Hotkeys",
-    description: "Toggle mode, push-to-talk, and custom key bindings.",
-    width: 856,
-    height: 856,
+    src: "/screenshots/settings-performance.png",
+    srcDark: "/screenshots/dark/settings-performance.png",
+    alt: "Vocalinux Performance settings page",
+    title: "Performance",
+    description: "Auto-pause, model keep-alive, and GPU device selection.",
+    ...SETTINGS_SIZE,
   },
   {
     src: "/screenshots/settings-general.png",
+    srcDark: "/screenshots/dark/settings-general.png",
     alt: "Vocalinux Application settings page",
     title: "Application",
     description: "Autostart, start minimized, and everyday defaults.",
-    width: 856,
-    height: 856,
+    ...SETTINGS_SIZE,
   },
   {
     src: "/screenshots/settings-advanced.png",
+    srcDark: "/screenshots/dark/settings-advanced.png",
     alt: "Vocalinux Advanced settings with whisper.cpp decoding controls",
     title: "Advanced",
     description: "Power-user decoding controls and Remote Server options.",
-    width: 856,
-    height: 856,
+    ...SETTINGS_SIZE,
   },
 ];
 
 export const metadata: Metadata = buildPageMetadata({
   title: "Vocalinux Screenshots | Linux Voice Dictation UI",
   description:
-    "See Vocalinux in action: system tray, about dialog, log viewer, and settings pages for speech model, dictation, audio, shortcuts, application, and advanced options.",
+    "See Vocalinux in action: system tray, about dialog, log viewer, and settings pages for speech model, dictation, audio, performance, application, and advanced options. Light and dark themes included.",
   path: "/screenshots",
   keywords: [
     "Vocalinux screenshots",
@@ -150,8 +155,9 @@ export default function ScreenshotsPage() {
         </h1>
         <p className="mb-8 max-w-4xl text-lg text-muted-foreground">
           A look at offline voice dictation on Linux: tray controls, debugging
-          tools, and the searchable sidebar settings UI from v0.15. Click any
-          image to expand it and browse the gallery.
+          tools, and the searchable sidebar settings UI from v0.15. Toggle the
+          site theme to switch between light and dark app shots. Click any image
+          to expand it and browse the gallery.
         </p>
       </section>
 
