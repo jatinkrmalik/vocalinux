@@ -617,9 +617,8 @@ export default function HomePage() {
           </div>
 
           {/*
-            Paired layout: crop the tall settings shot to a fixed frame so it
-            matches a full feature rail (all six items), instead of three short
-            cards stranded beside a full dialog screenshot.
+            Paired layout: settings shot stretches with the feature rail.
+            object-contain keeps the full dialog visible (no side crop).
           */}
           <div className="grid items-stretch gap-5 lg:grid-cols-12 lg:gap-6">
             <figure className="shot-frame flex h-full min-h-0 flex-col lg:col-span-7">
@@ -630,7 +629,7 @@ export default function HomePage() {
                   alt="Vocalinux settings dialog showing speech engine options"
                   width={2128}
                   height={1698}
-                  className="absolute inset-0 h-full w-full object-cover object-top"
+                  className="absolute inset-0 h-full w-full object-contain p-2 sm:p-3"
                 />
               </div>
               <figcaption className="shrink-0 border-t border-border px-4 py-2.5 text-sm text-muted-foreground">
