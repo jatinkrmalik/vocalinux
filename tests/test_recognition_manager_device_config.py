@@ -315,6 +315,38 @@ class TestAudioDeviceDetection(unittest.TestCase):
         mock_stream.stop_stream.assert_called_once()
         mock_stream.close.assert_called_once()
 
+    def test_test_audio_input_system_default_keeps_null_device_index(self):
+        """System Default must open PortAudio without an explicit device index."""
+        from vocalinux.speech_recognition.recognition_manager import test_audio_input
+
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = b"\x00\x01" * 1024
+        mock_audio = MagicMock()
+        mock_audio.open.return_value = mock_stream
+        mock_audio.get_default_input_device_info.return_value = {
+            "index": 7,
+            "name": "default",
+            "defaultSampleRate": 48000,
+            "maxInputChannels": 1,
+        }
+        mock_pyaudio = MagicMock(paInt16=8)
+        mock_pyaudio.PyAudio.return_value = mock_audio
+
+        with patch.dict("sys.modules", {"pyaudio": mock_pyaudio}):
+            if isinstance(sys.modules.get("numpy"), MagicMock):
+                del sys.modules["numpy"]
+            with patch(
+                "vocalinux.speech_recognition.recognition_manager._open_capture_stream",
+                return_value=(1, 48000, mock_stream),
+            ) as mock_open:
+                result = test_audio_input(device_index=None, duration=0.1)
+
+        assert result["success"] is True
+        mock_open.assert_called_once_with(mock_audio, None)
+        # Display metadata can still report the host default index/name.
+        assert result["device_index"] == 7
+        assert result["device_name"] == "default"
+
     def test_test_audio_input_negotiation_fallback_open(self):
         """When negotiation returns no stream, mic test falls back to a plain open."""
         mock_stream = MagicMock()

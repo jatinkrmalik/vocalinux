@@ -667,15 +667,17 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
 
         audio = pyaudio.PyAudio()
 
-        # Get device info
+        # Get device info for display. Keep open_device_index as None for
+        # System Default so PortAudio opens the host default instead of an
+        # explicit pseudo-device index like "default" / DeepFilterNet (#624).
+        open_device_index = device_index
         try:
             if device_index is not None:
                 info = audio.get_device_info_by_index(device_index)
             else:
                 info = audio.get_default_input_device_info()
-                device_index = info.get("index")
             result["device_name"] = info.get("name", "Unknown")
-            result["device_index"] = device_index
+            result["device_index"] = info.get("index", device_index)
         except (IOError, OSError) as e:
             result["error"] = f"Cannot get device info: {e}"
             audio.terminate()
@@ -684,7 +686,7 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
         # Negotiate the format and open the capture stream in ONE PortAudio
         # open — Bluetooth SCO devices abort with heap corruption when the
         # stream is opened, closed, and quickly reopened (issue #567).
-        CHANNELS, RATE, stream = _open_capture_stream(audio, device_index)
+        CHANNELS, RATE, stream = _open_capture_stream(audio, open_device_index)
         logger.info(f"Using {CHANNELS} channel(s) for audio test")
         result["sample_rate"] = RATE
 
@@ -699,8 +701,8 @@ def test_audio_input(device_index: int = None, duration: float = 1.0) -> dict:
                     "input": True,
                     "frames_per_buffer": CHUNK,
                 }
-                if device_index is not None:
-                    stream_kwargs["input_device_index"] = device_index
+                if open_device_index is not None:
+                    stream_kwargs["input_device_index"] = open_device_index
 
                 stream = audio.open(**stream_kwargs)
             except (IOError, OSError) as e:
@@ -2550,14 +2552,14 @@ class SpeechRecognitionManager:
                 if resolved_device_index is None:
                     resolved_device_index = _resolve_valid_input_device(audio, None)
             if resolved_device_index is None and not use_system_default:
-                logger.error("No audio input devices found with input channels.")
-                logger.error(
-                    "Please connect a microphone and ensure it is recognized by the system."
+                # No safe enumerated mic left (e.g. only PipeWire pseudo devices).
+                # Fall back to PortAudio system default instead of aborting.
+                logger.warning(
+                    "No safe audio input devices enumerated; "
+                    "falling back to system default capture."
                 )
-                play_error_sound()
-                audio.terminate()
-                self._update_state(RecognitionState.ERROR)
-                return
+                resolved_device_index = None
+                use_system_default = True
 
             # Log available devices for debugging (skip virtual devices)
             logger.debug("Available audio input devices:")
@@ -3200,8 +3202,11 @@ class SpeechRecognitionManager:
                 if resolved_device_index is None:
                     resolved_device_index = _resolve_valid_input_device(audio_instance, None)
             if resolved_device_index is None and not use_system_default:
-                logger.error("Reconnection failed: no input devices available.")
-                return False
+                logger.warning(
+                    "Reconnection: no safe input devices enumerated; "
+                    "falling back to system default capture."
+                )
+                resolved_device_index = None
 
             # Stream configuration
             CHUNK = 1024
