@@ -823,6 +823,16 @@ class TestSettingsNavigation(unittest.TestCase):
         ]:
             self.assertIn(f'SettingsPage("{name}", "{title}"', self.source_code)
 
+    def test_application_page_has_tray_warning_toggle(self):
+        self.assertIn('PreferencesGroup(title="General")', self.source_code)
+        self.assertIn("self.missing_tray_warning_switch = Gtk.Switch()", self.source_code)
+        self.assertIn('title="Warn if tray support is not detected"', self.source_code)
+        self.assertIn('"show_missing_tray_warning", enabled', self.source_code)
+        self.assertIn(
+            'ui_settings.get("show_missing_tray_warning", True)',
+            self.source_code,
+        )
+
     def test_status_controls_live_in_sidebar_footer(self):
         """Status, mic level, test, and Close live in the sidebar footer so
         they stay visible from every page without a bottom strip."""

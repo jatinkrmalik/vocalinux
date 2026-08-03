@@ -262,7 +262,8 @@ class TrayIndicator:
                 "No StatusNotifierWatcher on D-Bus session bus; tray icon may not appear. "
                 "On GNOME, install gnome-shell-extension-appindicator."
             )
-            GLib.idle_add(self._show_missing_watcher_dialog)
+            if self.config_manager.get_bool("ui", "show_missing_tray_warning", True):
+                GLib.idle_add(self._show_missing_watcher_dialog)
 
         # Create the menu
         self.menu = Gtk.Menu()
@@ -339,8 +340,18 @@ class TrayIndicator:
             "\n"
             "Keyboard shortcuts will still work even without the tray icon."
         )
-        dialog.connect("response", lambda d, _: d.destroy())
-        dialog.show()
+        dont_show_again = Gtk.CheckButton(label="Don't show again")
+        dont_show_again.set_margin_top(8)
+        dialog.get_message_area().pack_start(dont_show_again, False, False, 0)
+
+        def on_response(d, _response):
+            if dont_show_again.get_active():
+                self.config_manager.set("ui", "show_missing_tray_warning", False)
+                self.config_manager.save_settings()
+            d.destroy()
+
+        dialog.connect("response", on_response)
+        dialog.show_all()
         return False
 
     def _show_appindicator_error_dialog(self, error_detail: str):
