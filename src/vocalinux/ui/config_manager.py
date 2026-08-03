@@ -54,6 +54,7 @@ DEFAULT_CONFIG = {
     "ui": {
         "start_minimized": False,
         "show_notifications": True,
+        "show_missing_tray_warning": True,
     },
     "general": {
         "autostart": False,

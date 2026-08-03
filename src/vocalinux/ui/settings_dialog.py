@@ -1498,8 +1498,8 @@ class SettingsDialog(Gtk.Dialog):
         self.audio_device_combo.connect("changed", self._on_audio_device_changed)
 
     def _build_general_section(self):
-        """Build the Application page: startup behavior."""
-        group = PreferencesGroup(title="Startup")
+        """Build the Application page: general behavior."""
+        group = PreferencesGroup(title="General")
 
         self.autostart_switch = Gtk.Switch()
         autostart_row = PreferenceRow(
@@ -1519,10 +1519,20 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(start_minimized_row)
 
+        self.missing_tray_warning_switch = Gtk.Switch()
+        missing_tray_warning_row = PreferenceRow(
+            title="Warn if tray support is not detected",
+            subtitle="Show a warning when Vocalinux cannot detect AppIndicator support",
+            widget=self.missing_tray_warning_switch,
+            keywords=("tray", "appindicator", "warning"),
+        )
+        group.add_row(missing_tray_warning_row)
+
         self.general_tab.pack_start(group, False, False, 0)
 
         self.autostart_switch.connect("state-set", self._on_autostart_toggled)
         self.start_minimized_switch.connect("state-set", self._on_start_minimized_toggled)
+        self.missing_tray_warning_switch.connect("state-set", self._on_missing_tray_warning_toggled)
 
     def _build_auto_pause_section(self):
         """Build Auto-Pause settings: enable toggle + process name list."""
@@ -1896,6 +1906,17 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager.set("ui", "start_minimized", enabled)
         self.config_manager.save_settings()
         logger.info(f"Start minimized {'enabled' if enabled else 'disabled'}")
+        return False
+
+    def _on_missing_tray_warning_toggled(self, widget, state):
+        """Handle toggle of the missing tray support warning switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Missing tray warning toggled: {enabled}")
+        self.config_manager.set("ui", "show_missing_tray_warning", enabled)
+        self.config_manager.save_settings()
         return False
 
     def _on_copy_to_clipboard_toggled(self, widget, state):
@@ -3195,12 +3216,14 @@ class SettingsDialog(Gtk.Dialog):
 
         autostart_enabled = general_settings.get("autostart", False)
         start_minimized = ui_settings.get("start_minimized", False)
+        show_missing_tray_warning = ui_settings.get("show_missing_tray_warning", True)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
         auto_capitalize = text_injection_settings.get("auto_capitalize", True)
         append_trailing_space = text_injection_settings.get("append_trailing_space", True)
 
         self.autostart_switch.set_active(autostart_enabled)
         self.start_minimized_switch.set_active(start_minimized)
+        self.missing_tray_warning_switch.set_active(show_missing_tray_warning)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
         self.auto_capitalize_switch.set_active(auto_capitalize)
         self.append_trailing_space_switch.set_active(append_trailing_space)

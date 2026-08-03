@@ -2806,7 +2806,8 @@ install_whispercpp_with_gpu_support() {
     },
     "ui": {
         "start_minimized": false,
-        "show_notifications": true
+        "show_notifications": true,
+        "show_missing_tray_warning": true
     },
     "advanced": {
         "debug_logging": false,
@@ -2981,7 +2982,8 @@ PY
     },
     "ui": {
         "start_minimized": false,
-        "show_notifications": true
+        "show_notifications": true,
+        "show_missing_tray_warning": true
     },
     "advanced": {
         "debug_logging": false,
@@ -3033,7 +3035,8 @@ WHISPER_CONFIG
     },
     "ui": {
         "start_minimized": false,
-        "show_notifications": true
+        "show_notifications": true,
+        "show_missing_tray_warning": true
     },
     "advanced": {
         "debug_logging": false,
@@ -3073,7 +3076,8 @@ FALLBACK_CONFIG
     },
     "ui": {
         "start_minimized": false,
-        "show_notifications": true
+        "show_notifications": true,
+        "show_missing_tray_warning": true
     },
     "advanced": {
         "debug_logging": false,
@@ -3135,7 +3139,8 @@ VOSK_CONFIG
     },
     "ui": {
         "start_minimized": false,
-        "show_notifications": true
+        "show_notifications": true,
+        "show_missing_tray_warning": true
     },
     "advanced": {
         "debug_logging": false,

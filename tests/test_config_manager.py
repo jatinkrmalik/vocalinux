@@ -110,6 +110,9 @@ class TestConfigManager(unittest.TestCase):
         )  # From defaults
         self.assertEqual(config_manager.config["ui"]["start_minimized"], True)
         self.assertEqual(config_manager.config["ui"]["show_notifications"], True)  # From defaults
+        self.assertEqual(
+            config_manager.config["ui"]["show_missing_tray_warning"], True
+        )  # From defaults
 
     def test_load_config_file_error(self):
         """Test handling of errors when loading config file."""
@@ -435,6 +438,11 @@ class TestConfigManager(unittest.TestCase):
         """Test that sound effects are enabled by default."""
         config_manager = ConfigManager()
         self.assertTrue(config_manager.is_sound_effects_enabled())
+
+    def test_missing_tray_warning_enabled_by_default(self):
+        """Test that the missing tray support warning is enabled by default."""
+        config_manager = ConfigManager()
+        self.assertTrue(config_manager.get_bool("ui", "show_missing_tray_warning", False))
 
     def test_set_sound_effects_enabled(self):
         """Test setting sound effects enabled state."""
