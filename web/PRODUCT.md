@@ -30,7 +30,7 @@ Offline-first Linux voice typing with real desktop integration (system tray, X11
 - Speech languages: large selectable catalog (~33 + Auto-detect) shared by Settings/CLI; VOSK only lists languages with official Alphacephei models; remaining Whisper languages available via Auto-detect
 - Display servers: X11 and Wayland
 - Shortcut modes: toggle and push-to-talk; left/right modifier distinction; configurable modifier+key combos
-- Optional voice commands (English-only); Silero neural VAD with amplitude fallback
+- Optional voice commands with localized punctuation phrases for common languages; Silero neural VAD with amplitude fallback
 - Continuous dictation polish: capitalize after sentence punctuation; trailing space after each completed utterance
 - Optional auto-pause while configured apps run; optional idle model keep-alive unload
 - Vulkan discrete GPU auto-select with manual device override in Advanced settings

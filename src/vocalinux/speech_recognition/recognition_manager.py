@@ -924,7 +924,7 @@ class SpeechRecognitionManager:
         self.recognition_thread = None
         self.model = None
         self.recognizer = None  # Added for VOSK
-        self.command_processor = CommandProcessor()
+        self.command_processor = CommandProcessor(language=language)
 
         # Voice commands: None=auto (VOSK=yes, Whisper=no), True=always on, False=always off
         self._voice_commands_preference = kwargs.get("voice_commands_enabled")
@@ -3068,6 +3068,7 @@ class SpeechRecognitionManager:
         # VOSK needs to load a different model for the new language
         if language is not None and language != self.language:
             self.language = language
+            self.command_processor.set_language(language)
             restart_needed = True
 
         # Update VOSK specific params if provided
