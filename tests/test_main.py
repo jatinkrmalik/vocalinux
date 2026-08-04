@@ -732,8 +732,8 @@ class TestCheckDependencies(unittest.TestCase):
         """Test when Ayatana is missing but legacy AppIndicator3 is available."""
 
         def require_version_side_effect(name, version):
-            if name == "AyatanaAppIndicator3":
-                raise ValueError("AyatanaAppIndicator3 not found")
+            if name in ("AyatanaAppIndicator3", "AyatanaAppindicator3"):
+                raise ValueError(f"{name} not found")
 
         mock_gi = MagicMock()
         mock_gi.require_version = MagicMock(side_effect=require_version_side_effect)
@@ -755,12 +755,43 @@ class TestCheckDependencies(unittest.TestCase):
                 result = check_dependencies()
                 self.assertTrue(result)
 
+    def test_check_dependencies_falls_back_to_lowercase_ayatana(self):
+        """Test rare lowercase AyatanaAppindicator3 typelib is accepted."""
+
+        def require_version_side_effect(name, version):
+            if name == "AyatanaAppIndicator3":
+                raise ValueError("AyatanaAppIndicator3 not found")
+
+        mock_gi = MagicMock()
+        mock_gi.require_version = MagicMock(side_effect=require_version_side_effect)
+        mock_gtk = MagicMock()
+        mock_ayatana_lower = MagicMock()
+        mock_pynput = MagicMock()
+        mock_requests = MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "gi": mock_gi,
+                "gi.repository": MagicMock(Gtk=mock_gtk, AyatanaAppindicator3=mock_ayatana_lower),
+                "pynput": mock_pynput,
+                "requests": mock_requests,
+            },
+        ):
+            with patch("vocalinux.main.logger"):
+                result = check_dependencies()
+                self.assertTrue(result)
+
     def test_check_dependencies_missing_both_appindicators(self):
         """Test when both AppIndicator3 and AyatanaAppIndicator3 are missing."""
 
-        # Make gi.require_version raise ValueError for both AppIndicator variants
+        # Make gi.require_version raise ValueError for all AppIndicator variants
         def require_version_side_effect(name, version):
-            if name in ("AppIndicator3", "AyatanaAppIndicator3"):
+            if name in (
+                "AppIndicator3",
+                "AyatanaAppIndicator3",
+                "AyatanaAppindicator3",
+            ):
                 raise ValueError(f"{name} not found")
 
         mock_gi = MagicMock()

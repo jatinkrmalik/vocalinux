@@ -111,7 +111,8 @@ def check_dependencies():
         )
 
     # Prefer Ayatana AppIndicator (maintained; registers on KDE Plasma).
-    # Legacy Canonical AppIndicator3 is only accepted as a fallback.
+    # Match tray_indicator.py: canonical Ayatana, rare lowercase typelib, then
+    # legacy Canonical AppIndicator3 as last resort.
     try:
         import gi
 
@@ -122,13 +123,20 @@ def check_dependencies():
         try:
             import gi
 
-            gi.require_version("AppIndicator3", "0.1")
-            from gi.repository import AppIndicator3  # noqa: F401
+            gi.require_version("AyatanaAppindicator3", "0.1")
+            from gi.repository import AyatanaAppindicator3  # noqa: F401
         except (ImportError, ValueError) as e2:
-            logger.debug("AppIndicator3 import failed: %s", e2)
-            missing_system_deps.append(
-                "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
-            )
+            logger.debug("AyatanaAppindicator3 import failed: %s", e2)
+            try:
+                import gi
+
+                gi.require_version("AppIndicator3", "0.1")
+                from gi.repository import AppIndicator3  # noqa: F401
+            except (ImportError, ValueError) as e3:
+                logger.debug("AppIndicator3 import failed: %s", e3)
+                missing_system_deps.append(
+                    "AppIndicator3/AyatanaAppIndicator3 - Required for system tray icon"
+                )
 
     # Keyboard backends are optional and checked lazily by the shortcut manager.
     # Importing pynput can fail on Wayland/X-less sessions even when installed.
