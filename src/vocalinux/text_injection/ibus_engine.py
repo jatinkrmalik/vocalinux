@@ -1303,15 +1303,18 @@ class IBusTextInjector:
         captured before injection (e.g. on GNOME/Wayland with no global IBus
         engine), restoration is skipped to avoid switching the user to a
         wrong layout (see issue #497).
+
+        Engine restoration must run *after* ``stop_engine_process()``. Killing
+        the process that called ``register_component`` makes IBus run
+        ``check_global_engine()``, which only searches ``register_engine_list``
+        and treats XML engines such as ``xkb:es::spa`` as missing, clearing
+        the global engine even when Vocalinux was never selected (issue #558).
         """
-        if self._previous_engine:
-            logger.info(f"Restoring previous engine: {self._previous_engine}")
-            switch_engine(self._previous_engine)
-            self._previous_engine = None
-        else:
-            logger.info(
-                "Skipping engine restoration — " "no valid engine was captured before injection"
-            )
+        restore_engine = self._previous_engine
+        if not restore_engine:
+            current = get_current_engine()
+            if current and current != ENGINE_NAME:
+                restore_engine = current
 
         # Restore the XKB layout that was captured during setup
         # This ensures the user's original keyboard layout is preserved
@@ -1322,8 +1325,18 @@ class IBusTextInjector:
                 restore_xkb_layout(layout, variant, option)
             self._previous_xkb_layout = None
 
-        # Stop the engine process
+        # Stop the engine process first — this can clear IBus GlobalEngine (#558)
         stop_engine_process()
+
+        if restore_engine:
+            logger.info(f"Restoring previous engine after teardown: {restore_engine}")
+            if not switch_engine(restore_engine):
+                logger.error(f"Failed to restore IBus engine after teardown: {restore_engine}")
+        else:
+            logger.info(
+                "Skipping engine restoration — no restorable engine was available at shutdown"
+            )
+        self._previous_engine = None
 
     def inject_text(self, text: str) -> bool:
         """
