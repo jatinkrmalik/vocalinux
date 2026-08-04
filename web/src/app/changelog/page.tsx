@@ -15,6 +15,27 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.15.0",
+    date: "2026-07-28",
+    type: "stable",
+    highlights: [
+      "Searchable sidebar settings with live search replace the seven-tab notebook (PR #601)",
+      "AppImage packages for x86_64 and aarch64 on GitHub Releases (PR #573, #602)",
+      "Expanded speech-language catalog (~33 languages + Auto-detect), including Hungarian; VOSK only lists languages with official models (PR #616, fixes #565)",
+      "Settings: dictation status / mic level / Test Dictation / Close live in the sidebar footer (PR #618)",
+      "Settings: Custom Shortcut Record/Set controls show again (PR #619)",
+      "Languages: English (India) maps to Whisper code en for whisper.cpp / Whisper / remote API (PR #617)",
+      "Auto-capitalize after sentence punctuation; trailing space so the next utterance does not glue on (PR #554, #608)",
+      "Auto-pause competing apps and idle model keep-alive unload for battery/GPU headroom (PR #592, closes #445, #591)",
+      "Vulkan: auto-select discrete GPU and pick a device in Advanced settings (PR #590, closes #589)",
+      "Wayland: use IBus on previously unbridged compositors when ibus-wayland is running (PR #614, closes #607)",
+      "IBus: keep engine teardown correct when parent destroy fails (PR #613, fixes #606)",
+      "CLI: vocalinux --version (PR #563, closes #555)",
+      "Settings info notices flattened; Bluetooth mic heap-corruption fix; KDE unbridged-IBus skip when ibus-wayland is absent; xdotool focus preserve; installer/AUR fixes (PR #615, #599, #577, #564, #583, #569, #597, #579, #586)",
+      "Marketing site redesign; languages page per-engine badges; robots.txt indexing fix (PR #582, #616, #610)",
+    ],
+  },
+  {
     version: "v0.14.2",
     date: "2026-07-17",
     type: "stable",

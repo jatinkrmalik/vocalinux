@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="50" height="50" alt="Vocalinux"> 
+<img src="https://github.com/user-attachments/assets/56dabe5c-5c65-44d5-a36a-429c9fea0719" width="50" height="50" alt="Vocalinux">
 
 # Vocalinux
 
@@ -38,28 +38,35 @@ It's a free, GPLv3-licensed desktop app that lets you dictate text into *any* ap
 
 No internet required. No data leaves your machine. Just speak and type.
 
-## 📚 What's New in v0.14.2
+## 📚 What's New in v0.15.0
 
-> **0.14.2 is a stability patch on the 0.14 series.** Feature set is the same as 0.14.x; this release fixes IBus reliability and settings dialog sizing.
+> **0.15.0** adds searchable sidebar settings, AppImage packages, a much larger speech-language catalog (including Hungarian), cleaner continuous dictation (capitalization + trailing spaces), power-saving model unload, smarter Vulkan GPU selection, and Wayland IBus improvements on top of the 0.14 packaging line.
 
-### 0.14 series highlights
+### Highlights
 
 | Feature | Description |
 |---------|-------------|
-| **Configurable hotkeys** | Bind any modifier combination to a key (e.g. `Alt+R`, `Ctrl+Shift+V`) |
-| **FunASR / SenseVoice** | Remote-API engine supports FunASR and SenseVoice models |
-| **Flatpak packaging** | Distro-independent install with whisper.cpp, global hotkeys (evdev), and Wayland paste (wl-copy + ydotool) |
-| **AUR package** | Arch users can install via `yay -S vocalinux` |
-| **Layout-aware hotkeys** | Combo keys work correctly on non-US keyboard layouts |
-| **Wayland / IBus reliability** | GNOME and KDE injection fixes, first-dictation FocusIn gate, engine process launch restored |
+| **Searchable settings** | Sidebar navigation with search replaces the seven-tab notebook (#601) |
+| **AppImage** | Self-contained x86_64 and aarch64 builds on GitHub Releases (#573, #602) |
+| **More languages** | ~33 selectable speech languages (plus Auto-detect), including Hungarian; VOSK only lists languages with official models (#616, fixes #565) |
+| **Dictation polish** | Auto-capitalize after sentence punctuation; trailing space so the next utterance does not glue on (#554, #608) |
+| **Auto-pause + keep-alive** | Pause/unload while configured apps run; unload after idle timeout (#592) |
+| **Vulkan GPU selection** | Prefer discrete GPUs automatically; pick a device in Advanced settings (#590) |
+| **ibus-wayland** | Use IBus on “unbridged” compositors when `ibus-wayland` is running (#614) |
 
-### Bug fixes in v0.14.2
+### Also in this release
 
-- **IBus**: Restore engine process launch after the Flatpak XDG path import change (no silent ydotool fallback when IBus should work) (#534)
-- **IBus**: Wait for FocusIn before commit on scoped injection so the first dictation of a session is not dropped on GNOME Wayland (#533, fixes #523)
-- **Settings UI**: Tabs scroll so the dialog fits the monitor; wheel events from unfocused combos/spins reach the tab scroller (#538, #541)
+- Settings: dictation status / mic level / Test Dictation / Close live in the sidebar footer (#618)
+- Settings: Custom Shortcut Record/Set controls show again (#619)
+- Languages: English (India) maps to Whisper code `en` (#617)
+- CLI `--version` (#563)
+- Bluetooth mic probing no longer corrupts the heap / crashes on SCO capture devices (#599)
+- IBus engine teardown when parent destroy fails (#613)
+- Settings info notices flattened to match the rest of the dialog (#615)
+- KDE Plasma Wayland unbridged-IBus skip when ibus-wayland is absent (#577)
+- xdotool focus preserve; installer / uninstall / AUR reliability fixes (#564, #583, #569, #597, #579, #586)
 
-See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.14.2). Earlier 0.14.x notes are in UPDATE.md.
+See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.15.0).
 
 ---
 
@@ -79,28 +86,28 @@ See [docs/UPDATE.md](docs/UPDATE.md) and the [full changelog](https://github.com
 
 ## 📸 Screenshots
 
-Vocalinux in action, plus the settings tabs from v0.14.0-beta. Full gallery on the [website screenshots page](https://vocalinux.com/screenshots/).
+Vocalinux in action. Settings gallery shots may lag the searchable sidebar UI from v0.15.0 — full gallery on the [website screenshots page](https://vocalinux.com/screenshots/).
 
 ### Product
 
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="resources/screenshots/00-transcription.png" alt="Transcription in Action" width="350"><br>
+      <img src="web/public/screenshots/00-transcription.png" alt="Transcription in Action" width="350"><br>
       <em>Real-time voice-to-text transcription</em>
     </td>
     <td align="center" width="50%">
-      <img src="resources/screenshots/02-system-tray.png" alt="System Tray" width="350"><br>
+      <img src="web/public/screenshots/02-system-tray.png" alt="System Tray" width="350"><br>
       <em>System tray with listening indicator</em>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="resources/screenshots/05-about-view.png" alt="About View" width="350"><br>
-      <em>About dialog with version info</em>
+      <img src="web/public/screenshots/05-about-view.png" alt="About View" width="350"><br>
+      <em>About &amp; Updates in Settings</em>
     </td>
     <td align="center">
-      <img src="resources/screenshots/03-log-viewer.png" alt="Log Viewer" width="350"><br>
+      <img src="web/public/screenshots/03-log-viewer.png" alt="Log Viewer" width="350"><br>
       <em>Log viewer for debugging</em>
     </td>
   </tr>
@@ -111,29 +118,29 @@ Vocalinux in action, plus the settings tabs from v0.14.0-beta. Full gallery on t
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="resources/screenshots/settings-speech-engine.png" alt="Speech Engine settings" width="260"><br>
+      <img src="web/public/screenshots/settings-speech-engine.png" alt="Speech Engine settings" width="260"><br>
       <em>Speech Engine</em>
     </td>
     <td align="center" width="33%">
-      <img src="resources/screenshots/settings-recognition.png" alt="Recognition settings" width="260"><br>
+      <img src="web/public/screenshots/settings-recognition.png" alt="Recognition settings" width="260"><br>
       <em>Recognition</em>
     </td>
     <td align="center" width="33%">
-      <img src="resources/screenshots/settings-audio.png" alt="Audio settings" width="260"><br>
+      <img src="web/public/screenshots/settings-audio.png" alt="Audio settings" width="260"><br>
       <em>Audio</em>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="resources/screenshots/settings-shortcuts.png" alt="Shortcuts and hotkeys" width="260"><br>
-      <em>Shortcuts &amp; Hotkeys</em>
+      <img src="web/public/screenshots/settings-performance.png" alt="Performance settings" width="260"><br>
+      <em>Performance</em>
     </td>
     <td align="center">
-      <img src="resources/screenshots/settings-general.png" alt="General settings" width="260"><br>
+      <img src="web/public/screenshots/settings-general.png" alt="General settings" width="260"><br>
       <em>General</em>
     </td>
     <td align="center">
-      <img src="resources/screenshots/settings-advanced.png" alt="Advanced tuning and settings" width="260"><br>
+      <img src="web/public/screenshots/settings-advanced.png" alt="Advanced tuning and settings" width="260"><br>
       <em>Advanced</em>
     </td>
   </tr>
@@ -434,11 +441,11 @@ This script generates all three sounds using the same smooth glide algorithm. Yo
 - [x] ~~Multi-language support (FR, DE, RU)~~ ✅
 - [x] ~~whisper.cpp integration (default engine)~~ ✅
 - [x] ~~Vulkan GPU support~~ ✅
-- [ ] In-app update mechanism
-- [ ] Application-specific commands
-- [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
-- [ ] Debian/Ubuntu package (.deb)
+- [x] In-app update mechanism ✅
 - [x] ~~Wayland support via IBus~~ ✅
+- [x] ~~Flatpak packaging~~ ✅ (Flathub submission in progress)
+- [ ] Application-specific commands
+- [ ] Debian/Ubuntu package (.deb)
 - [ ] Voice command customization
 
 ## 🌐 The Voca Ecosystem
@@ -447,7 +454,7 @@ Vocalinux is part of a family of privacy-first, offline voice dictation tools. S
 
 | Platform | Project | Website | GitHub | Status |
 |----------|---------|---------|--------|--------|
-| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Stable v0.14.2 |
+| 🐧 Linux | **VocaLinux** | [vocalinux.com](https://vocalinux.com) | [jatinkrmalik/vocalinux](https://github.com/jatinkrmalik/vocalinux) | ✅ Stable v0.15.0 |
 | 🍎 macOS | **VocaMac** | [vocamac.com](https://vocamac.com) | [jatinkrmalik/vocamac](https://github.com/jatinkrmalik/vocamac) | 🚀 Beta |
 | 🪟 Windows | **VocaWin** | [vocawin.com](https://vocawin.com) | [jatinkrmalik/vocawin](https://github.com/jatinkrmalik/vocawin) | 📋 Planned |
 

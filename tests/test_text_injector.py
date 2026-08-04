@@ -95,7 +95,7 @@ class TestTextInjector(unittest.TestCase):
             # Make wtype available for Wayland
             self.mock_which.side_effect = lambda cmd: ("/usr/bin/wtype" if cmd == "wtype" else None)
 
-            # Mock wtype test call to return success
+            # Mock wtype probe call to return success
             mock_process = MagicMock()
             mock_process.returncode = 0
             mock_process.stderr = ""
@@ -104,6 +104,32 @@ class TestTextInjector(unittest.TestCase):
             injector = TextInjector()
             self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND)
             self.assertEqual(injector.wayland_tool, "wtype")
+
+    def test_wtype_startup_probe_is_non_destructive(self):
+        """Startup probing must not type visible text into the focused window."""
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
+            self.mock_which.side_effect = lambda cmd: ("/usr/bin/wtype" if cmd == "wtype" else None)
+
+            mock_process = MagicMock()
+            mock_process.returncode = 0
+            mock_process.stderr = ""
+            self.mock_subprocess.return_value = mock_process
+
+            TextInjector()
+
+            self.mock_subprocess.assert_any_call(
+                ["wtype", ""],
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                timeout=2,
+            )
+            wtype_calls = [
+                call.args[0]
+                for call in self.mock_subprocess.call_args_list
+                if call.args and call.args[0][0] == "wtype"
+            ]
+            self.assertTrue(all(len(cmd) < 2 or cmd[1] == "" for cmd in wtype_calls))
 
     def test_force_wayland_mode(self):
         """Test forcing Wayland mode."""
@@ -126,7 +152,7 @@ class TestTextInjector(unittest.TestCase):
                 "xdotool": "/usr/bin/xdotool",
             }.get(cmd)
 
-            # Make wtype test fail with compositor error
+            # Make wtype probe fail with compositor error
             mock_process = MagicMock()
             mock_process.returncode = 1
             mock_process.stderr = "compositor does not support virtual keyboard protocol"
@@ -177,7 +203,7 @@ class TestTextInjector(unittest.TestCase):
             # Make wtype available
             self.mock_which.side_effect = lambda cmd: ("/usr/bin/wtype" if cmd == "wtype" else None)
 
-            # Successful wtype test
+            # Successful wtype probe
             mock_process = MagicMock()
             mock_process.returncode = 0
             mock_process.stderr = ""
@@ -463,12 +489,12 @@ class TestTextInjector(unittest.TestCase):
                 "xdotool": "/usr/bin/xdotool",
             }.get(cmd)
 
-            # First return success for wtype test, then fail for actual injection
+            # First return success for wtype probe, then fail for actual injection
             call_count = [0]
 
             def mock_subprocess_call(*args, **kwargs):
                 call_count[0] += 1
-                if call_count[0] <= 1:  # wtype test call
+                if call_count[0] <= 1:  # wtype probe call
                     mock = MagicMock()
                     mock.returncode = 0
                     mock.stderr = ""
@@ -1191,8 +1217,8 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
         self.patch_sleep.stop()
         self.patch_ibus_available.stop()
 
-    def test_wtype_test_exception(self):
-        """Test wtype test handling exceptions gracefully."""
+    def test_wtype_probe_exception(self):
+        """Test wtype probe handling exceptions gracefully."""
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland"}):
 
             def which_side_effect(cmd):
@@ -1202,7 +1228,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
             self.mock_which.side_effect = which_side_effect
 
-            # Make the wtype test raise an exception
+            # Make the wtype probe raise an exception
             self.mock_subprocess.side_effect = Exception("Test wtype error")
 
             # Should still create the injector (will log warning)
@@ -1315,7 +1341,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
             self.mock_which.side_effect = which_side_effect
 
-            # Make wtype test return error about compositor
+            # Make wtype probe return error about compositor
             mock_process = MagicMock()
             mock_process.returncode = 1
             mock_process.stderr = "compositor does not support virtual keyboard protocol"
@@ -1336,7 +1362,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
             self.mock_which.side_effect = which_side_effect
 
-            # Make wtype test return error
+            # Make wtype probe return error
             mock_process = MagicMock()
             mock_process.returncode = 1
             mock_process.stderr = "compositor does not support virtual keyboard"
@@ -1555,7 +1581,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
             self.mock_which.side_effect = which_side_effect
 
-            # Make wtype test succeed
+            # Make wtype probe succeed
             mock_result = MagicMock()
             mock_result.returncode = 0
             mock_result.stderr = ""
@@ -1663,7 +1689,7 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
 
             self.mock_which.side_effect = which_side_effect
 
-            # Succeed on wtype test
+            # Succeed on wtype probe
             mock_result = MagicMock()
             mock_result.returncode = 0
             mock_result.stderr = ""

@@ -8,6 +8,7 @@ The tests focus on the business logic of the TrayIndicator class.
 import os
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -107,6 +108,8 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_speech_engine.state = RecognitionState.IDLE
         self.mock_text_injector = MagicMock()
         self.mock_config_manager = MagicMock()
+        self.mock_config_manager.get_bool.side_effect = lambda section, key, default=False: default
+        self.mock_config_manager.get_str.side_effect = lambda section, key, default="": default
 
         # Patch os path functions
         self.patcher_path_exists = patch("os.path.exists", return_value=True)
@@ -131,6 +134,17 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_config_manager_class = self.patcher_config_manager.start()
         self.mock_config_manager_class.return_value = self.mock_config_manager
 
+        # Default D-Bus ListNames to include StatusNotifierWatcher so constructing
+        # TrayIndicator (which idle_add's _init_indicator) does not open the
+        # missing-watcher dialog during setUp. Individual tests can override.
+        self.patcher_dbus_proxy = patch(
+            "vocalinux.ui.tray_indicator.Gio.DBusProxy.new_for_bus_sync"
+        )
+        self.mock_dbus_proxy_factory = self.patcher_dbus_proxy.start()
+        mock_proxy = MagicMock()
+        mock_proxy.call_sync.return_value.unpack.return_value = (["org.kde.StatusNotifierWatcher"],)
+        self.mock_dbus_proxy_factory.return_value = mock_proxy
+
         # Import and create TrayIndicator
         from vocalinux.ui.tray_indicator import TrayIndicator
 
@@ -146,6 +160,7 @@ class TestTrayIndicator(unittest.TestCase):
         self.patcher_listdir.stop()
         self.patcher_makedirs.stop()
         self.patcher_config_manager.stop()
+        self.patcher_dbus_proxy.stop()
         self.patcher_settings_dialog.stop()
         self.thread_patcher.stop()
         self.ksm_patcher.stop()
@@ -250,22 +265,17 @@ class TestTrayIndicator(unittest.TestCase):
             mock_dialog_instance.show.assert_called_once()
 
     def test_about_dialog(self):
-        """Test about dialog creation."""
-        with patch("vocalinux.ui.about_dialog.Gtk") as patched_gtk:
-            mock_about_dialog = MagicMock()
-            patched_gtk.AboutDialog.return_value = mock_about_dialog
-            mock_about_dialog.run.side_effect = lambda: None
-            patched_gtk.License.GPL_3_0 = 1
+        """Test About opens Settings focused on the About page."""
+        with patch("vocalinux.ui.tray_indicator.SettingsDialog") as mock_dialog_class:
+            mock_dialog_instance = MagicMock()
+            mock_dialog_class.return_value = mock_dialog_instance
 
-            with patch("vocalinux.ui.about_dialog.GdkPixbuf") as patched_pixbuf:
-                mock_pixbuf = MagicMock()
-                patched_pixbuf.Pixbuf.new_from_file.return_value = mock_pixbuf
+            self.tray_indicator._on_about_clicked(None)
 
-                self.tray_indicator._on_about_clicked(None)
-
-                mock_about_dialog.set_program_name.assert_called_with("Vocalinux")
-                mock_about_dialog.run.assert_called_once()
-                mock_about_dialog.destroy.assert_called_once()
+            mock_dialog_class.assert_called_once()
+            kwargs = mock_dialog_class.call_args.kwargs
+            self.assertEqual(kwargs.get("initial_page"), "about")
+            mock_dialog_instance.show.assert_called_once()
 
     def test_validate_resources_missing_resources_dir(self):
         """Test validation when resources directory doesn't exist."""
@@ -434,25 +444,16 @@ class TestTrayIndicator(unittest.TestCase):
                     self.tray_indicator.run()
                     mock_quit.assert_called_once()
 
-    def test_about_dialog_logo_scaling_error(self):
-        """Test about dialog handles logo scaling errors gracefully."""
-        with patch("vocalinux.ui.about_dialog.Gtk") as patched_gtk:
-            mock_about_dialog = MagicMock()
-            patched_gtk.AboutDialog.return_value = mock_about_dialog
-            mock_about_dialog.run.return_value = None
-            patched_gtk.License.GPL_3_0 = 1
+    def test_about_opens_settings_without_raising(self):
+        """Test About menu item opens settings even if dialog construction is mocked."""
+        with patch("vocalinux.ui.tray_indicator.SettingsDialog") as mock_dialog_class:
+            mock_dialog_instance = MagicMock()
+            mock_dialog_class.return_value = mock_dialog_instance
 
-            with patch("vocalinux.ui.about_dialog.GdkPixbuf") as patched_pixbuf:
-                # Simulate error loading pixbuf
-                patched_pixbuf.Pixbuf.new_from_file.side_effect = Exception("Load error")
+            self.tray_indicator._on_about_clicked(None)
 
-                # Should not raise exception
-                self.tray_indicator._on_about_clicked(None)
-
-                mock_about_dialog.run.assert_called_once()
-                mock_about_dialog.destroy.assert_called_once()
-                # set_logo should NOT be called due to the error
-                mock_about_dialog.set_logo.assert_not_called()
+            mock_dialog_instance.connect.assert_called()
+            mock_dialog_instance.show.assert_called_once()
 
     def test_check_status_notifier_watcher_true_when_present(self):
         mock_proxy = MagicMock()
@@ -497,6 +498,55 @@ class TestTrayIndicator(unittest.TestCase):
                 result = self.tray_indicator._init_indicator()
                 self.assertEqual(result, False)
                 mock_dialog.assert_called_once()
+
+    def test_init_indicator_missing_watcher_respects_opt_out(self):
+        get_bool = MagicMock(
+            side_effect=lambda section, key, default=False: (
+                False if (section, key) == ("ui", "show_missing_tray_warning") else default
+            )
+        )
+        self.tray_indicator.config_manager.get_bool = get_bool
+        scheduled = []
+
+        def record_idle(func, *args):
+            scheduled.append(func)
+            return False  # do not execute callbacks
+
+        with patch.object(
+            self.tray_indicator,
+            "_check_status_notifier_watcher",
+            return_value=False,
+        ):
+            with patch("vocalinux.ui.tray_indicator.GLib.idle_add", side_effect=record_idle):
+                result = self.tray_indicator._init_indicator()
+
+        self.assertEqual(result, False)
+        get_bool.assert_any_call("ui", "show_missing_tray_warning", True)
+        self.assertNotIn(self.tray_indicator._show_missing_watcher_dialog, scheduled)
+
+    def test_missing_watcher_dialog_dont_show_again_saves_opt_out(self):
+        mock_dialog = MagicMock()
+        mock_checkbox = MagicMock()
+        mock_checkbox.get_active.return_value = True
+        config = MagicMock()
+        self.tray_indicator.config_manager = config
+
+        with patch("vocalinux.ui.tray_indicator.Gtk.MessageDialog", return_value=mock_dialog):
+            with patch("vocalinux.ui.tray_indicator.Gtk.CheckButton", return_value=mock_checkbox):
+                result = self.tray_indicator._show_missing_watcher_dialog()
+
+        self.assertEqual(result, False)
+        mock_dialog.get_message_area.return_value.pack_start.assert_called_once_with(
+            mock_checkbox, False, False, 0
+        )
+        mock_dialog.show_all.assert_called_once()
+
+        response_callback = mock_dialog.connect.call_args[0][1]
+        response_callback(mock_dialog, None)
+
+        config.set.assert_called_once_with("ui", "show_missing_tray_warning", False)
+        config.save_settings.assert_called_once()
+        mock_dialog.destroy.assert_called_once()
 
     def test_init_indicator_creation_failure_shows_error_dialog(self):
         with patch(
@@ -585,3 +635,74 @@ class TestTrayIndicatorFlatpakIcons(unittest.TestCase):
         self.assertEqual(names["default"], "com.vocalinux.Vocalinux-microphone-off")
         self.assertEqual(names["active"], "com.vocalinux.Vocalinux-microphone")
         self.assertEqual(names["processing"], "com.vocalinux.Vocalinux-microphone-process")
+
+
+class TestAppIndicatorImportFallback(unittest.TestCase):
+    """The AppIndicator/Ayatana import chain must prefer the actively
+    maintained Ayatana fork and only fall back to the legacy Canonical
+    AppIndicator3 typelib when no Ayatana variant is installed.
+
+    Unlike the rest of this file, these tests use a bare object instead of
+    a MagicMock for ``gi.repository``: MagicMock auto-creates any attribute
+    on access, so it can never reproduce the real ``ImportError`` a missing
+    typelib raises, which is exactly the behavior this fallback chain
+    depends on.
+    """
+
+    def setUp(self):
+        self.addCleanup(self._restore_gi_repository)
+        self._clear_tray_indicator_module()
+
+    def tearDown(self):
+        self._clear_tray_indicator_module()
+
+    @staticmethod
+    def _clear_tray_indicator_module():
+        for mod in [k for k in list(sys.modules.keys()) if "tray_indicator" in k]:
+            del sys.modules[mod]
+
+    @staticmethod
+    def _restore_gi_repository():
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = mock_gi_repository
+
+    @staticmethod
+    def _fake_repository(**appindicator_attrs):
+        """A gi.repository stand-in exposing only the given AppIndicator
+        symbols, so importing anything else raises a real ImportError."""
+        repo = SimpleNamespace(
+            Gtk=mock_gtk,
+            GLib=mock_glib,
+            GObject=mock_gobject,
+            GdkPixbuf=mock_gdkpixbuf,
+            Gio=MagicMock(name="Gio"),
+            **appindicator_attrs,
+        )
+        return repo
+
+    def test_prefers_ayatana_appindicator3_when_available(self):
+        sentinel = MagicMock(name="AyatanaAppIndicator3")
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = self._fake_repository(AyatanaAppIndicator3=sentinel)
+
+        import vocalinux.ui.tray_indicator as tray
+
+        self.assertIs(tray.AppIndicator3, sentinel)
+
+    def test_falls_back_to_lowercase_ayatana_variant(self):
+        sentinel = MagicMock(name="AyatanaAppindicator3")
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = self._fake_repository(AyatanaAppindicator3=sentinel)
+
+        import vocalinux.ui.tray_indicator as tray
+
+        self.assertIs(tray.AppIndicator3, sentinel)
+
+    def test_falls_back_to_legacy_appindicator3_when_no_ayatana_available(self):
+        sentinel = MagicMock(name="AppIndicator3")
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = self._fake_repository(AppIndicator3=sentinel)
+
+        import vocalinux.ui.tray_indicator as tray
+
+        self.assertIs(tray.AppIndicator3, sentinel)

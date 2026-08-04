@@ -462,7 +462,11 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         self.assertNotIn("Suppress Non-Speech Tokens", source_code)
         self.assertNotIn("advanced_suppress_nst_switch", source_code)
 
-    def test_close_button_uses_dialog_padding(self):
+    def test_close_button_lives_in_sidebar_footer(self):
+        """The in-window Close button is anchored in the sidebar footer and
+        closes through the normal response path, not an orphan action-area
+        row below the content (#323 keeps an in-window Close for WMs that
+        hide the title-bar button)."""
         import os
 
         source_path = os.path.join(
@@ -476,9 +480,10 @@ class TestSettingsDialogInstantApply(unittest.TestCase):
         with open(source_path, "r") as f:
             source_code = f.read()
 
-        self.assertIn("action_area = self.get_action_area()", source_code)
-        self.assertIn("action_area.set_margin_start(16)", source_code)
-        self.assertIn("action_area.set_margin_end(16)", source_code)
+        self.assertNotIn('self.add_button("Close"', source_code)
+        self.assertIn('close_button = Gtk.Button(label="Close")', source_code)
+        self.assertIn('close_button.connect("clicked", self._on_close_clicked)', source_code)
+        self.assertIn("self.response(Gtk.ResponseType.CLOSE)", source_code)
 
     def test_advanced_disclaimer_appears_before_controls(self):
         import os
@@ -818,13 +823,43 @@ class TestSettingsNavigation(unittest.TestCase):
         ]:
             self.assertIn(f'SettingsPage("{name}", "{title}"', self.source_code)
 
-    def test_status_strip_is_persistent(self):
-        """The status strip is packed into the dialog, not into a page."""
-        self.assertIn("def _build_status_strip(self):", self.source_code)
-        strip_body = self.source_code.split("def _build_status_strip")[1].split("\n    def ")[0]
-        self.assertIn("self.get_content_area().pack_start(strip", strip_body)
+    def test_application_page_has_tray_warning_toggle(self):
+        self.assertIn('PreferencesGroup(title="General")', self.source_code)
+        self.assertIn("self.missing_tray_warning_switch = Gtk.Switch()", self.source_code)
+        self.assertIn('title="Warn if tray support is not detected"', self.source_code)
+        self.assertIn('"show_missing_tray_warning", enabled', self.source_code)
+        self.assertIn(
+            'ui_settings.get("show_missing_tray_warning", True)',
+            self.source_code,
+        )
+
+    def test_status_controls_live_in_sidebar_footer(self):
+        """Status, mic level, test, and Close live in the sidebar footer so
+        they stay visible from every page without a bottom strip."""
+        self.assertIn("def _build_sidebar_footer(self, sidebar_box", self.source_code)
+        footer_body = self.source_code.split("def _build_sidebar_footer")[1].split("\n    def ")[0]
+        self.assertIn("sidebar_box.pack_start(footer", footer_body)
         # One shared level bar for recognition + mic test
-        self.assertIn("self.recognition_audio_level = self.audio_level_bar", strip_body)
+        self.assertIn("self.recognition_audio_level = self.audio_level_bar", footer_body)
+        self.assertIn('self.test_button = Gtk.Button(label="Test Dictation")', footer_body)
+        self.assertIn('close_button = Gtk.Button(label="Close")', footer_body)
+        # No persistent bottom strip below the pages
+        self.assertNotIn("def _build_status_strip(self):", self.source_code)
+
+    def test_sidebar_icons_use_adwaita_names(self):
+        """Sidebar icons must resolve in the stock Adwaita theme."""
+        for icon in [
+            "input-keyboard-symbolic",
+            "audio-input-microphone-symbolic",
+            "audio-speakers-symbolic",
+            "power-profile-performance-symbolic",
+            "preferences-system-symbolic",
+            "applications-engineering-symbolic",
+        ]:
+            self.assertIn(f'"{icon}"', self.source_code)
+        # utilities-system-monitor-symbolic only ships with Ubuntu's Yaru theme
+        self.assertNotIn("utilities-system-monitor-symbolic", self.source_code)
+        self.assertNotIn("audio-card-symbolic", self.source_code)
 
     def test_gpu_selection_is_not_power_user_gated(self):
         """GPU device selection lives on the Performance page, ungated."""

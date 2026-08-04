@@ -504,6 +504,30 @@ class TestCheckDependencies(unittest.TestCase):
         self.assertIn("IBus Wayland", log_output)
 
 
+class TestRecoverFromFallback(unittest.TestCase):
+    def test_wtype_recovery_probe_is_non_destructive(self):
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND_XDOTOOL)
+
+        with patch(
+            "vocalinux.text_injection.text_injector.shutil.which",
+            side_effect=lambda cmd: "/usr/bin/wtype" if cmd == "wtype" else None,
+        ):
+            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+                self.assertTrue(obj._try_recover_from_fallback())
+
+        mock_run.assert_called_once_with(
+            ["wtype", ""],
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            timeout=2,
+        )
+
+
 class TestInjectText(unittest.TestCase):
     def test_inject_x11(self):
         from vocalinux.text_injection.text_injector import DesktopEnvironment

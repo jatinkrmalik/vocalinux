@@ -40,4 +40,6 @@ jobs:
 
           git remote add codeberg git@codeberg.org:jatinkrmalik/vocalinux.git
           git push codeberg --all
-          git push codeberg --tags
+          # Force tags so the mirror stays aligned with GitHub when a tag
+          # already exists on Codeberg (retagged release or prior partial sync).
+          git push codeberg --tags --force

@@ -27,6 +27,20 @@ That's it! The installer handles everything automatically:
 git clone https://github.com/jatinkrmalik/vocalinux.git && cd vocalinux && ./install.sh
 ```
 
+### AppImage (no install, no root)
+
+Download the `.AppImage` for your CPU (`x86_64` or `aarch64`) from
+[GitHub Releases](https://github.com/jatinkrmalik/vocalinux/releases), then:
+
+```bash
+chmod +x Vocalinux-*-x86_64.AppImage   # or aarch64
+./Vocalinux-*-x86_64.AppImage
+```
+
+AppImage still needs host text-injection tools (`xdotool` on X11; `wtype` /
+`ydotool` / clipboard tools on Wayland), same as the PyPI path. Prefer the
+one-liner installer above when you want system deps and models set up for you.
+
 ### From PyPI
 
 The PyPI package installs the Python application and Python dependencies, but it
@@ -55,7 +69,7 @@ vocalinux
 ```bash
 sudo dnf install -y \
     python3-virtualenv python3-devel python3-gobject gtk3 gtk3-devel \
-    libappindicator-gtk3 gobject-introspection-devel portaudio-devel \
+    libayatana-appindicator-gtk3 gobject-introspection-devel portaudio-devel \
     pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python3 -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
@@ -75,7 +89,7 @@ See [AUR.md](AUR.md). Or via PyPI:
 
 ```bash
 sudo pacman -S --needed \
-    python python-virtualenv python-gobject gtk3 libappindicator-gtk3 \
+    python python-virtualenv python-gobject gtk3 libayatana-appindicator \
     gobject-introspection python-cairo portaudio pkg-config xdotool wtype wl-clipboard xclip xsel
 
 python -m venv ~/.local/share/vocalinux-pypi/venv --system-site-packages
@@ -355,7 +369,7 @@ sudo apt install -y wtype wl-clipboard xclip xsel
 ```bash
 sudo dnf install -y \
     python3-pip python3-devel python3-virtualenv \
-    python3-gobject gtk3 libappindicator-gtk3 \
+    python3-gobject gtk3 libayatana-appindicator-gtk3 \
     gobject-introspection-devel portaudio-devel \
     wget curl unzip xdotool wtype wl-clipboard xclip xsel
 ```
@@ -364,7 +378,7 @@ sudo dnf install -y \
 ```bash
 sudo pacman -S --noconfirm \
     python-pip python-gobject gtk3 \
-    libappindicator-gtk3 gobject-introspection \
+    libayatana-appindicator gobject-introspection \
     python-cairo portaudio python-virtualenv \
     wget curl unzip xdotool wtype wl-clipboard xclip xsel
 ```
