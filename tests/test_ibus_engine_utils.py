@@ -4,6 +4,7 @@ Final comprehensive tests for IBus engine.
 These tests exercise code paths to improve coverage without platform-specific issues.
 """
 
+import signal
 import subprocess
 import sys
 import unittest
@@ -318,6 +319,34 @@ class TestStopEngineProcess(unittest.TestCase):
         result = stop_engine_process()
         # Verify the function handles missing PID file gracefully
         self.assertIsNone(result)
+
+    @patch("vocalinux.text_injection.ibus_engine.time.sleep", return_value=None)
+    @patch("vocalinux.text_injection.ibus_engine.os.kill")
+    @patch("vocalinux.text_injection.ibus_engine.Path")
+    @patch("vocalinux.text_injection.ibus_engine.PID_FILE")
+    def test_stop_engine_process_waits_for_exit(
+        self, mock_pid_file, mock_path_cls, mock_kill, mock_sleep
+    ):
+        """SIGTERM path must wait until the process is gone before returning (#558)."""
+        from vocalinux.text_injection.ibus_engine import stop_engine_process
+
+        mock_pid_file.exists.return_value = True
+        mock_pid_file.read_text.return_value = "4242\n"
+
+        cmdline = MagicMock()
+        cmdline.exists.return_value = True
+        cmdline.read_text.return_value = "python /x/vocalinux/text_injection/ibus_engine.py --ibus"
+        mock_path_cls.return_value = cmdline
+
+        # SIGTERM succeeds; first liveness check still alive; second gone.
+        mock_kill.side_effect = [None, None, OSError(3, "No such process")]
+
+        stop_engine_process(wait_timeout=1.0)
+
+        self.assertEqual(mock_kill.call_args_list[0][0], (4242, signal.SIGTERM))
+        self.assertGreaterEqual(mock_kill.call_count, 3)
+        mock_pid_file.unlink.assert_called()
+        mock_sleep.assert_called()
 
 
 if __name__ == "__main__":
