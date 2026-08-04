@@ -1349,12 +1349,19 @@ class IBusTextInjector:
         only searches ``register_engine_list`` and treats XML engines such as
         ``xkb:es::spa`` as missing, clearing the global engine even when
         Vocalinux was never selected (issue #558).
+
+        Prefer the *live* engine at quit when it is a real non-Vocalinux
+        engine, so a user who changed input source after warmup is not
+        switched back to a stale cache. Fall back to ``_previous_engine`` only
+        when the live engine is Vocalinux or unavailable (failed inject restore).
         """
-        restore_engine = self._previous_engine
-        if not restore_engine:
-            current = get_current_engine()
-            if current and current != ENGINE_NAME:
-                restore_engine = current
+        current = get_current_engine()
+        if current and current != ENGINE_NAME:
+            restore_engine = current
+        else:
+            restore_engine = self._previous_engine
+            if restore_engine == ENGINE_NAME:
+                restore_engine = None
 
         # Stop the engine process first and wait for exit — teardown can clear
         # IBus GlobalEngine (#558). Restore must land after that check.
@@ -1412,9 +1419,9 @@ class IBusTextInjector:
                 return False
 
             restore_engine = current_engine
-            # Keep a shutdown fallback if inject restore later fails (#558).
-            if not self._previous_engine:
-                self._previous_engine = current_engine
+            # Always refresh the shutdown fallback to the live engine so a later
+            # quit does not restore a stale warmup value (Bugbot on #643 / #558).
+            self._previous_engine = current_engine
             logger.debug(
                 f"Temporarily activating Vocalinux IBus engine (will restore {current_engine})"
             )

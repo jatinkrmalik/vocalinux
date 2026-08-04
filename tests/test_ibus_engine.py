@@ -659,11 +659,14 @@ class TestIBusTextInjector(unittest.TestCase):
             IBusTextInjector()
 
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
-    def test_stop_restores_engine(self, mock_switch, mock_ensure_dir, mock_stop_proc):
-        """Test stop() restores previous engine after process teardown (#558)."""
+    def test_stop_restores_engine(
+        self, mock_switch, mock_ensure_dir, mock_get_current, mock_stop_proc
+    ):
+        """Test stop() restores cached engine when live engine is unavailable (#558)."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
         parent = MagicMock()
@@ -678,6 +681,27 @@ class TestIBusTextInjector(unittest.TestCase):
         mock_stop_proc.assert_called_once()
         mock_switch.assert_called_once_with("xkb:fr::fra")
         self.assertEqual([c[0] for c in parent.mock_calls], ["stop_proc", "switch"])
+        self.assertIsNone(injector._previous_engine)
+
+    @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:de::deu")
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_stop_prefers_live_engine_over_stale_warmup_cache(
+        self, mock_ensure_dir, mock_switch, mock_get_current, mock_stop_proc
+    ):
+        """Quit must restore the live input source, not a stale warmup cache (#643 Bugbot)."""
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._previous_engine = "xkb:es::spa"
+
+        injector.stop()
+
+        mock_get_current.assert_called()
+        mock_stop_proc.assert_called_once()
+        mock_switch.assert_called_once_with("xkb:de::deu")
         self.assertIsNone(injector._previous_engine)
 
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
@@ -725,7 +749,7 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:es::spa")
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
@@ -741,7 +765,7 @@ class TestIBusTextInjector(unittest.TestCase):
         parent.attach_mock(mock_restore_xkb, "restore_xkb")
 
         injector = IBusTextInjector(auto_activate=False)
-        injector._previous_engine = "xkb:es::spa"
+        injector._previous_engine = "xkb:fr::fra"  # stale; live engine should win
         injector._previous_xkb_layout = ("es", "catalan", "compose:menu")
 
         injector.stop()
@@ -786,7 +810,7 @@ class TestIBusTextInjector(unittest.TestCase):
     def test_stop_uses_cached_engine_when_stuck_on_vocalinux(
         self, mock_ensure_dir, mock_switch, mock_get_current, mock_stop_proc
     ):
-        """If quit finds vocalinux selected, still restore the warmup-captured engine (#558)."""
+        """If quit finds vocalinux selected, fall back to the warmup-captured engine (#558)."""
         from vocalinux.text_injection.ibus_engine import IBusTextInjector
 
         injector = IBusTextInjector(auto_activate=False)
@@ -794,10 +818,9 @@ class TestIBusTextInjector(unittest.TestCase):
 
         injector.stop()
 
+        mock_get_current.assert_called()
         mock_stop_proc.assert_called_once()
         mock_switch.assert_called_once_with("xkb:es::spa")
-        # Live get_current_engine is not needed when _previous_engine is set
-        mock_get_current.assert_not_called()
 
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
     @patch(
@@ -936,9 +959,46 @@ class TestIBusTextInjector(unittest.TestCase):
 
         self.assertTrue(result)
         mock_sock.sendall.assert_called_once_with("Bonjour".encode("utf-8"))
+        self.assertEqual(injector._previous_engine, "libpinyin")
         self.assertEqual(
             [call.args[0] for call in mock_switch.call_args_list],
             [ENGINE_NAME, "libpinyin"],
+        )
+
+    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:de::deu")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=False)
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
+    @patch("socket.socket")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_inject_text_refreshes_stale_shutdown_fallback(
+        self,
+        mock_ensure_dir,
+        mock_socket_path,
+        mock_socket_cls,
+        mock_switch,
+        mock_is_active,
+        mock_get_current,
+    ):
+        """inject_text overwrites a stale warmup cache with the live engine (#643 Bugbot)."""
+        from vocalinux.text_injection.ibus_engine import ENGINE_NAME, IBusTextInjector
+
+        mock_socket_path.exists.return_value = True
+        mock_sock = MagicMock()
+        mock_sock.__enter__.return_value = mock_sock
+        mock_sock.__exit__.return_value = None
+        mock_sock.recv.return_value = b"OK"
+        mock_socket_cls.return_value = mock_sock
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._previous_engine = "xkb:es::spa"
+
+        self.assertTrue(injector.inject_text("Hallo"))
+        self.assertEqual(injector._previous_engine, "xkb:de::deu")
+        self.assertEqual(
+            [call.args[0] for call in mock_switch.call_args_list],
+            [ENGINE_NAME, "xkb:de::deu"],
         )
 
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="libpinyin")
