@@ -18,7 +18,7 @@ REQUIRED_TYPELIBS = (
 )
 
 # Tray stacks are alternates: seed both, require at least one at build time.
-INDICATOR_TYPELIBS = ("AppIndicator3-0.1", "AyatanaAppIndicator3-0.1")
+INDICATOR_TYPELIBS = ("AyatanaAppIndicator3-0.1", "AppIndicator3-0.1")
 
 
 def test_appimage_build_ships_transitive_typelibs():

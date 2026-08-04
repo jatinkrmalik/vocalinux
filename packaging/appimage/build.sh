@@ -39,13 +39,13 @@ TYPELIBS=(
   Gtk-3.0 Gdk-3.0 GdkX11-3.0 GdkPixbuf-2.0 GLib-2.0 GObject-2.0 Gio-2.0
   GModule-2.0 Pango-1.0 PangoCairo-1.0 cairo-1.0 HarfBuzz-0.0 Atk-1.0
   freetype2-2.0 fontconfig-2.0 xlib-2.0
-  AppIndicator3-0.1 AyatanaAppIndicator3-0.1 Dbusmenu-0.4 Notify-0.7
+  AyatanaAppIndicator3-0.1 AppIndicator3-0.1 Dbusmenu-0.4 Notify-0.7
   IBus-1.0 Rsvg-2.0
 )
 
-# Runtime only needs one tray stack (same as check_dependencies). Ship whichever
-# the build host has; fail only if neither typelib is present.
-INDICATOR_TYPELIBS=(AppIndicator3-0.1 AyatanaAppIndicator3-0.1)
+# Runtime only needs one tray stack (same as check_dependencies). Prefer
+# Ayatana when both are present; fail only if neither typelib is found.
+INDICATOR_TYPELIBS=(AyatanaAppIndicator3-0.1 AppIndicator3-0.1)
 
 # Shared libs loaded via GI at runtime (not linked into python3), so
 # linuxdeploy will not discover them from -e python3 alone.
@@ -270,11 +270,11 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk  # noqa: F401
 try:
-    gi.require_version('AppIndicator3', '0.1')
-    from gi.repository import AppIndicator3  # noqa: F401
-except (ImportError, ValueError):
     gi.require_version('AyatanaAppIndicator3', '0.1')
     from gi.repository import AyatanaAppIndicator3  # noqa: F401
+except (ImportError, ValueError):
+    gi.require_version('AppIndicator3', '0.1')
+    from gi.repository import AppIndicator3  # noqa: F401
 print('GI smoke OK')
 PY
   "
