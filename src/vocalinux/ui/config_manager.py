@@ -80,6 +80,13 @@ DEFAULT_CONFIG = {
         # the next dictation session (push-to-talk / toggle) continues cleanly
         # without glueing onto the previous sentence ("Hello.This").
         "append_trailing_space": True,
+        # When text is injected via the Wayland clipboard-paste fallback (ydotool
+        # on non-US layouts), the dictation is briefly placed on the clipboard to
+        # paste it. When enabled, Vocalinux saves and restores the user's previous
+        # clipboard and marks the dictation copy as sensitive so clipboard
+        # managers (e.g. KDE Klipper) do not keep it in history. Disabled by
+        # default to preserve existing behavior; ignored on the X11/type paths.
+        "restore_clipboard_after_paste": False,
     },
     "advanced": {
         "power_user_mode": False,

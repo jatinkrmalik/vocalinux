@@ -2027,6 +2027,18 @@ class SettingsDialog(Gtk.Dialog):
         logger.info(f"Copy to clipboard {'enabled' if enabled else 'disabled'}")
         return False
 
+    def _on_restore_clipboard_toggled(self, widget, state):
+        """Handle toggle of the preserve-clipboard switch."""
+        if self._initializing or self._applying_settings:
+            return False
+
+        enabled = bool(state)
+        logger.info(f"Preserve clipboard toggled: {enabled}")
+        self.config_manager.set("text_injection", "restore_clipboard_after_paste", enabled)
+        self.config_manager.save_settings()
+        logger.info(f"Preserve clipboard {'enabled' if enabled else 'disabled'}")
+        return False
+
     def _on_auto_capitalize_toggled(self, widget, state):
         """Handle toggle of the auto-capitalize switch."""
         if self._initializing or self._applying_settings:
@@ -2329,6 +2341,24 @@ class SettingsDialog(Gtk.Dialog):
         )
         output_group.add_row(copy_to_clipboard_row)
 
+        self.restore_clipboard_switch = Gtk.Switch()
+        self.restore_clipboard_switch.set_tooltip_text(
+            "On Wayland with a non-US keyboard layout, Vocalinux pastes dictation "
+            "via the clipboard (ydotool cannot type your layout directly), which "
+            "normally overwrites whatever you had copied. When enabled, Vocalinux "
+            "restores your previous clipboard after pasting and marks the dictation "
+            "as sensitive so clipboard managers like KDE Klipper keep it out of "
+            "history. Restore timing is best-effort. Has no effect on X11 or when "
+            "'Copy to Clipboard' is on."
+        )
+        restore_clipboard_row = PreferenceRow(
+            title="Preserve Clipboard",
+            subtitle="Restore your clipboard after dictation is pasted (Wayland paste only)",
+            widget=self.restore_clipboard_switch,
+            keywords=("clipboard", "klipper", "wayland", "paste"),
+        )
+        output_group.add_row(restore_clipboard_row)
+
         self.append_trailing_space_switch = Gtk.Switch()
         self.append_trailing_space_switch.set_tooltip_text(
             "Append a space after each completed transcription so the next "
@@ -2345,6 +2375,7 @@ class SettingsDialog(Gtk.Dialog):
 
         self.recognition_settings_tab.pack_start(output_group, False, False, 0)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
+        self.restore_clipboard_switch.connect("state-set", self._on_restore_clipboard_toggled)
         self.auto_capitalize_switch.connect("state-set", self._on_auto_capitalize_toggled)
         self.append_trailing_space_switch.connect(
             "state-set", self._on_append_trailing_space_toggled
@@ -3569,6 +3600,7 @@ class SettingsDialog(Gtk.Dialog):
         start_minimized = ui_settings.get("start_minimized", False)
         show_missing_tray_warning = ui_settings.get("show_missing_tray_warning", True)
         copy_to_clipboard = text_injection_settings.get("copy_to_clipboard", False)
+        restore_clipboard = text_injection_settings.get("restore_clipboard_after_paste", False)
         auto_capitalize = text_injection_settings.get("auto_capitalize", True)
         append_trailing_space = text_injection_settings.get("append_trailing_space", True)
 
@@ -3576,6 +3608,7 @@ class SettingsDialog(Gtk.Dialog):
         self.start_minimized_switch.set_active(start_minimized)
         self.missing_tray_warning_switch.set_active(show_missing_tray_warning)
         self.copy_to_clipboard_switch.set_active(copy_to_clipboard)
+        self.restore_clipboard_switch.set_active(restore_clipboard)
         self.auto_capitalize_switch.set_active(auto_capitalize)
         self.append_trailing_space_switch.set_active(append_trailing_space)
         self.sound_effects_switch.set_active(self.config_manager.is_sound_effects_enabled())
