@@ -17,8 +17,12 @@ REQUIRED_TYPELIBS = (
     "Notify-0.7",
 )
 
-# Tray stacks are alternates: seed both, require at least one at build time.
-INDICATOR_TYPELIBS = ("AyatanaAppIndicator3-0.1", "AppIndicator3-0.1")
+# Tray stacks are alternates (same order as tray_indicator.py).
+INDICATOR_TYPELIBS = (
+    "AyatanaAppIndicator3-0.1",
+    "AyatanaAppindicator3-0.1",
+    "AppIndicator3-0.1",
+)
 
 
 def test_appimage_build_ships_transitive_typelibs():
