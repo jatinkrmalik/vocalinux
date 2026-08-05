@@ -895,6 +895,58 @@ class TextInjector:
         )
         return False
 
+    def _clear_clipboard(self) -> bool:
+        """
+        Clear the clipboard using the first available tool.
+
+        Each backend has its own clear command:
+        - wl-copy: ``--clear`` flag removes the selection entirely
+        - xsel:    ``--clear`` flag
+        - xclip:   pipe empty input (creates an empty text offer)
+
+        Returns True if the clipboard was cleared successfully.
+        """
+        for tool in self._get_clipboard_tools():
+            if self._clipboard_tool_health.get(tool) is False:
+                continue
+            try:
+                if tool == "wl-copy":
+                    subprocess.run(
+                        ["wl-copy", "--clear"],
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=self._clipboard_timeout,
+                    )
+                    return True
+                if tool == "xsel":
+                    subprocess.run(
+                        ["xsel", "--clipboard", "--clear"],
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=self._clipboard_timeout,
+                    )
+                    return True
+                if tool == "xclip":
+                    subprocess.run(
+                        ["xclip", "-selection", "clipboard"],
+                        input="",
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        text=True,
+                        timeout=self._clipboard_timeout,
+                    )
+                    return True
+            except (
+                subprocess.CalledProcessError,
+                subprocess.TimeoutExpired,
+                FileNotFoundError,
+            ):
+                continue
+        return False
+
     def _should_copy_to_clipboard(self) -> bool:
         """Check if copy-to-clipboard setting is enabled."""
         try:
@@ -1298,7 +1350,10 @@ class TextInjector:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.warning(f"Paste simulation failed: {e}")
             if previous_clipboard is not None and not self._should_copy_to_clipboard():
-                self._copy_to_clipboard(previous_clipboard)
+                if previous_clipboard == "":
+                    self._clear_clipboard()
+                else:
+                    self._copy_to_clipboard(previous_clipboard)
             return False
 
         # Restore the previous clipboard content after a short delay so the
@@ -1309,7 +1364,16 @@ class TextInjector:
 
             def _restore() -> None:
                 time.sleep(0.3)
-                if self._copy_to_clipboard(previous_clipboard):
+                # If the user copied something else during the delay, don't
+                # overwrite their new clipboard content with stale data.
+                if self._read_clipboard() != text:
+                    logger.debug("Clipboard changed during restore delay; skipping restore")
+                    return
+                if previous_clipboard == "":
+                    success = self._clear_clipboard()
+                else:
+                    success = self._copy_to_clipboard(previous_clipboard)
+                if success:
                     logger.debug("Clipboard restored to previous content")
                 else:
                     logger.debug("Could not restore previous clipboard content")
