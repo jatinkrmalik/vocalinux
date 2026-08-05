@@ -589,6 +589,81 @@ class TestClearClipboard(unittest.TestCase):
         cmd = mock_run.call_args[0][0]
         self.assertEqual(cmd, ["xsel", "--clipboard", "--clear"])
 
+    def test_xclip_empty_input_used(self):
+        """Uses xclip with empty input when xclip is the only available tool."""
+        obj = _make_injector()
+        obj._session_environment = None
+        with patch(
+            "vocalinux.text_injection.text_injector.shutil.which",
+            side_effect=lambda cmd: "/usr/bin/xclip" if cmd == "xclip" else None,
+        ):
+            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "WAYLAND_DISPLAY": ""}):
+                    result = obj._clear_clipboard()
+        self.assertTrue(result)
+        call_kwargs = mock_run.call_args
+        self.assertEqual(call_kwargs[0][0], ["xclip", "-selection", "clipboard"])
+
+    def test_skips_unhealthy_tool_and_tries_next(self):
+        """Skips a tool marked unhealthy; returns False when it was the only tool."""
+        obj = _make_injector()
+        obj._clipboard_tool_health["wl-copy"] = False
+        with patch(
+            "vocalinux.text_injection.text_injector.shutil.which",
+            side_effect=lambda cmd: "/usr/bin/wl-copy" if cmd == "wl-copy" else None,
+        ):
+            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                result = obj._clear_clipboard()
+        self.assertFalse(result)
+        mock_run.assert_not_called()
+
+    def test_exception_falls_through_to_next_tool(self):
+        """When one tool throws, the next candidate is tried."""
+        obj = _make_injector()
+        obj._session_environment = None
+        with patch(
+            "vocalinux.text_injection.text_injector.shutil.which",
+            side_effect=lambda cmd: "/usr/bin/" + cmd if cmd in ("xclip", "xsel") else None,
+        ):
+            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                mock_run.side_effect = [
+                    subprocess.CalledProcessError(1, ["xclip"]),  # xclip fails
+                    MagicMock(returncode=0),  # xsel succeeds
+                ]
+                with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "WAYLAND_DISPLAY": ""}):
+                    result = obj._clear_clipboard()
+        self.assertTrue(result)
+
+    def test_clear_called_when_paste_fails_and_clipboard_was_empty(self):
+        """_clear_clipboard() is called immediately when paste fails and clipboard was empty."""
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        clear_called: list[bool] = []
+
+        with patch.object(obj, "_read_clipboard", return_value=""):
+            with patch.object(obj, "_copy_to_clipboard", return_value=True):
+                with patch.object(
+                    obj, "_clear_clipboard", side_effect=lambda: clear_called.append(True) or True
+                ):
+                    with patch.object(
+                        obj,
+                        "_ydotool_ctrl_v_command",
+                        return_value=["ydotool", "key", "ctrl+v"],
+                    ):
+                        with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                            with patch(
+                                "vocalinux.text_injection.text_injector.subprocess.run",
+                                side_effect=subprocess.CalledProcessError(1, ["ydotool", "key"]),
+                            ):
+                                result = obj._inject_via_clipboard_paste("text")
+
+        self.assertFalse(result)
+        self.assertTrue(
+            clear_called,
+            "_clear_clipboard() must be called when paste fails with empty previous clipboard",
+        )
+
     def test_returns_false_when_no_tool_available(self):
         """Returns False when no clipboard tool is installed."""
         obj = _make_injector()
