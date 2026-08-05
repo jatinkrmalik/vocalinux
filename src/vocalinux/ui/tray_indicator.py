@@ -14,16 +14,21 @@ import gi
 
 # Import GTK
 gi.require_version("Gtk", "3.0")
+# Prefer Ayatana AppIndicator: it is the actively maintained fork and the one
+# most distros ship for KDE/SNI compatibility. The original Canonical
+# AppIndicator3 (unmaintained since ~2013) can be present alongside it (e.g.
+# Fedora's libappindicator-gtk3) but fails to register a StatusNotifierItem
+# on modern KDE Plasma, leaving the tray icon invisible with no error logged.
 try:
-    gi.require_version("AppIndicator3", "0.1")
-    from gi.repository import AppIndicator3
+    gi.require_version("AyatanaAppIndicator3", "0.1")
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 except (ImportError, ValueError):
     try:
-        gi.require_version("AyatanaAppIndicator3", "0.1")
-        from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-    except (ImportError, ValueError):
         gi.require_version("AyatanaAppindicator3", "0.1")
         from gi.repository import AyatanaAppindicator3 as AppIndicator3
+    except (ImportError, ValueError):
+        gi.require_version("AppIndicator3", "0.1")
+        from gi.repository import AppIndicator3
 
 from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 
@@ -549,6 +554,18 @@ class TrayIndicator:
         # Show the dialog (non-modal)
         dialog.show()
 
+    def _show_settings_page(self, page_name: str):
+        """Open settings focused on a specific sidebar page."""
+        dialog = SettingsDialog(
+            parent=None,
+            config_manager=self.config_manager,
+            speech_engine=self.speech_engine,
+            shortcut_update_callback=self.update_shortcut,
+            initial_page=page_name,
+        )
+        dialog.connect("response", self._on_settings_dialog_response)
+        dialog.show()
+
     def _on_logs_clicked(self, widget):
         """Handle click on the View Logs menu item."""
         logger.debug("View Logs clicked")
@@ -605,10 +622,8 @@ class TrayIndicator:
 
     def _on_about_clicked(self, widget):
         """Handle click on the About menu item."""
-        from .about_dialog import show_about_dialog
-
         logger.debug("About clicked")
-        show_about_dialog(parent=None)
+        self._show_settings_page("about")
 
     def _get_auto_pause_config(self):
         """Return (enabled, apps, poll_interval_seconds) for AutoPauseMonitor."""
