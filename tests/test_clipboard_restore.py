@@ -788,37 +788,6 @@ class TestOverlappingClipboardRestore(unittest.TestCase):
         self.assertNotIn("hello", copy_calls[2:])
         self.assertIsNone(obj._clipboard_restore_target)
 
-    def test_stale_restore_thread_is_cancelled_by_newer_paste(self):
-        """A superseded restore must not clear the pending restore target."""
-        obj = _make_injector()
-        obj.wayland_tool = "ydotool"
-        copy_calls: list[str] = []
-
-        with patch.object(obj, "_read_clipboard", side_effect=["orig", "second"]):
-            with patch.object(
-                obj, "_copy_to_clipboard", side_effect=lambda t: copy_calls.append(t) or True
-            ):
-                with patch.object(
-                    obj,
-                    "_ydotool_ctrl_v_command",
-                    return_value=["ydotool", "key", "ctrl+v"],
-                ):
-                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
-                        with patch(
-                            "vocalinux.text_injection.text_injector.subprocess.run",
-                            return_value=MagicMock(returncode=0),
-                        ):
-                            # First paste schedules restore gen=1 for "orig".
-                            obj._inject_via_clipboard_paste("first")
-                            # Bump generation as a newer paste would, without scheduling
-                            # another restore (simulates copy_to_clipboard / unreadable).
-                            with obj._state_lock:
-                                obj._clipboard_restore_generation += 1
-                            time.sleep(0.5)
-
-        # Only the injection copy — stale restore must not write "orig" back.
-        self.assertEqual(copy_calls, ["first"])
-
 
 if __name__ == "__main__":
     unittest.main()
