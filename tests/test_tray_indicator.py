@@ -279,8 +279,6 @@ class TestTrayIndicator(unittest.TestCase):
 
     def test_update_available_shows_menu_and_opens_about(self):
         """Background update check reveals tray item and opens About with release."""
-        from unittest.mock import call
-
         from vocalinux.utils.update_checker import ReleaseInfo
 
         release = ReleaseInfo(
@@ -296,12 +294,19 @@ class TestTrayIndicator(unittest.TestCase):
         menu_item = MagicMock()
         self.tray_indicator._update_menu_item = menu_item
         self.tray_indicator.menu = MagicMock()
-        self.mock_config_manager.get_bool.side_effect = lambda section, key, default=False: (
-            True if key == "show_notifications" else default
-        )
-        self.mock_config_manager.get_str.side_effect = lambda section, key, default="": default
-        self.mock_config_manager.set.reset_mock()
-        self.mock_config_manager.save_settings.reset_mock()
+        # Pin the mock config used by the tray (avoids any patch indirection).
+        self.tray_indicator.config_manager = self.mock_config_manager
+        self.mock_config_manager.get_bool.side_effect = None
+        self.mock_config_manager.get_bool.return_value = True
+        self.mock_config_manager.get_str.side_effect = None
+        self.mock_config_manager.get_str.return_value = ""
+        recorded_sets = []
+
+        def _record_set(section, key, value):
+            recorded_sets.append((section, key, value))
+            return True
+
+        self.mock_config_manager.set.side_effect = _record_set
 
         with patch("subprocess.Popen") as mock_popen:
             self.tray_indicator._on_update_check_result(True, release)
@@ -311,10 +316,7 @@ class TestTrayIndicator(unittest.TestCase):
         menu_item.show.assert_called_once()
         mock_popen.assert_called_once()
         self.assertEqual(self.tray_indicator._pending_update, release)
-        self.assertIn(
-            call("updates", "last_notified_version", "v0.99.0"),
-            self.mock_config_manager.set.call_args_list,
-        )
+        self.assertIn(("updates", "last_notified_version", "v0.99.0"), recorded_sets)
         self.mock_config_manager.save_settings.assert_called()
 
         with patch("vocalinux.ui.tray_indicator.SettingsDialog") as mock_dialog_class:
@@ -340,18 +342,53 @@ class TestTrayIndicator(unittest.TestCase):
             prerelease=False,
             channel="stable",
         )
+        self.tray_indicator.config_manager = self.mock_config_manager
         self.tray_indicator._update_menu_item = MagicMock()
         self.tray_indicator.menu = MagicMock()
-        self.mock_config_manager.get_bool.return_value = True
         self.mock_config_manager.get_bool.side_effect = None
-        self.mock_config_manager.get_str.return_value = ""
+        self.mock_config_manager.get_bool.return_value = True
         self.mock_config_manager.get_str.side_effect = None
-        self.mock_config_manager.set.reset_mock()
+        self.mock_config_manager.get_str.return_value = ""
+        recorded_sets = []
+        self.mock_config_manager.set.side_effect = (
+            lambda section, key, value: recorded_sets.append((section, key, value)) or True
+        )
 
         with patch("subprocess.Popen", side_effect=FileNotFoundError("notify-send")):
             self.tray_indicator._maybe_notify_update(release)
 
-        self.mock_config_manager.set.assert_not_called()
+        self.assertEqual(recorded_sets, [])
+
+    def test_update_notification_persists_after_successful_spawn(self):
+        """Record last_notified_version only after notify-send is spawned."""
+        from vocalinux.utils.update_checker import ReleaseInfo
+
+        release = ReleaseInfo(
+            tag_name="v0.99.0",
+            version="0.99.0",
+            name="v0.99.0",
+            html_url="https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.99.0",
+            body="Notes",
+            published_at="2026-08-06T00:00:00Z",
+            prerelease=False,
+            channel="stable",
+        )
+        self.tray_indicator.config_manager = self.mock_config_manager
+        self.mock_config_manager.get_bool.side_effect = None
+        self.mock_config_manager.get_bool.return_value = True
+        self.mock_config_manager.get_str.side_effect = None
+        self.mock_config_manager.get_str.return_value = ""
+        recorded_sets = []
+        self.mock_config_manager.set.side_effect = (
+            lambda section, key, value: recorded_sets.append((section, key, value)) or True
+        )
+
+        with patch("subprocess.Popen") as mock_popen:
+            self.tray_indicator._maybe_notify_update(release)
+
+        mock_popen.assert_called_once()
+        self.assertEqual(recorded_sets, [("updates", "last_notified_version", "v0.99.0")])
+        self.mock_config_manager.save_settings.assert_called()
 
     def test_update_cleared_hides_menu_item(self):
         """Clearing an update hides the tray menu entry."""
