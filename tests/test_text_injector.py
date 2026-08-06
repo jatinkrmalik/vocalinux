@@ -2,12 +2,14 @@
 Tests for text injection functionality.
 """
 
+import contextlib
+import json
 import os
 import subprocess
 import sys
 import threading
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 # Update import path to use the new package structure
 from vocalinux.text_injection.text_injector import (
@@ -2226,6 +2228,85 @@ class TestCompositorIBusBridging(unittest.TestCase):
             ):
                 injector = TextInjector()
         self.assertEqual(injector.wayland_tool, "ydotool")
+
+
+@contextlib.contextmanager
+def _fake_config(config):
+    """Pretend config.json holds ``config``; ``None`` means no file at all.
+
+    Kept off the filesystem on purpose: another suite patches
+    ``tempfile.mkdtemp`` globally, so a real temp dir makes these tests
+    order-dependent.
+    """
+    with patch("vocalinux.text_injection.text_injector.config_dir", return_value="/fake/config"):
+        if config is None:
+            with patch("os.path.exists", return_value=False):
+                yield
+            return
+        payload = config if isinstance(config, str) else json.dumps(config)
+        with patch("os.path.exists", return_value=True):
+            with patch("builtins.open", mock_open(read_data=payload)):
+                yield
+
+
+class TestConfiguredBackend(unittest.TestCase):
+    """text_injection.backend in config.json pins the injection backend (#476)."""
+
+    def test_recognised_backends(self):
+        for value in ("ibus", "wtype", "ydotool"):
+            with _fake_config({"text_injection": {"backend": value}}):
+                self.assertEqual(TextInjector._configured_backend(), value)
+
+    def test_value_is_normalised(self):
+        with _fake_config({"text_injection": {"backend": "  WType  "}}):
+            self.assertEqual(TextInjector._configured_backend(), "wtype")
+
+    def test_auto_or_missing_means_auto(self):
+        for config in (
+            {"text_injection": {"backend": "auto"}},
+            {"text_injection": {"backend": ""}},
+            {"text_injection": {}},
+            {},
+            None,  # no config.json at all
+        ):
+            with _fake_config(config):
+                self.assertEqual(TextInjector._configured_backend(), "auto")
+
+    def test_unknown_value_falls_back_to_auto(self):
+        """A typo must not silently pin the wrong backend."""
+        with _fake_config({"text_injection": {"backend": "wtpye"}}):
+            self.assertEqual(TextInjector._configured_backend(), "auto")
+
+    def test_corrupt_config_does_not_raise(self):
+        """An unreadable config must not stop text injection from starting."""
+        with _fake_config("{not valid json"):
+            self.assertEqual(TextInjector._configured_backend(), "auto")
+
+
+class TestBackendPreference(unittest.TestCase):
+    """The environment variable wins over the persisted setting."""
+
+    def test_environment_overrides_config(self):
+        """A one-off experiment must not require editing the user's config."""
+        with _fake_config({"text_injection": {"backend": "ibus"}}):
+            with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": "wtype"}):
+                self.assertEqual(TextInjector._backend_preference(), "wtype")
+
+    def test_config_used_when_environment_unset(self):
+        with _fake_config({"text_injection": {"backend": "ydotool"}}):
+            with patch.dict("os.environ", {}, clear=True):
+                self.assertEqual(TextInjector._backend_preference(), "ydotool")
+
+    def test_auto_when_neither_is_set(self):
+        with _fake_config(None):
+            with patch.dict("os.environ", {}, clear=True):
+                self.assertEqual(TextInjector._backend_preference(), "auto")
+
+    def test_invalid_environment_value_still_falls_back_to_config(self):
+        """A typo in the variable must not discard a valid saved preference."""
+        with _fake_config({"text_injection": {"backend": "wtype"}}):
+            with patch.dict("os.environ", {"VOCALINUX_FORCE_BACKEND": "wtpye"}):
+                self.assertEqual(TextInjector._backend_preference(), "wtype")
 
 
 class TestForcedBackend(unittest.TestCase):

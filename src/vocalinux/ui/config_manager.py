@@ -80,6 +80,10 @@ DEFAULT_CONFIG = {
         # the next dictation session (push-to-talk / toggle) continues cleanly
         # without glueing onto the previous sentence ("Hello.This").
         "append_trailing_space": True,
+        # Text-injection backend: "auto" autodetects, or pin "ibus"/"wtype"/
+        # "ydotool" when the autodetection is wrong for your compositor (#476).
+        # VOCALINUX_FORCE_BACKEND overrides this for a single run.
+        "backend": "auto",
     },
     "advanced": {
         "power_user_mode": False,
