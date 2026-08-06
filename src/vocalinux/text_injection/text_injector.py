@@ -475,6 +475,9 @@ class TextInjector:
 
         Accepts ``ibus``, ``wtype``, ``ydotool`` or ``auto``. Anything else is
         ignored with a warning, so a typo cannot silently pin a backend.
+
+        This covers the environment variable only. ``_backend_preference()``
+        combines it with the persistent ``text_injection.backend`` setting.
         """
         value = os.environ.get("VOCALINUX_FORCE_BACKEND", "").strip().lower()
         if not value or value == "auto":
@@ -487,12 +490,61 @@ class TextInjector:
         )
         return "auto"
 
+    @staticmethod
+    def _configured_backend() -> str:
+        """Backend pinned via ``text_injection.backend`` in config.json, or ``"auto"``.
+
+        The environment variable is fine for a one-off experiment, but a user
+        whose compositor is autodetected wrongly needs the choice to survive a
+        restart without wrapping the launcher in a shell script (issue #476).
+
+        Read from disk rather than through ConfigManager to keep this package
+        independent of the UI layer, matching ``_should_copy_to_clipboard()``.
+        """
+        try:
+            import json
+
+            config_path = os.path.join(config_dir(), "config.json")
+            if not os.path.exists(config_path):
+                return "auto"
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            value = str(config.get("text_injection", {}).get("backend", "") or "").strip().lower()
+            if not value or value == "auto":
+                return "auto"
+            if value in ("ibus", "wtype", "ydotool"):
+                return value
+            logger.warning(
+                "Ignoring unknown text_injection.backend=%r (expected ibus/wtype/ydotool/auto)",
+                value,
+            )
+        except Exception as e:  # unreadable/corrupt config must not block startup
+            logger.debug(f"Could not read text_injection.backend setting: {e}")
+        return "auto"
+
+    @staticmethod
+    def _backend_preference() -> str:
+        """The backend to pin, from the environment or config.json.
+
+        ``VOCALINUX_FORCE_BACKEND`` wins so a backend can still be A/B-tested
+        for one run without editing (or permanently changing) the user's config.
+        """
+        forced = TextInjector._forced_backend()
+        if forced != "auto":
+            return forced
+        return TextInjector._configured_backend()
+
     def _check_dependencies(self):
         """Check for the required tools for text injection."""
         ibus_requested = False
-        forced = self._forced_backend()
+        forced = self._backend_preference()
         if forced != "auto":
-            logger.info("VOCALINUX_FORCE_BACKEND=%s: overriding backend autodetection", forced)
+            source = (
+                "VOCALINUX_FORCE_BACKEND"
+                if self._forced_backend() != "auto"
+                else "text_injection.backend"
+            )
+            logger.info("%s=%s: overriding backend autodetection", source, forced)
 
         # Prefer IBus on both X11 and Wayland - it sends Unicode directly,
         # bypassing keyboard layout issues entirely

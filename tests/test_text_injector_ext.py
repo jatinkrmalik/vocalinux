@@ -6,7 +6,7 @@ import sys
 import threading
 import unittest
 from typing import Any, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -356,6 +356,36 @@ class TestCheckDependencies(unittest.TestCase):
                 {"XDG_SESSION_TYPE": "wayland", "VOCALINUX_FORCE_BACKEND": "wtype"},
                 clear=True,
             ),
+            patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
+            patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
+            patch(
+                "shutil.which",
+                side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd in ("wtype", "ydotool") else None,
+            ),
+        ):
+            obj._check_dependencies()
+
+        self.assertEqual(obj.wayland_tool, "wtype")
+        mock_ibus_class.assert_not_called()
+
+    def test_config_backend_wtype_skips_ibus(self):
+        """text_injection.backend=wtype pins wtype with no environment variable set.
+
+        The environment variable is a one-off; this is the persisted setting from
+        issue #476, so it has to survive a restart on its own.
+        """
+        import json as _json
+
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.WAYLAND)
+        config = _json.dumps({"text_injection": {"backend": "wtype"}})
+
+        with (
+            patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"}, clear=True),
+            patch("vocalinux.text_injection.text_injector.config_dir", return_value="/fake/config"),
+            patch("os.path.exists", return_value=True),
+            patch("builtins.open", mock_open(read_data=config)),
             patch("vocalinux.text_injection.text_injector.is_ibus_available", return_value=True),
             patch("vocalinux.text_injection.text_injector.IBusTextInjector") as mock_ibus_class,
             patch(
