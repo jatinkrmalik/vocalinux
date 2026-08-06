@@ -574,6 +574,10 @@ class TrayIndicator:
             shortcut_update_callback=self.update_shortcut,
             initial_page=page_name,
             pending_update=self._pending_update,
+            # About checks should refresh the tray item without re-notifying.
+            update_status_callback=lambda available, release: self._apply_update_status(
+                available, release, notify=False
+            ),
         )
         dialog.connect("response", self._on_settings_dialog_response)
         dialog.show()
@@ -584,12 +588,23 @@ class TrayIndicator:
 
     def _on_update_check_result(self, available: bool, release: Optional[ReleaseInfo]):
         """Handle a background update-check result (already on the GLib main loop)."""
+        self._apply_update_status(available, release, notify=True)
+
+    def _apply_update_status(
+        self,
+        available: bool,
+        release: Optional[ReleaseInfo],
+        *,
+        notify: bool,
+    ) -> None:
+        """Update tray pending-update state and optional desktop notification."""
         self._pending_update = release if available else None
         if not hasattr(self, "menu"):
             return
         if available and release is not None:
             self._show_update_menu_item(release)
-            self._maybe_notify_update(release)
+            if notify:
+                self._maybe_notify_update(release)
         elif self._update_menu_item is not None:
             self._update_menu_item.hide()
 
@@ -610,10 +625,8 @@ class TrayIndicator:
             return
         if self.config_manager.get_str("updates", "last_notified_version", "") == release.tag_name:
             return
-        self.config_manager.set("updates", "last_notified_version", release.tag_name)
-        self.config_manager.save_settings()
-        # Same notify-send path as recognition_manager._show_notification (keep local
-        # to avoid tray→speech_recognition coupling).
+        # Persist only after notify-send is successfully spawned so a missing
+        # binary does not permanently suppress the alert for this version.
         try:
             import subprocess
 
@@ -633,6 +646,9 @@ class TrayIndicator:
             )
         except (FileNotFoundError, OSError) as exc:
             logger.debug("Could not show update notification: %s", exc)
+            return
+        self.config_manager.set("updates", "last_notified_version", release.tag_name)
+        self.config_manager.save_settings()
 
     def _on_update_available_clicked(self, widget):
         """Open Settings on About so the user can read notes and open the release."""

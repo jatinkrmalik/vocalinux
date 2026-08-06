@@ -1167,6 +1167,7 @@ class SettingsDialog(Gtk.Dialog):
         shortcut_update_callback: callable = None,
         initial_page: Optional[str] = None,
         pending_update: Optional[ReleaseInfo] = None,
+        update_status_callback: callable = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         # Force window decorations (title-bar close) on all WMs. An in-window
@@ -1178,6 +1179,7 @@ class SettingsDialog(Gtk.Dialog):
         self.config_manager = config_manager
         self.speech_engine = speech_engine
         self.shortcut_update_callback = shortcut_update_callback
+        self.update_status_callback = update_status_callback
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -3356,6 +3358,7 @@ class SettingsDialog(Gtk.Dialog):
             self.open_release_btn.get_style_context().remove_class("suggested-action")
             self.release_notes_group.hide()
             self._set_about_update_badge(False)
+            # Keep tray state as-is on a failed lookup (same as UpdateMonitor).
             return False
 
         self._about_release_url = (
@@ -3380,6 +3383,13 @@ class SettingsDialog(Gtk.Dialog):
             self.update_status_row.set_subtitle(f"Up to date on {channel}")
             self.open_release_btn.get_style_context().remove_class("suggested-action")
             self._set_about_update_badge(False)
+
+        # Keep the tray menu in sync with an About-page check (no extra notification).
+        if self.update_status_callback is not None:
+            try:
+                self.update_status_callback(update_available, release if update_available else None)
+            except Exception:
+                logger.error("Update status callback failed", exc_info=True)
 
         self.latest_release_row.set_subtitle(release_label)
         self.open_release_btn.set_sensitive(True)
