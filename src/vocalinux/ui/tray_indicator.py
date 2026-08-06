@@ -14,16 +14,21 @@ import gi
 
 # Import GTK
 gi.require_version("Gtk", "3.0")
+# Prefer Ayatana AppIndicator: it is the actively maintained fork and the one
+# most distros ship for KDE/SNI compatibility. The original Canonical
+# AppIndicator3 (unmaintained since ~2013) can be present alongside it (e.g.
+# Fedora's libappindicator-gtk3) but fails to register a StatusNotifierItem
+# on modern KDE Plasma, leaving the tray icon invisible with no error logged.
 try:
-    gi.require_version("AppIndicator3", "0.1")
-    from gi.repository import AppIndicator3
+    gi.require_version("AyatanaAppIndicator3", "0.1")
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 except (ImportError, ValueError):
     try:
-        gi.require_version("AyatanaAppIndicator3", "0.1")
-        from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-    except (ImportError, ValueError):
         gi.require_version("AyatanaAppindicator3", "0.1")
         from gi.repository import AyatanaAppindicator3 as AppIndicator3
+    except (ImportError, ValueError):
+        gi.require_version("AppIndicator3", "0.1")
+        from gi.repository import AppIndicator3
 
 from gi.repository import GdkPixbuf, Gio, GLib, GObject, Gtk
 

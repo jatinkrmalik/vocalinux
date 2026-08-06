@@ -8,6 +8,7 @@ The tests focus on the business logic of the TrayIndicator class.
 import os
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -634,3 +635,74 @@ class TestTrayIndicatorFlatpakIcons(unittest.TestCase):
         self.assertEqual(names["default"], "com.vocalinux.Vocalinux-microphone-off")
         self.assertEqual(names["active"], "com.vocalinux.Vocalinux-microphone")
         self.assertEqual(names["processing"], "com.vocalinux.Vocalinux-microphone-process")
+
+
+class TestAppIndicatorImportFallback(unittest.TestCase):
+    """The AppIndicator/Ayatana import chain must prefer the actively
+    maintained Ayatana fork and only fall back to the legacy Canonical
+    AppIndicator3 typelib when no Ayatana variant is installed.
+
+    Unlike the rest of this file, these tests use a bare object instead of
+    a MagicMock for ``gi.repository``: MagicMock auto-creates any attribute
+    on access, so it can never reproduce the real ``ImportError`` a missing
+    typelib raises, which is exactly the behavior this fallback chain
+    depends on.
+    """
+
+    def setUp(self):
+        self.addCleanup(self._restore_gi_repository)
+        self._clear_tray_indicator_module()
+
+    def tearDown(self):
+        self._clear_tray_indicator_module()
+
+    @staticmethod
+    def _clear_tray_indicator_module():
+        for mod in [k for k in list(sys.modules.keys()) if "tray_indicator" in k]:
+            del sys.modules[mod]
+
+    @staticmethod
+    def _restore_gi_repository():
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = mock_gi_repository
+
+    @staticmethod
+    def _fake_repository(**appindicator_attrs):
+        """A gi.repository stand-in exposing only the given AppIndicator
+        symbols, so importing anything else raises a real ImportError."""
+        repo = SimpleNamespace(
+            Gtk=mock_gtk,
+            GLib=mock_glib,
+            GObject=mock_gobject,
+            GdkPixbuf=mock_gdkpixbuf,
+            Gio=MagicMock(name="Gio"),
+            **appindicator_attrs,
+        )
+        return repo
+
+    def test_prefers_ayatana_appindicator3_when_available(self):
+        sentinel = MagicMock(name="AyatanaAppIndicator3")
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = self._fake_repository(AyatanaAppIndicator3=sentinel)
+
+        import vocalinux.ui.tray_indicator as tray
+
+        self.assertIs(tray.AppIndicator3, sentinel)
+
+    def test_falls_back_to_lowercase_ayatana_variant(self):
+        sentinel = MagicMock(name="AyatanaAppindicator3")
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = self._fake_repository(AyatanaAppindicator3=sentinel)
+
+        import vocalinux.ui.tray_indicator as tray
+
+        self.assertIs(tray.AppIndicator3, sentinel)
+
+    def test_falls_back_to_legacy_appindicator3_when_no_ayatana_available(self):
+        sentinel = MagicMock(name="AppIndicator3")
+        sys.modules["gi"] = mock_gi
+        sys.modules["gi.repository"] = self._fake_repository(AppIndicator3=sentinel)
+
+        import vocalinux.ui.tray_indicator as tray
+
+        self.assertIs(tray.AppIndicator3, sentinel)
