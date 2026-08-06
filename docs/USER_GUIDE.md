@@ -158,6 +158,10 @@ English-only whisper.cpp specializations limit the language selector to English.
 
 On multi-GPU machines, Vocalinux prefers a **discrete** Vulkan device when one is present. You can override the device under **Advanced** settings (`whispercpp_gpu_device`).
 
+Pip wheels of pywhispercpp are often CUDA builds. In that case Vocalinux always uses CUDA device 0 (the first NVIDIA GPU), because Vulkan GPU indices do not match CUDA ordinals. On a hybrid laptop the NVIDIA GPU is usually Vulkan GPU 1; feeding that index into CUDA would land on the CPU fallback instead.
+
+If you need a second NVIDIA GPU, either set `CUDA_VISIBLE_DEVICES` before starting Vocalinux or install a Vulkan-built pywhispercpp so the Advanced GPU picker applies.
+
 To check which backend is being used, look for these log messages when starting Vocalinux:
 ```
 [INFO] whisper.cpp using Vulkan GPU backend: AMD Radeon RX 6800
