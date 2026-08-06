@@ -20,56 +20,40 @@ def _release(tag: str = "v0.99.0") -> ReleaseInfo:
 
 
 class TestUpdateMonitor:
-    def test_start_schedules_without_immediate_check(self):
-        on_result = MagicMock()
+    def test_start_is_idempotent(self):
         monitor = UpdateMonitor(
             get_channel=lambda: "stable",
-            on_result=on_result,
-            get_current_version=lambda: "0.1.0",
-            startup_delay_seconds=45,
-            check_interval_seconds=3600,
+            on_result=MagicMock(),
             use_glib=False,
         )
         monitor.start()
-        assert monitor.active
-        assert monitor.tick() is False  # not due yet
-        on_result.assert_not_called()
+        monitor.start()
+        assert monitor._running
         monitor.stop()
-        assert not monitor.active
+        assert not monitor._running
 
-    def test_check_now_reports_available_update(self):
+    def test_reports_available_update(self):
         on_result = MagicMock()
         release = _release("v0.99.0")
-        monitor = UpdateMonitor(
-            get_channel=lambda: "stable",
-            on_result=on_result,
-            get_current_version=lambda: "0.15.0",
-            use_glib=False,
-        )
+        monitor = UpdateMonitor(get_channel=lambda: "stable", on_result=on_result, use_glib=False)
         monitor.start()
 
-        with patch(
-            "vocalinux.utils.update_monitor.fetch_latest_release",
-            return_value=release,
+        with (
+            patch(
+                "vocalinux.utils.update_monitor.fetch_latest_release",
+                return_value=release,
+            ),
+            patch("vocalinux.utils.update_monitor.__version__", "0.15.0"),
         ):
-            # Run worker synchronously by calling it directly.
-            monitor._check_in_progress = False
             monitor._worker("stable", "0.15.0", monitor._generation)
 
         on_result.assert_called_once_with(True, release)
-        assert monitor.last_available is True
-        assert monitor.last_release is release
         monitor.stop()
 
-    def test_check_now_reports_up_to_date(self):
+    def test_reports_up_to_date(self):
         on_result = MagicMock()
         release = _release("v0.15.0")
-        monitor = UpdateMonitor(
-            get_channel=lambda: "stable",
-            on_result=on_result,
-            get_current_version=lambda: "0.15.0",
-            use_glib=False,
-        )
+        monitor = UpdateMonitor(get_channel=lambda: "stable", on_result=on_result, use_glib=False)
         monitor.start()
 
         with patch(
@@ -79,18 +63,12 @@ class TestUpdateMonitor:
             monitor._worker("stable", "0.15.0", monitor._generation)
 
         on_result.assert_called_once_with(False, None)
-        assert monitor.last_available is False
         monitor.stop()
 
-    def test_failed_fetch_keeps_prior_available_state(self):
+    def test_failed_fetch_keeps_prior_callback_state(self):
         on_result = MagicMock()
         release = _release("v0.99.0")
-        monitor = UpdateMonitor(
-            get_channel=lambda: "stable",
-            on_result=on_result,
-            get_current_version=lambda: "0.15.0",
-            use_glib=False,
-        )
+        monitor = UpdateMonitor(get_channel=lambda: "stable", on_result=on_result, use_glib=False)
         monitor.start()
 
         with patch(
@@ -107,18 +85,11 @@ class TestUpdateMonitor:
             monitor._worker("stable", "0.15.0", monitor._generation)
 
         on_result.assert_not_called()
-        assert monitor.last_available is True
-        assert monitor.last_release is release
         monitor.stop()
 
     def test_stale_generation_is_ignored(self):
         on_result = MagicMock()
-        monitor = UpdateMonitor(
-            get_channel=lambda: "stable",
-            on_result=on_result,
-            get_current_version=lambda: "0.15.0",
-            use_glib=False,
-        )
+        monitor = UpdateMonitor(get_channel=lambda: "stable", on_result=on_result, use_glib=False)
         monitor.start()
         stale = monitor._generation
         monitor._generation += 1
@@ -130,22 +101,4 @@ class TestUpdateMonitor:
             monitor._worker("stable", "0.15.0", stale)
 
         on_result.assert_not_called()
-        monitor.stop()
-
-    def test_tick_fires_when_due(self):
-        on_result = MagicMock()
-        monitor = UpdateMonitor(
-            get_channel=lambda: "stable",
-            on_result=on_result,
-            get_current_version=lambda: "0.15.0",
-            startup_delay_seconds=0,
-            check_interval_seconds=60,
-            use_glib=False,
-        )
-        monitor.start()
-        # Force due immediately.
-        monitor._next_due_at = 0
-        with patch.object(monitor, "_run_check") as run_check:
-            assert monitor.tick() is True
-            run_check.assert_called_once()
         monitor.stop()

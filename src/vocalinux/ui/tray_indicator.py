@@ -608,11 +608,12 @@ class TrayIndicator:
         """Send one desktop notification per new version when notifications are on."""
         if not self.config_manager.get_bool("ui", "show_notifications", True):
             return
-        notified = self.config_manager.get_str("updates", "last_notified_version", "")
-        if notified == release.tag_name:
+        if self.config_manager.get_str("updates", "last_notified_version", "") == release.tag_name:
             return
         self.config_manager.set("updates", "last_notified_version", release.tag_name)
         self.config_manager.save_settings()
+        # Same notify-send path as recognition_manager._show_notification (keep local
+        # to avoid tray→speech_recognition coupling).
         try:
             import subprocess
 
@@ -624,8 +625,8 @@ class TrayIndicator:
                     "-a",
                     "Vocalinux",
                     "Vocalinux update available",
-                    f"{release.tag_name} is ready. Open the tray menu or Settings → About "
-                    "for release notes.",
+                    f"{release.tag_name} is ready. Open the tray menu or "
+                    "Settings → About for release notes.",
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
