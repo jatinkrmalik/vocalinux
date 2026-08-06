@@ -36,6 +36,7 @@ from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
 from ..utils.paths import models_dir  # noqa: E402
 from ..utils.update_checker import (  # noqa: E402
     DEFAULT_UPDATE_CHANNEL,
+    ReleaseInfo,
     fetch_latest_release,
     format_release_notes,
     is_trusted_release_url,
@@ -411,6 +412,15 @@ SETTINGS_CSS = """
 .sidebar-row:selected .sidebar-match-count {
     color: @theme_selected_fg_color;
     background-color: alpha(@theme_selected_fg_color, 0.2);
+}
+
+.sidebar-update-badge {
+    font-size: 0.75em;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: #26a269;
+    border-radius: 10px;
+    padding: 1px 7px;
 }
 
 .settings-search {
@@ -984,6 +994,7 @@ class SettingsPage:
         self.extras = []
         self.sidebar_row = None
         self.match_count_label = None
+        self.update_badge_label = None
 
         self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.box.set_margin_top(16)
@@ -1155,6 +1166,7 @@ class SettingsDialog(Gtk.Dialog):
         speech_engine: "SpeechRecognitionManager",
         shortcut_update_callback: callable = None,
         initial_page: Optional[str] = None,
+        pending_update: Optional[ReleaseInfo] = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         # Force window decorations (title-bar close) on all WMs. An in-window
@@ -1180,6 +1192,7 @@ class SettingsDialog(Gtk.Dialog):
         self._update_check_generation = 0
         self._update_auto_checked = False
         self._initial_page = initial_page
+        self._pending_update = pending_update
 
         # Setup CSS styling
         _setup_css()
@@ -1308,6 +1321,10 @@ class SettingsDialog(Gtk.Dialog):
         self.show_all()
         # Release notes stay hidden until a successful update check.
         self.release_notes_group.hide()
+        # Re-hide the About "New" badge if show_all revealed it without a pending update.
+        self._set_about_update_badge(self._pending_update is not None)
+        # Seed About from a tray background check (opens with notes already filled).
+        self._seed_pending_update_ui()
         if self._initial_page:
             self.navigate_to_page(self._initial_page)
         else:
@@ -1350,6 +1367,12 @@ class SettingsDialog(Gtk.Dialog):
         label = Gtk.Label(label=page.title, xalign=0)
         hbox.pack_start(label, True, True, 0)
 
+        update_badge = Gtk.Label(label="New")
+        update_badge.get_style_context().add_class("sidebar-update-badge")
+        update_badge.set_no_show_all(True)
+        update_badge.hide()
+        hbox.pack_end(update_badge, False, False, 0)
+
         match_label = Gtk.Label(label="")
         match_label.get_style_context().add_class("sidebar-match-count")
         match_label.set_no_show_all(True)
@@ -1358,6 +1381,9 @@ class SettingsDialog(Gtk.Dialog):
         row.add(hbox)
         page.sidebar_row = row
         page.match_count_label = match_label
+        page.update_badge_label = update_badge
+        if page.name == "about" and self._pending_update is not None:
+            update_badge.show()
         return row
 
     def _build_search_empty_page(self) -> Gtk.Widget:
@@ -1461,6 +1487,11 @@ class SettingsDialog(Gtk.Dialog):
             page.match_count_label.hide()
             page.sidebar_row.set_sensitive(True)
             page.sidebar_row.show()
+            if page.update_badge_label is not None:
+                if page.name == "about" and self._pending_update is not None:
+                    page.update_badge_label.show()
+                else:
+                    page.update_badge_label.hide()
 
         # Engine-driven visibility is authoritative; re-apply it in case a
         # control changed while the filter was active.
@@ -1514,12 +1545,16 @@ class SettingsDialog(Gtk.Dialog):
                 extra.hide()
 
             if page_matches > 0:
+                if page.update_badge_label is not None:
+                    page.update_badge_label.hide()
                 page.match_count_label.set_text(str(page_matches))
                 page.match_count_label.show()
                 page.sidebar_row.set_sensitive(True)
                 if first_match_page is None:
                     first_match_page = page
             else:
+                if page.update_badge_label is not None:
+                    page.update_badge_label.hide()
                 page.match_count_label.hide()
                 page.sidebar_row.set_sensitive(False)
 
@@ -3202,6 +3237,30 @@ class SettingsDialog(Gtk.Dialog):
         self.about_tab.pack_start(self.release_notes_group, False, False, 0)
         self.release_notes_group.hide()
 
+    def _set_about_update_badge(self, visible: bool) -> None:
+        """Show or hide the green New badge on the About sidebar row."""
+        about_page = next((page for page in self._pages if page.name == "about"), None)
+        if about_page is None or about_page.update_badge_label is None:
+            return
+        # Don't fight the search filter's match-count badges.
+        searching = bool(self.search_entry.get_text().strip())
+        if visible and not searching:
+            about_page.update_badge_label.show()
+        else:
+            about_page.update_badge_label.hide()
+
+    def _seed_pending_update_ui(self) -> None:
+        """Apply a tray-discovered update to the About page without another fetch."""
+        if self._pending_update is None:
+            return
+        # Avoid an immediate re-check flicker; user can still press Check.
+        self._update_auto_checked = True
+        self._apply_update_check_result(
+            self._pending_update,
+            channel=self._current_update_channel(),
+            generation=None,
+        )
+
     def _current_update_channel(self) -> str:
         """Return the selected update channel id."""
         channel_id = self.update_channel_combo.get_active_id()
@@ -3252,6 +3311,9 @@ class SettingsDialog(Gtk.Dialog):
     def _dialog_is_alive(self) -> bool:
         """Return False when the settings dialog has been destroyed."""
         try:
+            # During __init__ (before map) widgets exist but are not realized yet.
+            if self._initializing:
+                return True
             return bool(self.get_realized())
         except Exception:
             return False
@@ -3293,6 +3355,7 @@ class SettingsDialog(Gtk.Dialog):
             self.open_release_btn.set_tooltip_text("Open the Vocalinux project page")
             self.open_release_btn.get_style_context().remove_class("suggested-action")
             self.release_notes_group.hide()
+            self._set_about_update_badge(False)
             return False
 
         self._about_release_url = (
@@ -3306,13 +3369,17 @@ class SettingsDialog(Gtk.Dialog):
             release_label = f"{release_label} (nightly)"
 
         if update_available:
+            self._pending_update = release
             self.update_status_row.set_subtitle(
                 f"Update available on {channel} (running {__version__})"
             )
             self.open_release_btn.get_style_context().add_class("suggested-action")
+            self._set_about_update_badge(True)
         else:
+            self._pending_update = None
             self.update_status_row.set_subtitle(f"Up to date on {channel}")
             self.open_release_btn.get_style_context().remove_class("suggested-action")
+            self._set_about_update_badge(False)
 
         self.latest_release_row.set_subtitle(release_label)
         self.open_release_btn.set_sensitive(True)

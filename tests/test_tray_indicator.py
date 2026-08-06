@@ -277,6 +277,58 @@ class TestTrayIndicator(unittest.TestCase):
             self.assertEqual(kwargs.get("initial_page"), "about")
             mock_dialog_instance.show.assert_called_once()
 
+    def test_update_available_shows_menu_and_opens_about(self):
+        """Background update check reveals tray item and opens About with release."""
+        from vocalinux.utils.update_checker import ReleaseInfo
+
+        release = ReleaseInfo(
+            tag_name="v0.99.0",
+            version="0.99.0",
+            name="v0.99.0",
+            html_url="https://github.com/jatinkrmalik/vocalinux/releases/tag/v0.99.0",
+            body="Notes",
+            published_at="2026-08-06T00:00:00Z",
+            prerelease=False,
+            channel="stable",
+        )
+        menu_item = MagicMock()
+        self.tray_indicator._update_menu_item = menu_item
+        self.tray_indicator.menu = MagicMock()
+        self.mock_config_manager.get_bool.side_effect = lambda section, key, default=False: (
+            True if key == "show_notifications" else default
+        )
+        self.mock_config_manager.get_str.side_effect = lambda section, key, default="": default
+
+        with patch("subprocess.Popen") as mock_popen:
+            self.tray_indicator._on_update_check_result(True, release)
+
+        menu_item.set_label.assert_called()
+        self.assertIn("v0.99.0", menu_item.set_label.call_args[0][0])
+        menu_item.show.assert_called_once()
+        mock_popen.assert_called_once()
+        self.assertEqual(self.tray_indicator._pending_update, release)
+        self.mock_config_manager.set.assert_any_call("updates", "last_notified_version", "v0.99.0")
+
+        with patch("vocalinux.ui.tray_indicator.SettingsDialog") as mock_dialog_class:
+            mock_dialog_instance = MagicMock()
+            mock_dialog_class.return_value = mock_dialog_instance
+            self.tray_indicator._on_update_available_clicked(None)
+            kwargs = mock_dialog_class.call_args.kwargs
+            self.assertEqual(kwargs.get("initial_page"), "about")
+            self.assertEqual(kwargs.get("pending_update"), release)
+
+    def test_update_cleared_hides_menu_item(self):
+        """Clearing an update hides the tray menu entry."""
+        menu_item = MagicMock()
+        self.tray_indicator._update_menu_item = menu_item
+        self.tray_indicator.menu = MagicMock()
+        self.tray_indicator._pending_update = MagicMock()
+
+        self.tray_indicator._on_update_check_result(False, None)
+
+        self.assertIsNone(self.tray_indicator._pending_update)
+        menu_item.hide.assert_called_once()
+
     def test_validate_resources_missing_resources_dir(self):
         """Test validation when resources directory doesn't exist."""
         from vocalinux.ui.tray_indicator import TrayIndicator, _resource_manager

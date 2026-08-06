@@ -38,6 +38,8 @@ from ..common_types import RecognitionState, SpeechRecognitionManagerProtocol, T
 from ..model_keepalive import DEFAULT_IDLE_TIMEOUT_SECONDS, ModelKeepAlive
 from ..suspend_handler import SuspendHandler
 from ..utils.resource_manager import ResourceManager
+from ..utils.update_checker import ReleaseInfo
+from ..utils.update_monitor import UpdateMonitor
 from .config_manager import ConfigManager
 from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog
@@ -141,6 +143,10 @@ class TrayIndicator:
         self._init_icons()
         self._validate_resources()
 
+        # Must exist before _init_indicator: tests run idle_add synchronously.
+        self._pending_update: Optional[ReleaseInfo] = None
+        self._update_menu_item = None
+
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
 
@@ -165,6 +171,13 @@ class TrayIndicator:
         )
         self._model_keepalive.start()
         self._model_keepalive.bump()
+
+        # Background GitHub update checks (tray menu + optional notification)
+        self._update_monitor = UpdateMonitor(
+            get_channel=self._get_update_channel,
+            on_result=self._on_update_check_result,
+        )
+        self._update_monitor.start()
 
         # Set up keyboard shortcuts with mode support
         self._setup_keyboard_shortcuts()
@@ -287,6 +300,12 @@ class TrayIndicator:
         self._add_menu_item("Settings", self._on_settings_clicked)
         self._add_menu_item("View Logs", self._on_logs_clicked)
         self._add_menu_separator()
+        # Hidden until a background check finds a newer release.
+        self._update_menu_item = self._add_menu_item(
+            "Update Available…", self._on_update_available_clicked
+        )
+        self._update_menu_item.set_no_show_all(True)
+        self._update_menu_item.hide()
         self._add_menu_item("About", self._on_about_clicked)
         self._add_menu_item("Quit", self._on_quit_clicked)
 
@@ -295,6 +314,11 @@ class TrayIndicator:
 
         # Show the menu
         self.menu.show_all()
+        # show_all() would re-show the update item; keep it hidden until needed.
+        if self._pending_update is None:
+            self._update_menu_item.hide()
+        else:
+            self._show_update_menu_item(self._pending_update)
 
         # Update the UI based on the initial state
         self._update_ui(RecognitionState.IDLE)
@@ -539,32 +563,80 @@ class TrayIndicator:
     def _on_settings_clicked(self, widget):
         """Handle click on the Settings menu item."""
         logger.debug("Settings clicked")
+        self._show_settings_page(None)
 
-        # Create the settings dialog
-        dialog = SettingsDialog(
-            parent=None,  # Or get the main window if available
-            config_manager=self.config_manager,
-            speech_engine=self.speech_engine,
-            shortcut_update_callback=self.update_shortcut,
-        )
-
-        # Connect to the response signal
-        dialog.connect("response", self._on_settings_dialog_response)
-
-        # Show the dialog (non-modal)
-        dialog.show()
-
-    def _show_settings_page(self, page_name: str):
-        """Open settings focused on a specific sidebar page."""
+    def _show_settings_page(self, page_name: Optional[str]):
+        """Open settings, optionally focused on a specific sidebar page."""
         dialog = SettingsDialog(
             parent=None,
             config_manager=self.config_manager,
             speech_engine=self.speech_engine,
             shortcut_update_callback=self.update_shortcut,
             initial_page=page_name,
+            pending_update=self._pending_update,
         )
         dialog.connect("response", self._on_settings_dialog_response)
         dialog.show()
+
+    def _get_update_channel(self) -> str:
+        """Return the configured release channel for background update checks."""
+        return self.config_manager.get_str("updates", "channel", "stable")
+
+    def _on_update_check_result(self, available: bool, release: Optional[ReleaseInfo]):
+        """Handle a background update-check result (already on the GLib main loop)."""
+        self._pending_update = release if available else None
+        if not hasattr(self, "menu"):
+            return
+        if available and release is not None:
+            self._show_update_menu_item(release)
+            self._maybe_notify_update(release)
+        elif self._update_menu_item is not None:
+            self._update_menu_item.hide()
+
+    def _show_update_menu_item(self, release: ReleaseInfo) -> None:
+        """Reveal the tray menu entry that opens About / release notes."""
+        if self._update_menu_item is None:
+            return
+        label = f"Update Available ({release.tag_name})…"
+        self._update_menu_item.set_label(label)
+        self._update_menu_item.set_tooltip_text(
+            "Open Settings → About for release notes and download links"
+        )
+        self._update_menu_item.show()
+
+    def _maybe_notify_update(self, release: ReleaseInfo) -> None:
+        """Send one desktop notification per new version when notifications are on."""
+        if not self.config_manager.get_bool("ui", "show_notifications", True):
+            return
+        notified = self.config_manager.get_str("updates", "last_notified_version", "")
+        if notified == release.tag_name:
+            return
+        self.config_manager.set("updates", "last_notified_version", release.tag_name)
+        self.config_manager.save_settings()
+        try:
+            import subprocess
+
+            subprocess.Popen(
+                [
+                    "notify-send",
+                    "-i",
+                    "software-update-available",
+                    "-a",
+                    "Vocalinux",
+                    "Vocalinux update available",
+                    f"{release.tag_name} is ready. Open the tray menu or Settings → About "
+                    "for release notes.",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except (FileNotFoundError, OSError) as exc:
+            logger.debug("Could not show update notification: %s", exc)
+
+    def _on_update_available_clicked(self, widget):
+        """Open Settings on About so the user can read notes and open the release."""
+        logger.debug("Update Available clicked")
+        self._show_settings_page("about")
 
     def _on_logs_clicked(self, widget):
         """Handle click on the View Logs menu item."""
@@ -801,6 +873,9 @@ class TrayIndicator:
 
         if getattr(self, "_model_keepalive", None) is not None:
             self._model_keepalive.shutdown()
+
+        if getattr(self, "_update_monitor", None) is not None:
+            self._update_monitor.shutdown()
 
         self._cleanup_input_monitor()
 
