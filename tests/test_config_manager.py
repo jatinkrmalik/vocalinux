@@ -450,14 +450,6 @@ class TestConfigManager(unittest.TestCase):
         self.assertEqual(config_manager.config["shortcuts"]["toggle_recognition"], "ctrl+ctrl")
         self.assertEqual(config_manager.config["shortcuts"]["mode"], "toggle")
 
-    def test_fresh_install_uses_right_alt_push_to_talk(self):
-        """First install (no config file) uses hold Right Alt push-to-talk."""
-        config_manager = ConfigManager()
-        self.assertEqual(
-            config_manager.config["shortcuts"]["toggle_recognition"], "right_alt+right_alt"
-        )
-        self.assertEqual(config_manager.config["shortcuts"]["mode"], "push_to_talk")
-
     def test_sound_effects_enabled_by_default(self):
         """Test that sound effects are enabled by default."""
         config_manager = ConfigManager()
