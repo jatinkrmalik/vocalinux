@@ -214,6 +214,7 @@ class ConfigManager:
 
         if changed:
             self.save_config()
+
     def save_config(self):
         """Save the current configuration to the config file."""
         try:
