@@ -44,8 +44,10 @@ DEFAULT_CONFIG = {
         "enabled": True,  # Play sounds for recording start/stop/error
     },
     "shortcuts": {
-        "toggle_recognition": "ctrl+ctrl",  # Double-tap modifier key
-        "mode": "toggle",  # "toggle" or "push_to_talk"
+        # First-install default: hold Right Alt (Option). Existing users keep
+        # whatever is already saved in their config.json.
+        "toggle_recognition": "right_alt+right_alt",
+        "mode": "push_to_talk",  # "toggle" or "push_to_talk"
         # Pure-modifier gestures: "ctrl+ctrl", "alt+alt", "shift+shift" (and
         # left_/right_ variants) — double-tap (toggle) or hold (push_to_talk).
         # Modifier+key combos are also supported, e.g. "alt+r", "ctrl+alt+r",

@@ -272,9 +272,9 @@ Or launch it from your application menu!
 
 ### Voice Dictation
 
-1. **Toggle mode**: Double-tap the shortcut key (default Ctrl) to start recording
+1. **Push-to-talk (default)**: Hold Right Alt (Option on Mac-layout keyboards) and speak
 2. Speak clearly into your microphone
-3. **Toggle mode**: Double-tap again (or pause speaking) to stop, or **Push-to-Talk mode**: release the key to stop
+3. **Release** the key to stop, or switch to **Toggle mode** in Settings (double-tap a key to start/stop)
 
 ### Voice Commands
 
