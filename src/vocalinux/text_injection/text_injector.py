@@ -112,6 +112,11 @@ class TextInjector:
         self._state_lock = threading.Lock()
         self._clipboard_tool_health = {}
         self._clipboard_timeout = 0.35
+        # Clipboard restore coordination for overlapping ydotool pastes.
+        # generation increments on each paste so stale restore threads exit;
+        # target holds the pre-injection content the latest restore should write back.
+        self._clipboard_restore_generation = 0
+        self._clipboard_restore_target: Optional[str] = None
 
         # Force Wayland mode if requested
         if wayland_mode and self.environment == DesktopEnvironment.X11:
@@ -1258,10 +1263,12 @@ class TextInjector:
 
     def _read_clipboard(self) -> Optional[str]:
         """
-        Read the current clipboard content.
+        Read the current clipboard *text* content.
 
-        Returns the clipboard text, "" if the clipboard is verifiably empty,
-        or None if it could not be read (non-text data or no tool available).
+        Always requests a text MIME type so image/file clipboards are not
+        decoded as corrupted strings. Returns the clipboard text, "" if a
+        tool reports the clipboard is verifiably empty, or None if it could
+        not be read as text (non-text data, no tool, or tool error).
         """
         host_is_wayland = (
             self._session_environment == DesktopEnvironment.WAYLAND
@@ -1269,16 +1276,20 @@ class TextInjector:
             or bool(os.environ.get("WAYLAND_DISPLAY"))
         )
 
+        # Force text MIME types. Bare `xclip -o` / `wl-paste` can return raw
+        # image bytes (rc=0); restoring that as text destroys the clipboard.
         candidates: list[list[str]] = []
         if host_is_wayland and shutil.which("wl-paste"):
-            candidates.append(["wl-paste", "--no-newline"])
+            candidates.append(["wl-paste", "--no-newline", "--type", "text"])
         if shutil.which("xclip"):
-            candidates.append(["xclip", "-selection", "clipboard", "-o"])
+            candidates.append(["xclip", "-selection", "clipboard", "-o", "-t", "UTF8_STRING"])
         if shutil.which("xsel"):
+            # xsel is text-oriented and has no MIME flag.
             candidates.append(["xsel", "--clipboard", "--output"])
         if not host_is_wayland and shutil.which("wl-paste"):
-            candidates.append(["wl-paste", "--no-newline"])
+            candidates.append(["wl-paste", "--no-newline", "--type", "text"])
 
+        saw_empty = False
         for cmd in candidates:
             try:
                 result = subprocess.run(
@@ -1292,19 +1303,18 @@ class TextInjector:
                 )
                 if result.returncode == 0:
                     return result.stdout
-                # wl-paste and xclip signal an empty clipboard with a non-zero
-                # exit code rather than empty stdout.  Detect those messages so
-                # callers can distinguish "empty" (restore to empty) from
-                # "unreadable" (skip restore).
-                stderr_lower = result.stderr.lower()
-                if "nothing is copied" in stderr_lower or (
-                    "target" in stderr_lower and "not available" in stderr_lower
-                ):
-                    return ""
+                # wl-paste signals a truly empty clipboard this way. Do not
+                # treat xclip's "target … not available" as empty — that also
+                # means "clipboard has image/file, no text". Keep scanning so
+                # a later backend (e.g. xclip on XWayland) can still return text.
+                stderr_lower = (result.stderr or "").lower()
+                if "nothing is copied" in stderr_lower:
+                    saw_empty = True
+                    continue
             except (subprocess.TimeoutExpired, OSError, UnicodeDecodeError):
                 continue
 
-        return None
+        return "" if saw_empty else None
 
     def _inject_via_clipboard_paste(self, text: str) -> bool:
         """
@@ -1316,7 +1326,9 @@ class TextInjector:
 
         The previous clipboard content is saved before injection and restored
         in a background thread after Ctrl+V completes, so the user's clipboard
-        is not permanently overwritten.
+        is not permanently overwritten. Overlapping pastes share one restore
+        target (the pre-first-injection content) and a generation counter so
+        stale restore threads do not clobber a newer paste.
 
         Returns:
             True if successful, False otherwise
@@ -1326,7 +1338,18 @@ class TextInjector:
             "(saving clipboard to restore after paste)"
         )
 
-        previous_clipboard = self._read_clipboard()
+        # Bump generation so any in-flight restore from a prior paste exits.
+        # If a restore is already pending, keep restoring to that original
+        # content rather than the intermediate dictated text still on the clipboard.
+        with self._state_lock:
+            self._clipboard_restore_generation += 1
+            generation = self._clipboard_restore_generation
+            pending_target = self._clipboard_restore_target
+
+        if pending_target is not None:
+            previous_clipboard: Optional[str] = pending_target
+        else:
+            previous_clipboard = self._read_clipboard()
 
         if not self._copy_to_clipboard(text):
             logger.warning("Could not copy text to clipboard for paste injection")
@@ -1350,6 +1373,9 @@ class TextInjector:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.warning(f"Paste simulation failed: {e}")
             if previous_clipboard is not None and not self._should_copy_to_clipboard():
+                with self._state_lock:
+                    if generation == self._clipboard_restore_generation:
+                        self._clipboard_restore_target = None
                 if previous_clipboard == "":
                     self._clear_clipboard()
                 else:
@@ -1361,24 +1387,40 @@ class TextInjector:
         # Skip restore when the user has opted in to keeping dictated text in
         # the clipboard (copy_to_clipboard setting) — restoring would undo that.
         if previous_clipboard is not None and not self._should_copy_to_clipboard():
+            with self._state_lock:
+                self._clipboard_restore_target = previous_clipboard
 
             def _restore() -> None:
                 time.sleep(0.3)
+                with self._state_lock:
+                    if generation != self._clipboard_restore_generation:
+                        # A newer paste owns the restore; leave its target alone.
+                        return
+                    target = self._clipboard_restore_target
+                    self._clipboard_restore_target = None
+                if target is None:
+                    return
                 # If the user copied something else during the delay, don't
                 # overwrite their new clipboard content with stale data.
                 if self._read_clipboard() != text:
                     logger.debug("Clipboard changed during restore delay; skipping restore")
                     return
-                if previous_clipboard == "":
+                if target == "":
                     success = self._clear_clipboard()
                 else:
-                    success = self._copy_to_clipboard(previous_clipboard)
+                    success = self._copy_to_clipboard(target)
                 if success:
                     logger.debug("Clipboard restored to previous content")
                 else:
                     logger.debug("Could not restore previous clipboard content")
 
             threading.Thread(target=_restore, daemon=True).start()
+        else:
+            # No delayed restore for this paste — drop any inherited pending
+            # target so a cancelled prior restore cannot linger.
+            with self._state_lock:
+                if generation == self._clipboard_restore_generation:
+                    self._clipboard_restore_target = None
 
         return True
 

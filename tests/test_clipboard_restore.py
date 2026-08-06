@@ -27,6 +27,8 @@ def _make_injector() -> Any:
     obj._state_lock = threading.Lock()
     obj._clipboard_tool_health = {}
     obj._clipboard_timeout = 0.35
+    obj._clipboard_restore_generation = 0
+    obj._clipboard_restore_target = None
     return obj
 
 
@@ -48,6 +50,25 @@ class TestReadClipboard(unittest.TestCase):
                     mock_run.return_value = MagicMock(returncode=0, stdout="copied text")
                     result = obj._read_clipboard()
         self.assertEqual(result, "copied text")
+        mock_run.assert_called_once()
+        self.assertEqual(
+            mock_run.call_args.args[0],
+            ["wl-paste", "--no-newline", "--type", "text"],
+        )
+
+    def test_xclip_requests_utf8_string_target(self):
+        """xclip must request UTF8_STRING so image clipboards are not read as text."""
+        obj = _make_injector()
+        with patch("vocalinux.text_injection.text_injector.shutil.which") as mock_which:
+            mock_which.side_effect = lambda cmd: ("/usr/bin/xclip" if cmd == "xclip" else None)
+            with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout="xclip text")
+                result = obj._read_clipboard()
+        self.assertEqual(result, "xclip text")
+        self.assertEqual(
+            mock_run.call_args.args[0],
+            ["xclip", "-selection", "clipboard", "-o", "-t", "UTF8_STRING"],
+        )
 
     def test_xclip_fallback_when_wl_paste_unavailable(self):
         """Falls back to xclip when wl-paste is not installed."""
@@ -686,8 +707,12 @@ class TestReadClipboardEmptyDetection(unittest.TestCase):
                 result = obj._read_clipboard()
         self.assertEqual(result, "")
 
-    def test_xclip_target_not_available_returns_empty_string(self):
-        """Returns '' when xclip stderr says target STRING not available."""
+    def test_xclip_target_not_available_returns_none(self):
+        """xclip 'target not available' means no text — not an empty clipboard.
+
+        Image/file clipboards produce this message for UTF8_STRING. Returning
+        '' would cause a clear that destroys non-text data; skip restore instead.
+        """
         obj = _make_injector()
         obj._session_environment = None  # non-Wayland so xclip is tried
         with patch(
@@ -696,12 +721,28 @@ class TestReadClipboardEmptyDetection(unittest.TestCase):
             with patch(
                 "vocalinux.text_injection.text_injector.subprocess.run",
                 return_value=MagicMock(
-                    returncode=1, stdout="", stderr="Error: target STRING not available"
+                    returncode=1, stdout="", stderr="Error: target UTF8_STRING not available"
                 ),
             ):
                 with patch.dict("os.environ", {"XDG_SESSION_TYPE": "x11", "WAYLAND_DISPLAY": ""}):
                     result = obj._read_clipboard()
-        self.assertEqual(result, "")
+        self.assertIsNone(result)
+
+    def test_wl_paste_empty_falls_through_to_xclip_text(self):
+        """Empty Wayland clipboard must not skip an X11 backend that still has text."""
+        obj = _make_injector()
+        with patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}):
+            with patch("vocalinux.text_injection.text_injector.shutil.which") as mock_which:
+                mock_which.side_effect = lambda cmd: (
+                    "/usr/bin/" + cmd if cmd in ("wl-paste", "xclip") else None
+                )
+                with patch("vocalinux.text_injection.text_injector.subprocess.run") as mock_run:
+                    mock_run.side_effect = [
+                        MagicMock(returncode=1, stdout="", stderr="Nothing is copied"),
+                        MagicMock(returncode=0, stdout="x11 text"),
+                    ]
+                    result = obj._read_clipboard()
+        self.assertEqual(result, "x11 text")
 
     def test_non_empty_clipboard_error_still_returns_none(self):
         """A non-zero exit code with unknown stderr does not trigger empty detection."""
@@ -709,6 +750,74 @@ class TestReadClipboardEmptyDetection(unittest.TestCase):
         with patch("shutil.which", return_value=None):
             result = obj._read_clipboard()
         self.assertIsNone(result)
+
+
+class TestOverlappingClipboardRestore(unittest.TestCase):
+    """Overlapping pastes must restore the original pre-first-injection content."""
+
+    def test_overlapping_pastes_restore_original_clipboard(self):
+        """Second paste within the restore window must not restore intermediate text."""
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        copy_calls: list[str] = []
+        # First paste saves "URL". Second paste would naively save "hello" (still on
+        # clipboard); pending-target must keep restoring to "URL".
+        read_values = iter(["URL", "world"])
+
+        with patch.object(obj, "_read_clipboard", side_effect=lambda: next(read_values)):
+            with patch.object(
+                obj, "_copy_to_clipboard", side_effect=lambda t: copy_calls.append(t) or True
+            ):
+                with patch.object(
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
+                ):
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            self.assertTrue(obj._inject_via_clipboard_paste("hello"))
+                            self.assertTrue(obj._inject_via_clipboard_paste("world"))
+                            time.sleep(0.5)
+
+        self.assertEqual(copy_calls[0], "hello")
+        self.assertEqual(copy_calls[1], "world")
+        self.assertEqual(copy_calls[-1], "URL")
+        self.assertNotIn("hello", copy_calls[2:])
+        self.assertIsNone(obj._clipboard_restore_target)
+
+    def test_stale_restore_thread_is_cancelled_by_newer_paste(self):
+        """A superseded restore must not clear the pending restore target."""
+        obj = _make_injector()
+        obj.wayland_tool = "ydotool"
+        copy_calls: list[str] = []
+
+        with patch.object(obj, "_read_clipboard", side_effect=["orig", "second"]):
+            with patch.object(
+                obj, "_copy_to_clipboard", side_effect=lambda t: copy_calls.append(t) or True
+            ):
+                with patch.object(
+                    obj,
+                    "_ydotool_ctrl_v_command",
+                    return_value=["ydotool", "key", "ctrl+v"],
+                ):
+                    with patch.object(obj, "_should_copy_to_clipboard", return_value=False):
+                        with patch(
+                            "vocalinux.text_injection.text_injector.subprocess.run",
+                            return_value=MagicMock(returncode=0),
+                        ):
+                            # First paste schedules restore gen=1 for "orig".
+                            obj._inject_via_clipboard_paste("first")
+                            # Bump generation as a newer paste would, without scheduling
+                            # another restore (simulates copy_to_clipboard / unreadable).
+                            with obj._state_lock:
+                                obj._clipboard_restore_generation += 1
+                            time.sleep(0.5)
+
+        # Only the injection copy — stale restore must not write "orig" back.
+        self.assertEqual(copy_calls, ["first"])
 
 
 if __name__ == "__main__":
