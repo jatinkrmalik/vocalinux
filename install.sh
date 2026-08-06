@@ -1621,7 +1621,7 @@ install_system_dependencies() {
     # Debian install they are absent and cause CMake's bootstrap to fail (Hurdle 2 from
     # https://medium.com/@cslev/talking-to-my-linux-box-without-talking-to-the-cloud-vocalinux-on-debian-without-the-tears-10bf053ea21b).
     local PYWHISPERCPP_BUILD_DEPS="libssl-dev autoconf automake libtool patchelf"
-    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard util-linux-extra $PYWHISPERCPP_BUILD_DEPS"
+    local APT_PACKAGES_UBUNTU="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3-0.1 gir1.2-ibus-1.0 $GI_DEV_PKG libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
     local APT_PACKAGES_DEBIAN_BASE="python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ibus-1.0 libcairo2-dev cmake python3-dev build-essential portaudio19-dev python3-venv pkg-config wget curl unzip vulkan-tools libvulkan-dev $VULKAN_SHADER_PKG xclip xsel wl-clipboard $PYWHISPERCPP_BUILD_DEPS"
     local APT_PACKAGES_DEBIAN_11_12="$APT_PACKAGES_DEBIAN_BASE libgirepository1.0-dev gir1.2-ayatanaappindicator3-0.1"
     local APT_PACKAGES_DEBIAN_13_PLUS="$APT_PACKAGES_DEBIAN_BASE libgirepository-2.0-dev gir1.2-ayatanaappindicator3-0.1 util-linux-extra"
@@ -1650,6 +1650,13 @@ install_system_dependencies() {
                     APT_PACKAGES="$APT_PACKAGES_DEBIAN_13_PLUS"
                 else
                     APT_PACKAGES="$APT_PACKAGES_DEBIAN_11_12"
+                fi
+            elif [[ "$DISTRO_FAMILY" == "ubuntu" ]]; then
+                # util-linux-extra exists from Ubuntu 24.04+ (util-linux 2.38+ split).
+                # On 22.04 those tools ship in the main util-linux package (always installed).
+                local UBUNTU_MAJOR="${DISTRO_VERSION%%.*}"
+                if [[ "$UBUNTU_MAJOR" =~ ^[0-9]+$ ]] && [ "$UBUNTU_MAJOR" -ge 24 ]; then
+                    APT_PACKAGES="$APT_PACKAGES util-linux-extra"
                 fi
             fi
 

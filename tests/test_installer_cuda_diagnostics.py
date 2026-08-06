@@ -90,6 +90,18 @@ class InstallerCudaDiagnosticsTests(unittest.TestCase):
             self.assertIn("xsel", line)
             self.assertIn("wl-clipboard", line)
 
+    def test_ubuntu_22_package_list_omits_util_linux_extra(self) -> None:
+        """Ubuntu 22.04 lacks util-linux-extra; gate it to 24.04+ like Debian 13+."""
+        source = _installer_source()
+
+        ubuntu_line = next(
+            line for line in source.splitlines() if "local APT_PACKAGES_UBUNTU=" in line
+        )
+        self.assertNotIn("util-linux-extra", ubuntu_line)
+        self.assertIn('[[ "$DISTRO_FAMILY" == "ubuntu" ]]', source)
+        self.assertIn("UBUNTU_MAJOR", source)
+        self.assertIn('APT_PACKAGES="$APT_PACKAGES util-linux-extra"', source)
+
 
 if __name__ == "__main__":
     unittest.main()
