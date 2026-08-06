@@ -150,7 +150,7 @@ class ConfigManager:
             if needs_migration:
                 self._migrate_config(user_config)
 
-            self._migrate_shortcuts_config()
+            self._migrate_shortcuts_config(user_config)
 
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Failed to load config: {e}")
@@ -188,15 +188,32 @@ class ConfigManager:
         self.save_config()
         logger.info("Config migrated to new per-engine model format")
 
-    def _migrate_shortcuts_config(self):
+    def _migrate_shortcuts_config(self, user_config: Optional[dict] = None):
+        """Migrate deprecated shortcuts and preserve legacy mode when omitted."""
         shortcuts_config = self.config.get("shortcuts", {})
         shortcut = shortcuts_config.get("toggle_recognition")
+        changed = False
 
         if shortcut == "super+super":
             shortcuts_config["toggle_recognition"] = "ctrl+ctrl"
-            self.save_config()
+            changed = True
             logger.info("Migrated deprecated super+super shortcut to ctrl+ctrl")
 
+        # Older installs (and install.sh seeds) often stored only toggle_recognition.
+        # Missing mode previously meant toggle; pin that so the new push_to_talk
+        # default does not flip existing configs into hold-Ctrl.
+        user_shortcuts = (user_config or {}).get("shortcuts")
+        if (
+            isinstance(user_shortcuts, dict)
+            and "toggle_recognition" in user_shortcuts
+            and "mode" not in user_shortcuts
+        ):
+            shortcuts_config["mode"] = "toggle"
+            changed = True
+            logger.info("Migrated missing shortcuts.mode to toggle for existing config")
+
+        if changed:
+            self.save_config()
     def save_config(self):
         """Save the current configuration to the config file."""
         try:
