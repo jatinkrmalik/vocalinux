@@ -102,3 +102,32 @@ class TestUpdateMonitor:
 
         on_result.assert_not_called()
         monitor.stop()
+
+    def test_stale_channel_result_is_ignored_and_rechecks(self):
+        """A result for an earlier channel must not update the tray."""
+        on_result = MagicMock()
+        channel = {"value": "stable"}
+        monitor = UpdateMonitor(
+            get_channel=lambda: channel["value"],
+            on_result=on_result,
+            use_glib=False,
+        )
+        monitor.start()
+        generation = monitor._generation
+
+        channel["value"] = "nightly"
+        with (
+            patch(
+                "vocalinux.utils.update_monitor.fetch_latest_release",
+                return_value=_release(),
+            ) as fetch_mock,
+            patch.object(monitor, "_run_check") as run_check,
+        ):
+            monitor._worker("stable", "0.15.0", generation)
+
+        on_result.assert_not_called()
+        run_check.assert_called_once_with()
+        # Worker itself should not have re-fetched for nightly — only the
+        # deferred _run_check path does that.
+        fetch_mock.assert_called_once_with(channel="stable")
+        monitor.stop()

@@ -115,11 +115,7 @@ class UpdateMonitor:
         self._check_in_progress = True
         self._generation += 1
         generation = self._generation
-        try:
-            channel = normalize_channel(self._get_channel())
-        except Exception:
-            logger.error("Failed to read update channel", exc_info=True)
-            channel = DEFAULT_UPDATE_CHANNEL
+        channel = self._current_channel()
         threading.Thread(
             target=self._worker,
             args=(channel, __version__, generation),
@@ -136,20 +132,30 @@ class UpdateMonitor:
 
         if release is None:
             # Network/API miss — keep any previously shown update affordance.
-            self._finish_check(generation, callback=False)
+            self._finish_check(generation, channel, callback=False)
             return
 
         available = is_update_available(current, release, channel)
         self._finish_check(
             generation,
+            channel,
             callback=True,
             available=available,
             release=release if available else None,
         )
 
+    def _current_channel(self) -> str:
+        """Read and normalize the live channel preference."""
+        try:
+            return normalize_channel(self._get_channel())
+        except Exception:
+            logger.error("Failed to read update channel", exc_info=True)
+            return DEFAULT_UPDATE_CHANNEL
+
     def _finish_check(
         self,
         generation: int,
+        channel: str,
         *,
         callback: bool,
         available: bool = False,
@@ -159,6 +165,18 @@ class UpdateMonitor:
             self._check_in_progress = False
             if not self._running or generation != self._generation:
                 return False
+            # Drop results from an earlier channel (About-page checks do the same).
+            if callback:
+                current_channel = self._current_channel()
+                if current_channel != channel:
+                    logger.debug(
+                        "Ignoring stale update result for channel %s (now %s)",
+                        channel,
+                        current_channel,
+                    )
+                    if self._running:
+                        self._run_check()
+                    return False
             if callback and self._on_result is not None:
                 try:
                     self._on_result(available, release)
