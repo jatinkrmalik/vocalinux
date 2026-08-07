@@ -189,7 +189,7 @@ class ConfigManager:
         logger.info("Config migrated to new per-engine model format")
 
     def _migrate_shortcuts_config(self, user_config: Optional[dict] = None):
-        """Migrate deprecated shortcuts and preserve legacy mode when omitted."""
+        """Migrate deprecated shortcuts and preserve legacy defaults when omitted."""
         shortcuts_config = self.config.get("shortcuts", {})
         shortcut = shortcuts_config.get("toggle_recognition")
         changed = False
@@ -199,18 +199,25 @@ class ConfigManager:
             changed = True
             logger.info("Migrated deprecated super+super shortcut to ctrl+ctrl")
 
-        # Older installs (and install.sh seeds) often stored only toggle_recognition.
-        # Missing mode previously meant toggle; pin that so the new push_to_talk
-        # default does not flip existing configs into hold-Ctrl.
-        user_shortcuts = (user_config or {}).get("shortcuts")
-        if (
-            isinstance(user_shortcuts, dict)
-            and "toggle_recognition" in user_shortcuts
-            and "mode" not in user_shortcuts
-        ):
-            shortcuts_config["mode"] = "toggle"
-            changed = True
-            logger.info("Migrated missing shortcuts.mode to toggle for existing config")
+        # Existing config files that never stored shortcuts (or only stored the
+        # key) previously inherited ctrl+ctrl + toggle from DEFAULT_CONFIG.
+        # Pin those historical defaults so the new first-install defaults do
+        # not silently change behavior for upgrades.
+        if user_config is not None:
+            user_shortcuts = user_config.get("shortcuts")
+            if not isinstance(user_shortcuts, dict):
+                shortcuts_config["toggle_recognition"] = "ctrl+ctrl"
+                shortcuts_config["mode"] = "toggle"
+                changed = True
+                logger.info(
+                    "Migrated missing shortcuts section to legacy ctrl+ctrl toggle defaults"
+                )
+            elif "mode" not in user_shortcuts:
+                shortcuts_config["mode"] = "toggle"
+                if "toggle_recognition" not in user_shortcuts:
+                    shortcuts_config["toggle_recognition"] = "ctrl+ctrl"
+                changed = True
+                logger.info("Migrated missing shortcuts.mode to toggle for existing config")
 
         if changed:
             self.save_config()
