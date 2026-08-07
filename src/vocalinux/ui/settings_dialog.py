@@ -1489,11 +1489,10 @@ class SettingsDialog(Gtk.Dialog):
             page.match_count_label.hide()
             page.sidebar_row.set_sensitive(True)
             page.sidebar_row.show()
-            if page.update_badge_label is not None:
-                if page.name == "about" and self._pending_update is not None:
-                    page.update_badge_label.show()
-                else:
-                    page.update_badge_label.hide()
+
+        # Badge visibility follows _pending_update (cleared on failed About checks
+        # so a stale New badge cannot reappear when search is cleared).
+        self._set_about_update_badge(self._pending_update is not None)
 
         # Engine-driven visibility is authoritative; re-apply it in case a
         # control changed while the filter was active.
@@ -3357,8 +3356,12 @@ class SettingsDialog(Gtk.Dialog):
             self.open_release_btn.set_tooltip_text("Open the Vocalinux project page")
             self.open_release_btn.get_style_context().remove_class("suggested-action")
             self.release_notes_group.hide()
+            # Clear dialog pending state so search restore cannot revive the New
+            # badge while About still shows the failed-lookup message. Do not
+            # call update_status_callback — tray state stays as-is (same as
+            # UpdateMonitor on a failed lookup).
+            self._pending_update = None
             self._set_about_update_badge(False)
-            # Keep tray state as-is on a failed lookup (same as UpdateMonitor).
             return False
 
         self._about_release_url = (
