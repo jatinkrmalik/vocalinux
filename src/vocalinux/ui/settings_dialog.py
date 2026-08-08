@@ -3162,8 +3162,8 @@ class SettingsDialog(Gtk.Dialog):
 
         license_row = PreferenceRow(
             title="License",
-            subtitle=f"GNU GPL v3 · {__copyright__}",
-            keywords=("license", "gpl", "copyright"),
+            subtitle=f"GNU AGPL v3 · {__copyright__}",
+            keywords=("license", "agpl", "gpl", "copyright"),
         )
         app_group.add_row(license_row)
         self.about_tab.pack_start(app_group, False, False, 0)

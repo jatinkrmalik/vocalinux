@@ -87,14 +87,14 @@ COMPONENT_NAME = "org.freedesktop.IBus.Vocalinux"
 ENGINE_RANK = 50
 _ENGINE_META = {
     "language": "other",
-    "license": "GPL-3.0",
+    "license": "AGPL-3.0",
     "author": "Vocalinux",
     "icon": "audio-input-microphone",
     "layout": "default",
 }
 _COMPONENT_META = {
     "version": "1.0",
-    "license": "GPL-3.0",
+    "license": "AGPL-3.0",
     "author": "Vocalinux",
     "homepage": "https://github.com/jatinkrmalik/vocalinux",
     "textdomain": "vocalinux",
