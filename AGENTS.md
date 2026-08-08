@@ -237,6 +237,23 @@ docs(readme): update installation instructions
 - **All changes require a PR** - Even small fixes and documentation updates
 - **Wait for CI to pass** before merging PRs
 - **Squash merge** PRs to keep history clean
+- **Humanize all human-facing text** - See the rule below
+
+## Human-facing text: always humanize
+
+Any prose a person will read must go through the `humanizer` skill (`~/.cursor/skills/humanizer/SKILL.md`) before you post or hand it off. Run the humanizer pass every time, as a rule, not just when asked.
+
+This applies to:
+
+- Pull request titles and descriptions
+- Replies and review comments on pull requests
+- Comments and replies on issues
+- Commit message bodies
+- Any Markdown or plain text you generate for a human to copy and paste
+
+Use the skill's embedded mode for these: run the draft, audit, and final rewrite internally, then output only the final text. Do not paste the audit bullets into the PR, issue, or handoff.
+
+This rule is about prose only. Do not humanize code, code comments, logs, configuration, test fixtures, or other machine-facing output.
 
 ## Cursor Cloud specific instructions
 
