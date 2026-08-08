@@ -37,7 +37,7 @@ Offline-first Linux voice typing with real desktop integration (system tray, X11
 - Wayland: IBus when `ibus-wayland` is running, including on compositors previously treated as unbridged
 - Packaging: install.sh, AppImage (x86_64/aarch64), AUR, Flatpak (local/Flathub status as documented)
 - No usage telemetry in the installed app
-- GPL-3.0; marketing version string is tracked in site package/version surfaces
+- AGPL-3.0; marketing version string is tracked in site package/version surfaces
 - Website is Next.js marketing + SEO guides (static export); languages page documents per-engine support honestly
 
 ## Brand commitments
