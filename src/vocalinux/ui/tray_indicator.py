@@ -41,6 +41,7 @@ from ..utils.resource_manager import ResourceManager
 from ..utils.update_checker import ReleaseInfo
 from ..utils.update_monitor import UpdateMonitor
 from .config_manager import ConfigManager
+from .keyboard_backends import DEFAULT_SHORTCUT, DEFAULT_SHORTCUT_MODE
 from .keyboard_shortcuts import KeyboardShortcutManager
 from .settings_dialog import SettingsDialog
 
@@ -107,8 +108,8 @@ class TrayIndicator:
         self._syncing_autostart_menu = False
 
         # Get configured shortcut and mode from config
-        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
-        mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
+        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", DEFAULT_SHORTCUT)
+        mode = self.config_manager.get_str("shortcuts", "mode", DEFAULT_SHORTCUT_MODE)
 
         # Initialize keyboard shortcut manager with configured shortcut and mode
         self.shortcut_manager = KeyboardShortcutManager(shortcut=shortcut, mode=mode)
@@ -195,7 +196,7 @@ class TrayIndicator:
         self.shortcut_manager.register_release_callback(None)
 
         # Get configured mode from config
-        mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
+        mode = self.config_manager.get_str("shortcuts", "mode", DEFAULT_SHORTCUT_MODE)
         logger.info(f"Setting up keyboard shortcuts with mode: {mode}")
 
         if mode == "toggle":

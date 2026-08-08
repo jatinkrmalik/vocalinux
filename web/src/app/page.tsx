@@ -162,7 +162,7 @@ const homeJsonLd = [
       {
         "@type": "HowToStep",
         name: "Start dictating",
-        text: "Launch vocalinux and use toggle or push-to-talk shortcut mode to begin dictation.",
+        text: "Launch vocalinux and hold Right Alt (Option) to begin dictation, or choose toggle mode in Settings.",
         url: "https://vocalinux.com/#install",
       },
     ],

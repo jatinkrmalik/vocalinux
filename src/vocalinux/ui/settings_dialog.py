@@ -59,6 +59,8 @@ from ..utils.whispercpp_model_info import is_model_downloaded as is_whispercpp_m
 from ..version import __copyright__, __description__, __url__, __version__  # noqa: E402
 from .config_manager import DEFAULT_CONFIG  # noqa: E402
 from .keyboard_backends import (  # noqa: E402
+    DEFAULT_SHORTCUT,
+    DEFAULT_SHORTCUT_MODE,
     SHORTCUT_DISPLAY_NAMES,
     SHORTCUT_GROUPS,
     SHORTCUT_MODES,
@@ -2439,9 +2441,9 @@ class SettingsDialog(Gtk.Dialog):
             self.shortcut_mode_combo.append(mode_id, display_name)
 
         # Load current mode from config
-        current_mode = self.config_manager.get_str("shortcuts", "mode", "toggle")
+        current_mode = self.config_manager.get_str("shortcuts", "mode", DEFAULT_SHORTCUT_MODE)
         if not self.shortcut_mode_combo.set_active_id(current_mode):
-            self.shortcut_mode_combo.set_active_id("toggle")
+            self.shortcut_mode_combo.set_active_id(DEFAULT_SHORTCUT_MODE)
 
         mode_row = PreferenceRow(
             title="Shortcut Mode",
@@ -2469,7 +2471,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Load current shortcut from config
         current_shortcut = self.config_manager.get_str(
-            "shortcuts", "toggle_recognition", "ctrl+ctrl"
+            "shortcuts", "toggle_recognition", DEFAULT_SHORTCUT
         )
 
         self.shortcut_row = PreferenceRow(
@@ -2577,7 +2579,7 @@ class SettingsDialog(Gtk.Dialog):
             blocked = False
         try:
             if not self.shortcut_combo.set_active_id(active_id):
-                self.shortcut_combo.set_active_id("ctrl+ctrl")
+                self.shortcut_combo.set_active_id(DEFAULT_SHORTCUT)
         finally:
             if blocked:
                 self.shortcut_combo.handler_unblock_by_func(self._on_shortcut_changed)
@@ -2719,7 +2721,7 @@ class SettingsDialog(Gtk.Dialog):
         assuming a bare-modifier gesture. Reads the saved shortcut from config
         (the single source of truth for both preset and custom shortcuts).
         """
-        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        shortcut = self.config_manager.get_str("shortcuts", "toggle_recognition", DEFAULT_SHORTCUT)
         is_combo = is_valid_shortcut(shortcut) and parse_shortcut_spec(shortcut).is_combo
         # e.g. "Press Alt+R" (combo toggle), "Double-tap Ctrl", "Hold Alt+R".
         action = get_shortcut_display_name(shortcut, mode)
@@ -2765,7 +2767,7 @@ class SettingsDialog(Gtk.Dialog):
         # Apply from saved config (source of truth for both preset and custom).
         if self.shortcut_update_callback:
             shortcut_id = self.config_manager.get_str(
-                "shortcuts", "toggle_recognition", "ctrl+ctrl"
+                "shortcuts", "toggle_recognition", DEFAULT_SHORTCUT
             )
             success = self.shortcut_update_callback(shortcut_id, mode_id)
             if success:
@@ -2793,9 +2795,9 @@ class SettingsDialog(Gtk.Dialog):
         visible while a preset is still the active binding. Also clear the
         temporary Record/Set hint so the mode description matches the UI.
         """
-        current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+        current = self.config_manager.get_str("shortcuts", "toggle_recognition", DEFAULT_SHORTCUT)
         self._sync_shortcut_selection_ui(current)
-        mode_id = self.shortcut_mode_combo.get_active_id() or "toggle"
+        mode_id = self.shortcut_mode_combo.get_active_id() or DEFAULT_SHORTCUT_MODE
         self._update_shortcut_ui_for_mode(mode_id)
 
     def _on_shortcut_changed(self, widget):
@@ -2815,7 +2817,9 @@ class SettingsDialog(Gtk.Dialog):
         # Selecting "Custom Shortcut" does not change the active binding until
         # the user records/sets one; just focus the custom entry for convenience.
         if shortcut_id == "__custom__":
-            current = self.config_manager.get_str("shortcuts", "toggle_recognition", "ctrl+ctrl")
+            current = self.config_manager.get_str(
+                "shortcuts", "toggle_recognition", DEFAULT_SHORTCUT
+            )
             if not self._is_preset_shortcut(current):
                 self.custom_shortcut_entry.set_text(current)
             self._set_custom_shortcut_row_visible(True)
