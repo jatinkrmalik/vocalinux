@@ -99,6 +99,8 @@ DEFAULT_CONFIG = {
     "updates": {
         # "stable" follows GitHub /releases/latest; "nightly" follows nightly-YYYY-MM-DD tags.
         "channel": "stable",
+        # Tag last announced via desktop notification (avoids re-notifying every 6h).
+        "last_notified_version": "",
     },
 }
 

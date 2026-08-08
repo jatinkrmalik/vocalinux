@@ -773,6 +773,19 @@ class TestSettingsSearch(unittest.TestCase):
         self.assertIn("self.sidebar_listbox.select_row(page.sidebar_row)", source)
         self.assertIn("self.settings_stack.set_visible_child_name(page.name)", source)
 
+    def test_failed_update_check_clears_pending_before_hiding_badge(self):
+        """Failed About lookup must clear _pending_update so search cannot revive New."""
+        source = self._settings_source()
+        fail_block = source.split("if release is None:")[1].split("return False")[0]
+        self.assertIn("self._pending_update = None", fail_block)
+        self.assertIn("self._set_about_update_badge(False)", fail_block)
+        # Search restore must follow _pending_update via the badge helper.
+        restore_body = source.split("def _restore_search_baseline")[1].split("def ")[0]
+        self.assertIn(
+            "self._set_about_update_badge(self._pending_update is not None)",
+            restore_body,
+        )
+
     @staticmethod
     def _settings_source():
         import os
