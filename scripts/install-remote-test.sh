@@ -153,8 +153,37 @@ run_remote_install() {
 # exactly how the fd-0 redirect regression in #933 slipped through. bsdutils /
 # util-linux `script` is in the base package set of every gated distro.
 command -v script >/dev/null 2>&1 || fail "script(1) not found; needed to give the piped run a terminal"
+#
+# The producer half matters too: a `cat` of the whole file finishes inside the
+# pipe buffer long before bash reaches the tagged-installer handoff, so it can
+# never be killed by a consumer that abandons the pipe the way a still-
+# streaming curl can (the error 23 the #933 fix still had to drain for). The
+# helper below trickles the bootstrap so it is mid-write at the handoff, and
+# pipefail makes its exit status count — a consumer that closes the pipe early
+# kills it with SIGPIPE and fails the run instead of hiding behind bash's own
+# exit status.
+PIPED_FEED=/tmp/vl-piped-feed.sh
+cat >"$PIPED_FEED" <<'EOF'
+#!/usr/bin/env bash
+# Usage: vl-piped-feed.sh BOOTSTRAP [installer args...]
+set -o pipefail
+bootstrap=$1; shift
+# ~16 KiB/s: still writing (and soon blocked on the full pipe buffer) when the
+# bootstrap reaches the tagged-installer handoff, the way curl is mid-download.
+drip() {
+  local file=$1 chunk
+  split -b 8192 "$file" /tmp/vl-feed-
+  for chunk in /tmp/vl-feed-*; do
+    cat "$chunk"
+    sleep 0.5
+  done
+  rm -f /tmp/vl-feed-*
+}
+drip "$bootstrap" | bash -s -- "$@"
+EOF
+chmod 0755 "$PIPED_FEED"
 run_remote_install_piped() {
-  su - "$INSTALL_USER" -c "cd '$INSTALL_HOME' && VOCALINUX_REPO_URL='file://$MIRROR' script -qec \"cat '$BOOTSTRAP' | bash -s -- --auto --skip-models '--tag=$GATE_TAG'\" /dev/null"
+  su - "$INSTALL_USER" -c "cd '$INSTALL_HOME' && VOCALINUX_REPO_URL='file://$MIRROR' script -qec \"'$PIPED_FEED' '$BOOTSTRAP' --auto --skip-models '--tag=$GATE_TAG'\" /dev/null"
 }
 
 assert_remote_install() {

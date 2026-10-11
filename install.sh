@@ -511,6 +511,15 @@ handoff_to_tagged_installer() {
         export VOCALINUX_REMOTE_INSTALL=yes
         export TMPDIR="$(dirname "$VOCALINUX_TMP_DIR")"
         rmdir "$VOCALINUX_TMP_DIR"
+        # A bootstrap read from a pipe (curl | bash) leaves its unread tail on
+        # stdin: bash hands the pipe to the tagged installer, which reads its
+        # commands from a file instead, so nothing drains it. A producer still
+        # streaming (the download is bigger than the pipe buffer) stays blocked
+        # for the whole install and reports curl error 23 when this fd closes.
+        # Drain to EOF first; a tty has no EOF to wait for and is left alone.
+        if [ ! -t 0 ]; then
+            cat >/dev/null 2>&1 || true
+        fi
         exec bash "$tagged_installer" "${INSTALLER_ARGS[@]}" "--venv-dir=$remote_venv"
     fi
 

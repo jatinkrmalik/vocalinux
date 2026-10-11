@@ -120,7 +120,8 @@ def test_piped_installer_prompts_answer_on_the_terminal(tmp_path: Path) -> None:
     Feed "1" (interactive) early — pty input queues until the mode prompt
     reads it — then Ctrl+C once the engine menu is up. Reaching "Choose
     engine" proves the tty answer was accepted while the script still flowed
-    through the pipe.
+    through the pipe. --tag skips the release-tag lookup so a slow GitHub
+    cannot eat the window before the first prompt appears.
     """
     transcript = tmp_path / "interactive.typescript"
     feeder = tmp_path / "feed-input.sh"
@@ -128,15 +129,19 @@ def test_piped_installer_prompts_answer_on_the_terminal(tmp_path: Path) -> None:
         "#!/bin/sh\n"
         # Queued until the "Choose mode" prompt reads /dev/tty.
         "sleep 1; printf '1\\n'\n"
-        # Interrupt once the engine menu is on screen; late on purpose — a
-        # slow runner must not see Ctrl+C before the second prompt appears.
-        "sleep 12; printf '\\003'\n",
+        # Interrupt only once the engine menu is on screen: a blind delay
+        # loses to a slow runner and Ctrl+C's a healthy installer mid-prompt.
+        "for _ in $(seq 1 60); do\n"
+        f"  grep -q 'Choose engine' {shlex.quote(str(transcript))} 2>/dev/null && break\n"
+        "  sleep 1\n"
+        "done\n"
+        "printf '\\003'\n",
         encoding="utf-8",
     )
     feeder.chmod(0o755)
     subprocess.run(
         f"{shlex.quote(str(feeder))} | {shlex.quote(str(SCRIPT))} -ec "
-        + shlex.quote(f"cat {INSTALLER} | bash")
+        + shlex.quote(f"cat {shlex.quote(str(INSTALLER))} | bash -s -- --tag=v0.0.0-test")
         + f" {shlex.quote(str(transcript))}",
         shell=True,
         stdin=subprocess.DEVNULL,
