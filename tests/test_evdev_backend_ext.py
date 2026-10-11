@@ -1348,6 +1348,7 @@ class TestEvdevGrabAndForwarding:
         device = MagicMock()
         device.fileno.return_value = 10
         device.info.bustype = 0x03  # BUS_USB
+        device.active_keys.return_value = []
         mock_input_device.return_value = device
         forwarder = MagicMock()
         mock_uinput.return_value = forwarder
@@ -1446,6 +1447,7 @@ class TestEvdevGrabAndForwarding:
         device.fileno.return_value = 10
         device.info.bustype = 0x03
         device.name = "keyd virtual keyboard"
+        device.active_keys.return_value = []
         mock_input_device.return_value = device
         forwarder = MagicMock()
         forwarder.device.path = "/dev/input/event20"
@@ -1536,6 +1538,7 @@ class TestEvdevGrabAndForwarding:
         device = MagicMock()
         device.fileno.return_value = 10
         device.info.bustype = 0x03
+        device.active_keys.return_value = []
         mock_input_device.return_value = device
         mock_uinput.side_effect = OSError("could not open uinput device in write mode")
         forwarder = MagicMock()
@@ -1569,6 +1572,26 @@ class TestEvdevGrabAndForwarding:
         assert opened is True
         mock_write_only.assert_not_called()
         device.grab.assert_not_called()
+        assert backend._forwarders == {}
+        assert device in backend.devices
+
+    @pytest.mark.parametrize("held_keys, grabbed", [([[54]], False), ([[], [54]], True)])
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_leaves_keyboard_with_held_key_ungrabbed(
+        self, mock_input_device: Mock, mock_uinput: Mock, held_keys: list, grabbed: bool
+    ) -> None:
+        """A key held before or during the grab must release where GNOME saw it go down."""
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.active_keys.side_effect = held_keys
+        mock_input_device.return_value = device
+
+        backend = EvdevKeyboardBackend()
+
+        assert backend._open_keyboard_device("/dev/input/event0") is True
+        assert device.ungrab.called is grabbed
+        mock_uinput.return_value.close.assert_called_once()
         assert backend._forwarders == {}
         assert device in backend.devices
 
@@ -2318,6 +2341,7 @@ class TestSharedEvdevDeviceLayer:
         device.name = "test-kbd"
         device.fileno.return_value = 10
         device.capabilities.return_value = {}
+        device.active_keys.return_value = []
         mock_input_device.return_value = device
         forwarder = MagicMock()
         forwarder.device.path = "/dev/input/event9"

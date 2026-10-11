@@ -1113,7 +1113,16 @@ class EvdevDeviceHub:
             forwarder = self._create_forwarder(device)
             if forwarder is not None:
                 try:
+                    # A key the compositor already saw go down must also come
+                    # up on this device; grabbed, its release would only reach
+                    # the clone and the key would stay held across the desktop.
+                    # The second check catches a press that races the grab.
+                    if device.active_keys():
+                        raise OSError("a key is held")
                     device.grab()
+                    if device.active_keys():
+                        device.ungrab()
+                        raise OSError("a key is held")
                 except (OSError, IOError) as e:
                     logger.warning(
                         f"Cannot grab {device_path} ({e}); "
