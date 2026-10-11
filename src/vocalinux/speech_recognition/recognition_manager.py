@@ -3186,6 +3186,7 @@ class SpeechRecognitionManager:
         # sees the dictation as ended. The volume goes back only once the
         # microphone thread has left the device, and before the stop cue.
         self.should_record = False
+        self._update_state(RecognitionState.PROCESSING)
         self._cancel_pending_playback_duck()
 
         # Wait for audio thread to finish recording and enqueue any pending audio

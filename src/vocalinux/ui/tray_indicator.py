@@ -249,6 +249,7 @@ class TrayIndicator:
         from .dictation_overlay import DictationOverlay
 
         self.overlay = DictationOverlay(enabled=self.config_manager.is_overlay_enabled())
+        self.speech_engine.register_audio_level_callback(self.overlay.set_audio_level)
 
         # Initialize the icon files and validate resources
         self._init_icons()
@@ -1738,6 +1739,7 @@ class TrayIndicator:
         self._stop_language_shortcut_managers()
 
         if getattr(self, "overlay", None) is not None:
+            self.speech_engine.unregister_audio_level_callback(self.overlay.set_audio_level)
             self.overlay.destroy()
             self.overlay = None
 
