@@ -49,6 +49,7 @@
   setxkbmap,
   pulseaudio,
   alsa-utils,
+  vulkan-tools,
   src,
 }:
 
@@ -70,6 +71,7 @@ let
     pulseaudio # paplay
     alsa-utils # aplay
     (lib.getBin glib) # gdbus
+    vulkan-tools # vulkaninfo for Vulkan GPU discovery and selection
   ];
 in
 buildPythonApplication {
