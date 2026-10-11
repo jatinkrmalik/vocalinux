@@ -171,13 +171,17 @@ bootstrap=$1; shift
 # ~16 KiB/s: still writing (and soon blocked on the full pipe buffer) when the
 # bootstrap reaches the tagged-installer handoff, the way curl is mid-download.
 drip() {
-  local file=$1 chunk
+  local file=$1 chunk rc=0
   split -b 8192 "$file" /tmp/vl-feed-
   for chunk in /tmp/vl-feed-*; do
-    cat "$chunk"
+    # A cat killed by SIGPIPE means the consumer closed the pipe early — the
+    # download failure this arm exists to catch. Keep the status through the
+    # cleanup so pipefail above sees it.
+    cat "$chunk" || { rc=$?; break; }
     sleep 0.5
   done
   rm -f /tmp/vl-feed-*
+  return "$rc"
 }
 drip "$bootstrap" | bash -s -- "$@"
 EOF
