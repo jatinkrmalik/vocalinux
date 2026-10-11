@@ -251,6 +251,18 @@ def test_vulkan_builds_against_pinned_headers_not_the_base_image_ones():
     ), "the rebuild does not point ggml at the pinned headers"
 
 
+def test_vulkan_rebuild_does_not_borrow_the_builders_instruction_set():
+    """GGML_NATIVE is ggml's default and puts -march=native on libggml-cpu, so
+    the AppImage inherits whichever instruction set the CI runner has. A runner
+    with AVX-512 ships a binary that SIGILLs on any CPU without it (#938), and
+    the shared native cache then serves the same one to every later build. OFF
+    matches the portable baseline the PyPI wheel falls back to."""
+    assert "-DGGML_NATIVE=OFF" in BUILD_SH.read_text(encoding="utf-8"), (
+        "the Vulkan rebuild must not compile with -march=native; the AppImage"
+        " runs on CPUs the runner's instruction set does not describe"
+    )
+
+
 def test_vulkan_shaders_get_the_compiler_the_base_image_lacks():
     """ggml demands glslc specifically, and Ubuntu 22.04 packages none."""
     text = BUILD_SH.read_text(encoding="utf-8")

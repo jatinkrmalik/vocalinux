@@ -218,6 +218,22 @@ def test_the_version_injection_names_the_version_being_built() -> None:
     )
 
 
+def test_the_vulkan_build_does_not_borrow_the_builders_instruction_set() -> None:
+    """GGML_NATIVE is ggml's default and puts -march=native on libggml-cpu, so
+    the Flatpak inherits whichever instruction set the builder has, and the
+    result SIGILLs on any CPU without it (#938). OFF ships the portable
+    baseline the PyPI wheel carries."""
+    module = re.search(
+        r"^  - name: python3-pywhispercpp$(.*?)(?=^  - name: |\Z)",
+        DEPS_YAML.read_text(encoding="utf-8"),
+        re.M | re.S,
+    )
+    assert module, "the pywhispercpp module is gone; this test needs rewriting"
+    assert "-DGGML_NATIVE=OFF" in module.group(
+        1
+    ), "the Flatpak Vulkan build must not compile with -march=native"
+
+
 def test_the_manifest_env_agrees_with_the_module() -> None:
     """build-options.env sets PYWHISPERCPP_VERSION for the whole build. Left
     behind, it tells the build one version while the module builds another."""
