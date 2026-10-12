@@ -9,6 +9,10 @@
   setuptools,
   wheel,
   cmake,
+  shaderc,
+  spirv-headers,
+  vulkan-headers,
+  vulkan-loader,
   numpy,
   requests,
   tqdm,
@@ -48,10 +52,10 @@ buildPythonPackage rec {
   env = {
     # The sdist ships no version.txt; setup.py falls back to this env var.
     PYWHISPERCPP_VERSION = version;
-    # One static extension module (BUILD_SHARED_LIBS defaults ON upstream and
-    # would need $ORIGIN rpath repair that never runs outside cibuildwheel) and
-    # a portable baseline instead of -march=native.
-    CMAKE_ARGS = "-DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON";
+    # Build Vulkan as a shared backend: Vocalinux's GPU detector looks for
+    # libggml-vulkan.so. CMake's build-tree RPATH can leak /build into the
+    # wheel; disable CMake RPATHs and let autoPatchelfHook set Nix runtime paths.
+    CMAKE_ARGS = "-DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DGGML_VULKAN=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_SKIP_RPATH=ON";
   };
 
   # env attrs are exported verbatim; expanding the core count needs a shell
@@ -67,6 +71,7 @@ buildPythonPackage rec {
 
   nativeBuildInputs = [
     cmake
+    shaderc # provides glslc, used to compile whisper.cpp's Vulkan shaders
     autoPatchelfHook
   ];
 
@@ -75,8 +80,14 @@ buildPythonPackage rec {
     wheel
   ];
 
-  # libstdc++/libgomp for the compiled extension.
-  buildInputs = [ stdenv.cc.cc.lib ];
+  # CMake's Vulkan backend calls find_package(SPIRV-Headers CONFIG REQUIRED),
+  # so expose the package configuration as well as the Vulkan headers/loader.
+  buildInputs = [
+    stdenv.cc.cc.lib
+    spirv-headers
+    vulkan-headers
+    vulkan-loader
+  ];
 
   dependencies = [
     numpy

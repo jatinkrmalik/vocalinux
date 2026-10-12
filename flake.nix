@@ -38,14 +38,14 @@
       });
 
       overlays.default = final: prev: {
-        vocalinux = self.packages.${prev.system}.vocalinux;
+        vocalinux = self.packages.${prev.stdenv.hostPlatform.system}.vocalinux;
       };
 
       nixosModules.vocalinux =
         { pkgs, lib, ... }:
         {
           imports = [ ./packaging/nix/module.nix ];
-          programs.vocalinux.package = lib.mkDefault self.packages.${pkgs.system}.vocalinux;
+          programs.vocalinux.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.vocalinux;
         };
       nixosModules.default = self.nixosModules.vocalinux;
 
@@ -53,7 +53,7 @@
         { pkgs, lib, ... }:
         {
           imports = [ ./packaging/nix/home-manager.nix ];
-          programs.vocalinux.package = lib.mkDefault self.packages.${pkgs.system}.vocalinux;
+          programs.vocalinux.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.vocalinux;
         };
       homeManagerModules.default = self.homeManagerModules.vocalinux;
     };
