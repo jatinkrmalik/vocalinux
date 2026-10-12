@@ -490,7 +490,62 @@ class TestOverlayWithMockedGtkWindow(unittest.TestCase):
         self.assertFalse(overlay._on_draw(widget, cr))
         self.assertTrue(cr.arc.called)
         self.assertTrue(cr.fill.called)
-        self.assertTrue(cr.stroke.called)  # ripple ring
+        self.assertEqual(cr.stroke.call_count, 1)  # loudness ring only, no ripple yet
+
+    def test_ripple_follows_audio_peaks_and_expires(self) -> None:
+        """set_audio_level over the spike threshold draws a ripple that ends."""
+        overlay = _overlay_without_gtk(enabled=True)
+        overlay.controller.set_state(RecognitionState.LISTENING)
+        overlay._phase = 0.25
+        widget = MagicMock()
+        widget.get_allocated_width.return_value = 96
+        widget.get_allocated_height.return_value = 96
+
+        # Quiet and slowly rising levels never start a ripple.
+        overlay.set_audio_level(1.0)
+        overlay.set_audio_level(2.4)
+        self.assertEqual(overlay._ripple_phase, 1.0)
+
+        # A real peak starts one; a step inside the spike ratio does not retrigger.
+        overlay.set_audio_level(50.0)
+        self.assertEqual(overlay._ripple_phase, 0.0)
+        overlay._ripple_phase = 0.5
+        overlay.set_audio_level(60.0)
+        self.assertEqual(overlay._ripple_phase, 0.5)
+
+        cr = MagicMock()
+        self.assertFalse(overlay._on_draw(widget, cr))
+        self.assertEqual(cr.stroke.call_count, 2)  # loudness ring + ripple
+
+        # The ripple expands over its ~650ms of ticks and then stops drawing.
+        while overlay._ripple_phase < 1.0:
+            overlay._on_anim_tick()
+        cr_done = MagicMock()
+        self.assertFalse(overlay._on_draw(widget, cr_done))
+        self.assertEqual(cr_done.stroke.call_count, 1)
+
+    def test_ripple_radius_stays_inside_window(self) -> None:
+        """The ripple circle plus its stroke never exceeds the window."""
+        from vocalinux.ui.dictation_overlay import _RIPPLE_STROKE_WIDTH
+
+        overlay = _overlay_without_gtk(enabled=True)
+        overlay.controller.set_state(RecognitionState.LISTENING)
+        overlay.set_audio_level(80.0)
+        overlay._ripple_phase = 0.0
+        widget = MagicMock()
+        widget.get_allocated_width.return_value = 96
+        widget.get_allocated_height.return_value = 96
+
+        max_r = 0.0
+        for _ in range(60):  # span the whole ripple expansion
+            cr = MagicMock()
+            self.assertFalse(overlay._on_draw(widget, cr))
+            for arc_call in cr.arc.call_args_list:
+                max_r = max(max_r, arc_call.args[2])
+            overlay._on_anim_tick()
+
+        limit = 96 / 2 - _RIPPLE_STROKE_WIDTH / 2
+        self.assertLessEqual(max_r, limit)
 
     def test_on_draw_processing_uses_muted_pulse(self):
         overlay = _overlay_without_gtk(enabled=True)
