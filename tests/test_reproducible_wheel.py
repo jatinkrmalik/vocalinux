@@ -152,6 +152,9 @@ def test_staging_waits_for_comparison_and_uses_only_canonical_outputs(
     assert builds[0][0][0] != builds[1][0][0]  # Separate venv interpreters.
     assert builds[0][1] != builds[1][1]  # Separate source/build trees.
     assert all("--no-isolation" in argv for argv, _ in builds)
+    venvs = [argv for argv, _ in calls if argv[:2] == ["uv", "venv"]]
+    assert len(venvs) == 2
+    assert all("--system-site-packages" not in argv for argv in venvs)
     installs = [argv for argv, _ in calls if argv[:3] == ["uv", "pip", "install"]]
     assert len(installs) == 2
     for argv in installs:
@@ -231,3 +234,39 @@ def test_cleanup_rejects_aliased_overlap(gate: ModuleType, tmp_path: Path) -> No
     diagnostics = output / ".." / "dist"
     with pytest.raises(RuntimeError, match="must not overlap"):
         gate.prepare_outputs(output, diagnostics)
+
+
+@pytest.mark.parametrize("interrupt_after", range(1, 7))
+def test_interrupted_cleanup_can_be_retried(
+    gate: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    interrupt_after: int,
+) -> None:
+    """Canonical ownership evidence must survive until every staged copy is gone."""
+    output = tmp_path / "dist"
+    diagnostics = tmp_path / "build/reproducible-wheel"
+    for name in ("package.whl", "package.tar.gz"):
+        wheel(diagnostics / "canonical" / name)
+        wheel(diagnostics / "independent" / name)
+        wheel(output / name)
+    unrelated = tmp_path / "build/user-file"
+    unrelated.write_text("keep")
+    unlink = Path.unlink
+    deleted = 0
+
+    def interrupted_unlink(path: Path, missing_ok: bool = False) -> None:
+        nonlocal deleted
+        unlink(path, missing_ok=missing_ok)
+        deleted += 1
+        if deleted == interrupt_after:
+            raise OSError("simulated interruption")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", interrupted_unlink)
+        with pytest.raises(OSError, match="simulated interruption"):
+            gate.prepare_outputs(output, diagnostics)
+    gate.prepare_outputs(output, diagnostics)
+    assert not list(output.iterdir())
+    assert not list(diagnostics.iterdir())
+    assert unrelated.read_text() == "keep"

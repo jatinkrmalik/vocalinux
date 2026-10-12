@@ -97,11 +97,16 @@ exception is `snap-backfill.yml`: that workflow attaches the snap, rewrites
 
 PR CI and the release workflow run `scripts/build_reproducible_wheel.py` before
 publication. It checks lock/export drift, installs the hash-pinned `release-build`
-toolchain into two fresh virtualenvs, and independently builds an sdist and its
-wheel in each source tree with `--no-isolation`. `SOURCE_DATE_EPOCH` comes from
+toolchain into two fresh virtualenvs without system site-packages, and independently
+builds an sdist and its wheel in each source tree with `--no-isolation`.
+`SOURCE_DATE_EPOCH` comes from
 the checked-out commit. Both builds use the same Python 3.11 interpreter and
 platform; this checks repeatability under controlled inputs, not cross-platform
 or cross-Python-version reproducibility. Only wheels are compared byte-for-byte.
+
+Build-only environments deliberately exclude host packages and setuptools plugins.
+Unlike runtime/development virtualenvs, they do not need distro PyGObject: the
+backend reads version metadata without importing GTK.
 
 The script runs `twine check --strict` with the locked tools and stages only the
 canonical wheel and sdist in `dist/` after comparison succeeds. All release
@@ -117,6 +122,8 @@ files, and symlinks cause cleanup to stop before deleting anything; move those
 files aside first. The rest of `build/` is never cleaned. Logs, hashes and both
 builds are retained in `build/reproducible-wheel/`; CI uploads that directory on failure.
 Refresh the toolchain through `just lock`, not by editing its export by hand.
+Cleanup removes staged copies before their canonical originals, so an interrupted
+cleanup can safely be retried.
 
 ## Detailed Release Steps
 

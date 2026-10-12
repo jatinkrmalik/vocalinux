@@ -96,7 +96,8 @@ def prepare_outputs(output: Path, diagnostics: Path) -> None:
     user to move them aside. Failed builds can be retried even with partial logs
     and archives, provided no unexpected files are present.
     """
-    files: list[Path] = []
+    diagnostic_files: list[Path] = []
+    staged_files: list[Path] = []
     directories: list[Path] = []
     archives: dict[str, Path] = {}
     resolved_output = output.resolve()
@@ -127,7 +128,7 @@ def prepare_outputs(output: Path, diagnostics: Path) -> None:
                         raise RuntimeError(
                             f"unrecognized diagnostic output; move aside: {artifact}"
                         )
-                    files.append(artifact)
+                    diagnostic_files.append(artifact)
                     if entry.name == "canonical":
                         archives[artifact.name] = artifact
                 directories.append(entry)
@@ -137,7 +138,7 @@ def prepare_outputs(output: Path, diagnostics: Path) -> None:
                 "independent.log",
                 "comparison.txt",
             }:
-                files.append(entry)
+                diagnostic_files.append(entry)
             else:
                 raise RuntimeError(f"unrecognized diagnostic output; move aside: {entry}")
     if output.exists():
@@ -150,7 +151,10 @@ def prepare_outputs(output: Path, diagnostics: Path) -> None:
                 or digest(artifact) != digest(canonical)
             ):
                 raise RuntimeError(f"unrecognized or modified output; move aside: {artifact}")
-            files.append(artifact)
+            staged_files.append(artifact)
+    # Delete staged copies first. Their canonical originals are the ownership
+    # evidence needed by the next run if cleanup is interrupted midway through.
+    files = staged_files + diagnostic_files
     if files:
         print(f"Cleaning {len(files)} previous reproducible-wheel output files")
     for path in files:
@@ -204,7 +208,6 @@ def build(python: str, output: Path, diagnostics: Path) -> None:
                     "uv",
                     "venv",
                     "--no-config",
-                    "--system-site-packages",
                     "--python",
                     python,
                     str(venv),
