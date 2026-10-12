@@ -20,7 +20,7 @@ The installer detects a running instance, updates in place, preserves configurat
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.18.1
+git checkout v0.18.2
 ./install.sh
 ```
 
@@ -38,7 +38,7 @@ git pull origin main
 |--------|---------|
 | AUR | `yay -S vocalinux` (or your AUR helper) |
 | AppImage | Download the new file from [Releases](https://github.com/VocaHQ/vocalinux/releases) |
-| Snap | Store: `sudo snap refresh vocalinux` (`--edge` until stable is promoted). Until Canonical lists 0.18.1, sideload `vocalinux_0.18.1_amd64.snap` from the GitHub Release (`sudo snap install --dangerous ./vocalinux_0.18.1_amd64.snap`), then `sudo snap connect vocalinux:uinput`. v0.16.2 rev 7 has no such plug. |
+| Snap | Store: `sudo snap refresh vocalinux` (`--edge` until stable is promoted). Until Canonical lists 0.18.2, sideload `vocalinux_0.18.2_amd64.snap` from the GitHub Release (`sudo snap install --dangerous ./vocalinux_0.18.2_amd64.snap`), then `sudo snap connect vocalinux:uinput`. v0.16.2 rev 7 has no such plug. |
 | Flatpak (release bundle) | Install the new `.flatpak` from Releases; bundles do not auto-update |
 | PyPI | Reinstall in the same venv after system packages are current |
 
@@ -76,6 +76,33 @@ vocalinux
 ```
 
 Missing system packages: see [INSTALL.md](INSTALL.md) or [DISTRO_COMPATIBILITY.md](DISTRO_COMPATIBILITY.md).
+
+---
+
+## What's New in v0.18.2
+
+0.18.2 is a **patch** on the stable line. Default engine is still whisper.cpp. The headline is a livelier dictation overlay plus a round of fixes: the overlay orb now reacts to live microphone level, Nix users get a flake package with NixOS and Home Manager modules and Vulkan GPU inference, and the dictation shortcut can no longer strand a key when you are typing while the app starts.
+
+### 0.18.2 highlights
+
+| Feature | Description |
+|---------|-------------|
+| **Live mic orb** | Dictation overlay orb pulses and ripples with your real audio level instead of sitting static (#940) |
+| **Nix packaging** | Flake package plus NixOS and Home Manager modules (#936), and Vulkan GPU inference for pywhispercpp on Nix (#942) |
+| **Safer startup grab** | A keyboard with a held key or queued key events is left ungrabbed at startup, so typing during launch cannot stick a key on the desktop (#941) |
+| **Older CPU fix** | Bundled pywhispercpp builds no longer use -march=native, so AppImage and Flatpak stop crashing on CPUs without the build host's instruction set (#939) |
+| **Piped installer** | `curl \| bash` keeps the script on stdin and prompts via /dev/tty, so interactive prompts work mid-pipe (#935) |
+
+### Also in v0.18.2
+
+- Installer package map covers cairo headers on openSUSE, Void, Solus and Alpine (#937)
+- evdev monitors remapper virtual keyboards ungrabbed so remappers like keyd keep working (#932)
+- The install section on vocalinux.com showcases the .deb, .rpm, Snap, Flatpak and AUR packages (#929)
+- The remote `curl | bash` install path is gated end to end in CI (#898)
+
+AppImage, Flatpak, and Snap still ship whisper.cpp only.
+
+See the [full changelog](https://github.com/VocaHQ/vocalinux/releases/tag/v0.18.2).
 
 ---
 
