@@ -37,6 +37,7 @@ _ORB_SIZE = 96
 _PULSE_PERIOD_MS = 1400
 _ANIMATION_TICK_MS = 33  # ~30 fps
 _BOTTOM_MARGIN = 48
+_RIPPLE_STROKE_WIDTH = 2.0
 
 
 class DictationOverlayController:
@@ -474,12 +475,15 @@ class DictationOverlay:
             cr.set_line_width(2 + 10 * loudness if outer else 2)
             cr.stroke() if outer else cr.fill()
 
-        # Expanding ripple (listening only).
+        # Expanding ripple (listening only). The cap keeps the circle and
+        # its stroke inside the window — on backends without layer shell
+        # the window is exactly the orb size, so an uncapped ripple clips.
         if mode == MODE_LISTENING and self._ripple_phase < 1.0:
-            ripple_r = min(orb * (0.24 + 0.42 * self._ripple_phase), min(width, height) / 2 - 1)
+            max_r = max(0.0, min(width, height) / 2 - _RIPPLE_STROKE_WIDTH / 2 - 1)
+            ripple_r = min(orb * (0.24 + 0.42 * self._ripple_phase), max_r)
             ripple_a = 0.65 * (1.0 - self._ripple_phase)
             cr.set_source_rgba(base_r, base_g, base_b, ripple_a)
-            cr.set_line_width(2.0)
+            cr.set_line_width(_RIPPLE_STROKE_WIDTH)
             cr.arc(cx, cy, ripple_r, 0, 2 * math.pi)
             cr.stroke()
 
