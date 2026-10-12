@@ -251,13 +251,16 @@ def test_vulkan_builds_against_pinned_headers_not_the_base_image_ones():
     ), "the rebuild does not point ggml at the pinned headers"
 
 
-def test_vulkan_rebuild_does_not_borrow_the_builders_instruction_set():
+def test_vulkan_rebuild_does_not_borrow_the_builders_instruction_set() -> None:
     """GGML_NATIVE is ggml's default and puts -march=native on libggml-cpu, so
     the AppImage inherits whichever instruction set the CI runner has. A runner
     with AVX-512 ships a binary that SIGILLs on any CPU without it (#938), and
     the shared native cache then serves the same one to every later build. OFF
     matches the portable baseline the PyPI wheel falls back to."""
-    assert "-DGGML_NATIVE=OFF" in BUILD_SH.read_text(encoding="utf-8"), (
+    text = BUILD_SH.read_text(encoding="utf-8")
+    command_lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+    cmake_args = re.findall(r'CMAKE_ARGS="([^"]*)"', "\n".join(command_lines))
+    assert any("-DGGML_NATIVE=OFF" in args for args in cmake_args), (
         "the Vulkan rebuild must not compile with -march=native; the AppImage"
         " runs on CPUs the runner's instruction set does not describe"
     )

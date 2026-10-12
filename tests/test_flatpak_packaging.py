@@ -229,8 +229,11 @@ def test_the_vulkan_build_does_not_borrow_the_builders_instruction_set() -> None
         re.M | re.S,
     )
     assert module, "the pywhispercpp module is gone; this test needs rewriting"
-    assert "-DGGML_NATIVE=OFF" in module.group(
-        1
+    command_lines = [
+        line for line in module.group(1).splitlines() if not line.lstrip().startswith("#")
+    ]
+    assert any(
+        "-DGGML_NATIVE=OFF" in line and "pip3 install" in line for line in command_lines
     ), "the Flatpak Vulkan build must not compile with -march=native"
 
 
