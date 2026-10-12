@@ -137,6 +137,30 @@ def _clone_device_name(device: InputDevice) -> str:
     return f"{base}{_CLONE_NAME_SUFFIX}"
 
 
+def _has_queued_key_events(device: InputDevice) -> bool:
+    """True when unread key events sit on the device's fd.
+
+    The queue holds everything delivered since the fd was opened —
+    including events the compositor already saw — so a queued key event at
+    grab time means the compositor's key state may disagree with ours.
+    Consumed events are not replayed: when the caller keeps the grab only
+    non-key traffic was dropped, and when it ungrabs the dropped keys are
+    ones the apps already handled. The bound just prevents a pathological
+    backlog from delaying startup; the kernel's per-client queue is far
+    smaller.
+    """
+    try:
+        for _ in range(512):
+            event = device.read_one()
+            if event is None:
+                break
+            if event.type == ecodes.EV_KEY:
+                return True
+    except OSError:
+        pass
+    return False
+
+
 if EVDEV_AVAILABLE:
 
     class _WriteOnlyUInput(UInput):
@@ -1120,7 +1144,13 @@ class EvdevDeviceHub:
                     if device.active_keys():
                         raise OSError("a key is held")
                     device.grab()
-                    if device.active_keys():
+                    # Draining the fd catches the handover that check misses:
+                    # a press the compositor saw go down before the grab whose
+                    # release arrived only to us afterwards. active_keys() is
+                    # already empty again, but the compositor still counts the
+                    # key held — forwarding that release through the clone
+                    # cannot clear it on the real device.
+                    if device.active_keys() or _has_queued_key_events(device):
                         device.ungrab()
                         raise OSError("a key is held")
                 except (OSError, IOError) as e:
