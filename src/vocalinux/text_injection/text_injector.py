@@ -314,52 +314,62 @@ class TextInjector:
         """Return True when KWin VirtualKeyboard / input method is enabled.
 
         On KDE Plasma Wayland, IBus only reaches native apps when this is on
-        (issue #574). Disabled or unqueryable → treat IBus as unbridged.
+        (issue #574). KWin 6 reports the setting through the ``available``
+        property; ``enabled`` existed on Plasma 5 and is kept as a fallback
+        (issue #911). Disabled or unqueryable → treat IBus as unbridged.
         """
-        try:
-            result = subprocess.run(
-                [
-                    "gdbus",
-                    "call",
-                    "--session",
-                    "--dest",
-                    "org.kde.KWin",
-                    "--object-path",
-                    "/VirtualKeyboard",
-                    "--method",
-                    "org.freedesktop.DBus.Properties.Get",
-                    "org.kde.kwin.VirtualKeyboard",
-                    "enabled",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=2,
-                env=host_env(),
-            )
-        except (subprocess.SubprocessError, FileNotFoundError) as e:
-            logger.info(
-                "Could not query KWin VirtualKeyboard (%s); treating IBus as unbridged.",
-                e,
-            )
-            return False
+        for prop in ("available", "enabled"):
+            try:
+                result = subprocess.run(
+                    [
+                        "gdbus",
+                        "call",
+                        "--session",
+                        "--dest",
+                        "org.kde.KWin",
+                        "--object-path",
+                        "/VirtualKeyboard",
+                        "--method",
+                        "org.freedesktop.DBus.Properties.Get",
+                        "org.kde.kwin.VirtualKeyboard",
+                        prop,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    env=host_env(),
+                )
+            except (subprocess.SubprocessError, FileNotFoundError) as e:
+                logger.info(
+                    "Could not query KWin VirtualKeyboard (%s); treating IBus as unbridged.",
+                    e,
+                )
+                return False
 
-        out = (result.stdout or "").strip().lower() if result.returncode == 0 else ""
-        # gdbus prints variant wrappers like: (<<true>>,) or (<<false>>,)
-        if "<<true>>" in out:
-            return True
-        if "<<false>>" in out:
-            logger.info(
-                "KWin Virtual Keyboard is disabled; IBus commits will not reach "
-                "native apps. Falling back to ydotool/wtype. Enable: System "
-                "Settings → Keyboard → Virtual Keyboard → IBus Wayland."
+            out = (result.stdout or "").strip().lower() if result.returncode == 0 else ""
+            # gdbus prints the variant as (<true>,) on KWin 6 and doubly
+            # wrapped as (<<true>>,) on Plasma 5; the bare "<true>" substring
+            # matches both forms.
+            if "<true>" in out:
+                return True
+            if "<false>" in out:
+                logger.info(
+                    "KWin Virtual Keyboard is disabled; IBus commits will not reach "
+                    "native apps. Falling back to ydotool/wtype. Enable: System "
+                    "Settings → Keyboard → Virtual Keyboard → IBus Wayland."
+                )
+                return False
+            # The property does not exist on this KWin (Plasma 6 dropped
+            # 'enabled'; Plasma 5 lacks 'available') or its answer was not a
+            # readable boolean -- try the other name before giving up.
+            logger.debug(
+                "KWin VirtualKeyboard property '%s' inconclusive (rc=%s out=%r).",
+                prop,
+                result.returncode,
+                result.stdout,
             )
-            return False
 
-        logger.info(
-            "KWin VirtualKeyboard not confirmed (rc=%s out=%r); treating IBus as unbridged.",
-            result.returncode,
-            result.stdout,
-        )
+        logger.info("KWin VirtualKeyboard not confirmed; treating IBus as unbridged.")
         return False
 
     @staticmethod
@@ -879,14 +889,16 @@ class TextInjector:
             )
             # Bridging Wayland DEs (GNOME): inject_text() switches to the
             # real vocalinux engine for each commit, so a bare xkb:* baseline is
-            # fine (#501, #504). KDE is not in that set unless IBus is already
-            # the session IM: a leftover daemon plus scoped activate reports
-            # success while Kate/Qt get nothing (#752). Unbridged compositors
-            # still bail below.
+            # fine (#501, #504). KDE joins that set only when KWin's Virtual
+            # Keyboard is confirmed on: a confirmed VK bridge is what makes the
+            # commits reach apps, and it is also what keeps the #752
+            # leftover-daemon trap (scoped activate reports success while
+            # Kate/Qt get nothing) excluded when the VK check fails (#911).
+            # Unbridged compositors still bail below.
             wayland_scoped_ibus = (
                 self.environment == DesktopEnvironment.WAYLAND
                 and not explicit_non_ibus_im
-                and not _is_kde_plasma_session()
+                and (not _is_kde_plasma_session() or self._kde_virtual_keyboard_enabled())
             )
 
             # Check if IBus is the active input method (not just installed)
@@ -970,7 +982,11 @@ class TextInjector:
             # The RemoteDesktop portal sits ahead of both in autodetection: it
             # is the only injection path Wayland sanctions, works inside the
             # Flatpak sandbox without /dev/uinput, and reaches native clients
-            # on compositors with no input-method-v2 bridge.
+            # on compositors with no input-method-v2 bridge. KDE is the
+            # exception: KWin's portal scrambles letter case (#911), so on
+            # Plasma a present ydotool goes first -- the ordering from before
+            # the portal backend existed.
+            kde_ydotool_first = ydotool_available and _is_kde_plasma_session()
             if forced == "portal" and portal_available:
                 self._select_portal_backend(
                     "%s=portal: using RemoteDesktop portal for Wayland injection",
@@ -983,13 +999,21 @@ class TextInjector:
                 self._ensure_ydotoold()
                 self.wayland_tool = "ydotool"
                 logger.info("%s=ydotool: using ydotool for Wayland injection", pin_source)
-            elif portal_available:
+            elif portal_available and not kde_ydotool_first:
                 self._select_portal_backend(
                     "Using the RemoteDesktop portal for Wayland text injection"
                 )
             elif ydotool_available and self._ensure_ydotoold():
                 self.wayland_tool = "ydotool"
                 logger.info("Using ydotool for Wayland text injection")
+            elif portal_available:
+                # Reached only on KDE after ydotool proved unusable; on other
+                # desktops the earlier portal branch already fired. A daemonless
+                # ydotool must not outrank a working portal: it may fail at
+                # injection time (no /dev/uinput), while the portal delivers.
+                self._select_portal_backend(
+                    "Using the RemoteDesktop portal for Wayland text injection"
+                )
             elif ydotool_available and not wtype_available:
                 self.wayland_tool = "ydotool"
                 logger.warning(
@@ -1837,8 +1861,12 @@ class TextInjector:
                         chunk = text[i : i + chunk_size]
                         chunk_num = (i // chunk_size) + 1
 
-                        # First try with clearmodifiers
-                        cmd = ["xdotool", "type", "--clearmodifiers", chunk]
+                        # First try with clearmodifiers. ``--`` ends option
+                        # parsing: a chunk that starts with '-' (a word
+                        # hyphenated across the chunk boundary) is typed
+                        # literally instead of read as a flag and rejected
+                        # (#921).
+                        cmd = ["xdotool", "type", "--clearmodifiers", "--", chunk]
                         logger.debug(f"Injecting chunk {chunk_num}/{total_chunks}: '{chunk}'")
 
                         subprocess.run(
@@ -2636,7 +2664,9 @@ class TextInjector:
                 raise _InjectionAborted
             chunk = text[i : i + chunk_size]
             if self.wayland_tool == "wtype":
-                cmd = ["wtype", chunk]
+                # ``--`` puts wtype in raw-text mode so a leading '-' is not
+                # parsed as an option.
+                cmd = ["wtype", "--", chunk]
                 # wtype types at compositor pace; the budget scales with the
                 # chunk length so only a wedged process can ever hit it.
                 type_timeout = max(5, len(chunk) * 0.05)
@@ -2644,7 +2674,8 @@ class TextInjector:
                 # Keep key-delay > 0 to avoid Shift-leak ("Can you" -> "CAN YOu").
                 # Low delay so fallback typing finishes quickly for long phrases.
                 key_delay = os.environ.get("VOCALINUX_YDOTOOL_KEY_DELAY", "2")
-                cmd = ["ydotool", "type", "--key-delay", key_delay, chunk]
+                # ``--`` ends ydotool's option parsing for the same reason.
+                cmd = ["ydotool", "type", "--key-delay", key_delay, "--", chunk]
                 type_timeout = max(5, len(chunk) * self._key_delay_seconds(key_delay) * 4)
             try:
                 subprocess.run(

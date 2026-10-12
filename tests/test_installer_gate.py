@@ -15,7 +15,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = REPO_ROOT / "install.sh"
 GATE_SH = REPO_ROOT / "scripts" / "install-test.sh"
-REMOTE_GATE_SH = REPO_ROOT / "scripts" / "remote-install-test.sh"
 MATRIX = REPO_ROOT / ".github" / "workflows" / "distro-test-matrix.yml"
 JUSTFILE = REPO_ROOT / "justfile"
 
@@ -38,10 +37,6 @@ def _matrix_text() -> str:
 
 def _gate_text() -> str:
     return GATE_SH.read_text(encoding="utf-8")
-
-
-def _remote_gate_text() -> str:
-    return REMOTE_GATE_SH.read_text(encoding="utf-8")
 
 
 def _without_comments(text: str) -> str:
@@ -205,76 +200,6 @@ def test_the_gate_is_runnable_locally():
     assert "scripts/install-test.sh" in justfile
 
 
-def test_remote_gate_runs_the_piped_bootstrap_in_ci() -> None:
-    """Remote mode needs its own job: the distro matrix deliberately enters
-    local mode by running inside an extracted project tree."""
-    block = _job_block(_matrix_text(), "remote-install")
-    assert "needs: syntax" in block
-    assert "ubuntu:24.04" in block
-    assert "scripts/remote-install-test.sh" in block
-    assert re.search(r"^\s*docker run", block, re.M)
-    assert not re.search(r"^\s*continue-on-error:\s*true", block, re.M)
-
-    remote = _without_comments(_remote_gate_text())
-    assert re.search(r"cat '\$BOOTSTRAP' \| env [\s\S]*bash -s --", remote)
-    assert "--skip-system-deps" not in remote
-
-
-def test_remote_gate_uses_distinct_real_git_tags() -> None:
-    """A bootstrap and tagged tree with identical contents could stay green
-    after handoff disappeared. Fixture markers make the selected revision and
-    execution of its installer independently observable."""
-    remote = _remote_gate_text()
-    assert re.search(r'git -C "\$REPO" archive HEAD \| tar -x', remote)
-    assert 'git clone -q --bare "$FIXTURE_TREE" "$FIXTURE_BARE"' in remote
-    assert "safe.directory '$FIXTURE_BARE'" in remote
-    assert "url.'file://$FIXTURE_BARE'.insteadOf" in remote
-    assert "REMOTE_INSTALL_TEST_MARKER_FILE" in remote
-    assert 'assert_checked_out "$LATEST_TAG"' in remote
-    assert 'assert_checked_out "$UPDATE_TAG"' in remote
-    assert 'assert_tagged_installer_ran "$LATEST_TAG"' in remote
-    assert 'assert_tagged_installer_ran "$UPDATE_TAG"' in remote
-    assert "bootstrap-fell-through" in remote
-
-
-def test_remote_gate_covers_resolution_clone_fetch_and_failures() -> None:
-    """The complete public control flow, not merely the handoff helper, is the
-    regression boundary. Network package installs remain real."""
-    remote = _without_comments(_remote_gate_text())
-    assert "REMOTE_INSTALL_TEST_API_MODE" in remote
-    assert re.search(r"run_bootstrap success --auto --skip-models", remote)
-    assert re.search(r'run_bootstrap fail [^\n]*--tag="\$UPDATE_TAG"', remote)
-    assert "expect_bootstrap_failure 3 fail 'No release tag available:'" in remote
-    assert "--tag=v0.0.0-remote-e2e-missing" in remote
-    assert re.search(r'expect_bootstrap_failure 1 fail [\s\S]*--tag="\$BROKEN_TAG"', remote)
-    assert 'rm "$FIXTURE_TREE/install.d/models.sh"' in remote
-    assert re.search(r'expect_bootstrap_failure 3 fail [\s\S]*--tag="\$BROKEN_EXPORT_TAG"', remote)
-    assert 'rm "$FIXTURE_TREE/requirements/installer-build.txt"' in remote
-    assert "exec /usr/bin/curl" in remote
-
-
-def test_remote_gate_smokes_remote_specific_outputs() -> None:
-    """Remote mode changes both the venv and activation-helper locations; an
-    exit-zero-only gate would not prove the handoff preserved either one."""
-    remote = _remote_gate_text()
-    for construct in (
-        r'VENV="\$INSTALL_HOME/\.local/share/vocalinux/venv"',
-        r'\[ -x "\$INSTALL_HOME/\.local/bin/activate-vocalinux\.sh" \]',
-        r'\[ -x "\$INSTALL_HOME/\.local/bin/vocalinux" \]',
-        r'"engine": "remote_api"',
-        r'\[ -f "\$REMOTE_CLONE/src/vocalinux/utils/model_checksums\.txt" \]',
-        r"'\$INSTALL_HOME/\.local/bin/vocalinux' --version",
-        r"^assert EVDEV_AVAILABLE or PYNPUT_AVAILABLE",
-    ):
-        assert re.search(construct, remote, re.M), f"remote smoke no longer asserts {construct}"
-
-
-def test_remote_gate_is_runnable_locally() -> None:
-    justfile = JUSTFILE.read_text(encoding="utf-8")
-    assert re.search(r"^remote-install-gate:", justfile, re.M)
-    assert "scripts/remote-install-test.sh" in justfile
-
-
 def test_the_smoke_checks_what_the_installer_claims_to_have_created():
     """Asserting exit 0 alone would pass on an installer that silently
     installed nothing. These are the artefacts install.sh reports creating."""
@@ -305,3 +230,156 @@ def test_the_smoke_checks_what_an_import_walk_cannot_see():
         "the smoke imports keyboard_backends without asserting a backend is"
         " available, which is the failure the suse compiler packages fix"
     )
+
+
+REMOTE_GATE_SH = REPO_ROOT / "scripts" / "install-remote-test.sh"
+
+
+def _remote_gate_text() -> str:
+    return REMOTE_GATE_SH.read_text(encoding="utf-8")
+
+
+def _remote_bootstrap_case() -> str:
+    """The remote gate's bootstrap `case "$ID"`, which is not the only case."""
+    blocks = re.findall(r'^case "\$ID" in\n(.*?)^esac', _remote_gate_text(), re.M | re.S)
+    bootstrap = [block for block in blocks if "apt-get" in block]
+    assert len(bootstrap) == 1, 'no single `case "$ID"` installs the bootstrap packages'
+    return bootstrap[0]
+
+
+def _remote_job_image() -> str:
+    """The container image the install-remote job runs the gate in."""
+    block = _job_block(_matrix_text(), "install-remote")
+    run = re.search(r'^\s*(\S+)\s*\\\n\s*bash "\$PWD/scripts/install-remote-test\.sh"', block, re.M)
+    assert run, "the install-remote job has no docker image line above the gate call"
+    return run.group(1)
+
+
+def test_the_workflow_runs_the_remote_gate():
+    """The remote path (bootstrap outside a checkout -> tag -> clone/fetch ->
+    handoff) is the one a curl|bash user takes; a gate that only runs the local
+    mode leaves it unguarded."""
+    block = _job_block(_matrix_text(), "install-remote")
+    assert re.search(r"^\s*docker run", block, re.M), "the remote job must run a container"
+    assert re.search(
+        r'^\s*bash "\$PWD/scripts/install-remote-test\.sh"$', block, re.M
+    ), "the remote job no longer runs the remote gate script"
+
+
+def test_the_remote_gate_can_fail_a_build():
+    """Same rule as the local matrix: advisory jobs are documentation."""
+    block = _job_block(_matrix_text(), "install-remote")
+    assert not re.search(r"^\s*continue-on-error:\s*true", block, re.M), (
+        "the remote install gate is advisory; a gate that cannot fail a build"
+        " is documentation, not a gate"
+    )
+
+
+def test_the_remote_gate_selects_a_tag():
+    """Tag selection is half the remote contract; a run without --tag resolves
+    whatever the latest release API returns instead of a chosen ref."""
+    gate = _without_comments(_remote_gate_text())
+    assert re.search(r"--tag=", gate), (
+        "the remote gate no longer passes --tag; it tests the latest-release"
+        " fallback rather than the selectable-tag path"
+    )
+
+
+def test_the_remote_gate_fails_closed_on_the_selected_tag():
+    """Guardrail: installer, sourced modules and requirement exports must all
+    come from the selected tag. The only evidence is the clone's HEAD equalling
+    the tag commit the gate published."""
+    gate = _without_comments(_remote_gate_text())
+    assert re.search(r"rev-parse HEAD", gate)
+    assert re.search(r'"\$cloned_sha" = "\$EXPECTED_SHA"', gate), (
+        "the remote gate no longer compares the clone's HEAD to the tag commit;"
+        " installing a different revision would pass"
+    )
+    assert re.search(
+        r'rev-parse "\$GATE_TAG\^\{commit\}"', gate
+    ), "the remote gate no longer checks the selected tag ref reached the clone"
+
+
+def test_the_remote_gate_bootstraps_outside_a_checkout():
+    """install.sh chooses local mode from a pyproject.toml in the working
+    directory; the remote path only runs when the bootstrap starts where no
+    checkout exists. Overriding the clone source is what keeps the run on this
+    commit instead of the public repo's last release."""
+    gate = _without_comments(_remote_gate_text())
+    assert "VOCALINUX_REPO_URL" in gate, (
+        "the remote gate no longer redirects the clone source; it would"
+        " install the public repo's tag rather than this commit"
+    )
+    installer = _without_comments(INSTALLER.read_text(encoding="utf-8"))
+    assert re.search(r"VOCALINUX_REPO_URL:-https://github\.com/VocaHQ/vocalinux\.git", installer), (
+        "install.sh no longer honors VOCALINUX_REPO_URL; the gate's mirror"
+        " cannot reach it and the clone falls back to the public repo"
+    )
+
+
+def test_the_remote_gate_runs_as_an_unprivileged_user():
+    """install.sh refuses to run as root and calls sudo directly. The remote
+    handoff re-execs as the same user, so a root run would test a path no
+    user takes twice over."""
+    gate = _without_comments(_remote_gate_text())
+    assert "useradd" in gate
+    assert re.search(r'su - "\$INSTALL_USER"', gate)
+    assert "NOPASSWD" in gate
+
+
+def test_the_remote_gate_covers_the_fetch_arm():
+    """The remote path has two ways in: `git clone` on a fresh machine and
+    `git fetch origin tag` + `git reset --hard` over an existing clone, which
+    is what every re-run hits. Asserting the update message in an install log
+    proves the second arm ran."""
+    gate = _without_comments(_remote_gate_text())
+    assert re.search(
+        r'grep -l "Updating existing clone"', gate
+    ), "the remote gate no longer checks the fetch+reset arm ran"
+    assert gate.count("run_remote_install") >= 3, "the remote gate no longer runs the install twice"
+
+
+def test_the_remote_gate_checks_handoff_artifacts():
+    """handoff_to_tagged_installer appends --venv-dir and re-execs with the
+    remote marker; the remote venv and the relocated activation helper are the
+    only observable proof both arrived."""
+    gate = _without_comments(_remote_gate_text())
+    for construct in (
+        r'\[ -x "\$REMOTE_VENV/bin/python" \]',
+        r'\[ -f "\$INSTALL_HOME/\.local/bin/activate-vocalinux\.sh" \]',
+    ):
+        assert re.search(construct, gate), f"the remote gate no longer asserts {construct}"
+
+
+def test_the_remote_gate_smoke_tests_the_installed_app():
+    """Same standard as the local gate: the app binary answers --version
+    through the wrapper the user's PATH carries."""
+    gate = _without_comments(_remote_gate_text())
+    assert re.search(r"'\$INSTALL_HOME/\.local/bin/vocalinux' --version", gate)
+    assert re.search(
+        r'\[ -x "\$INSTALL_HOME/\.local/bin/vocalinux" \]', gate
+    ), "the remote gate no longer asserts the user-facing wrapper exists"
+
+
+def test_the_remote_gate_has_a_bootstrap_arm_for_its_distro():
+    """The job is pinned to one container; the gate's bootstrap arms are per
+    /etc/os-release ID. A pinned distro with no arm fails at the case
+    fallthrough 40 minutes into CI rather than here."""
+    image = _remote_job_image()
+    assert image in CONTAINER_OS_IDS, (
+        f"{image} is the remote gate's container but not in CONTAINER_OS_IDS;"
+        " add its /etc/os-release ID so this guard can check the gate handles it"
+    )
+    os_id = CONTAINER_OS_IDS[image]
+    bootstrap = _remote_bootstrap_case()
+    assert re.search(rf"^  [\w |-]*\b{re.escape(os_id)}\b[\w |-]*\)", bootstrap, re.M), (
+        f"{image} reports ID={os_id}, which scripts/install-remote-test.sh has"
+        " no bootstrap arm for"
+    )
+
+
+def test_the_remote_gate_is_runnable_locally():
+    """CI and the local entry point must run the same script."""
+    justfile = JUSTFILE.read_text(encoding="utf-8")
+    assert re.search(r"^remote-install-gate distro=", justfile, re.M)
+    assert "scripts/install-remote-test.sh" in justfile

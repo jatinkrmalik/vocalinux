@@ -80,6 +80,14 @@ class SpeechRecognitionManagerProtocol(Protocol):
         """Register a callback for recognized text with its audio-capture start time."""
         ...
 
+    def register_audio_level_callback(self, callback: Callable[[float], None]) -> None:
+        """Register a callback for microphone loudness updates (0-100)."""
+        ...
+
+    def unregister_audio_level_callback(self, callback: Callable[[float], None]) -> None:
+        """Remove a previously registered audio level callback."""
+        ...
+
     @property
     def model_ready(self) -> bool:
         """Whether the engine has a model loaded and can recognize speech."""

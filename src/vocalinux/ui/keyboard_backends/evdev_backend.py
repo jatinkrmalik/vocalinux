@@ -20,6 +20,7 @@ to each registered backend for its own consumption decision.
 import errno
 import logging
 import os
+import platform
 import re
 import select
 import threading
@@ -88,6 +89,38 @@ else:
 # skip clones (also ones created by other Vocalinux processes), so it must
 # survive the kernel's uinput name-length truncation.
 _CLONE_NAME_SUFFIX = " (vocalinux)"
+
+# Name fragments remapper-created keyboards are known to use. Only a
+# fallback for systems where sysfs is unreadable (snap confinement): the
+# sysfs check in ``_is_virtual_keyboard`` catches every uinput-spawned
+# device regardless of name.
+_REMAPPER_DEVICE_NAMES = (
+    "keyd virtual",
+    "kmonad",
+    "kanata",
+    "xremap",
+    "interception",
+)
+
+
+def _is_virtual_keyboard(device_path: str, device_name: str) -> bool:
+    """True when the keyboard is a virtual device, not a real keyboard.
+
+    Devices spawned through uinput — key remappers (keyd, kmonad,
+    interception-tools), on-screen keyboards, accessibility injectors —
+    have no physical parent, so the kernel places them under
+    ``/devices/virtual/input``. Real devices live under bus-specific
+    paths (usb, i8042, ...). When sysfs is unavailable the name check
+    catches the common remappers.
+    """
+    sys_path = f"/sys/class/input/{os.path.basename(device_path)}/device"
+    try:
+        if os.path.exists(sys_path):
+            return "/devices/virtual/input/" in os.path.realpath(sys_path)
+    except OSError:
+        pass
+    name = device_name.lower()
+    return any(marker in name for marker in _REMAPPER_DEVICE_NAMES)
 
 
 def _clone_device_name(device: InputDevice) -> str:
@@ -253,9 +286,10 @@ def find_keyboard_devices() -> list[str]:
     """
     Find all keyboard input devices.
 
-    Devices that emit pointer motion (REL_X/Y or ABS_X/Y) are excluded:
-    a mouse is not a keyboard, and monitoring one proxies all cursor
-    movement through the reader thread (cursor stutter, #900).
+    Devices that emit pointer motion (REL_X/Y, ABS_X/Y, or multitouch
+    ABS_MT_POSITION_X/Y) are excluded: a mouse is not a keyboard, and
+    monitoring one proxies all cursor movement through the reader thread
+    (cursor stutter, #900; dead touchpad, #914).
 
     Prefers /proc/bus/input/devices (host installs). Falls back to
     ``evdev.list_devices()`` when that path cannot be read (common under snap
@@ -288,44 +322,114 @@ def find_keyboard_devices() -> list[str]:
 # which showed up as periodic cursor stutter (#900).
 _POINTER_AXIS_BITS = 0x3
 
+# Key codes only real keyboards report: the modifiers plus KEY_A — the
+# same set the evdev fallback requires. Button-only devices (power/sleep
+# buttons, the ACPI video bus, vendor hotkey blocks) never have one, so
+# they stop being grabbed and cloned too (#915).
+_KEYBOARD_KEY_CODES = frozenset(
+    {
+        KEY_LEFTCTRL,
+        KEY_RIGHTCTRL,
+        KEY_LEFTALT,
+        KEY_RIGHTALT,
+        KEY_LEFTSHIFT,
+        KEY_RIGHTSHIFT,
+        KEY_LEFTMETA,
+        KEY_RIGHTMETA,
+        30,  # KEY_A
+    }
+)
+
+# Bits 53 and 54 of an ABS bitmap: ABS_MT_POSITION_X|ABS_MT_POSITION_Y.
+# Multitouch-only touchpads and touchscreens (e.g. the Goodix GXTP5100 in
+# #914) can report the MT pair without the single-touch ABS_X/Y pair.
+_POINTER_MT_AXIS_BITS = 0x3 << 53
+
+# Machines whose kernels print bitmap words as 32-bit unsigned longs;
+# everything else (x86_64, aarch64, ppc64*, riscv64, s390x, ...) is 64-bit.
+# On a 32-bit kernel bit N lives in a different word than on 64-bit, which
+# shifts where each key code or axis lands in the /proc bitmap.
+_32BIT_MACHINES = frozenset(
+    {
+        "armv5l",
+        "armv6l",
+        "armv7l",
+        "armv8l",
+        "i386",
+        "i486",
+        "i586",
+        "i686",
+        "mips",
+        "mipsel",
+        "ppc",
+        "riscv32",
+    }
+)
+_WORD_BITS = 32 if platform.machine() in _32BIT_MACHINES else 64
+
+
+def _bitmap_to_int(hex_bitmap: str) -> int:
+    """Integer value of a /proc capability bitmap, or 0 when unparseable.
+
+    Words print most-significant first; each holds ``_WORD_BITS`` bits.
+    """
+    value = 0
+    for shift, word in enumerate(reversed(hex_bitmap.split())):
+        try:
+            value |= int(word, 16) << (shift * _WORD_BITS)
+        except ValueError:
+            return 0
+    return value
+
 
 def _bitmap_has_any_bit(hex_bitmap: str) -> bool:
-    """True when any word of a /proc capability bitmap has a bit set."""
-    try:
-        return any(int(word, 16) for word in hex_bitmap.split())
-    except ValueError:
-        return False
+    """True when the /proc capability bitmap has a bit set."""
+    return _bitmap_to_int(hex_bitmap) != 0
+
+
+def _bitmap_has_code(hex_bitmap: str, code: int) -> bool:
+    """True when bit ``code`` is set in a /proc capability bitmap."""
+    return bool(_bitmap_to_int(hex_bitmap) & (1 << code))
 
 
 def _bitmap_low_bits(hex_bitmap: str) -> int:
-    """Low word (bits 0-63) of a /proc capability bitmap, or 0.
+    """Bits 0-63 of a /proc capability bitmap, or 0.
 
-    Bitmaps print most-significant word first, so axis bits 0..63 live in
-    the last word on the line.
+    On 64-bit kernels that is the last word; on 32-bit kernels it spans
+    the last two — ``_bitmap_to_int`` handles both.
     """
-    words = hex_bitmap.split()
-    if not words:
-        return 0
-    try:
-        return int(words[-1], 16)
-    except ValueError:
-        return 0
+    return _bitmap_to_int(hex_bitmap) & ((1 << 64) - 1)
 
 
 def _proc_block_has_pointer_axes(device: dict[str, Any]) -> bool:
     """True when a parsed /proc device block reports pointer motion axes."""
+    abs_bits = _bitmap_low_bits(device.get("abs", ""))
     return (
         _bitmap_low_bits(device.get("rel", "")) & _POINTER_AXIS_BITS == _POINTER_AXIS_BITS
-        or _bitmap_low_bits(device.get("abs", "")) & _POINTER_AXIS_BITS == _POINTER_AXIS_BITS
+        or abs_bits & _POINTER_AXIS_BITS == _POINTER_AXIS_BITS
+        or abs_bits & _POINTER_MT_AXIS_BITS == _POINTER_MT_AXIS_BITS
     )
+
+
+def _proc_block_has_keyboard_keys(device: dict[str, Any]) -> bool:
+    """True when the block's KEY bitmap has a real keyboard key.
+
+    Any nonzero KEY bit used to qualify a block as a keyboard — but
+    touchpad buttons, power/sleep keys and ACPI hotkey blocks all report
+    EV_KEY codes too, so every one of them was grabbed and cloned (#915).
+    """
+    key_bitmap = device.get("key", "")
+    return any(_bitmap_has_code(key_bitmap, code) for code in _KEYBOARD_KEY_CODES)
 
 
 def _parse_keyboard_devices_from_proc(proc_file: TextIO) -> list[str]:
     """Parse an open /proc/bus/input/devices stream for event KEY devices.
 
-    Devices that emit pointer motion (REL_X/Y or ABS_X/Y) are skipped:
-    mice and tablets report EV_KEY bits for their buttons, but grabbing
-    them proxies every cursor movement through this reader.
+    Only blocks carrying a real keyboard key (a modifier or KEY_A, the
+    same rule the evdev fallback applies) qualify. Devices that emit
+    pointer motion (REL_X/Y, ABS_X/Y or ABS_MT_POSITION_X/Y) are
+    skipped: mice and tablets report EV_KEY bits for their buttons, but
+    grabbing them proxies every cursor movement through this reader.
     """
     keyboard_devices: list[str] = []
     device: Optional[dict[str, Any]] = None
@@ -334,18 +438,23 @@ def _parse_keyboard_devices_from_proc(proc_file: TextIO) -> list[str]:
         nonlocal device
         if device is None:
             return
-        if _bitmap_has_any_bit(device.get("key", "")):
-            if _proc_block_has_pointer_axes(device):
+        if not _proc_block_has_keyboard_keys(device):
+            if _bitmap_has_any_bit(device.get("key", "")):
                 logger.debug(
-                    "Skipping pointer device during keyboard discovery: "
+                    "Skipping non-keyboard device during keyboard discovery: "
                     f"{device.get('name', '?')} ({device.get('handlers', [])})"
                 )
-            else:
-                for handler in device.get("handlers", []):
-                    if handler.startswith("event"):
-                        device_path = f"/dev/input/{handler}"
-                        if os.path.exists(device_path):
-                            keyboard_devices.append(device_path)
+        elif _proc_block_has_pointer_axes(device):
+            logger.debug(
+                "Skipping pointer device during keyboard discovery: "
+                f"{device.get('name', '?')} ({device.get('handlers', [])})"
+            )
+        else:
+            for handler in device.get("handlers", []):
+                if handler.startswith("event"):
+                    device_path = f"/dev/input/{handler}"
+                    if os.path.exists(device_path):
+                        keyboard_devices.append(device_path)
         device = None
 
     with proc_file as f:
@@ -370,7 +479,12 @@ def _parse_keyboard_devices_from_proc(proc_file: TextIO) -> list[str]:
 
 
 def _capabilities_have_pointer_axes(capabilities: Mapping[int, Sequence[int]]) -> bool:
-    """True when the device reports REL_X+REL_Y or ABS_X+ABS_Y pointer axes."""
+    """True when the device reports pointer motion axes.
+
+    Covers REL_X+REL_Y, single-touch ABS_X+ABS_Y, and multitouch-only
+    ABS_MT_POSITION_X+ABS_MT_POSITION_Y (touchpads/touchscreens that
+    report no single-touch axes).
+    """
     rel_codes = capabilities.get(ecodes.EV_REL, ())
     if ecodes.REL_X in rel_codes and ecodes.REL_Y in rel_codes:
         return True
@@ -379,7 +493,9 @@ def _capabilities_have_pointer_axes(capabilities: Mapping[int, Sequence[int]]) -
         entry[0] if isinstance(entry, (tuple, list)) else entry
         for entry in capabilities.get(ecodes.EV_ABS, ())
     }
-    return ecodes.ABS_X in abs_codes and ecodes.ABS_Y in abs_codes
+    if ecodes.ABS_X in abs_codes and ecodes.ABS_Y in abs_codes:
+        return True
+    return ecodes.ABS_MT_POSITION_X in abs_codes and ecodes.ABS_MT_POSITION_Y in abs_codes
 
 
 def _find_keyboard_devices_from_evdev() -> list[str]:
@@ -969,8 +1085,7 @@ class EvdevDeviceHub:
         # name suffix also covers clones of other Vocalinux processes whose
         # paths we never registered. Other virtual devices (key remappers,
         # accessibility keyboards) ARE monitored: users can bind shortcuts
-        # to them, and grabbing is what lets the shortcut reach us at all
-        # when a remapper has already grabbed the physical device.
+        # to them.
         device_name = str(getattr(device, "name", "") or "")
         if device_path in self._clone_paths or device_name.endswith(_CLONE_NAME_SUFFIX):
             logger.debug(f"Skipping Vocalinux clone device: {device_path} ({device_name})")
@@ -980,22 +1095,35 @@ class EvdevDeviceHub:
                 logger.debug(f"Ignoring close failure for clone {device_path}: {e}")
             return False
 
-        # Exclusive grab hides the device from the compositor; the paired
-        # clone re-emits every event we do not consume so apps keep typing.
-        forwarder = self._create_forwarder(device)
-        if forwarder is not None:
-            try:
-                device.grab()
-            except (OSError, IOError) as e:
-                logger.warning(
-                    f"Cannot grab {device_path} ({e}); "
-                    "shortcut keys will also reach the focused app"
-                )
+        forwarder: Optional[UInput] = None
+        if _is_virtual_keyboard(device_path, device_name):
+            # A virtual keyboard is a remapper's output. Grabbing it
+            # starves the compositor of every event the remapper emits,
+            # and the paired clone is a new input device the remapper
+            # grabs in turn — keyd locks the whole keyboard this way
+            # (#930). Monitor it ungrabbed: its events still reach the
+            # listener, so shortcuts bound to it keep working. Only
+            # suppression is lost, which a grab could never provide anyway
+            # — the remapper re-emits on a device we cannot hold.
+            logger.debug(f"Monitoring virtual keyboard ungrabbed: {device_path} ({device_name})")
+        else:
+            # Exclusive grab hides the device from the compositor; the
+            # paired clone re-emits every event we do not consume so apps
+            # keep typing.
+            forwarder = self._create_forwarder(device)
+            if forwarder is not None:
                 try:
-                    forwarder.close()
-                except (OSError, IOError, RuntimeError) as e:
-                    logger.debug(f"Ignoring clone close failure for {device_path}: {e}")
-                forwarder = None
+                    device.grab()
+                except (OSError, IOError) as e:
+                    logger.warning(
+                        f"Cannot grab {device_path} ({e}); "
+                        "shortcut keys will also reach the focused app"
+                    )
+                    try:
+                        forwarder.close()
+                    except (OSError, IOError, RuntimeError) as e:
+                        logger.debug(f"Ignoring clone close failure for {device_path}: {e}")
+                    forwarder = None
 
         with self._devices_lock:
             if (

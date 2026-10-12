@@ -26,7 +26,12 @@ modules:
       # Assert the shape instead.
       - python3 -c "from pathlib import Path; p = Path('pywhispercpp-1.5.0/setup.py'); s = p.read_text(); n = 'setup(\\n    name=\"pywhispercpp\",'; assert n in s, 'pywhispercpp setup.py no longer matches the injection point'; p.write_text(s.replace(n, n + '\\n    version=\"1.5.0\",'))"
       - tar --owner=0 --group=0 -czf pywhispercpp-1.5.0.tar.gz pywhispercpp-1.5.0
-      - PYWHISPERCPP_VERSION=1.5.0 NO_REPAIR=1 GGML_VULKAN=1 pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}"
+      # GGML_NATIVE is ggml's default and compiles libggml-cpu with
+      # -march=native, so the package inherits whichever instruction set the
+      # Flatpak builder has. An AVX-512 builder ships a binary that SIGILLs on
+      # any CPU without it (#938). OFF ships the portable baseline the PyPI
+      # wheel carries.
+      - PYWHISPERCPP_VERSION=1.5.0 NO_REPAIR=1 GGML_VULKAN=1 CMAKE_ARGS="-DGGML_NATIVE=OFF" pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}"
         --prefix=${FLATPAK_DEST} "pywhispercpp" --no-build-isolation
       # whisper.cpp installs its shared libraries next to the extension module.
       # Symlink them onto the default loader path so the extension resolves them
@@ -113,6 +118,15 @@ modules:
       - *id004
       - *id005
       - *id006
+  - name: python3-pysocks
+    buildsystem: simple
+    build-commands:
+      - pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}"
+        --prefix=${FLATPAK_DEST} "pysocks" --no-build-isolation
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl
+        sha256: 2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5
   - name: python3-tqdm
     buildsystem: simple
     build-commands:

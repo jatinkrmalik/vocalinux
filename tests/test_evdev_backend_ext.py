@@ -28,11 +28,61 @@ from vocalinux.ui.keyboard_backends.evdev_backend import (
     EvdevKeyboardBackend,
     _clone_device_name,
     _find_keyboard_devices_from_evdev,
+    _is_virtual_keyboard,
     device_has_key,
     device_has_modifier_key,
     ecodes,
     find_keyboard_devices,
 )
+
+
+class TestIsVirtualKeyboard:
+    """Test _is_virtual_keyboard() sysfs and name detection (#930)."""
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.realpath")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_sysfs_virtual_path_is_virtual(self, mock_exists: Mock, mock_realpath: Mock) -> None:
+        """A device node under /devices/virtual/input is uinput-spawned."""
+        mock_exists.return_value = True
+        mock_realpath.return_value = "/sys/devices/virtual/input/input30"
+
+        assert _is_virtual_keyboard("/dev/input/event9", "Whatever Keyboard") is True
+        mock_realpath.assert_called_once_with("/sys/class/input/event9/device")
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.realpath")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_sysfs_real_path_is_not_virtual(self, mock_exists: Mock, mock_realpath: Mock) -> None:
+        """A bus-attached path wins over a remapper-sounding name."""
+        mock_exists.return_value = True
+        mock_realpath.return_value = "/sys/devices/pci0000:00/usb1/input/input7"
+
+        assert _is_virtual_keyboard("/dev/input/event9", "keyd virtual keyboard") is False
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_name_fallback_matches_remap_names(self, mock_exists: Mock) -> None:
+        """Without sysfs, known remapper names are treated as virtual."""
+        mock_exists.return_value = False
+
+        for name in ("keyd virtual keyboard", "KMonad output", "kanata", "xremap"):
+            assert _is_virtual_keyboard("/dev/input/event9", name) is True, name
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_name_fallback_ignores_real_keyboards(self, mock_exists: Mock) -> None:
+        """Without sysfs, ordinary keyboard names stay grabbed."""
+        mock_exists.return_value = False
+
+        assert _is_virtual_keyboard("/dev/input/event9", "AT Translated Set 2 keyboard") is False
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.realpath")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_sysfs_oserror_falls_back_to_names(
+        self, mock_exists: Mock, mock_realpath: Mock
+    ) -> None:
+        """A sysfs read failure degrades to the name check, not a crash."""
+        mock_exists.side_effect = OSError("permission denied")
+
+        assert _is_virtual_keyboard("/dev/input/event9", "keyd virtual keyboard") is True
+        assert _is_virtual_keyboard("/dev/input/event9", "AT Translated Set 2 keyboard") is False
 
 
 class TestFindKeyboardDevices:
@@ -54,7 +104,7 @@ H: Handlers=
         mock_proc_content = """I: Bus=0011 Vendor=0001 Product=0001 Version=ab83
 N: Name="AT Translated Set 2 keyboard"
 H: Handlers=sysrq kbd event0
-B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
 """
         with patch("builtins.open", mock_open(read_data=mock_proc_content)):
             with patch("os.path.exists", return_value=True):
@@ -66,7 +116,7 @@ B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
         mock_proc_content = """I: Bus=0011 Vendor=0001 Product=0001 Version=ab83
 N: Name="AT Translated Set 2 keyboard"
 H: Handlers=sysrq kbd event0
-B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
 I: Bus=0018 Vendor=04f3 Product=0033 Version=0500
 N: Name="Elan Touchpad"
 H: Handlers=mouse0 event1
@@ -126,7 +176,7 @@ B: KEY=0
         mock_proc_content = """I: Bus=0011 Vendor=0001 Product=0001 Version=ab83
 N: Name="Device with no event"
 H: Handlers=kbd
-B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
 """
         with patch("builtins.open", mock_open(read_data=mock_proc_content)):
             result = find_keyboard_devices()
@@ -138,7 +188,7 @@ B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
         mock_proc_content = """I: Bus=0011 Vendor=0001 Product=0001 Version=ab83
 N: Name="AT Translated Set 2 keyboard"
 H: Handlers=sysrq kbd event0
-B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
 """
         with patch("builtins.open", mock_open(read_data=mock_proc_content)):
             with patch("os.path.exists", return_value=False):
@@ -150,14 +200,16 @@ B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
         mock_proc_content = """I: Bus=0011 Vendor=0001 Product=0001 Version=ab83
 N: Name="AT Translated Set 2 keyboard"
 H: Handlers=sysrq kbd event0
-B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
 I: Bus=0003 Vendor=046d Product=c08b Version=0110
 N: Name="Logitech G502 HERO Gaming Mouse"
 H: Handlers=mouse0 event5
-B: KEY=1f0000 0 0 0 0
+B: KEY=1f0000 0 0 0 38000000
 B: REL=143
 B: MSC=10
 """
+        # KEY carries real keyboard keys (bits 29-31) so only the pointer
+        # check can drop this device.
         with patch("builtins.open", mock_open(read_data=mock_proc_content)):
             with patch("os.path.exists", return_value=True):
                 result = find_keyboard_devices()
@@ -168,9 +220,11 @@ B: MSC=10
         mock_proc_content = """I: Bus=0018 Vendor=04f3 Product=0033 Version=0500
 N: Name="Elan Touchpad"
 H: Handlers=mouse0 event1
-B: KEY=ff000000000000 0 0 0
+B: KEY=ff000000000000 0 0 38000000
 B: ABS=273000000000003
 """
+        # KEY carries real keyboard keys (bits 29-31) so only the pointer
+        # check can drop this device.
         with patch("builtins.open", mock_open(read_data=mock_proc_content)):
             with patch("os.path.exists", return_value=True):
                 result = find_keyboard_devices()
@@ -181,7 +235,7 @@ B: ABS=273000000000003
         mock_proc_content = """I: Bus=0005 Vendor=046d Product=b331 Version=0030
 N: Name="Wireless Keyboard"
 H: Handlers=kbd event3
-B: KEY=10000 7ff 202100 3953b001 68ffe0 1 20000 2000000000000 0
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
 B: REL=100
 """
         with patch("builtins.open", mock_open(read_data=mock_proc_content)):
@@ -194,13 +248,113 @@ B: REL=100
         mock_proc_content = """I: Bus=0003 Vendor=046d Product=c52b Version=1201
 N: Name="Logitech USB Receiver"
 H: Handlers=mouse0 event4
-B: KEY=ffff0000 0 0 0 0
+B: KEY=ffff0000 0 0 0 38000000
 B: REL=0 0 143
+"""
+        # KEY carries real keyboard keys (bits 29-31) so only the pointer
+        # check can drop this device.
+        with patch("builtins.open", mock_open(read_data=mock_proc_content)):
+            with patch("os.path.exists", return_value=True):
+                result = find_keyboard_devices()
+                assert result == []
+
+    def test_find_keyboard_devices_skips_button_only_devices(self) -> None:
+        """Devices whose KEY bitmap has no real keyboard key are not keyboards (#915)."""
+        mock_proc_content = """I: Bus=0019 Vendor=0000 Product=0001 Version=0000
+N: Name="Power Button"
+H: Handlers=kbd event4
+B: KEY=1000000000000 0
+I: Bus=0019 Vendor=0000 Product=0003 Version=0000
+N: Name="Sleep Button"
+H: Handlers=kbd event5
+B: KEY=4000 0 0
+I: Bus=0019 Vendor=0000 Product=0006 Version=0000
+N: Name="Video Bus"
+H: Handlers=kbd event6
+B: KEY=3f000300000000 0 0 0 0
+I: Bus=0019 Vendor=17aa Product=5054 Version=4101
+N: Name="ThinkPad Extra Buttons"
+H: Handlers=kbd event7 rfkill
+B: KEY=40040002000000 c00017 21004000 300600 400028000000 0
+I: Bus=0011 Vendor=0001 Product=0001 Version=ab83
+N: Name="AT Translated Set 2 keyboard"
+H: Handlers=sysrq kbd event0
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
+I: Bus=0003 Vendor=046d Product=c08b Version=0110
+N: Name="Logitech G502 HERO Gaming Mouse Keyboard"
+H: Handlers=sysrq kbd event8
+B: KEY=ff 0 0 0 38000000
+I: Bus=0006 Vendor=0000 Product=0000 Version=0001
+N: Name="ydotoold virtual device"
+H: Handlers=kbd mouse0 event9
+B: KEY=ffff0000 0 0 38000000
+B: REL=143
+"""
+        with patch("builtins.open", mock_open(read_data=mock_proc_content)):
+            with patch("os.path.exists", return_value=True):
+                result = find_keyboard_devices()
+                assert result == ["/dev/input/event0", "/dev/input/event8"]
+
+    def test_find_keyboard_devices_32bit_words(self) -> None:
+        """On a 32-bit kernel each bitmap word holds 32 bits, not 64.
+
+        KEY_RIGHTCTRL (code 97) sits in the fourth 32-bit word — the first
+        word printed. A 64-bit reading would look for it in word 1 and
+        miss the keyboard entirely.
+        """
+        mock_proc_content = """I: Bus=0019 Vendor=0000 Product=0001 Version=0000
+N: Name="GPIO keyboard"
+H: Handlers=kbd event2
+B: KEY=2 0 0 0
+"""
+        with patch("vocalinux.ui.keyboard_backends.evdev_backend._WORD_BITS", 32):
+            with patch("builtins.open", mock_open(read_data=mock_proc_content)):
+                with patch("os.path.exists", return_value=True):
+                    result = find_keyboard_devices()
+                    assert result == ["/dev/input/event2"]
+
+    def test_find_keyboard_devices_skips_multitouch_only_touchpad(self) -> None:
+        """A touchpad reporting only MT axes (no ABS_X/Y) is a pointer (#914)."""
+        mock_proc_content = """I: Bus=0018 Vendor=27c6 Product=01e9 Version=0100
+N: Name="GXTP5100:00 27C6:01E9"
+H: Handlers=mouse0 event2
+B: PROP=85
+B: EV=1b
+B: KEY=10000 0 0 0 38000000
+B: ABS=60000000000000
+B: MSC=10
 """
         with patch("builtins.open", mock_open(read_data=mock_proc_content)):
             with patch("os.path.exists", return_value=True):
                 result = find_keyboard_devices()
                 assert result == []
+
+    def test_find_keyboard_devices_skips_mixed_single_and_mt_touchpad(self) -> None:
+        """A touchpad with both ABS_X/Y and MT axes stays skipped."""
+        mock_proc_content = """I: Bus=0018 Vendor=27c6 Product=01e9 Version=0100
+N: Name="GXTP5100:00 27C6:01E9"
+H: Handlers=mouse0 event2
+B: KEY=10000 0 0 0 38000000
+B: ABS=60000000000003
+"""
+        with patch("builtins.open", mock_open(read_data=mock_proc_content)):
+            with patch("os.path.exists", return_value=True):
+                result = find_keyboard_devices()
+                assert result == []
+
+    def test_find_keyboard_devices_mt_axes_32bit_words(self) -> None:
+        """On a 32-bit kernel the same MT axes print as two 32-bit words."""
+        mock_proc_content = """I: Bus=0018 Vendor=27c6 Product=01e9 Version=0100
+N: Name="GXTP5100:00 27C6:01E9"
+H: Handlers=mouse0 event2
+B: KEY=10000 0 0 0 38000000
+B: ABS=600000 0
+"""
+        with patch("vocalinux.ui.keyboard_backends.evdev_backend._WORD_BITS", 32):
+            with patch("builtins.open", mock_open(read_data=mock_proc_content)):
+                with patch("os.path.exists", return_value=True):
+                    result = find_keyboard_devices()
+                    assert result == []
 
 
 class TestFindKeyboardDevicesFromEvdev:
@@ -244,6 +398,15 @@ class TestFindKeyboardDevicesFromEvdev:
             "/dev/input/event3": {
                 ecodes.EV_KEY: [ecodes.KEY_A],
                 ecodes.EV_REL: [ecodes.REL_WHEEL],
+            },
+            # Multitouch-only touchpad: MT position axes, no ABS_X/Y (#914).
+            # Carries a real key so only the MT check can drop it.
+            "/dev/input/event4": {
+                ecodes.EV_KEY: [ecodes.KEY_LEFTCTRL, ecodes.BTN_LEFT],
+                ecodes.EV_ABS: [
+                    (ecodes.ABS_MT_POSITION_X, MagicMock()),
+                    (ecodes.ABS_MT_POSITION_Y, MagicMock()),
+                ],
             },
         }
         devices = self._devices(caps)
@@ -1200,15 +1363,88 @@ class TestEvdevGrabAndForwarding:
 
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
-    def test_open_monitors_other_virtual_devices(self, mock_input_device, mock_uinput):
-        """Remapper/accessibility virtual devices are monitored like real ones.
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_open_monitors_remapper_virtual_device_ungrabbed(
+        self, mock_exists: Mock, mock_input_device: Mock, mock_uinput: Mock
+    ) -> None:
+        """Remapper virtual keyboards are monitored without a grab or clone.
 
-        A user can record a shortcut on a keyd/kmonad-style virtual keyboard;
-        ignoring every BUS_VIRTUAL device would leave that shortcut dead.
+        keyd reports BUS_USB to look like a real keyboard; with sysfs
+        unreadable the name check still catches it (#930). Grabbing the
+        remapper's output device starves the compositor, and the clone is
+        another uinput device the remapper grabs — so no clone is made.
+        The listener still sees its events, so shortcuts bound to it work.
         """
+        mock_exists.return_value = False  # no sysfs entry: name fallback
         device = MagicMock()
         device.fileno.return_value = 10
-        device.info.bustype = 0x06  # BUS_VIRTUAL
+        device.info.bustype = 0x03  # BUS_USB — keyd deliberately looks real
+        device.name = "keyd virtual keyboard"
+        mock_input_device.return_value = device
+
+        backend = EvdevKeyboardBackend()
+        opened = backend._open_keyboard_device("/dev/input/event5")
+
+        assert opened is True
+        device.grab.assert_not_called()
+        mock_uinput.assert_not_called()
+        assert backend._forwarders == {}
+        assert device in backend.devices
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.realpath")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_open_detects_virtual_keyboard_by_sysfs_path(
+        self,
+        mock_exists: Mock,
+        mock_realpath: Mock,
+        mock_input_device: Mock,
+        mock_uinput: Mock,
+    ) -> None:
+        """A uinput-spawned keyboard is ungrabbed regardless of its name.
+
+        keyd names and clones its device however it likes; the reliable
+        signal is the sysfs device path landing under /devices/virtual.
+        """
+        mock_exists.return_value = True
+        mock_realpath.return_value = "/sys/devices/virtual/input/input30"
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.info.bustype = 0x03  # BUS_USB
+        device.name = "Plausible Keyboard"  # name a remapper could choose
+        mock_input_device.return_value = device
+
+        backend = EvdevKeyboardBackend()
+        opened = backend._open_keyboard_device("/dev/input/event5")
+
+        assert opened is True
+        device.grab.assert_not_called()
+        mock_uinput.assert_not_called()
+        assert backend._forwarders == {}
+        assert device in backend.devices
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.realpath")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
+    def test_open_grabs_keyboard_on_real_sysfs_path(
+        self,
+        mock_exists: Mock,
+        mock_realpath: Mock,
+        mock_input_device: Mock,
+        mock_uinput: Mock,
+    ) -> None:
+        """A real sysfs path keeps suppression even for a remapper-ish name.
+
+        sysfs is ground truth for virtualness; the name list is only a
+        fallback for confined installs where sysfs cannot be read.
+        """
+        mock_exists.return_value = True
+        mock_realpath.return_value = "/sys/devices/pci0000:00/input/input0"
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.info.bustype = 0x03
         device.name = "keyd virtual keyboard"
         mock_input_device.return_value = device
         forwarder = MagicMock()
@@ -1220,7 +1456,7 @@ class TestEvdevGrabAndForwarding:
 
         assert opened is True
         device.grab.assert_called_once()
-        assert device in backend.devices
+        assert backend._forwarders[10] is forwarder
 
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")

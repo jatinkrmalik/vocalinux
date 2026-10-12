@@ -37,6 +37,7 @@ _ORB_SIZE = 96
 _PULSE_PERIOD_MS = 1400
 _ANIMATION_TICK_MS = 33  # ~30 fps
 _BOTTOM_MARGIN = 48
+_RIPPLE_STROKE_WIDTH = 2.0
 
 
 class DictationOverlayController:
@@ -125,6 +126,8 @@ class DictationOverlay:
         self._drawing_area: Optional[Gtk.DrawingArea] = None
         self._anim_id: Optional[int] = None
         self._phase = 0.0
+        self._audio_level = self._audio_level_target = 0.0
+        self._ripple_phase = 1.0
         self._gtk_ready = False
         self._use_layer_shell = False
 
@@ -282,7 +285,16 @@ class DictationOverlay:
     def on_recognition_state(self, state: RecognitionState) -> None:
         """Handle a recognition state change (same path as the tray icon)."""
         self.controller.set_state(state)
+        if state != RecognitionState.LISTENING:
+            self._audio_level_target = 0.0
         self._sync_window()
+
+    def set_audio_level(self, level: float) -> None:
+        """Accept microphone loudness (0–100) without calling GTK from the audio thread."""
+        target = max(0.0, min(1.0, level / 100.0))
+        if target > 0.025 and target > self._audio_level_target * 1.45:
+            self._ripple_phase = 0.0
+        self._audio_level_target = target
 
     def destroy(self) -> None:
         """Tear down animation and window."""
@@ -401,6 +413,11 @@ class DictationOverlay:
 
     def _on_anim_tick(self) -> bool:
         self._phase = (self._phase + _ANIMATION_TICK_MS / _PULSE_PERIOD_MS) % 1.0
+        target = self._audio_level_target if self.controller.mode == MODE_LISTENING else 0.0
+        self._audio_level += (target - self._audio_level) * (
+            0.42 if target > self._audio_level else 0.16
+        )
+        self._ripple_phase = min(1.0, self._ripple_phase + _ANIMATION_TICK_MS / 650.0)
         if self._drawing_area is not None:
             self._drawing_area.queue_draw()
         # Keep ticking while visible.
@@ -438,25 +455,35 @@ class DictationOverlay:
             pulse = 0.55 + 0.25 * math.sin(self._phase * 2.0 * math.pi)
             alpha_scale = 0.75
             core_a = 0.8
+            loudness = 0.0
         else:
             pulse = 0.5 + 0.5 * math.sin(self._phase * 2.0 * math.pi)
             alpha_scale = 1.0
             core_a = 0.95
+            loudness = max(
+                0.0, min(1.0, (20 * math.log10(max(self._audio_level, 0.001)) + 45) / 45)
+            )
 
         # Outer glow rings.
         for radius_scale, ring_a in ((0.95, 0.12), (0.72, 0.22), (0.52, 0.35)):
             radius = (orb * 0.42) * radius_scale * (0.92 + 0.08 * pulse)
             alpha = ring_a * (0.55 + 0.45 * pulse) * alpha_scale
+            outer = mode == MODE_LISTENING and radius_scale == 0.95
+            alpha *= 0.25 + 0.75 * loudness if outer else 1.0
             cr.set_source_rgba(base_r, base_g, base_b, alpha)
             cr.arc(cx, cy, radius, 0, 2 * math.pi)
-            cr.fill()
+            cr.set_line_width(2 + 10 * loudness if outer else 2)
+            cr.stroke() if outer else cr.fill()
 
-        # Expanding ripple (listening only).
-        if mode == MODE_LISTENING:
-            ripple_r = (orb * 0.28) + self._phase * (orb * 0.28)
-            ripple_a = max(0.0, 0.45 * (1.0 - self._phase))
+        # Expanding ripple (listening only). The cap keeps the circle and
+        # its stroke inside the window — on backends without layer shell
+        # the window is exactly the orb size, so an uncapped ripple clips.
+        if mode == MODE_LISTENING and self._ripple_phase < 1.0:
+            max_r = max(0.0, min(width, height) / 2 - _RIPPLE_STROKE_WIDTH / 2 - 1)
+            ripple_r = min(orb * (0.24 + 0.42 * self._ripple_phase), max_r)
+            ripple_a = 0.65 * (1.0 - self._ripple_phase)
             cr.set_source_rgba(base_r, base_g, base_b, ripple_a)
-            cr.set_line_width(2.0)
+            cr.set_line_width(_RIPPLE_STROKE_WIDTH)
             cr.arc(cx, cy, ripple_r, 0, 2 * math.pi)
             cr.stroke()
 

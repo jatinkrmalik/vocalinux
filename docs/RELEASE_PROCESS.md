@@ -168,7 +168,8 @@ Use these rules for every GitHub Release body (and for the draft pasted into the
 5. `## Bug Fixes` - group by area (IBus, Installer, AUR, Text injection, …)
 6. Optional: `## Improvements`, `## Docs`, `## Packaging`
 7. `## Thanks` - external PR authors and issue reporters by `@handle`
-8. `## Install / Upgrade` - `install.sh`, AUR, PyPI, **AppImage**, Flatpak, Snap
+8. `## Install / Upgrade` - `install.sh`, AUR, PyPI, **AppImage**, Flatpak, Snap,
+   `.deb` / `.rpm`
    (Store channels plus GitHub `.snap` sideload when Store review is pending)
 9. `### Verifying what you downloaded` (required, and easy to lose). `release.yml`
    generates it, with `sha256sum -c --ignore-missing SHA256SUMS` and
@@ -384,7 +385,8 @@ After pushing the tag, the GitHub Actions workflow will automatically:
 2. Build and attach AppImages for x86_64 and aarch64, both from that same wheel
 3. Create a GitHub Release with auto-generated notes
 4. Attach `SHA256SUMS` covering every GitHub asset (wheel, sdist, both AppImages,
-   both Flatpaks, the amd64 snap) and generate build provenance from that
+   both Flatpaks, the amd64 snap, the `.deb` and `.rpm` for both arches) and
+   generate build provenance from that
    manifest (runs after the aarch64 AppImage, both Flatpaks, and the snap land,
    so a partial manifest never gets published)
 5. Publish to PyPI via trusted publishing
@@ -407,8 +409,9 @@ Monitor at: https://github.com/VocaHQ/vocalinux/actions
 
 - [ ] Verify GitHub Release was created correctly
 - [ ] Verify `SHA256SUMS` is attached and lists every GitHub asset (wheel, sdist,
-      both AppImages, both Flatpaks, the amd64 snap) - the release notes tell
-      users to run `sha256sum -c` against it
+      both AppImages, both Flatpaks, the amd64 snap, the `.deb` and `.rpm` for
+      both arches) - the release notes tell users to run `sha256sum -c`
+      against it
 - [ ] If the Store held the snap for `uinput` review, confirm the GitHub `.snap`
       is still attached and the notes document `snap install --dangerous`
 - [ ] After candidate QA (install, tray, mic, model download, typing into a real
@@ -474,6 +477,7 @@ git push origin v0.5.1-beta
 | 0.16.0 | 2026-08-23 | Stable | Update checker + tray notify, Right Alt PTT default (new installs), searchable language list, delete unused models, Voca tone picker (family preview WAVs), About page, AGPL-3.0, family mic icons, installer/just/uv pinning, Test Dictation missing-model message, IBus/audio/clipboard/GPU/AppImage reliability, vocalinux.com family workbench restyle |
 | 0.17.0 | 2026-09-16 | Stable | Faster Whisper + Parakeet engines, Speech Model simple setup, first-run system language, Snap with ydotool/uinput, Flatpak bundles on the GitHub Release, XWayland/layout paste and settings/audio fixes |
 | 0.18.0 | 2026-10-02 | Stable | Dictation Pad, evdev hotkey suppression, PipeWire capture + system audio, RemoteDesktop portal injection, per-language shortcuts + tray history, TinyDiarize file transcription, D-Bus activation, custom dictionary, postprocessing hook, floating overlay, audio ducking, AUR -bin + self-hosted Flatpak remote + snap-promote |
+| 0.18.1 | 2026-10-08 | Stable | Settings Proxy page, opt-in JSONL transcript persistence, .deb/.rpm release packages, slimmer tray menu, dictation-pad Wayland ghost fix, evdev keyboard-discovery tightening, KWin 6 case fix, staged model picker |
 | 0.16.2 | 2026-09-05 | Stable | Patch: KDE leftover IBus skip, Wayland/IBus shortcuts via wtype/ydotool, BackSpace delete that, installer glslc on Fedora/Arch, nightly version stamp, release integrity pins, AUR PKGBUILD CI gate, distro CI/docs drift, Gateway Beta on site |
 | 0.16.1 | 2026-08-30 | Stable | Patch: per-engine model at startup, leftover tray idle, terminal Ctrl+Shift+V paste, GNOME XWayland layout after IBus, Python 3.11 floor + verified downloads, AppImage glibc that boots on Debian 12, Settings/About polish |
 

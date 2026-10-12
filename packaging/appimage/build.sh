@@ -463,9 +463,15 @@ _compile_pywhispercpp_vulkan() {
        found {exit}' "$REPO_ROOT/requirements/vad.txt" > "$WORKDIR/pywhispercpp.txt"
   # Hosts that default cc/c++ to clang (this Cloud Agent image) fail the
   # CMAKE C++ compiler test: clang does not search gcc's libstdc++ path.
+  # GGML_NATIVE is ggml's default and compiles libggml-cpu with -march=native,
+  # tuned to whichever runner the build lands on. A runner with AVX-512 ships a
+  # libggml-cpu.so that dies with SIGILL on any CPU without it (#938), and the
+  # native cache then serves the same binary to every later build. OFF builds
+  # the portable baseline the PyPI wheel already ships; the Vulkan path is
+  # unaffected because its shaders run on the GPU.
   if ! CC="${CC:-gcc}" CXX="${CXX:-g++}" \
       GGML_VULKAN=1 \
-      CMAKE_ARGS="-DCMAKE_INSTALL_RPATH=\$ORIGIN -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DVulkan_INCLUDE_DIR=$VULKAN_INCLUDE_DIR" \
+      CMAKE_ARGS="-DCMAKE_INSTALL_RPATH=\$ORIGIN -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DGGML_NATIVE=OFF -DVulkan_INCLUDE_DIR=$VULKAN_INCLUDE_DIR" \
       uv_install --verbose --require-hashes --no-deps \
         --reinstall-package pywhispercpp --no-binary pywhispercpp \
         -r "$WORKDIR/pywhispercpp.txt" >"$pip_log" 2>&1; then

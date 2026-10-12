@@ -57,6 +57,7 @@ from ..utils.model_checksums import (
     write_verification_stamp,
 )
 from ..utils.paths import models_dir
+from ..utils.proxy import requests_proxies
 from ..utils.pywhispercpp_loader import (
     find_shared_library_dirs as _find_pywhispercpp_shared_library_dirs,
 )
@@ -2414,6 +2415,7 @@ class SpeechRecognitionManager:
                     stream=True,
                     timeout=self._MODEL_DOWNLOAD_TIMEOUT,
                     headers={"User-Agent": f"vocalinux/{__version__}"},
+                    proxies=requests_proxies(),
                 )
             except requests.exceptions.RequestException as e:
                 # Surfaced on the calling thread below.
@@ -3184,6 +3186,7 @@ class SpeechRecognitionManager:
         # sees the dictation as ended. The volume goes back only once the
         # microphone thread has left the device, and before the stop cue.
         self.should_record = False
+        self._update_state(RecognitionState.PROCESSING)
         self._cancel_pending_playback_duck()
 
         # Wait for audio thread to finish recording and enqueue any pending audio

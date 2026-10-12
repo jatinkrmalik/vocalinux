@@ -89,9 +89,11 @@ just flatpak-deps-check # fail if that manifest is behind the export
 just model-checksums  # refresh pinned model digests after adding a model
 just appimage      # build the AppImage in its pinned base image (needs docker)
 just appimage-boot fedora:42   # boot that AppImage in a distro container
+just native-packages  # build the .deb and .rpm in the pinned base image (needs docker)
+just native-smoke fedora:42  # install the built package in a distro container
 just aur-gate      # build the AUR PKGBUILD on current Arch (needs docker)
 just install-gate debian:12  # run install.sh unattended in a distro container
-just remote-install-gate  # run piped bootstrap + tagged handoff/install in Ubuntu
+just remote-install-gate debian:12  # remote curl|bash path end to end against HEAD (needs docker)
 just verify-release  # check a published release as published (needs gh)
 just pre-commit    # pre-commit run --all-files
 just run-debug     # vocalinux --debug
@@ -122,13 +124,14 @@ Website: `web/AGENTS.md`, `web/PRODUCT.md`, `web/DESIGN.md`. Do not duplicate si
 | pywhispercpp | Pinned in `install.sh` as `PYWHISPERCPP_VERSION` (keep in sync with `uv.lock`) |
 | Installer build tools | `[dependency-groups].installer-build` exports to `requirements/installer-build.txt`. Bootstrap uses hashed wheels on new and reused venvs; source builds use these tools without build isolation. Its setuptools `>=83` floor keeps the pinned installer tools patched; do not add it to `[build-system]` (Arch). Backend rebuilds select pywhispercpp's complete hash block from `runtime.txt` via `scripts/installer_requirements.py`, with `--no-deps` so they cannot replace the runtime |
 | Installer Whisper export | Compiled universally from Python 3.11, constrained by `runtime.txt` and `installer-build.txt` to keep shared pins consistent. Uses a `+cpu` torch pin and best-match index resolution so the CPU index's older copies of shared packages do not downgrade the runtime |
-| Remote installer | After cloning, hand off to the tagged `install.sh` with the original arguments and remote venv path. The installer and its exports must come from the same revision, including when the tag predates the pinned installer. `just remote-install-gate` tests latest resolution, explicit tags, initial clone, fetch/update, handoff, and fail-closed tagged trees |
+| Remote installer | After cloning, hand off to the tagged `install.sh` with the original arguments and remote venv path. The installer and its exports must come from the same revision, including when the tag predates the pinned installer |
 | `[vad]` extra | `onnxruntime` for Silero VAD |
 | One export per extra | Every extra in `pyproject.toml` needs a hash-pinned `requirements/<extra>.txt` (underscores become dashes), written by a `uv export` line in `just lock`. `install.sh` installs six of them, so an extra with no export is an install path with nothing pinned, which is how `[parakeet]`, `[faster_whisper]` and `[vosk]` reached users. `tests/test_dependency_exports.py` enumerates the extras and the installer's call sites rather than trusting the recipe to stay complete; `docs` is the one exemption and it carries its reason in `EXPORT_EXEMPT` |
 | Exports match the lock | `just export-check` re-runs every `uv export` line in `just lock` and fails if a committed export is behind `uv.lock`. It reads those lines out of the recipe, so an export added there is checked without touching `scripts/check_exports.py`, and it runs under `UV_OFFLINE=1`: `uv export` reads the lock and nothing else. The lint job runs it, because an export named in the recipe and never regenerated is a snapshot, not a pin. `uv pip compile` targets are out of scope by design (they resolve against live indexes) |
 | AppImage PyGObject | Pinned separately in `requirements/appimage.in`, and below 3.52: the AppImage bundles its own interpreter and builds PyGObject against the base image's girepository-1.0, while uv.lock's 3.56 needs girepository-2.0 (glib 2.80+) |
 | AppImage build inputs | Base image, tooling, interpreter, shaderc and the Vulkan headers are pinned in `packaging/appimage/tool_checksums.txt`. Build with `just appimage` (docker) — building on the host ships the host's glibc, which is what kept the AppImage off Debian 12 |
 | AppImage boot matrix | `packaging/appimage/boot-test.sh` runs the finished AppImage in distro containers, and the matrix in `unified-pipeline.yml` must keep distros both older and newer than the build image: the old ones prove the glibc floor, the new ones catch a bundle that breaks the host binaries it spawns. A distro added there needs its package recipe in the script — `tests/test_appimage_packaging.py` checks both |
+| Native packages (.deb / .rpm) | Thin packages built by nfpm in the pinned Debian 12 image (`packaging/native/tool_checksums.txt` pins the image and the nfpm releases). Python, GTK and PyGObject come from the distro; only `pywhispercpp` and `pynput` are vendored under `/usr/lib/vocalinux/vendor` (unpackaged on Debian/Fedora). `packaging/native/smoke-test.sh` installs the package per-distro and runs `vocalinux --version` plus an import smoke — `tests/test_native_packaging.py` keeps the deps lists, vendored set and CI matrix consistent offline |
 | Flatpak deps | `packaging/flatpak/python3-dependencies.yaml` is generated from `requirements/runtime.txt` by `scripts/sync_flatpak_deps.py` (`just flatpak-deps`, which `just lock` runs itself). It resolves each artifact by the digest uv already recorded, so the Flatpak downloads the bytes in `uv.lock`. The project installs there with `pip3 install --no-deps`, so nothing inside the build evaluates `pyproject.toml` — `tests/test_flatpak_packaging.py` checks the invariant offline |
 | Speech models | Verified against digests pinned in `src/vocalinux/utils/model_checksums.txt` before install, by both `install.sh` and the runtime downloaders. **Fails closed** — an unpinned model is refused. Regenerate with `just model-checksums` (never by hand); `tests/test_model_checksums.py` fails if it falls behind. whisper.cpp URLs use a pinned Hugging Face commit, never `main` |
 
@@ -170,7 +173,7 @@ src/vocalinux/
 └── resources/                  # SVG icons + WAV cues (also repo resources/)
 ```
 
-Also: `tests/`, `docs/`, `packaging/` (AppImage, AUR, Flatpak), `scripts/`,
+Also: `tests/`, `docs/`, `packaging/` (AppImage, AUR, Flatpak, native .deb/.rpm), `scripts/`,
 `install.sh` (bootstrap and orchestration), `install.d/` (sourced installer modules),
 `uninstall.sh`, `web/`. `scripts/distro-package-map.yaml` owns installer package
 names; `install.d/package_map.sh` is generated by `just distro-packages`.

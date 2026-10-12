@@ -105,6 +105,17 @@ appimage: build
 appimage-boot distro="debian:12":
     docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/packaging/appimage:/pk:ro" {{distro}} bash /pk/boot-test.sh "/dist/$(basename "$(ls dist/*.AppImage)")"
 
+# Build the .deb and .rpm in the pinned container, as release.yml does (needs
+# docker). Thin packages: the distro supplies Python, GTK and the typelibs;
+# only pywhispercpp and pynput are vendored.
+native-packages: build
+    bash packaging/native/docker-build.sh dist/*.whl "$(grep -oP '__version__\s*=\s*"\K[^"]+' src/vocalinux/version.py)" dist
+
+# Install the built package in a matching distro container, as the CI matrix
+# does: debian:12 / ubuntu:24.04 exercise the .deb, fedora:42 the .rpm.
+native-smoke distro="debian:12":
+    docker run --rm -v "$PWD/dist:/out:ro" -v "$PWD/packaging/native:/pk:ro" {{distro}} bash /pk/smoke-test.sh
+
 # Build the AUR package from this checkout on current Arch, as the CI gate
 # does. Answers "does this commit build on Arch" — the tag tarball source= is
 # swapped for a git archive of HEAD (needs docker).
@@ -140,11 +151,14 @@ install-gate distro="debian:12":
     fi
     docker run "${ARGS[@]}" {{distro}} bash "$PWD/scripts/install-test.sh"
 
-# Run the public remote-bootstrap shape against controlled local release tags.
-# The bootstrap is piped outside a checkout, then clones, hands off to, installs,
-# updates, and rejects a broken tagged tree. Ubuntu is deliberate: the six-distro
-# local gate owns package-map coverage; this gate owns revision and handoff logic.
-remote-install-gate:
+# Run install.sh's remote path end to end in a distro container, as the CI gate
+# does: bootstrap outside a checkout, tag selection, clone/fetch of a mirror
+# published from HEAD, handoff to the tagged installer. Answers "does the
+# public curl|bash path install this commit" (needs docker). Same worktree
+# handling as install-gate above.
+#
+# Usage: `just remote-install-gate` for debian:12, or `just remote-install-gate fedora:42`
+remote-install-gate distro="debian:12":
     #!/usr/bin/env bash
     set -euo pipefail
     COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
@@ -152,7 +166,7 @@ remote-install-gate:
     if [ "$COMMON" != "$PWD/.git" ]; then
         ARGS+=(-v "$COMMON:$COMMON:ro")
     fi
-    docker run "${ARGS[@]}" ubuntu:24.04 bash "$PWD/scripts/remote-install-test.sh"
+    docker run "${ARGS[@]}" {{distro}} bash "$PWD/scripts/install-remote-test.sh"
 
 # Check that a published release verifies as published: manifest, provenance,
 # notes and PyPI digests. Needs gh, downloads nothing.
