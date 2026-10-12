@@ -1608,15 +1608,49 @@ class TestEvdevGrabAndForwarding:
 
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_refuses_grab_when_key_transition_already_queued(
+        self, mock_input_device: Mock, mock_uinput: Mock
+    ) -> None:
+        """A key transition queued at open refuses the grab entirely.
+
+        Everything drained before the grab was delivered to the
+        compositor's fd too, so a key event there means input is in
+        flight: grabbing would route a release through the clone for a
+        press the desktop saw on the physical device. The device stays
+        monitored ungrabbed and the rescan retries once quiet.
+        """
+        press = self._queued_key_event(54, 1, time.time())
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.active_keys.return_value = []
+        device.read_one.side_effect = [press, None]
+        mock_input_device.return_value = device
+        forwarder = MagicMock()
+        mock_uinput.return_value = forwarder
+
+        backend = EvdevKeyboardBackend()
+
+        assert backend._open_keyboard_device("/dev/input/event0") is True
+        device.grab.assert_not_called()
+        device.ungrab.assert_not_called()
+        forwarder.write_event.assert_not_called()
+        forwarder.close.assert_called_once()
+        assert backend._forwarders == {}
+        assert backend._pending_events == {}
+        assert device in backend.devices
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
     def test_open_ungrabs_on_pre_grab_key_transition(
         self, mock_input_device: Mock, mock_uinput: Mock
     ) -> None:
-        """A press the compositor saw go down refuses the grab.
+        """A press arriving between the pre-grab drain and the grab refuses it.
 
-        The drained queue timestamped before the grab belongs to the
-        compositor's view too, so a key event there is the handover case.
-        Its post-grab release still reaches the desktop through the clone
-        before the clone is closed, and engines get it via pending events.
+        The event slipped past the empty pre-drain but is timestamped
+        before the grab, so it belongs to the compositor's view too — the
+        handover case. Its post-grab release still reaches the desktop
+        through the clone before the clone is closed, and engines get it
+        via pending events.
         """
         pre = time.time() - 10
         post = time.time() + 10
@@ -1625,7 +1659,8 @@ class TestEvdevGrabAndForwarding:
         device = MagicMock()
         device.fileno.return_value = 10
         device.active_keys.return_value = []
-        device.read_one.side_effect = [press, release, None]
+        # The pre-grab drain comes up empty; the straddle drain sees both.
+        device.read_one.side_effect = [None, press, release, None]
         mock_input_device.return_value = device
         forwarder = MagicMock()
         mock_uinput.return_value = forwarder
@@ -1659,7 +1694,7 @@ class TestEvdevGrabAndForwarding:
         device = MagicMock()
         device.fileno.return_value = 10
         device.active_keys.return_value = []
-        device.read_one.side_effect = [stale_press, held_press, None]
+        device.read_one.side_effect = [None, stale_press, held_press, None]
         mock_input_device.return_value = device
         forwarder = MagicMock()
         mock_uinput.return_value = forwarder
@@ -1706,7 +1741,8 @@ class TestEvdevGrabAndForwarding:
         device = MagicMock()
         device.fileno.return_value = 10
         device.active_keys.return_value = []
-        device.read_one.side_effect = [*queue, None]
+        # First None empties the pre-grab drain; the straddle drain follows.
+        device.read_one.side_effect = [None, *queue, None]
         mock_input_device.return_value = device
         forwarder = MagicMock()
         mock_uinput.return_value = forwarder

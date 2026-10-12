@@ -1213,6 +1213,15 @@ class EvdevDeviceHub:
                     # the clone and the key would stay held across the desktop.
                     if device.active_keys():
                         raise OSError("a key is held")
+                    # Events already queued on this fd were delivered to the
+                    # compositor's fd too. A key transition among them means
+                    # input is in flight: grabbing now would route that
+                    # key's release through the clone for a press the desktop
+                    # saw on the physical device, which cannot reliably
+                    # clear it. Refuse and let the rescan retry once quiet.
+                    pre_grab_queued = _drain_queued_events(device)
+                    if any(e.type == ecodes.EV_KEY for e in pre_grab_queued):
+                        raise OSError("a key is held")
                     grab_ts = time.time()
                     device.grab()
                     # The drained queue straddles the grab. Events timestamped
