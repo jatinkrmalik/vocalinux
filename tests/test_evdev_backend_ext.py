@@ -1575,41 +1575,24 @@ class TestEvdevGrabAndForwarding:
         assert backend._forwarders == {}
         assert device in backend.devices
 
-    @pytest.mark.parametrize(
-        "held_keys, queued_key, expect_grab, expect_ungrab",
-        [
-            ([[54]], False, False, False),  # held before the grab: never grabbed
-            ([[], [54]], False, True, True),  # still held after the grab: ungrab
-            ([[], []], True, True, True),  # press+release inside the handover: ungrab
-            ([[], []], False, True, False),  # quiet handover: grab stays
-        ],
-    )
+    def _queued_key_event(self, code: int, value: int, ts: float) -> MagicMock:
+        """A queued EV_KEY event timestamped pre- or post-grab."""
+        event = MagicMock()
+        event.type = ecodes.EV_KEY
+        event.code = code
+        event.value = value
+        event.timestamp.return_value = ts
+        return event
+
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
     def test_open_leaves_keyboard_with_held_key_ungrabbed(
-        self,
-        mock_input_device: Mock,
-        mock_uinput: Mock,
-        held_keys: list,
-        queued_key: bool,
-        expect_grab: bool,
-        expect_ungrab: bool,
+        self, mock_input_device: Mock, mock_uinput: Mock
     ) -> None:
-        """A key the compositor saw go down must come up on the real device.
-
-        Held keys fail active_keys(); a press whose release raced the grab
-        only shows up in the fd's queue, and either way the device stays
-        ungrabbed so the compositor sees the release.
-        """
+        """A key held before the grab keeps the device ungrabbed."""
         device = MagicMock()
         device.fileno.return_value = 10
-        device.active_keys.side_effect = held_keys
-        if queued_key:
-            key_event = MagicMock()
-            key_event.type = ecodes.EV_KEY
-            device.read_one.side_effect = [key_event, None]
-        else:
-            device.read_one.return_value = None
+        device.active_keys.return_value = [54]
         mock_input_device.return_value = device
         forwarder = MagicMock()
         mock_uinput.return_value = forwarder
@@ -1617,15 +1600,130 @@ class TestEvdevGrabAndForwarding:
         backend = EvdevKeyboardBackend()
 
         assert backend._open_keyboard_device("/dev/input/event0") is True
-        assert device.grab.called is expect_grab
-        assert device.ungrab.called is expect_ungrab
+        device.grab.assert_not_called()
+        device.ungrab.assert_not_called()
+        forwarder.close.assert_called_once()
+        assert backend._forwarders == {}
         assert device in backend.devices
-        if expect_grab and not expect_ungrab:
-            forwarder.close.assert_not_called()
-            assert backend._forwarders == {10: forwarder}
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_ungrabs_on_pre_grab_key_transition(
+        self, mock_input_device: Mock, mock_uinput: Mock
+    ) -> None:
+        """A press the compositor saw go down refuses the grab.
+
+        The drained queue timestamped before the grab belongs to the
+        compositor's view too, so a key event there is the handover case.
+        Its post-grab release still reaches the desktop through the clone
+        before the clone is closed, and engines get it via pending events.
+        """
+        pre = time.time() - 10
+        post = time.time() + 10
+        press = self._queued_key_event(54, 1, pre)
+        release = self._queued_key_event(54, 0, post)
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.active_keys.return_value = []
+        device.read_one.side_effect = [press, release, None]
+        mock_input_device.return_value = device
+        forwarder = MagicMock()
+        mock_uinput.return_value = forwarder
+
+        backend = EvdevKeyboardBackend()
+
+        assert backend._open_keyboard_device("/dev/input/event0") is True
+        device.grab.assert_called_once()
+        device.ungrab.assert_called_once()
+        forwarder.write_event.assert_called_once_with(release)
+        forwarder.close.assert_called_once()
+        assert backend._forwarders == {}
+        assert backend._pending_events == {10: [release]}
+        assert device in backend.devices
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_skips_replaying_post_grab_held_press(
+        self, mock_input_device: Mock, mock_uinput: Mock
+    ) -> None:
+        """A post-grab press still held is not replayed onto a dying clone.
+
+        Refusing the grab over a pre-grab transition, the held press would
+        leave the key logically down forever if replayed before close, so
+        only events for released keys are emitted.
+        """
+        pre = time.time() - 10
+        post = time.time() + 10
+        stale_press = self._queued_key_event(54, 1, pre)
+        held_press = self._queued_key_event(100, 1, post)
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.active_keys.return_value = []
+        device.read_one.side_effect = [stale_press, held_press, None]
+        mock_input_device.return_value = device
+        forwarder = MagicMock()
+        mock_uinput.return_value = forwarder
+
+        backend = EvdevKeyboardBackend()
+
+        assert backend._open_keyboard_device("/dev/input/event0") is True
+        device.ungrab.assert_called_once()
+        forwarder.write_event.assert_not_called()
+        assert backend._pending_events == {10: [held_press]}
+
+    @pytest.mark.parametrize(
+        "queued, expected_pending",
+        [
+            ("none", "none"),  # quiet handover: grab stays, nothing pending
+            ("post_tap", "post_tap"),  # post-grab tap replays, grab stays
+            ("post_press", "post_press"),  # held post-grab press keeps the grab
+        ],
+    )
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_open_keeps_grab_when_only_post_grab_events(
+        self,
+        mock_input_device: Mock,
+        mock_uinput: Mock,
+        queued: str,
+        expected_pending: str,
+    ) -> None:
+        """Events entirely after the grab are input, not handover evidence.
+
+        A tap delivered after the grab reached only our fd, so the grab is
+        kept and the events are queued for dispatch — dropping them would
+        lose the keystroke the compositor never saw.
+        """
+        post = time.time() + 10
+        events = {
+            "post_tap": [
+                self._queued_key_event(54, 1, post),
+                self._queued_key_event(54, 0, post),
+            ],
+            "post_press": [self._queued_key_event(100, 1, post)],
+        }
+        queue = events.get(queued, [])
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.active_keys.return_value = []
+        device.read_one.side_effect = [*queue, None]
+        mock_input_device.return_value = device
+        forwarder = MagicMock()
+        mock_uinput.return_value = forwarder
+
+        backend = EvdevKeyboardBackend()
+
+        assert backend._open_keyboard_device("/dev/input/event0") is True
+        device.grab.assert_called_once()
+        device.ungrab.assert_not_called()
+        forwarder.close.assert_not_called()
+        forwarder.write_event.assert_not_called()
+        assert backend._forwarders == {10: forwarder}
+        expected = events.get(expected_pending, [])
+        if expected:
+            assert backend._pending_events == {10: expected}
         else:
-            forwarder.close.assert_called_once()
-            assert backend._forwarders == {}
+            assert backend._pending_events == {}
 
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")

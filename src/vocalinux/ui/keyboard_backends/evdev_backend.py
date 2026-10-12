@@ -137,28 +137,63 @@ def _clone_device_name(device: InputDevice) -> str:
     return f"{base}{_CLONE_NAME_SUFFIX}"
 
 
-def _has_queued_key_events(device: InputDevice) -> bool:
-    """True when unread key events sit on the device's fd.
+def _drain_queued_events(device: InputDevice) -> list[InputEvent]:
+    """Unread events sitting on the device's fd, drained without blocking.
 
     The queue holds everything delivered since the fd was opened —
-    including events the compositor already saw — so a queued key event at
-    grab time means the compositor's key state may disagree with ours.
-    Consumed events are not replayed: when the caller keeps the grab only
-    non-key traffic was dropped, and when it ungrabs the dropped keys are
-    ones the apps already handled. The bound just prevents a pathological
-    backlog from delaying startup; the kernel's per-client queue is far
-    smaller.
+    including events the compositor already saw — so the caller must split
+    it at the grab instant rather than treat every queued event alike. The
+    bound just prevents a pathological backlog from delaying startup; the
+    kernel's per-client queue is far smaller.
     """
+    events: list[InputEvent] = []
     try:
         for _ in range(512):
             event = device.read_one()
             if event is None:
                 break
-            if event.type == ecodes.EV_KEY:
-                return True
+            events.append(event)
     except OSError:
         pass
-    return False
+    return events
+
+
+def _is_post_grab(event: InputEvent, grab_ts: float) -> bool:
+    """True when the event was timestamped after the grab instant.
+
+    Kernel timestamps share ``time.time()``'s realtime domain. Anything
+    unreadable is treated as pre-grab — refusing the grab is the safe side.
+    """
+    try:
+        return event.timestamp() >= grab_ts
+    except (AttributeError, TypeError):
+        return False
+
+
+def _replay_events_on_clone(forwarder: UInput, events: list[InputEvent]) -> None:
+    """Emit drained events on a clone that is about to be closed.
+
+    Events delivered after the grab reached only our fd — dropping them
+    loses real input — so on the refuse-grab path they are replayed through
+    the clone before it disappears. A press still held at drain time is
+    skipped: replaying it would leave the key logically down forever on a
+    clone that is going away, and the real release reaches the compositor
+    naturally once the device is ungrabbed.
+    """
+    held: set[int] = set()
+    for event in events:
+        if event.type == ecodes.EV_KEY:
+            if event.value == 0:
+                held.discard(event.code)
+            else:
+                held.add(event.code)
+    for event in events:
+        if event.type == ecodes.EV_KEY and event.code in held:
+            continue
+        try:
+            forwarder.write_event(event)
+        except (OSError, IOError):
+            return
 
 
 if EVDEV_AVAILABLE:
@@ -658,9 +693,11 @@ _HUB_OWNED_ATTRIBUTES = frozenset(
         "_release_failed_forwarder",
         "_forward_event",
         "_dispatch_events",
+        "_dispatch_event",
         "_detach_devices",
         "_close_detached",
         "_resync_clone_key_state",
+        "_pending_events",
     }
 )
 
@@ -679,6 +716,7 @@ _HUB_METHOD_ATTRIBUTES = frozenset(
         "_release_failed_forwarder",
         "_forward_event",
         "_dispatch_events",
+        "_dispatch_event",
         "_detach_devices",
         "_close_detached",
         "_resync_clone_key_state",
@@ -743,6 +781,10 @@ class EvdevDeviceHub:
         # Grabbed fd -> key codes the clone currently believes are held.
         # Needed to reconcile after SYN_DROPPED eats release events.
         self._forwarded_held: dict[int, set[int]] = {}
+        # fd -> events drained at open time that arrived after the grab.
+        # They reached only our fd, so dispatch runs them through the same
+        # shortcut/forward path as live events, ahead of the next read().
+        self._pending_events: dict[int, list[InputEvent]] = {}
         self._uinput_warned = False
 
     def reset(self) -> None:
@@ -881,56 +923,70 @@ class EvdevDeviceHub:
         if engines is None:
             engines = self._engine_snapshot()
 
+        for event in self._pending_events.pop(fd, []):
+            self._dispatch_event(fd, device, event, engines, generation)
+
         for event in device.read():
             if generation is not None and self._generation != generation:
                 # The generation advanced mid-read: this monitor's teardown
                 # is done or in flight, so drop the rest of the buffer
                 # rather than act on a newer generation's state.
                 return
-            if event.type == ecodes.EV_SYN:
-                if event.code == ecodes.SYN_DROPPED:
-                    # Kernel buffer overflowed — discard until SYN_REPORT
-                    self._dropped_devices.add(fd)
-                    logger.warning(f"SYN_DROPPED on {device.name} (fd={fd}), resetting key state")
-                elif event.code == ecodes.SYN_REPORT:
-                    if fd in self._dropped_devices:
-                        # End of dropped sequence — clear stale state
-                        self._dropped_devices.discard(fd)
-                        for engine in engines:
-                            engine.key_pressed_devices.discard(id(device))
-                        # Release keys the clone still thinks are held before
-                        # the SYN_REPORT reaches it, atomically.
-                        self._resync_clone_key_state(fd, device, engines, generation)
-                        # A dropped modifier release must not leave any
-                        # engine's combo logically held.
-                        for engine in engines:
-                            engine._reset_combo_state()
-                    self._forward_event(fd, event, generation)
-                continue
-            if fd in self._dropped_devices:
-                # Handling shortcut state mid-drop is unsafe, but surviving
-                # non-shortcut events still pass through so the app sees
-                # what the kernel kept.
-                consumed = False
-                for engine in engines:
-                    if engine._event_is_shortcut(fd, event):
-                        consumed = True
-                if not consumed:
-                    self._forward_event(fd, event, generation)
-                continue
-            if event.type == ecodes.EV_KEY:
-                # Every key event updates each engine's shortcut state (combo
-                # modifiers must be tracked AND forwarded); only the
-                # forwarding decision differs.
-                consumed = False
-                for engine in engines:
-                    if engine._event_is_shortcut(fd, event):
-                        consumed = True
-                    engine._handle_key_event(event, device)
-                if not consumed:
-                    self._forward_event(fd, event, generation)
-            else:
+            self._dispatch_event(fd, device, event, engines, generation)
+
+    def _dispatch_event(
+        self,
+        fd: int,
+        device: InputDevice,
+        event: InputEvent,
+        engines: Sequence["EvdevKeyboardBackend"],
+        generation: Optional[int] = None,
+    ) -> None:
+        """Shortcut-check and forward one event (per-event body of dispatch)."""
+        if event.type == ecodes.EV_SYN:
+            if event.code == ecodes.SYN_DROPPED:
+                # Kernel buffer overflowed — discard until SYN_REPORT
+                self._dropped_devices.add(fd)
+                logger.warning(f"SYN_DROPPED on {device.name} (fd={fd}), resetting key state")
+            elif event.code == ecodes.SYN_REPORT:
+                if fd in self._dropped_devices:
+                    # End of dropped sequence — clear stale state
+                    self._dropped_devices.discard(fd)
+                    for engine in engines:
+                        engine.key_pressed_devices.discard(id(device))
+                    # Release keys the clone still thinks are held before
+                    # the SYN_REPORT reaches it, atomically.
+                    self._resync_clone_key_state(fd, device, engines, generation)
+                    # A dropped modifier release must not leave any
+                    # engine's combo logically held.
+                    for engine in engines:
+                        engine._reset_combo_state()
                 self._forward_event(fd, event, generation)
+            return
+        if fd in self._dropped_devices:
+            # Handling shortcut state mid-drop is unsafe, but surviving
+            # non-shortcut events still pass through so the app sees
+            # what the kernel kept.
+            consumed = False
+            for engine in engines:
+                if engine._event_is_shortcut(fd, event):
+                    consumed = True
+            if not consumed:
+                self._forward_event(fd, event, generation)
+            return
+        if event.type == ecodes.EV_KEY:
+            # Every key event updates each engine's shortcut state (combo
+            # modifiers must be tracked AND forwarded); only the
+            # forwarding decision differs.
+            consumed = False
+            for engine in engines:
+                if engine._event_is_shortcut(fd, event):
+                    consumed = True
+                engine._handle_key_event(event, device)
+            if not consumed:
+                self._forward_event(fd, event, generation)
+        else:
+            self._forward_event(fd, event, generation)
 
     def _monitor_devices(
         self,
@@ -960,6 +1016,11 @@ class EvdevDeviceHub:
                         continue
 
                     readable, _, _ = select.select(device_fds, [], [], 1.0)  # 1 second timeout
+                    # Events drained past the grab at open time count as
+                    # pending input even when nothing sits on the fd.
+                    for pending_fd in self._pending_events:
+                        if pending_fd not in readable:
+                            readable.append(pending_fd)
 
                     for fd in readable:
                         if self._generation != generation:
@@ -1064,6 +1125,7 @@ class EvdevDeviceHub:
             self._forwarder_paths = {}
             self._clone_paths = set()
             self._forwarded_held = {}
+            self._pending_events = {}
         return devices, forwarders
 
     def _close_detached(self, devices: list[InputDevice], forwarders: list[UInput]) -> None:
@@ -1120,6 +1182,7 @@ class EvdevDeviceHub:
             return False
 
         forwarder: Optional[UInput] = None
+        post_grab_events: list[InputEvent] = []
         if _is_virtual_keyboard(device_path, device_name):
             # A virtual keyboard is a remapper's output. Grabbing it
             # starves the compositor of every event the remapper emits,
@@ -1140,17 +1203,25 @@ class EvdevDeviceHub:
                     # A key the compositor already saw go down must also come
                     # up on this device; grabbed, its release would only reach
                     # the clone and the key would stay held across the desktop.
-                    # The second check catches a press that races the grab.
                     if device.active_keys():
                         raise OSError("a key is held")
+                    grab_ts = time.time()
                     device.grab()
-                    # Draining the fd catches the handover that check misses:
-                    # a press the compositor saw go down before the grab whose
-                    # release arrived only to us afterwards. active_keys() is
-                    # already empty again, but the compositor still counts the
-                    # key held — forwarding that release through the clone
-                    # cannot clear it on the real device.
-                    if device.active_keys() or _has_queued_key_events(device):
+                    # The drained queue straddles the grab. Events timestamped
+                    # before it were delivered to the compositor's fd as well:
+                    # a key transition there is the handover case — a press the
+                    # compositor saw go down whose release arrived only to us —
+                    # so the grab is refused. Events after it reached only this
+                    # fd and are real input the compositor never saw; they are
+                    # replayed on either path so a tap racing the grab is not
+                    # lost. A key still held here was pressed after the grab —
+                    # the compositor never saw it go down, so keeping the grab
+                    # (and replaying the press) is consistent.
+                    queued = _drain_queued_events(device)
+                    post_grab_events = [e for e in queued if _is_post_grab(e, grab_ts)]
+                    if any(
+                        e.type == ecodes.EV_KEY and not _is_post_grab(e, grab_ts) for e in queued
+                    ):
                         device.ungrab()
                         raise OSError("a key is held")
                 except (OSError, IOError) as e:
@@ -1158,6 +1229,7 @@ class EvdevDeviceHub:
                         f"Cannot grab {device_path} ({e}); "
                         "shortcut keys will also reach the focused app"
                     )
+                    _replay_events_on_clone(forwarder, post_grab_events)
                     try:
                         forwarder.close()
                     except (OSError, IOError, RuntimeError) as e:
@@ -1196,6 +1268,11 @@ class EvdevDeviceHub:
                     self._forwarder_paths[fd] = clone_path
                     self._clone_paths.add(clone_path)
                 self._forwarded_held[fd] = set()
+            if post_grab_events:
+                # Drained events that arrived after the grab reached only
+                # this fd; dispatch replays them before the next read so
+                # engines (and the clone) see the input in kernel order.
+                self._pending_events[fd] = post_grab_events
 
         logger.debug(
             f"Opened keyboard device: {device_path} ({device.name})"
@@ -1386,6 +1463,7 @@ class EvdevDeviceHub:
                 self.device_paths.discard(device_path)
             self._fd_generation.pop(fd, None)
             self._dropped_devices.discard(fd)
+            self._pending_events.pop(fd, None)
             forwarder = self._forwarders.pop(fd, None)
             clone_path = self._forwarder_paths.pop(fd, None)
             if clone_path is not None:
