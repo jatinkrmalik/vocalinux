@@ -2579,6 +2579,30 @@ class TestSharedEvdevDeviceLayer:
         active._handle_key_event.assert_called_once()
         idle._handle_key_event.assert_not_called()
 
+    def test_dispatch_pending_events_tolerates_empty_read(self) -> None:
+        """A pending-only fd replays stored events without disconnecting.
+
+        Regression test for "replay drops a working keyboard": when stored
+        startup events mark a device readable but no new input arrived,
+        device.read() raises BlockingIOError. That error must not escape to
+        the monitor, which treats OSError as a disconnect and would close a
+        healthy keyboard and its clone.
+        """
+        engine = EvdevKeyboardBackend(shortcut="ctrl+ctrl")
+        hub = self._registered(engine)
+        engine._handle_key_event = MagicMock()
+
+        release = self._key_event(29, 0)
+        hub._pending_events[10] = [release]
+
+        device = MagicMock()
+        device.read.side_effect = BlockingIOError(11, "Resource temporarily unavailable")
+
+        hub._dispatch_events(10, device)
+
+        engine._handle_key_event.assert_called_once_with(release, device)
+        assert hub._pending_events == {}
+
     def test_register_waits_for_in_flight_teardown(self) -> None:
         """Devices opened after teardown starts are never closed by it.
 

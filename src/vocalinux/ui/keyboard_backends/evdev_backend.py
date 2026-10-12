@@ -926,7 +926,15 @@ class EvdevDeviceHub:
         for event in self._pending_events.pop(fd, []):
             self._dispatch_event(fd, device, event, engines, generation)
 
-        for event in device.read():
+        try:
+            events = list(device.read())
+        except BlockingIOError:
+            # The fd was marked readable only because stored startup events
+            # were pending — nothing new arrived. EAGAIN is not a
+            # disconnect; let the monitor keep the device.
+            events = []
+
+        for event in events:
             if generation is not None and self._generation != generation:
                 # The generation advanced mid-read: this monitor's teardown
                 # is done or in flight, so drop the rest of the buffer
