@@ -1317,6 +1317,14 @@ class EvdevDeviceHub:
         EV_REP is filtered out so the clone never autorepeats: the physical
         device's own repeat events are forwarded verbatim, preserving its
         repeat rate without doubling repeats.
+
+        SW_RFKILL_ALL is stripped from EV_SW: a fresh uinput device reports
+        every switch as 0, and the kernel's rfkill-input handler reads a 0
+        killswitch as radios-off — cloning that bit soft-blocks all radios
+        the moment the clone appears, on ThinkPads and any other device
+        declaring it (#946). The clone keeps every other switch so real
+        switch events still forward; a forwarded SW_RFKILL_ALL write is
+        dropped by the kernel for the undeclared code.
         """
         try:
             capabilities: dict[int, Sequence[int]] = {
@@ -1324,6 +1332,13 @@ class EvdevDeviceHub:
             }
             for event_type in (ecodes.EV_SYN, ecodes.EV_FF, ecodes.EV_REP):
                 capabilities.pop(event_type, None)
+            switches = [
+                code for code in capabilities.get(ecodes.EV_SW, ()) if code != ecodes.SW_RFKILL_ALL
+            ]
+            if switches:
+                capabilities[ecodes.EV_SW] = switches
+            else:
+                capabilities.pop(ecodes.EV_SW, None)
             name = _clone_device_name(device)
             try:
                 return UInput(

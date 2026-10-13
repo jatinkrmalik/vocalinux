@@ -1364,6 +1364,69 @@ class TestEvdevGrabAndForwarding:
 
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_clone_drops_rfkill_switch_keeps_other_switches(
+        self, mock_input_device: Mock, mock_uinput: Mock
+    ) -> None:
+        """The clone must not declare SW_RFKILL_ALL (#946).
+
+        "ThinkPad Extra Buttons" declares SW_RFKILL_ALL. A fresh uinput
+        device reports every switch as 0, and the kernel's rfkill-input
+        handler reads a 0 killswitch as radios-off — cloning the bit
+        soft-blocked all radios on every startup and resume. Other
+        switches stay declared so real switch events still forward.
+        """
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.active_keys.return_value = []
+        device.capabilities.return_value = {
+            ecodes.EV_KEY: [30],  # KEY_A
+            ecodes.EV_SW: [ecodes.SW_RFKILL_ALL, ecodes.SW_TABLET_MODE],
+        }
+        mock_input_device.return_value = device
+        forwarder = MagicMock()
+        forwarder.device.path = "/dev/input/event20"
+        mock_uinput.return_value = forwarder
+
+        backend = EvdevKeyboardBackend()
+        opened = backend._open_keyboard_device("/dev/input/event0")
+
+        assert opened is True
+        events = mock_uinput.call_args.kwargs["events"]
+        assert ecodes.SW_RFKILL_ALL not in events[ecodes.EV_SW]
+        assert ecodes.SW_TABLET_MODE in events[ecodes.EV_SW]
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    def test_clone_drops_ev_sw_when_only_switch_is_rfkill(
+        self, mock_input_device: Mock, mock_uinput: Mock
+    ) -> None:
+        """A device declaring only SW_RFKILL_ALL gets no EV_SW at all (#946).
+
+        ThinkPad Extra Buttons reports SW=8: bit 3 alone. Declaring an
+        empty EV_SW capability would still register a switch device, so
+        the type is dropped entirely.
+        """
+        device = MagicMock()
+        device.fileno.return_value = 10
+        device.active_keys.return_value = []
+        device.capabilities.return_value = {
+            ecodes.EV_KEY: [30],  # KEY_A
+            ecodes.EV_SW: [ecodes.SW_RFKILL_ALL],
+        }
+        mock_input_device.return_value = device
+        forwarder = MagicMock()
+        forwarder.device.path = "/dev/input/event20"
+        mock_uinput.return_value = forwarder
+
+        backend = EvdevKeyboardBackend()
+        opened = backend._open_keyboard_device("/dev/input/event0")
+
+        assert opened is True
+        events = mock_uinput.call_args.kwargs["events"]
+        assert ecodes.EV_SW not in events
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.UInput")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
     @patch("vocalinux.ui.keyboard_backends.evdev_backend.os.path.exists")
     def test_open_monitors_remapper_virtual_device_ungrabbed(
         self, mock_exists: Mock, mock_input_device: Mock, mock_uinput: Mock
