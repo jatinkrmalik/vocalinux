@@ -105,6 +105,11 @@
   </content_rating>
 
   <releases>
+    <release version="0.18.2" date="2026-10-12">
+      <description>
+        <p>Patch: the dictation overlay orb pulses and ripples with live microphone level, Nix gets a flake package with NixOS and Home Manager modules plus Vulkan GPU inference, keyboards with a held key or queued key events are left ungrabbed at startup so typing during launch cannot strand a key, bundled pywhispercpp drops -march=native so AppImage and Flatpak stop crashing on older CPUs, and the piped installer prompts via /dev/tty. This Flatpak still ships whisper.cpp only.</p>
+      </description>
+    </release>
     <release version="0.18.1" date="2026-10-08">
       <description>
         <p>Patch: Settings Proxy page for model downloads and update checks behind SOCKS5/HTTP proxies, opt-in JSONL transcript persistence so a failed injection no longer loses the text, .deb and .rpm release packages for Debian and Fedora, and a slimmer tray menu with Start on Login and About living in Settings. Dictation pad windows no longer ghost away under Wayland compositors, keyboard discovery stops grabbing mice, touchpads, and power buttons, KDE Plasma 6 Wayland letter case is fixed, and the Speech Model picker stages changes until Download is confirmed instead of starting a fetch per click. This Flatpak still ships whisper.cpp only.</p>
