@@ -15,6 +15,20 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.18.2",
+    date: "2026-10-12",
+    type: "stable",
+    highlights: [
+      "Dictation overlay orb pulses and ripples with live microphone level (PR #940)",
+      "Nix flake package with NixOS and Home Manager modules (PR #936), plus Vulkan GPU inference for pywhispercpp on Nix (PR #942)",
+      "Held keyboards are left ungrabbed at startup, so typing during launch cannot strand a key (PR #941)",
+      "Bundled pywhispercpp builds drop -march=native, fixing AppImage and Flatpak crashes on older CPUs (PR #939)",
+      "Piped curl | bash install keeps the script on stdin and prompts via /dev/tty (PR #935)",
+      "Installer covers cairo headers on openSUSE, Void, Solus and Alpine; evdev monitors remapper virtual keyboards ungrabbed (PR #937, #932)",
+      "CI gates the remote curl | bash install path end to end (PR #898)",
+    ],
+  },
+  {
     version: "v0.18.1",
     date: "2026-10-08",
     type: "stable",
@@ -480,7 +494,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-10-08",
+    dateModified: "2026-10-12",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
