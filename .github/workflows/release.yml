@@ -568,7 +568,8 @@ jobs:
       group: flatpak-remote
     steps:
       # Same pattern as publish-aur: an unconfigured remote skips the publish
-      # instead of failing the release.
+      # instead of failing the release. The skip is loud — a quiet one let the
+      # documented remote sit unpublished for releases at a time (#951).
       - name: Check remote credentials
         id: creds
         env:
@@ -577,7 +578,13 @@ jobs:
         run: |
           if [ -z "$FLATPAK_GPG_PRIVATE_KEY" ] || [ -z "$FLATPAK_REPO_TOKEN" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "FLATPAK_GPG_PRIVATE_KEY and/or FLATPAK_REPO_TOKEN not set; skipping remote publish (docs/FLATPAK_REMOTE.md)"
+            msg="FLATPAK_GPG_PRIVATE_KEY and/or FLATPAK_REPO_TOKEN not set; skipping remote publish — the documented auto-update remote will not carry this release (docs/FLATPAK_REMOTE.md)"
+            echo "::warning::$msg"
+            {
+              echo "### :warning: Flatpak remote publish skipped"
+              echo
+              echo "$msg"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
