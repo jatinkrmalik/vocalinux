@@ -470,9 +470,11 @@ _compile_pywhispercpp_baseline() {
   echo "== Rebuilding pywhispercpp at the portable CPU baseline =="
   remove_appdir_pywhispercpp
   if ! _install_pinned_pywhispercpp "$pip_log"; then
-    echo "Baseline pywhispercpp rebuild failed; keeping the PyPI wheel." >&2
+    # The wheel is already gone, so "continue" would ship an AppImage with
+    # no speech engine at all; fail the build instead.
+    echo "Baseline pywhispercpp rebuild failed; refusing to ship without the speech engine." >&2
     tail -n 40 "$pip_log" 2>/dev/null | sed 's/^/    /' >&2 || true
-    return 0
+    return 1
   fi
   copy_whisper_native_libs_to_usr_lib
 }
@@ -488,7 +490,7 @@ _compile_pywhispercpp_vulkan() {
       exit 1
     fi
     echo "Warning: AppImage will use a CPU-only baseline pywhispercpp build." >&2
-    _compile_pywhispercpp_baseline
+    _compile_pywhispercpp_baseline || return 1
     return 0
   fi
 
@@ -500,7 +502,7 @@ _compile_pywhispercpp_vulkan() {
       exit 1
     fi
     echo "Warning: continuing with a CPU-only baseline pywhispercpp build." >&2
-    _compile_pywhispercpp_baseline
+    _compile_pywhispercpp_baseline || return 1
     return 0
   fi
 
@@ -520,7 +522,7 @@ _compile_pywhispercpp_vulkan() {
       exit 1
     fi
     echo "Warning: continuing with a CPU-only baseline pywhispercpp build." >&2
-    _compile_pywhispercpp_baseline
+    _compile_pywhispercpp_baseline || return 1
     return 0
   fi
 

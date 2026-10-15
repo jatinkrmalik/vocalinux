@@ -129,8 +129,9 @@ cmake --build "$TOOLS/ggml-build" --target ggml-cpu -j"$(nproc)"
 BASELINE_CPU="$(find "$TOOLS/ggml-build" -name 'libggml-cpu.so.*' -type f | sort -V | tail -1)"
 [ -f "$BASELINE_CPU" ] || fail "baseline libggml-cpu build produced no library"
 # objdump, not a feature check: the SIGILL is ISA-level, so assert no 256-bit
-# or FMA instructions survive in the library that ships.
-if objdump -d "$BASELINE_CPU" | grep -qE 'ymm|vfmadd|vfnmadd|vfmsub|vzeroupper'; then
+# or FMA instructions survive in the library that ships. No grep -q: under
+# pipefail an early exit SIGPIPEs objdump and the pipeline reports a miss.
+if objdump -d "$BASELINE_CPU" | grep -E 'ymm|vfmadd|vfnmadd|vfmsub|vzeroupper' >/dev/null; then
     fail "baseline libggml-cpu still carries AVX/FMA instructions"
 fi
 # The vendored wheel files carry auditwheel-mangled basenames
