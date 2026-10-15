@@ -105,13 +105,11 @@ done
 # --- portable libggml-cpu -------------------------------------------------
 # The pinned pywhispercpp wheels bundle a libggml-cpu compiled for AVX2+FMA,
 # which dies with SIGILL at model load on pre-Haswell CPUs (#957). Rebuild
-# just that library from the same pinned sdist at the plain x86-64 baseline —
+# the ggml libraries from the same pinned sdist at the plain x86-64 baseline —
 # GGML_NATIVE=OFF alone still compiles -mavx2 -mfma, because ggml turns every
-# GGML_* SIMD option on while its native default is on — and swap it into the
-# vendored copies in place, keeping each original filename so the NEEDED
-# entries still resolve. The rest of the wheel (the Python extension,
-# libwhisper, the other libggml libs) carries no generated SIMD, so only
-# libggml-cpu needs replacing.
+# GGML_* SIMD option on while its native default is on — and swap them into
+# the vendored copies. libwhisper and the Python extension carry no generated
+# SIMD, so only the libggml set needs replacing.
 SDIST_DIR="$TOOLS/pywhispercpp-sdist"
 mkdir -p "$SDIST_DIR"
 pip3 download --require-hashes --no-deps --no-binary pywhispercpp \
@@ -135,9 +133,30 @@ BASELINE_CPU="$(find "$TOOLS/ggml-build" -name 'libggml-cpu.so.*' -type f | sort
 if objdump -d "$BASELINE_CPU" | grep -qE 'ymm|vfmadd|vfnmadd|vfmsub|vzeroupper'; then
     fail "baseline libggml-cpu still carries AVX/FMA instructions"
 fi
+# The vendored wheel files carry auditwheel-mangled basenames
+# (libggml-cpu-<hash>.so.0.9.8) that the extension's NEEDED entries point at,
+# so overwrite the cpu library in place and keep its filename. Only cpu is
+# swapped: the wheel's other libggml files carry no generated SIMD, and the
+# mangled core lib doubles as the extension's __cxa_call_terminate provider —
+# replacing it with a locally built copy drops that export.
+swapped=0
 while IFS= read -r vendored; do
     cp "$BASELINE_CPU" "$vendored"
+    swapped=$((swapped + 1))
 done < <(find "$PAYLOAD/usr/lib/vocalinux/vendor" -name 'libggml-cpu*.so*')
+[ "$swapped" -gt 0 ] || fail "found no vendored libggml-cpu to replace"
+# The baseline library's own NEEDED entries use the unmangled sonames
+# (libggml-base.so.0, libgomp.so.1), so alias the vendored copies — the same
+# upstream version, and base/gomp carry no generated SIMD anyway — under
+# those names inside pywhispercpp.libs.
+while IFS= read -r libs_dir; do
+    vendored_base="$(find "$libs_dir" -name 'libggml-base*.so*' | head -1)"
+    [ -n "$vendored_base" ] || fail "no vendored libggml-base in $libs_dir"
+    cp "$vendored_base" "$libs_dir/libggml-base.so.0"
+    vendored_gomp="$(find "$libs_dir" -name 'libgomp*.so*' | head -1)"
+    [ -n "$vendored_gomp" ] || fail "no vendored libgomp in $libs_dir"
+    cp "$vendored_gomp" "$libs_dir/libgomp.so.1"
+done < <(find "$PAYLOAD/usr/lib/vocalinux/vendor" -type d -name 'pywhispercpp.libs')
 
 # --- launchers -----------------------------------------------------------
 # Same environment install.sh's wrapper establishes: the vendored
