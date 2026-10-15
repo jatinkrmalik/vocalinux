@@ -102,6 +102,43 @@ for VENDOR_WHEEL in "$TOOLS"/wheels/*/*.whl; do
     python3 -m zipfile -e "$VENDOR_WHEEL" "$PAYLOAD/usr/lib/vocalinux/vendor/"
 done
 
+# --- portable libggml-cpu -------------------------------------------------
+# The pinned pywhispercpp wheels bundle a libggml-cpu compiled for AVX2+FMA,
+# which dies with SIGILL at model load on pre-Haswell CPUs (#957). Rebuild
+# just that library from the same pinned sdist at the plain x86-64 baseline —
+# GGML_NATIVE=OFF alone still compiles -mavx2 -mfma, because ggml turns every
+# GGML_* SIMD option on while its native default is on — and swap it into the
+# vendored copies in place, keeping each original filename so the NEEDED
+# entries still resolve. The rest of the wheel (the Python extension,
+# libwhisper, the other libggml libs) carries no generated SIMD, so only
+# libggml-cpu needs replacing.
+SDIST_DIR="$TOOLS/pywhispercpp-sdist"
+mkdir -p "$SDIST_DIR"
+pip3 download --require-hashes --no-deps --no-binary pywhispercpp \
+    -r "$PINS_VENDOR" -d "$SDIST_DIR" >/dev/null
+tar -xzf "$SDIST_DIR"/pywhispercpp-*.tar.gz -C "$SDIST_DIR"
+WHISPER_GGML="$(echo "$SDIST_DIR"/pywhispercpp-*/whisper.cpp/ggml)"
+[ -d "$WHISPER_GGML" ] || fail "whisper.cpp/ggml missing from pywhispercpp sdist"
+# ggml.pc.in is generated upstream and absent from the sdist; it only feeds
+# the standalone install rules this build never runs.
+touch "$WHISPER_GGML/ggml.pc.in"
+cmake -S "$WHISPER_GGML" -B "$TOOLS/ggml-build" \
+    -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+    -DGGML_NATIVE=OFF -DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF \
+    -DGGML_BMI2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF \
+    -DGGML_BUILD_TESTS=OFF -DGGML_BUILD_EXAMPLES=OFF
+cmake --build "$TOOLS/ggml-build" --target ggml-cpu -j"$(nproc)"
+BASELINE_CPU="$(find "$TOOLS/ggml-build" -name 'libggml-cpu.so.*' -type f | sort -V | tail -1)"
+[ -f "$BASELINE_CPU" ] || fail "baseline libggml-cpu build produced no library"
+# objdump, not a feature check: the SIGILL is ISA-level, so assert no 256-bit
+# or FMA instructions survive in the library that ships.
+if objdump -d "$BASELINE_CPU" | grep -qE 'ymm|vfmadd|vfnmadd|vfmsub|vzeroupper'; then
+    fail "baseline libggml-cpu still carries AVX/FMA instructions"
+fi
+while IFS= read -r vendored; do
+    cp "$BASELINE_CPU" "$vendored"
+done < <(find "$PAYLOAD/usr/lib/vocalinux/vendor" -name 'libggml-cpu*.so*')
+
 # --- launchers -----------------------------------------------------------
 # Same environment install.sh's wrapper establishes: the vendored
 # pywhispercpp.libs on LD_LIBRARY_PATH, user site-packages off so they cannot

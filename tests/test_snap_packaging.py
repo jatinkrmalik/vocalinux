@@ -193,3 +193,37 @@ def test_snap_promote_dispatch_input_never_reaches_the_shell() -> None:
         assert "${{" not in line, f"a run: step interpolates a template expression: {line.strip()}"
     assert "TAG: ${{ inputs.tag }}" in text
     assert "REVISION: ${{ steps.candidate.outputs.revision }}" in text
+
+
+#: ggml SIMD options pinned off for the portable x86-64 baseline in every
+#: packaged pywhispercpp build (#957). GGML_NATIVE=OFF alone leaves each of
+#: these on while ggml's native default is on.
+PORTABLE_GGML_OPTIONS = (
+    "GGML_NATIVE",
+    "GGML_SSE42",
+    "GGML_AVX",
+    "GGML_AVX2",
+    "GGML_BMI2",
+    "GGML_FMA",
+    "GGML_F16C",
+)
+
+
+def test_snap_builds_pywhispercpp_at_the_portable_baseline() -> None:
+    """pywhispercpp's PyPI wheel ships a libggml-cpu compiled for AVX2+FMA,
+    which dies with SIGILL at model load on pre-Haswell CPUs (#957). The
+    python plugin installs that wheel by default, so the recipe must force an
+    sdist build with every ggml SIMD option pinned off — GGML_NATIVE=OFF
+    alone leaves them all on."""
+    doc = yaml.safe_load(SNAPCRAFT_YAML.read_text(encoding="utf-8"))
+    env: dict = {}
+    for entry in doc["parts"]["vocalinux"].get("build-environment") or []:
+        env.update(entry)
+    assert env.get("PIP_NO_BINARY") == "pywhispercpp", (
+        "without --no-binary the snap installs the AVX2+FMA wheel (#957)"
+    )
+    cmake_args = env.get("CMAKE_ARGS") or ""
+    for flag in PORTABLE_GGML_OPTIONS:
+        assert f"-D{flag}=OFF" in cmake_args, (
+            f"the snap's pywhispercpp build does not pin {flag} off"
+        )
