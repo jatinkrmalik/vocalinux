@@ -368,8 +368,14 @@ def capitalize_sentences(text: str) -> str:
     if not text:
         return text
 
-    # Capitalize first character
-    result = text[0].upper() + text[1:]
+    # Capitalize the first letter, skipping leading whitespace a voice
+    # command can leave behind ("new line hello" -> "\n hello").
+    first_letter = re.match(r"\s*([a-z])", text)
+    if first_letter:
+        idx = first_letter.start(1)
+        result = text[:idx] + text[idx].upper() + text[idx + 1 :]
+    else:
+        result = text[0].upper() + text[1:]
 
     # Capitalize after sentence-ending punctuation + whitespace
     result = re.sub(

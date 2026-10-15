@@ -1098,7 +1098,7 @@ class TestInjectText(unittest.TestCase):
             self.assertTrue(mock_run.called)
             self.assertTrue(result)
 
-    def test_inject_newline_only_segment_reaches_backend(self):
+    def test_inject_newline_only_segment_reaches_backend(self) -> None:
         """A bare "\n" from "new line" is typed, not skipped as empty (#955)."""
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
@@ -1108,7 +1108,7 @@ class TestInjectText(unittest.TestCase):
             mock_xdotool.assert_called_once_with("\n")
             self.assertEqual(obj.last_typed_count, 1)
 
-    def test_inject_paragraph_break_segment_reaches_backend(self):
+    def test_inject_paragraph_break_segment_reaches_backend(self) -> None:
         """A bare "\n\n" from "new paragraph" is typed, not skipped (#955)."""
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
@@ -1118,7 +1118,7 @@ class TestInjectText(unittest.TestCase):
             mock_xdotool.assert_called_once_with("\n\n")
             self.assertEqual(obj.last_typed_count, 2)
 
-    def test_inject_newline_segment_reaches_ibus(self):
+    def test_inject_newline_segment_reaches_ibus(self) -> None:
         """The IBus backend also receives a bare newline segment (#955)."""
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 
@@ -1129,7 +1129,7 @@ class TestInjectText(unittest.TestCase):
         self.assertTrue(obj.inject_text("\n"))
         mock_ibus.inject_text.assert_called_once_with("\n")
 
-    def test_inject_empty_string_still_skipped(self):
+    def test_inject_empty_string_still_skipped(self) -> None:
         """A truly empty segment is still a cheap no-op."""
         from vocalinux.text_injection.text_injector import DesktopEnvironment
 

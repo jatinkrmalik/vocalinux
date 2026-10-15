@@ -1773,6 +1773,20 @@ class TestMainCallbackLineBreakCommands(unittest.TestCase):
         finally:
             boot.stack.close()
 
+    def test_vosk_capitalize_skips_leading_newline(self) -> None:
+        """Vosk auto-capitalize uppercases the first letter after "\n"."""
+        boot = _boot_main_callbacks()
+        try:
+            boot.mock_speech.engine = "vosk"
+            boot.mock_config.get.side_effect = lambda section, key, *a, **k: (section, key) == (
+                "text_injection",
+                "auto_capitalize",
+            )
+            boot.text_cb("\nhello").result(timeout=10)
+            boot.text_system.inject_text.assert_called_once_with("\nHello ")
+        finally:
+            boot.stack.close()
+
 
 class TestPadRoutingCallbacks(unittest.TestCase):
     """Pad capture routing through the real main() callback wrappers (#726).
