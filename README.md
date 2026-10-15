@@ -217,16 +217,15 @@ sudo snap install vocalinux --edge
 sudo snap connect vocalinux:audio-record   # if mic is not auto-connected
 sudo snap connect vocalinux:raw-input      # global keyboard shortcuts (evdev)
 sudo snap connect vocalinux:hardware-observe  # list keyboards (/proc/bus/input/devices)
-sudo snap connect vocalinux:uinput         # native Wayland typing (ydotool)
 ```
 
-v0.18.2 includes ydotool and the `uinput` plug. The Store still has to finish review of that plug, so `snap info vocalinux` may still show **v0.16.2** (rev 7) on edge. That revision has no `uinput` plug; `snap connect vocalinux:uinput` fails until a 0.18.0+ revision is listed.
+Native Wayland typing uses the RemoteDesktop portal: the compositor asks once on first dictation, nothing to connect. The recipe ships **no `uinput` plug** and no ydotool; the Store denied the super-privileged grant, which held the 0.17.0+ revisions and left **v0.16.2 (rev 7)** on edge. On KDE Plasma, KWin's portal can mistype letter case ([KDE bug 489021](https://bugs.kde.org/show_bug.cgi?id=489021)); set Virtual Keyboard to "IBus Wayland" so dictation types correctly.
 
-Until then, sideload the GitHub file:
+The v0.18.x GitHub `.snap` still declares `uinput`, so KDE users who want ydotool can sideload it and connect the plug manually:
 
 ```bash
 sudo snap install --dangerous ./vocalinux_0.18.2_amd64.snap
-sudo snap connect vocalinux:uinput
+sudo snap connect vocalinux:uinput   # only in the v0.18.x sideload; the recipe no longer ships it
 ```
 
 ### Nix / NixOS (flake)
