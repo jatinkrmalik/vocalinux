@@ -698,6 +698,59 @@ class TestIBusTextInjector(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             IBusTextInjector()
 
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    @patch("vocalinux.text_injection.ibus_engine.SOCKET_PATH")
+    @patch("vocalinux.text_injection.ibus_engine.is_engine_active", return_value=True)
+    @patch("vocalinux.text_injection.ibus_engine.sync_xwayland_layout_from_gnome")
+    @patch(
+        "vocalinux.text_injection.ibus_engine.get_current_xkb_layout",
+        return_value=("", "", ""),
+    )
+    def test_newline_only_text_reaches_engine_socket(
+        self,
+        mock_xkb: MagicMock,
+        mock_sync_xwayland: MagicMock,
+        mock_active: MagicMock,
+        mock_socket_path: MagicMock,
+        mock_ensure_dir: MagicMock,
+    ) -> None:
+        """A bare newline from "new line" goes to the engine socket (#955)."""
+        mock_socket_path.exists.return_value = True
+
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+
+        sent = {}
+
+        class FakeSock:
+            def settimeout(self, _timeout: float) -> None:
+                pass
+
+            def connect(self, path: str) -> None:
+                sent["path"] = path
+
+            def sendall(self, data: bytes) -> None:
+                sent["data"] = data
+
+            def recv(self, _n: int) -> bytes:
+                return b"OK"
+
+            def __enter__(self) -> "FakeSock":
+                return self
+
+            def __exit__(self, *args: object) -> bool:
+                return False
+
+        with patch(
+            "vocalinux.text_injection.ibus_engine.socket.socket",
+            return_value=FakeSock(),
+        ):
+            self.assertTrue(injector.inject_text("\n"))
+
+        self.assertEqual(sent["data"], b"\n")
+
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)

@@ -1622,7 +1622,10 @@ class IBusTextInjector:
         Returns:
             True if injection was successful, False otherwise
         """
-        if not text or not text.strip():
+        # Same contract as TextInjector.inject_text: space/tab-only input has
+        # no key to send, but a newline-only segment from "new line" must
+        # reach the engine socket (the engine commits it as text) (#955).
+        if not text or not text.strip(" \t"):
             logger.debug("Empty text provided, skipping injection")
             return True
 
