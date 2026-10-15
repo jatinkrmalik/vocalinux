@@ -274,9 +274,7 @@ def test_vulkan_rebuild_does_not_borrow_the_builders_instruction_set() -> None:
     and dying on pre-Haswell CPUs (#957), so each option must be pinned off."""
     text = BUILD_SH.read_text(encoding="utf-8")
     command_lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
-    cmake_args = " ".join(
-        re.findall(r'CMAKE_ARGS="([^"]*)"', "\n".join(command_lines))
-    )
+    cmake_args = " ".join(re.findall(r'CMAKE_ARGS="([^"]*)"', "\n".join(command_lines)))
     for flag in PORTABLE_GGML_OPTIONS:
         assert f"-D{flag}=OFF" in cmake_args, (
             f"the Vulkan rebuild does not pin {flag} off; the AppImage runs on"
@@ -290,8 +288,7 @@ def test_cpu_only_fallback_rebuilds_at_the_portable_baseline() -> None:
     exit of the Vulkan path must rebuild the sdist at the baseline instead."""
     text = BUILD_SH.read_text(encoding="utf-8")
     assert "_compile_pywhispercpp_baseline" in text, (
-        "no CPU-only baseline rebuild exists; the Vulkan fallbacks still keep"
-        " the AVX2+FMA wheel"
+        "no CPU-only baseline rebuild exists; the Vulkan fallbacks still keep" " the AVX2+FMA wheel"
     )
     command_lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
     calls = sum("_compile_pywhispercpp_baseline" in line for line in command_lines)

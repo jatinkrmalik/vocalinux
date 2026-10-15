@@ -247,9 +247,7 @@ def test_the_vulkan_build_does_not_borrow_the_builders_instruction_set() -> None
     command_lines = [
         line for line in module.group(1).splitlines() if not line.lstrip().startswith("#")
     ]
-    install_line = next(
-        (line for line in command_lines if "pip3 install" in line), ""
-    )
+    install_line = next((line for line in command_lines if "pip3 install" in line), "")
     assert install_line, "the pywhispercpp pip3 install line is gone"
     for flag in PORTABLE_GGML_OPTIONS:
         assert f"-D{flag}=OFF" in install_line, (

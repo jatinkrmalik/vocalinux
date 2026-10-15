@@ -219,11 +219,11 @@ def test_snap_builds_pywhispercpp_at_the_portable_baseline() -> None:
     env: dict = {}
     for entry in doc["parts"]["vocalinux"].get("build-environment") or []:
         env.update(entry)
-    assert env.get("PIP_NO_BINARY") == "pywhispercpp", (
-        "without --no-binary the snap installs the AVX2+FMA wheel (#957)"
-    )
+    assert (
+        env.get("PIP_NO_BINARY") == "pywhispercpp"
+    ), "without --no-binary the snap installs the AVX2+FMA wheel (#957)"
     cmake_args = env.get("CMAKE_ARGS") or ""
     for flag in PORTABLE_GGML_OPTIONS:
-        assert f"-D{flag}=OFF" in cmake_args, (
-            f"the snap's pywhispercpp build does not pin {flag} off"
-        )
+        assert (
+            f"-D{flag}=OFF" in cmake_args
+        ), f"the snap's pywhispercpp build does not pin {flag} off"
