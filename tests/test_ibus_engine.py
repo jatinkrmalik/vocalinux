@@ -709,12 +709,12 @@ class TestIBusTextInjector(unittest.TestCase):
     )
     def test_newline_only_text_reaches_engine_socket(
         self,
-        mock_xkb,
-        mock_sync_xwayland,
-        mock_active,
-        mock_socket_path,
-        mock_ensure_dir,
-    ):
+        mock_xkb: MagicMock,
+        mock_sync_xwayland: MagicMock,
+        mock_active: MagicMock,
+        mock_socket_path: MagicMock,
+        mock_ensure_dir: MagicMock,
+    ) -> None:
         """A bare newline from "new line" goes to the engine socket (#955)."""
         mock_socket_path.exists.return_value = True
 
@@ -725,22 +725,22 @@ class TestIBusTextInjector(unittest.TestCase):
         sent = {}
 
         class FakeSock:
-            def settimeout(self, _timeout):
+            def settimeout(self, _timeout: float) -> None:
                 pass
 
-            def connect(self, path):
+            def connect(self, path: str) -> None:
                 sent["path"] = path
 
-            def sendall(self, data):
+            def sendall(self, data: bytes) -> None:
                 sent["data"] = data
 
-            def recv(self, _n):
+            def recv(self, _n: int) -> bytes:
                 return b"OK"
 
-            def __enter__(self):
+            def __enter__(self) -> "FakeSock":
                 return self
 
-            def __exit__(self, *args):
+            def __exit__(self, *args: object) -> bool:
                 return False
 
         with patch(
