@@ -1608,7 +1608,11 @@ class TextInjector:
         """
         self.last_typed_count = 0
 
-        if not text or not text.strip():
+        # Only a truly empty segment is skipped: whitespace-only text still
+        # has keys to deliver ("new line" produces a bare "\n" the backends
+        # type as Return).  Space/tab-only segments never arrive — segment
+        # normalization strips those before injection is queued (#955).
+        if not text:
             logger.debug("Empty text provided, skipping injection")
             return True
 
