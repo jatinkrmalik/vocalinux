@@ -105,6 +105,14 @@ parts:
     source-type: local
     build-environment:
       - PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      # pywhispercpp's PyPI wheel ships a libggml-cpu compiled for AVX2+FMA,
+      # which dies with SIGILL at model load on pre-Haswell CPUs (#957), so
+      # the pinned sdist is built instead of installing that wheel.
+      # GGML_NATIVE=OFF alone is not the portable baseline either: while
+      # ggml's native default is on it turns every GGML_* SIMD option on, so
+      # each one is pinned off for the plain x86-64 baseline.
+      - PIP_NO_BINARY: pywhispercpp
+      - CMAKE_ARGS: "-DGGML_NATIVE=OFF -DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_BMI2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF"
     build-packages:
       - build-essential
       - cmake
