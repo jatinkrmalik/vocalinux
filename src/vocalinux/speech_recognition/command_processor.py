@@ -27,6 +27,12 @@ _ATTACH_LEFT_WS = r"[^\S\n]*"
 # phrases — the same marks stay untouched on real text.
 _EDGE_PUNCTUATION = ".,!?;:…"
 
+# Trailing punctuation right after a spoken command mid-utterance is also
+# phrasing, not text ("testing, new paragraph, done" must not type a stray
+# comma after the break).  Command substitution consumes it — but only
+# before whitespace or the end, so "…newline.io" keeps its dot.
+_TRAILING_PUNCTUATION = r"(?:[,.!?;:…]+(?=\s|$))?"
+
 # Base English text commands (always present).
 _BASE_TEXT_COMMANDS = {
     # Line commands
@@ -304,14 +310,14 @@ class CommandProcessor:
                     if replacement in _ATTACH_LEFT_REPLACEMENTS:
                         # Punctuation: drop horizontal space before the spoken phrase
                         processed_text = re.sub(
-                            _ATTACH_LEFT_WS + cmd_pattern + _ATTACH_LEFT_WS,
+                            _ATTACH_LEFT_WS + cmd_pattern + _TRAILING_PUNCTUATION + _ATTACH_LEFT_WS,
                             replacement,
                             processed_text,
                             flags=re.IGNORECASE,
                         )
                     else:
                         processed_text = re.sub(
-                            cmd_pattern,
+                            cmd_pattern + _TRAILING_PUNCTUATION,
                             replacement,
                             processed_text,
                             flags=re.IGNORECASE,
