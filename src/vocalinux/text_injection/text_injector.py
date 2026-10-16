@@ -1850,7 +1850,7 @@ class TextInjector:
             max_retries = 2
             logger.debug(f"Starting xdotool injection with {max_retries} max retries")
 
-                # Retries resume at the first untyped position: restarting from
+            # Retries resume at the first untyped position: restarting from
             # the top would duplicate what a failed attempt already sent.
             typed = 0
             for retry in range(max_retries + 1):

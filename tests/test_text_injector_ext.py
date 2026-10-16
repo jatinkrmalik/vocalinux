@@ -1204,11 +1204,7 @@ class TestInjectText(unittest.TestCase):
         failed_once = {"done": False}
 
         def flaky_run(cmd, **kwargs):
-            if (
-                cmd[:2] == ["xdotool", "key"]
-                and cmd[-1] == "Return"
-                and not failed_once["done"]
-            ):
+            if cmd[:2] == ["xdotool", "key"] and cmd[-1] == "Return" and not failed_once["done"]:
                 failed_once["done"] = True
                 raise subprocess.CalledProcessError(1, cmd)
             return MagicMock(returncode=0)
