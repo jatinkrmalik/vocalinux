@@ -777,7 +777,10 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertIsNone(injector._previous_engine)
 
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:de::deu")
+    @patch(
+        "vocalinux.text_injection.ibus_engine.get_current_engine",
+        side_effect=["xkb:de::deu", None],
+    )
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
@@ -798,7 +801,10 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertIsNone(injector._previous_engine)
 
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:es::spa")
+    @patch(
+        "vocalinux.text_injection.ibus_engine.get_current_engine",
+        side_effect=["xkb:es::spa", None],
+    )
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
@@ -823,6 +829,35 @@ class TestIBusTextInjector(unittest.TestCase):
         self.assertEqual([c[0] for c in parent.mock_calls], ["stop_proc", "switch"])
 
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
+    @patch(
+        "vocalinux.text_injection.ibus_engine.get_current_engine",
+        return_value="xkb:us::eng",
+    )
+    @patch("vocalinux.text_injection.ibus_engine.switch_engine")
+    @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
+    @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")
+    def test_stop_skips_engine_write_when_live_engine_healthy(
+        self, mock_ensure_dir, mock_switch, mock_get_current, mock_stop_proc
+    ):
+        """A healthy live engine must not be rewritten at quit (#954).
+
+        `ibus engine <name>` applies the engine's XKB map server-wide; on
+        GNOME the redundant write collapses the user's multi-layout map and
+        breaks keyboard layout switching after exit.
+        """
+        from vocalinux.text_injection.ibus_engine import IBusTextInjector
+
+        injector = IBusTextInjector(auto_activate=False)
+        injector._previous_engine = "xkb:us::eng"
+
+        injector.stop()
+
+        mock_get_current.assert_called()
+        mock_stop_proc.assert_called_once()
+        mock_switch.assert_not_called()
+        self.assertIsNone(injector._previous_engine)
+
+    @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
     @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value=None)
     @patch("vocalinux.text_injection.ibus_engine.switch_engine")
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
@@ -842,7 +877,10 @@ class TestIBusTextInjector(unittest.TestCase):
 
     @patch("vocalinux.text_injection.ibus_engine.restore_xkb_layout")
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:es::spa")
+    @patch(
+        "vocalinux.text_injection.ibus_engine.get_current_engine",
+        side_effect=["xkb:es::spa", None],
+    )
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=True)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
     @patch("vocalinux.text_injection.ibus_engine.ensure_ibus_dir")

@@ -1588,15 +1588,24 @@ class IBusTextInjector:
         stop_engine_process()
 
         if restore_engine:
-            logger.info(f"Restoring previous engine after teardown: {restore_engine}")
-            restored = False
-            for attempt in range(3):
-                if switch_engine(restore_engine):
-                    restored = True
-                    break
-                time.sleep(0.15 * (attempt + 1))
-            if not restored:
-                logger.error(f"Failed to restore IBus engine after teardown: {restore_engine}")
+            # `ibus engine <name>` applies that engine's XKB map server-wide.
+            # Writing it when the live engine is already a real engine
+            # collapses GNOME's multi-layout map and breaks layout switching
+            # (#954). Re-check after teardown and only restore when Vocalinux
+            # was left selected or no engine is active at all (#558).
+            live = get_current_engine()
+            if live and live != ENGINE_NAME:
+                logger.info(f"Skipping engine restore — live engine already active: {live}")
+            else:
+                logger.info(f"Restoring previous engine after teardown: {restore_engine}")
+                restored = False
+                for attempt in range(3):
+                    if switch_engine(restore_engine):
+                        restored = True
+                        break
+                    time.sleep(0.15 * (attempt + 1))
+                if not restored:
+                    logger.error(f"Failed to restore IBus engine after teardown: {restore_engine}")
         else:
             logger.info(
                 "Skipping engine restoration — no restorable engine was available at shutdown"

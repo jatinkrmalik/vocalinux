@@ -429,7 +429,10 @@ class TestStopRestoreRetry(unittest.TestCase):
     """Coverage for stop() restore retry after teardown."""
 
     @patch("vocalinux.text_injection.ibus_engine.stop_engine_process")
-    @patch("vocalinux.text_injection.ibus_engine.get_current_engine", return_value="xkb:es::spa")
+    @patch(
+        "vocalinux.text_injection.ibus_engine.get_current_engine",
+        side_effect=["xkb:es::spa", None],
+    )
     @patch("vocalinux.text_injection.ibus_engine.switch_engine", return_value=False)
     @patch("vocalinux.text_injection.ibus_engine.time.sleep", return_value=None)
     @patch("vocalinux.text_injection.ibus_engine.IBUS_AVAILABLE", True)
