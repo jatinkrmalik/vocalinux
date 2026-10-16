@@ -285,7 +285,7 @@ class CommandProcessor:
             segment_text = re.sub(
                 r"(\b(?:" + self._text_cmd_alternation + r")\b)[,.!?;:…]+$",
                 r"\1",
-                segment_text,
+                segment_text.strip(),
                 flags=re.IGNORECASE,
             )
             processed_text = segment_text.strip()

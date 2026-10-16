@@ -1203,7 +1203,7 @@ class TestInjectText(unittest.TestCase):
         obj = _make_injector(DesktopEnvironment.X11)
         failed_once = {"done": False}
 
-        def flaky_run(cmd, **kwargs):
+        def flaky_run(cmd: list, **kwargs: object) -> MagicMock:
             if cmd[:2] == ["xdotool", "key"] and cmd[-1] == "Return" and not failed_once["done"]:
                 failed_once["done"] = True
                 raise subprocess.CalledProcessError(1, cmd)

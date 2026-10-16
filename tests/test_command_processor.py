@@ -606,6 +606,7 @@ class TestStandaloneCommandPunctuation(unittest.TestCase):
             ),
             ("line one, new line, line two", "line one, \n line two"),
             ("hello new line.", "hello \n"),
+            ("hello new line. ", "hello \n"),
         ]
         for input_text, expected in cases:
             with self.subTest(input_text=input_text):
