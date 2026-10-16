@@ -1850,8 +1850,8 @@ class TextInjector:
             max_retries = 2
             logger.debug(f"Starting xdotool injection with {max_retries} max retries")
 
-            # Retries resume at the first untyped chunk: restarting from the
-            # top would duplicate the chunks a failed attempt already sent.
+                # Retries resume at the first untyped position: restarting from
+            # the top would duplicate what a failed attempt already sent.
             typed = 0
             for retry in range(max_retries + 1):
                 try:
@@ -1902,6 +1902,9 @@ class TextInjector:
                                     text=True,
                                     timeout=5,
                                 )
+                            # Advance past what just went out so a retry
+                            # resumes mid-chunk instead of re-typing it.
+                            typed += len(segment)
                             if seg_index < len(segments) - 1:
                                 subprocess.run(
                                     [
@@ -1916,7 +1919,7 @@ class TextInjector:
                                     text=True,
                                     timeout=5,
                                 )
-                        typed = min(i + chunk_size, len(text))
+                                typed += 1  # the '\n' the Return produced
 
                         # Add a larger delay between chunks
                         if i + chunk_size < len(text):

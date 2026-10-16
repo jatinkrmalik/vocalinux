@@ -1196,6 +1196,36 @@ class TestInjectText(unittest.TestCase):
             ],
         )
 
+    def test_xdotool_retry_resumes_after_delivered_segment(self) -> None:
+        """A failed Return retries from the '\n', not from the top (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        failed_once = {"done": False}
+
+        def flaky_run(cmd, **kwargs):
+            if (
+                cmd[:2] == ["xdotool", "key"]
+                and cmd[-1] == "Return"
+                and not failed_once["done"]
+            ):
+                failed_once["done"] = True
+                raise subprocess.CalledProcessError(1, cmd)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=flaky_run) as mock_run:
+            self.assertTrue(obj.inject_text("abc\ndef"))
+
+        self.assertEqual(
+            self._xdotool_calls(mock_run),
+            [
+                ["xdotool", "type", "--clearmodifiers", "--", "abc"],
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+                ["xdotool", "type", "--clearmodifiers", "--", "def"],
+            ],
+        )
+
 
 class TestLogWindowInfo(unittest.TestCase):
     def test_log_x11(self):

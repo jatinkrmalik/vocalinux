@@ -605,6 +605,7 @@ class TestStandaloneCommandPunctuation(unittest.TestCase):
                 "Testing 123, \n\n does this work now?",
             ),
             ("line one, new line, line two", "line one, \n line two"),
+            ("hello new line.", "hello \n"),
         ]
         for input_text, expected in cases:
             with self.subTest(input_text=input_text):
@@ -616,4 +617,10 @@ class TestStandaloneCommandPunctuation(unittest.TestCase):
         """A dot glued to following text is not sentence punctuation."""
         result, actions = self.processor.process_text("use new paragraph.done")
         self.assertEqual(result, "use \n\n.done")
+        self.assertEqual(actions, [])
+
+    def test_command_produced_punctuation_is_not_eaten(self) -> None:
+        """A mark from an earlier command replacement survives (#955)."""
+        result, actions = self.processor.process_text("hello new line exclamation mark")
+        self.assertEqual(result, "hello \n!")
         self.assertEqual(actions, [])
