@@ -553,6 +553,28 @@ def get_current_engine() -> Optional[str]:
     return None
 
 
+def _query_active_engine() -> Optional[str]:
+    """
+    Query the engine ibus-daemon actually reports, with no GNOME fallbacks.
+
+    Unlike :func:`get_current_engine`, this never consults gsettings, so it
+    can distinguish a really-active engine from a cleared global engine —
+    ``None`` means either "No global engine" or that the query failed.
+    """
+    try:
+        result = subprocess.run(
+            ["ibus", "engine"], capture_output=True, text=True, timeout=5, env=host_env()
+        )
+        stderr_lower = result.stderr.lower() if result.stderr else ""
+        if "no global engine" in stderr_lower:
+            return None
+        if result.returncode == 0:
+            return result.stdout.strip() or None
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return None
+
+
 def _ibus_im_env_configured() -> bool:
     """True if the process env says IBus is the session input method."""
     gtk_im = os.environ.get("GTK_IM_MODULE", "").lower()
@@ -1589,13 +1611,21 @@ class IBusTextInjector:
 
         if restore_engine:
             # `ibus engine <name>` applies that engine's XKB map server-wide.
-            # Writing it when the live engine is already a real engine
-            # collapses GNOME's multi-layout map and breaks layout switching
-            # (#954). Re-check after teardown and only restore when Vocalinux
-            # was left selected or no engine is active at all (#558).
-            live = get_current_engine()
+            # Re-check the daemon (not the GNOME fallback) after teardown and
+            # skip the write when a real engine is already active — rewriting
+            # it collapses GNOME's multi-layout map (#954). The same skip
+            # applies when teardown left the engine cleared but the restore
+            # target is an xkb:* source on GNOME: gnome-shell owns that map
+            # and the write would only collapse it. A cleared global engine
+            # for a real IM engine still gets restored (#558).
+            live = _query_active_engine()
             if live and live != ENGINE_NAME:
                 logger.info(f"Skipping engine restore — live engine already active: {live}")
+            elif live is None and _is_gnome_session() and restore_engine.startswith("xkb:"):
+                logger.info(
+                    "Skipping engine restore — engine cleared and GNOME owns "
+                    f"the XKB map; not rewriting {restore_engine}"
+                )
             else:
                 logger.info(f"Restoring previous engine after teardown: {restore_engine}")
                 restored = False
