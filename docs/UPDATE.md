@@ -97,6 +97,7 @@ Missing system packages: see [INSTALL.md](INSTALL.md) or [DISTRO_COMPATIBILITY.m
 
 - The Flatpak remote publish warns on the release run when its secrets are not configured, instead of skipping silently for tags (#961; fixes #951 reported by @andreacasini)
 - README gains a badge row for every install format plus a Nix flake section (#949)
+- Transcribe File's modal model-download dialog now closes itself once TinyDiarize lands, releasing its grab so the transcript's Copy and Save As buttons are clickable (#965; found during release e2e testing)
 
 AppImage, Flatpak, and Snap still ship whisper.cpp only.
 

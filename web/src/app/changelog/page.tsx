@@ -24,6 +24,7 @@ const releases = [
       "Quitting no longer collapses multi-layout keyboards; the IBus engine restore is skipped when a real engine is live (PR #963)",
       "Snap, Flatpak, AppImage and .deb/.rpm builds compile pywhispercpp at the portable x86-64 baseline, ending SIGILL crashes on pre-Haswell CPUs (PR #959)",
       "Snap recipe drops the denied `uinput` plug so new revisions clear Store review; Wayland typing uses the RemoteDesktop portal (PR #960)",
+      "Transcribe File's modal download dialog releases its grab once TinyDiarize lands, so the transcript's Copy and Save As buttons work (PR #965)",
       "Flatpak remote publish warns loudly when unconfigured instead of skipping silently (PR #961); README gains install-format badges and a Nix section (PR #949)",
     ],
   },

@@ -40,7 +40,7 @@ Vocalinux turns speech into typed text in whatever app has focus. It is a free, 
 
 No Voca account is required. Models download once. After that, speech-to-text stays on your machine.
 
-**Current release:** [v0.18.3](https://github.com/VocaHQ/vocalinux/releases/tag/v0.18.3). Patch: "new line" and "new paragraph" voice commands finally type real line breaks, hotkeys work again on GNOME Shell X11, packaged builds stop crashing on older CPUs, and the Snap package can publish again. Details: [docs/UPDATE.md](docs/UPDATE.md).
+**Current release:** [v0.18.3](https://github.com/VocaHQ/vocalinux/releases/tag/v0.18.3). Patch: "new line" and "new paragraph" voice commands finally type real line breaks, hotkeys work again on GNOME Shell X11, packaged builds stop crashing on older CPUs, the Snap package can publish again, and Transcribe File's download dialog stops locking the transcript. Details: [docs/UPDATE.md](docs/UPDATE.md).
 
 ## Features
 
