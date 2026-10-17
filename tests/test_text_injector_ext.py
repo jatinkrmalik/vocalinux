@@ -1098,6 +1098,130 @@ class TestInjectText(unittest.TestCase):
             self.assertTrue(mock_run.called)
             self.assertTrue(result)
 
+    def test_inject_newline_only_segment_reaches_backend(self) -> None:
+        """A bare "\n" from "new line" is typed, not skipped as empty (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        with patch.object(obj, "_inject_with_xdotool") as mock_xdotool:
+            self.assertTrue(obj.inject_text("\n"))
+            mock_xdotool.assert_called_once_with("\n")
+            self.assertEqual(obj.last_typed_count, 1)
+
+    def test_inject_paragraph_break_segment_reaches_backend(self) -> None:
+        """A bare "\n\n" from "new paragraph" is typed, not skipped (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        with patch.object(obj, "_inject_with_xdotool") as mock_xdotool:
+            self.assertTrue(obj.inject_text("\n\n"))
+            mock_xdotool.assert_called_once_with("\n\n")
+            self.assertEqual(obj.last_typed_count, 2)
+
+    def test_inject_newline_segment_reaches_ibus(self) -> None:
+        """The IBus backend also receives a bare newline segment (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11_IBUS)
+        mock_ibus = MagicMock()
+        mock_ibus.inject_text.return_value = True
+        obj._ibus_injector = mock_ibus
+        self.assertTrue(obj.inject_text("\n"))
+        mock_ibus.inject_text.assert_called_once_with("\n")
+
+    def test_inject_empty_string_still_skipped(self) -> None:
+        """A truly empty segment is still a cheap no-op."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        with patch.object(obj, "_inject_with_xdotool") as mock_xdotool:
+            self.assertTrue(obj.inject_text(""))
+            mock_xdotool.assert_not_called()
+            self.assertEqual(obj.last_typed_count, 0)
+
+    @staticmethod
+    def _xdotool_calls(run_mock: MagicMock) -> list:
+        """Return the xdotool type/key argv sequences run_mock received."""
+        return [
+            c.args[0]
+            for c in run_mock.call_args_list
+            if c.args and c.args[0][0] == "xdotool" and c.args[0][1] in ("type", "key")
+        ]
+
+    def test_xdotool_newline_sent_as_return_key(self) -> None:
+        """'\n' is `xdotool key Return`, never a Linefeed inside `type` (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        with patch("subprocess.run") as mock_run:
+            self.assertTrue(obj.inject_text("\n"))
+
+        self.assertEqual(
+            self._xdotool_calls(mock_run),
+            [["xdotool", "key", "--clearmodifiers", "Return"]],
+        )
+
+    def test_xdotool_newlines_split_chunk_into_type_and_return(self) -> None:
+        """A mid-utterance '\n\n' splits the chunk: type, Return, Return (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        with patch("subprocess.run") as mock_run:
+            self.assertTrue(obj.inject_text("Testing 123, \n\n, works?"))
+
+        self.assertEqual(
+            self._xdotool_calls(mock_run),
+            [
+                ["xdotool", "type", "--clearmodifiers", "--", "Testing 123, "],
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+                ["xdotool", "type", "--clearmodifiers", "--", ", wor"],
+                ["xdotool", "type", "--clearmodifiers", "--", "ks?"],
+            ],
+        )
+
+    def test_xdotool_paragraph_break_presses_return_twice(self) -> None:
+        """'\n\n' from "new paragraph" is two Return presses, no type call (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        with patch("subprocess.run") as mock_run:
+            self.assertTrue(obj.inject_text("\n\n"))
+
+        self.assertEqual(
+            self._xdotool_calls(mock_run),
+            [
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+            ],
+        )
+
+    def test_xdotool_retry_resumes_after_delivered_segment(self) -> None:
+        """A failed Return retries from the '\n', not from the top (#955)."""
+        from vocalinux.text_injection.text_injector import DesktopEnvironment
+
+        obj = _make_injector(DesktopEnvironment.X11)
+        failed_once = {"done": False}
+
+        def flaky_run(cmd: list, **kwargs: object) -> MagicMock:
+            if cmd[:2] == ["xdotool", "key"] and cmd[-1] == "Return" and not failed_once["done"]:
+                failed_once["done"] = True
+                raise subprocess.CalledProcessError(1, cmd)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=flaky_run) as mock_run:
+            self.assertTrue(obj.inject_text("abc\ndef"))
+
+        self.assertEqual(
+            self._xdotool_calls(mock_run),
+            [
+                ["xdotool", "type", "--clearmodifiers", "--", "abc"],
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+                ["xdotool", "key", "--clearmodifiers", "Return"],
+                ["xdotool", "type", "--clearmodifiers", "--", "def"],
+            ],
+        )
+
 
 class TestLogWindowInfo(unittest.TestCase):
     def test_log_x11(self):

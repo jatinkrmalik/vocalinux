@@ -512,3 +512,116 @@ class TestCommandPhrases(unittest.TestCase):
             self.assertEqual(aliases[f"point d{apostrophe}interrogation"], "?")
             self.assertEqual(aliases[f"point d{apostrophe}exclamation"], "!")
         self.assertEqual(aliases["point"], ".")
+
+
+class TestStandaloneCommandPunctuation(unittest.TestCase):
+    """Engine sentence-final punctuation on standalone commands (issue #955).
+
+    whisper.cpp transcripts arrive capitalized and punctuated ("New line."),
+    which used to leave a stray "." after the substituted newline — or, for
+    punctuation commands, a doubled mark.  Edge punctuation is dropped only
+    when the whole segment is command phrases; real text keeps it.
+    """
+
+    def setUp(self) -> None:
+        """Set up for tests."""
+        self.processor = CommandProcessor()
+
+    def test_standalone_line_breaks_with_engine_punctuation(self) -> None:
+        """Punctuated standalone line-break commands still emit the break."""
+        cases = [
+            ("New line.", "\n"),
+            ("new line.", "\n"),
+            ("New line!", "\n"),
+            ("New line?", "\n"),
+            ("new line...", "\n"),
+            (", new line", "\n"),
+            ("New paragraph.", "\n\n"),
+            ("new paragraph!", "\n\n"),
+        ]
+        for input_text, expected in cases:
+            with self.subTest(input_text=input_text):
+                result, actions = self.processor.process_text(input_text)
+                self.assertEqual(result, expected)
+                self.assertEqual(actions, [])
+
+    def test_standalone_punctuation_commands_with_engine_punctuation(self) -> None:
+        """Punctuated standalone punctuation commands emit one mark, not two."""
+        cases = [
+            ("Period.", "."),
+            ("Full stop.", "."),
+            ("Comma.", ","),
+            ("Question mark?", "?"),
+        ]
+        for input_text, expected in cases:
+            with self.subTest(input_text=input_text):
+                result, actions = self.processor.process_text(input_text)
+                self.assertEqual(result, expected)
+                self.assertEqual(actions, [])
+
+    def test_standalone_action_commands_with_engine_punctuation(self) -> None:
+        """Punctuated standalone action commands fire without stray text."""
+        cases = [
+            ("Delete that.", ["delete_last"]),
+            ("Select all.", ["select_all"]),
+            ("Undo!", ["undo"]),
+            ("Redo?", ["redo"]),
+        ]
+        for input_text, expected_actions in cases:
+            with self.subTest(input_text=input_text):
+                result, actions = self.processor.process_text(input_text)
+                self.assertEqual(result, "")
+                self.assertEqual(actions, expected_actions)
+
+    def test_real_text_keeps_engine_sentence_punctuation(self) -> None:
+        """Non-command utterances keep the punctuation the engine emitted."""
+        cases = [
+            ("Hello world.", "Hello world.", []),
+            ("capitalize word.", "Word.", []),
+            ("the end full stop", "the end.", []),
+            ("scratch that previous text.", "previous text.", ["delete_last"]),
+        ]
+        for input_text, expected_text, expected_actions in cases:
+            with self.subTest(input_text=input_text):
+                result, actions = self.processor.process_text(input_text)
+                self.assertEqual(result, expected_text)
+                self.assertEqual(actions, expected_actions)
+
+    def test_punctuation_only_segment_is_not_eaten(self) -> None:
+        """A segment that is only punctuation stays text, not a command."""
+        result, actions = self.processor.process_text("...")
+        self.assertEqual(result, "...")
+        self.assertEqual(actions, [])
+
+    def test_mid_utterance_trailing_punctuation_is_consumed(self) -> None:
+        """Punctuation right after a mid-utterance command does not type (#955)."""
+        cases = [
+            (
+                "Testing 1, 2, 3. New paragraph. Does this work now?",
+                "Testing 1, 2, 3. \n\n Does this work now?",
+            ),
+            (
+                "Testing 123, new paragraph, does this work now?",
+                "Testing 123, \n\n does this work now?",
+            ),
+            ("line one, new line, line two", "line one, \n line two"),
+            ("hello new line.", "hello \n"),
+            ("hello new line. ", "hello \n"),
+        ]
+        for input_text, expected in cases:
+            with self.subTest(input_text=input_text):
+                result, actions = self.processor.process_text(input_text)
+                self.assertEqual(result, expected)
+                self.assertEqual(actions, [])
+
+    def test_trailing_punct_eaten_only_before_space_or_end(self) -> None:
+        """A dot glued to following text is not sentence punctuation."""
+        result, actions = self.processor.process_text("use new paragraph.done")
+        self.assertEqual(result, "use \n\n.done")
+        self.assertEqual(actions, [])
+
+    def test_command_produced_punctuation_is_not_eaten(self) -> None:
+        """A mark from an earlier command replacement survives (#955)."""
+        result, actions = self.processor.process_text("hello new line exclamation mark")
+        self.assertEqual(result, "hello \n!")
+        self.assertEqual(actions, [])

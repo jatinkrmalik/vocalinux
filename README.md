@@ -16,14 +16,20 @@
 [![X11 & Wayland](https://img.shields.io/badge/display-X11%20%7C%20Wayland-lightgrey)](https://github.com/VocaHQ/vocalinux#features)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![GitHub release](https://img.shields.io/github/v/release/VocaHQ/vocalinux)](https://github.com/VocaHQ/vocalinux/releases)
+
+[![AppImage](https://img.shields.io/badge/AppImage-x86__64%20%7C%20aarch64-2C5BB4)](https://github.com/VocaHQ/vocalinux/releases/latest)
+[![.deb](https://img.shields.io/badge/.deb-Debian%20%7C%20Ubuntu-A81D33?logo=debian&logoColor=white)](https://github.com/VocaHQ/vocalinux/releases/latest)
+[![.rpm](https://img.shields.io/badge/.rpm-Fedora-EE0000?logo=fedora&logoColor=white)](https://github.com/VocaHQ/vocalinux/releases/latest)
+[![Flatpak](https://img.shields.io/badge/Flatpak-vocahq%20remote-4A90D9?logo=flatpak&logoColor=white)](#flatpak-any-distro)
+[![Snap](https://img.shields.io/badge/Snap-edge-82BEA0?logo=snapcraft&logoColor=white)](https://snapcraft.io/vocalinux)
+[![AUR](https://img.shields.io/aur/version/vocalinux)](https://aur.archlinux.org/packages/vocalinux)
+[![PyPI](https://img.shields.io/pypi/v/vocalinux)](https://pypi.org/project/vocalinux/)
+[![Nix flake](https://img.shields.io/badge/Nix-flake-5277C3?logo=nixos&logoColor=white)](packaging/nix/README.md)
 
 [![Discord](https://img.shields.io/discord/1538633755877580810?logo=discord&logoColor=white&label=Discord)](https://discord.gg/t6muquAJbm)
 [![VocaHQ](https://img.shields.io/badge/VocaHQ-vocahq.com-1a7f4e)](https://vocahq.com)
 [![Follow on X](https://img.shields.io/badge/Follow%20%40vocahq-000000?style=flat&logo=x&logoColor=white)](https://x.com/vocahq)
-[![GitHub release](https://img.shields.io/github/v/release/VocaHQ/vocalinux)](https://github.com/VocaHQ/vocalinux/releases)
-[![PyPI](https://img.shields.io/pypi/v/vocalinux)](https://pypi.org/project/vocalinux/)
-[![AUR](https://img.shields.io/aur/version/vocalinux)](https://aur.archlinux.org/packages/vocalinux)
 
 [Website](https://vocalinux.com) · [Install](#install) · [Docs](#documentation) · [Releases](https://github.com/VocaHQ/vocalinux/releases)
 
@@ -33,7 +39,7 @@ Vocalinux turns speech into typed text in whatever app has focus. It is a free, 
 
 No Voca account is required. Models download once. After that, speech-to-text stays on your machine.
 
-**Current release:** [v0.18.2](https://github.com/VocaHQ/vocalinux/releases/tag/v0.18.2). Patch: an audio-reactive overlay orb, Nix packaging with Vulkan GPU inference, held-keyboard startup safety for the dictation shortcut, and bundled-engine fixes for older CPUs. Details: [docs/UPDATE.md](docs/UPDATE.md).
+**Current release:** [v0.18.3](https://github.com/VocaHQ/vocalinux/releases/tag/v0.18.3). Patch: "new line" and "new paragraph" voice commands finally type real line breaks, hotkeys work again on GNOME Shell X11, packaged builds stop crashing on older CPUs, the Snap package can publish again, and Transcribe File's download dialog stops locking the transcript. Details: [docs/UPDATE.md](docs/UPDATE.md).
 
 ## Features
 
@@ -44,7 +50,7 @@ No Voca account is required. Models download once. After that, speech-to-text st
 - **Toggle or push-to-talk**: New installs default to hold Right Alt; existing configs keep their shortcut
 - **System tray + settings**: Searchable sidebar, Speech Model simple setup with Advanced as an island, status icons, audio feedback
 - **Start on login**: XDG autostart (desktop session, not a systemd service)
-- **Packaging**: install script, `.deb` / `.rpm`, AppImage, AUR, PyPI, Snap (`--edge`), Flatpak (release bundles and local build; not on Flathub)
+- **Packaging**: install script, `.deb` / `.rpm`, AppImage, AUR, PyPI, Snap (`--edge`), Flatpak (release bundles and local build; not on Flathub), Nix flake
 
 ## Screenshots
 
@@ -150,7 +156,7 @@ bash /tmp/vl.sh --auto --engine=vosk                # VOSK only
 bash /tmp/vl.sh --auto --engine=parakeet            # Parakeet (CPU)
 ```
 
-For a specific release tag, see [GitHub Releases](https://github.com/VocaHQ/vocalinux/releases) or `./install.sh --tag=v0.18.2`.
+For a specific release tag, see [GitHub Releases](https://github.com/VocaHQ/vocalinux/releases) or `./install.sh --tag=v0.18.3`.
 
 ### Arch Linux (AUR)
 
@@ -210,17 +216,25 @@ sudo snap install vocalinux --edge
 sudo snap connect vocalinux:audio-record   # if mic is not auto-connected
 sudo snap connect vocalinux:raw-input      # global keyboard shortcuts (evdev)
 sudo snap connect vocalinux:hardware-observe  # list keyboards (/proc/bus/input/devices)
-sudo snap connect vocalinux:uinput         # native Wayland typing (ydotool)
 ```
 
-v0.18.2 includes ydotool and the `uinput` plug. The Store still has to finish review of that plug, so `snap info vocalinux` may still show **v0.16.2** (rev 7) on edge. That revision has no `uinput` plug; `snap connect vocalinux:uinput` fails until a 0.18.0+ revision is listed.
+Native Wayland typing uses the RemoteDesktop portal: the compositor asks once on first dictation, nothing to connect. The recipe ships **no `uinput` plug** and no ydotool; the Store denied the super-privileged grant, which held the 0.17.0+ revisions and left **v0.16.2 (rev 7)** on edge. On KDE Plasma, KWin's portal can mistype letter case ([KDE bug 489021](https://bugs.kde.org/show_bug.cgi?id=489021)); set Virtual Keyboard to "IBus Wayland" so dictation types correctly.
 
-Until then, sideload the GitHub file:
+GitHub `.snap` files through v0.18.2 declare `uinput`, so KDE users who want ydotool can sideload that build and connect the plug manually:
 
 ```bash
 sudo snap install --dangerous ./vocalinux_0.18.2_amd64.snap
-sudo snap connect vocalinux:uinput
+sudo snap connect vocalinux:uinput   # only in the v0.18.x sideload; the recipe no longer ships it
 ```
+
+### Nix / NixOS (flake)
+
+```bash
+nix run github:VocaHQ/vocalinux          # try it
+nix profile install github:VocaHQ/vocalinux
+```
+
+The flake also ships `nixosModules.vocalinux` and `homeManagerModules.vocalinux` for declarative installs (`programs.vocalinux.enable = true`). The bundled pywhispercpp builds with Vulkan GPU inference. Details: [packaging/nix/README.md](packaging/nix/README.md).
 
 ### From source
 
@@ -318,7 +332,7 @@ Neural VAD (Silero) is used when `onnxruntime` is available; install via `pip in
 
 | Document | Description |
 |----------|-------------|
-| [Installation](docs/INSTALL.md) | Installer, AppImage, AUR, Flatpak, Snap, running |
+| [Installation](docs/INSTALL.md) | Installer, AppImage, AUR, Flatpak, Snap, Nix flake, running |
 | [Manual / PyPI install](docs/INSTALL_MANUAL.md) | Package lists and pip workflows |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common failures |
 | [User guide](docs/USER_GUIDE.md) | Dictation, engines, models, tips |
