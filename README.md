@@ -16,9 +16,8 @@
 [![X11 & Wayland](https://img.shields.io/badge/display-X11%20%7C%20Wayland-lightgrey)](https://github.com/VocaHQ/vocalinux#features)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-
 [![GitHub release](https://img.shields.io/github/v/release/VocaHQ/vocalinux)](https://github.com/VocaHQ/vocalinux/releases)
+
 [![AppImage](https://img.shields.io/badge/AppImage-x86__64%20%7C%20aarch64-2C5BB4)](https://github.com/VocaHQ/vocalinux/releases/latest)
 [![.deb](https://img.shields.io/badge/.deb-Debian%20%7C%20Ubuntu-A81D33?logo=debian&logoColor=white)](https://github.com/VocaHQ/vocalinux/releases/latest)
 [![.rpm](https://img.shields.io/badge/.rpm-Fedora-EE0000?logo=fedora&logoColor=white)](https://github.com/VocaHQ/vocalinux/releases/latest)
