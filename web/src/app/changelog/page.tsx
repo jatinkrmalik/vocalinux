@@ -15,6 +15,20 @@ import { absoluteUrl, buildPageMetadata } from "@/lib/seo";
 
 const releases = [
   {
+    version: "v0.18.3",
+    date: "2026-10-17",
+    type: "stable",
+    highlights: [
+      "\"new line\" and \"new paragraph\" voice commands insert real line breaks, standalone and mid-utterance, with no stray punctuation left behind (PR #958, #962)",
+      "Hotkeys work again on GNOME Shell X11: the evdev backend is preferred there over pynput (PR #963)",
+      "Quitting no longer collapses multi-layout keyboards; the IBus engine restore is skipped when a real engine is live (PR #963)",
+      "Snap, Flatpak, AppImage and .deb/.rpm builds compile pywhispercpp at the portable x86-64 baseline, ending SIGILL crashes on pre-Haswell CPUs (PR #959)",
+      "Snap recipe drops the denied `uinput` plug so new revisions clear Store review; Wayland typing uses the RemoteDesktop portal (PR #960)",
+      "Transcribe File's modal download dialog releases its grab once TinyDiarize lands, so the transcript's Copy and Save As buttons work (PR #965)",
+      "Flatpak remote publish warns loudly when unconfigured instead of skipping silently (PR #961); README gains install-format badges and a Nix section (PR #949)",
+    ],
+  },
+  {
     version: "v0.18.2",
     date: "2026-10-12",
     type: "stable",
@@ -87,7 +101,7 @@ const releases = [
       "Recommended model button sets size and specialization together and will not ignore a file already on disk (PR #797, #778)",
       "Localized punctuation voice commands for it/fr/de/es/pt/nl/pl/ru (PR #642, #640)",
       "Bare F1–F24 push-to-talk shortcuts (PR #815)",
-      "Snap packaging with ydotool and uinput for native Wayland; GitHub .snap sideload while Store review of uinput is pending (PR #519, #823, #822)",
+      "Snap packaging with ydotool and uinput for native Wayland; the Store denied the uinput grant, so later revisions drop the plug and type via the RemoteDesktop portal (PR #519, #823, #822)",
       "Release workflow attaches Vocalinux-<version>-{x86_64,aarch64}.flatpak (PR #786, #784)",
       "XWayland clipboard paste instead of layout-garbled xdotool type (PR #680, #657)",
       "Layout-aware Ctrl+V paste; ydotool releases Ctrl after a timed-out paste (PR #788, #675, #658)",
@@ -116,7 +130,7 @@ const releases = [
       "CI: gate AUR PKGBUILD builds on every PR; test the distros the docs promise and fix docs drift (PR #772, #773)",
       "Site: VocaGateway family card is Beta; README logo, badges, and privacy copy (PR #765, #764)",
       "Deps: bump the github-actions group (PR #766)",
-      "Snap 0.16.2 edge (rev 7) has no uinput plug: snap connect vocalinux:uinput fails, and dictation only reaches XWayland apps. A later store snap ships ydotool; refresh, then connect uinput (PR #823)",
+      "Snap 0.16.2 edge (rev 7) has no uinput plug: snap connect vocalinux:uinput fails, and dictation only reaches XWayland apps. Later revisions ship the RemoteDesktop portal instead; the Store denied the uinput grant (PR #823)",
     ],
   },
   {
@@ -494,7 +508,7 @@ export default function ChangelogPage() {
     headline: "Vocalinux Changelog - Release History",
     description:
       "Complete release history for Vocalinux, the offline voice dictation software for Linux.",
-    dateModified: "2026-10-12",
+    dateModified: "2026-10-17",
     author: {
       "@type": "Person",
       name: "Jatin K Malik",
