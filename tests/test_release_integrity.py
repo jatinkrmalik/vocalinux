@@ -294,13 +294,15 @@ def test_the_remote_publish_is_stable_gated_and_keeps_history():
     assert ".flatpakref" in block, "no app ref is written for one-command installs"
 
 
-def test_the_remote_publish_recreates_dirs_git_drops():
+def test_the_remote_publish_recreates_dirs_git_drops() -> None:
     """git does not track empty directories, so a site/repo checked out from
     gh-pages comes back without refs/remotes or refs/mirrors — and
     `flatpak build-update-repo --generate-static-deltas` aborts on
     `opendir(refs/remotes): No such file or directory` when it enumerates refs
     for deltas. v0.18.3 hit exactly this on the first real remote publish."""
     block = _jobs()["publish-flatpak-remote"]
-    assert (
-        'mkdir -p "$repo/refs/remotes" "$repo/refs/mirrors"' in block
-    ), "the copied-back repo must re-create the ref dirs git dropped"
+    mkdir = 'mkdir -p "$repo/refs/remotes" "$repo/refs/mirrors"'
+    assert mkdir in block, "the copied-back repo must re-create the ref dirs git dropped"
+    assert block.index(mkdir) < block.index(
+        "flatpak build-update-repo"
+    ), "the dirs must exist before build-update-repo enumerates refs"
