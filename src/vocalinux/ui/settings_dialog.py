@@ -2514,7 +2514,7 @@ class ModelDownloadDialog(Gtk.Dialog):
         if engine == "whisper":
             self._start_pulsing()
 
-    def _on_destroy(self, *_args) -> None:
+    def _on_destroy(self, *_args: object) -> None:
         """Stop the pulse timer when the dialog goes away."""
         self._stop_pulsing()
 
