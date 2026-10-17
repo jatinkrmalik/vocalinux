@@ -1173,7 +1173,9 @@ class TestTdrzDownloadDialog(TestTrayIndicator):
     grab once the model lands: the transcript dialog opening behind it would
     otherwise be unclickable until the hidden dialog is found and closed."""
 
-    def _run_download(self, download_side_effect=None):
+    def _run_download(
+        self, download_side_effect: Exception | None = None
+    ) -> tuple[MagicMock, MagicMock]:
         from vocalinux.ui.tray_indicator import Gtk
 
         mock_prompt = MagicMock()
