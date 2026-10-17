@@ -292,3 +292,15 @@ def test_the_remote_publish_is_stable_gated_and_keeps_history():
         "continue-on-error" not in block
     ), "a tolerated checkout failure falls through to the empty-repo path"
     assert ".flatpakref" in block, "no app ref is written for one-command installs"
+
+
+def test_the_remote_publish_recreates_dirs_git_drops():
+    """git does not track empty directories, so a site/repo checked out from
+    gh-pages comes back without refs/remotes or refs/mirrors — and
+    `flatpak build-update-repo --generate-static-deltas` aborts on
+    `opendir(refs/remotes): No such file or directory` when it enumerates refs
+    for deltas. v0.18.3 hit exactly this on the first real remote publish."""
+    block = _jobs()["publish-flatpak-remote"]
+    assert (
+        'mkdir -p "$repo/refs/remotes" "$repo/refs/mirrors"' in block
+    ), "the copied-back repo must re-create the ref dirs git dropped"
