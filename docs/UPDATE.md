@@ -20,7 +20,7 @@ The installer detects a running instance, updates in place, preserves configurat
 ```bash
 cd vocalinux
 git fetch origin
-git checkout v0.18.2
+git checkout v0.18.3
 ./install.sh
 ```
 
@@ -38,7 +38,7 @@ git pull origin main
 |--------|---------|
 | AUR | `yay -S vocalinux` (or your AUR helper) |
 | AppImage | Download the new file from [Releases](https://github.com/VocaHQ/vocalinux/releases) |
-| Snap | Store: `sudo snap refresh vocalinux` (`--edge` until stable is promoted). Until Canonical lists 0.18.2, sideload `vocalinux_0.18.2_amd64.snap` from the GitHub Release (`sudo snap install --dangerous ./vocalinux_0.18.2_amd64.snap`), then `sudo snap connect vocalinux:uinput`. v0.16.2 rev 7 has no such plug. |
+| Snap | Store: `sudo snap refresh vocalinux` (`--edge` until stable is promoted). The recipe ships no `uinput` plug (the Store denied the grant); Wayland typing uses the RemoteDesktop portal. The GitHub `vocalinux_0.18.2_amd64.snap` still declares `uinput` for KDE users who want ydotool (`sudo snap install --dangerous`, then `sudo snap connect vocalinux:uinput`). |
 | Flatpak (release bundle) | Install the new `.flatpak` from Releases; bundles do not auto-update |
 | PyPI | Reinstall in the same venv after system packages are current |
 
@@ -76,6 +76,32 @@ vocalinux
 ```
 
 Missing system packages: see [INSTALL.md](INSTALL.md) or [DISTRO_COMPATIBILITY.md](DISTRO_COMPATIBILITY.md).
+
+---
+
+## What's New in v0.18.3
+
+0.18.3 is a **patch** on the stable line. Default engine is still whisper.cpp. This one is all fixes: "new line" and "new paragraph" finally insert real line breaks, hotkeys come back on GNOME Shell X11, packaged builds stop crashing on older CPUs, and the Snap package can publish again now that the denied `uinput` plug is gone.
+
+### 0.18.3 highlights
+
+| Fix | Description |
+|---------|-------------|
+| **Real line breaks** | "new line" and "new paragraph" insert an actual newline standalone or mid-utterance, and the stray punctuation they used to leave behind is gone (#958, #962; fixes #955 reported by @rastarr) |
+| **GNOME X11 hotkeys** | Push-to-talk and toggle shortcuts work on gnome-shell X11 sessions again; the app now prefers the evdev backend there (#963; fixes #954 reported by @jepst) |
+| **Layout restore on quit** | Quitting no longer collapses a multi-layout keyboard map (us,de staying us,de) because the IBus engine restore is skipped when a real engine is already active (#963) |
+| **Older CPUs unblocked** | Snap, Flatpak, AppImage and the .deb/.rpm builds now compile the bundled pywhispercpp at the true x86-64 baseline, ending the SIGILL crash on pre-Haswell processors (#959; fixes #957 reported by @bucketsofmail) |
+| **Snap can publish** | The `uinput` plug the Snap Store denied is removed, so new revisions clear automatic review again; Wayland typing uses the RemoteDesktop portal (#960) |
+
+### Also in v0.18.3
+
+- The Flatpak remote publish warns on the release run when its secrets are not configured, instead of skipping silently for tags (#961; fixes #951 reported by @andreacasini)
+- README gains a badge row for every install format plus a Nix flake section (#949)
+- Transcribe File's modal model-download dialog now closes itself once TinyDiarize lands, releasing its grab so the transcript's Copy and Save As buttons are clickable (#965; found during release e2e testing)
+
+AppImage, Flatpak, and Snap still ship whisper.cpp only.
+
+See the [full changelog](https://github.com/VocaHQ/vocalinux/releases/tag/v0.18.3).
 
 ---
 
@@ -200,7 +226,7 @@ See the [full changelog](https://github.com/VocaHQ/vocalinux/releases/tag/v0.18.
 | **Searchable open picker** | Language list filters while open (#798) |
 | **Localized punctuation commands** | it/fr/de/es/pt/nl/pl/ru; English phrases still work (#642) |
 | **Bare F-keys** | F1–F24 are valid push-to-talk shortcuts (#815) |
-| **Snap** | Store listing, ydotool + `uinput` for native Wayland; GitHub `.snap` for sideload while Store review is pending (#519, #823, #822) |
+| **Snap** | Store listing, ydotool + `uinput` for native Wayland. The Store later denied the `uinput` grant, so the plug was dropped and Wayland typing moved to the RemoteDesktop portal (#519, #823, #822) |
 | **Flatpak on the tag** | Workflow attaches `.flatpak` assets and checksums them (#786) |
 
 ### Also in v0.17.0
@@ -260,7 +286,7 @@ See the [full changelog](https://github.com/VocaHQ/vocalinux/releases/tag/v0.17.
 - **CI**: gate AUR PKGBUILD builds on every PR (#772 by @sesav)
 - **CI / docs**: test the distros the docs promise and fix docs drift (#773 by @sesav)
 - **Site**: VocaGateway family card is Beta; README logo, badges, and privacy copy (#765 by @jatinkrmalik, #764)
-- **Snap**: v0.16.2 `latest/edge` (rev 7) has no `uinput` plug. `sudo snap connect vocalinux:uinput` errors with `snap "vocalinux" has no plug named "uinput"`. Dictation only reaches XWayland apps. A later store snap ships ydotool and the plug; then `snap refresh` and `snap connect vocalinux:uinput` (#823)
+- **Snap**: v0.16.2 `latest/edge` (rev 7) has no `uinput` plug. `sudo snap connect vocalinux:uinput` errors with `snap "vocalinux" has no plug named "uinput"`. Dictation only reaches XWayland apps. (v0.17.0+ added the plug, but the Store denied it, so later revisions drop it again and type via the RemoteDesktop portal.) (#823)
 
 See the [full changelog](https://github.com/VocaHQ/vocalinux/releases/tag/v0.16.2).
 
