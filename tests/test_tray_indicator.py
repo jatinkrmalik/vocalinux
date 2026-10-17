@@ -1181,15 +1181,13 @@ class TestTdrzDownloadDialog(TestTrayIndicator):
         mock_dialog = MagicMock()
         mock_dialog.cancelled = False
         self.mock_speech_engine.try_begin_download.return_value = True
-        self.mock_speech_engine.download_whispercpp_model.side_effect = (
-            download_side_effect
-        )
+        self.mock_speech_engine.download_whispercpp_model.side_effect = download_side_effect
 
-        with patch(
-            "vocalinux.ui.tray_indicator.Gtk.MessageDialog", return_value=mock_prompt
-        ), patch(
-            "vocalinux.ui.tray_indicator.ModelDownloadDialog", return_value=mock_dialog
-        ), patch.object(self.tray_indicator, "_start_file_transcription") as mock_start:
+        with (
+            patch("vocalinux.ui.tray_indicator.Gtk.MessageDialog", return_value=mock_prompt),
+            patch("vocalinux.ui.tray_indicator.ModelDownloadDialog", return_value=mock_dialog),
+            patch.object(self.tray_indicator, "_start_file_transcription") as mock_start,
+        ):
             self.tray_indicator._offer_tdrz_download("/tmp/clip.wav")
             run = self.mock_thread_class.call_args.kwargs["target"]
             run()
