@@ -16,6 +16,7 @@ import errno
 import os
 import threading
 import time
+from collections.abc import Callable
 from unittest.mock import MagicMock, Mock, call, mock_open, patch
 
 import pytest
@@ -26,6 +27,7 @@ from vocalinux.ui.keyboard_backends.evdev_backend import (
     MODIFIER_KEY_CODES,
     EvdevDeviceHub,
     EvdevKeyboardBackend,
+    InputEvent,
     _clone_device_name,
     _find_keyboard_devices_from_evdev,
     _is_virtual_keyboard,
@@ -1929,19 +1931,19 @@ class TestEvdevGrabAndForwarding:
         release_started, release_done = threading.Event(), threading.Event()
         written, errors = [], []
 
-        def write_event(event):
+        def write_event(event: InputEvent) -> None:
             if event is press:
                 replay_started.set()
                 assert allow_replay.wait(3), "Replay timed out"
             written.append(event)
 
-        def run(callback):
+        def run(callback: Callable[[], None]) -> None:
             try:
                 callback()
             except BaseException as exc:
                 errors.append(exc)
 
-        def release_ctrl():
+        def release_ctrl() -> None:
             release_started.set()
             try:
                 backend._hub._dispatch_event(fd, device, release, (backend,))

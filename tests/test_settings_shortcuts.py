@@ -7,6 +7,7 @@ Uses source code inspection to avoid GTK mocking issues.
 import ast
 import os
 import unittest
+from collections.abc import Callable
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -40,7 +41,7 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         """Test that shortcuts section is built in __init__."""
         self.assertIn("self._build_shortcuts_section()", self.source_code)
 
-    def _pass_through_handler(self):
+    def _pass_through_handler(self) -> Callable[..., bool]:
         """Compile the real method without importing the whole GTK UI."""
         cls = next(
             x
@@ -59,7 +60,7 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         )
         return namespace[method.name]
 
-    def test_pass_through_signal_is_connected(self):
+    def test_pass_through_signal_is_connected(self) -> None:
         self.assertIn(
             "self.pass_shortcut_to_apps_switch.connect(\n"
             '            "state-set", self._on_pass_shortcut_to_apps_toggled\n'
@@ -67,7 +68,7 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
             self.source_code,
         )
 
-    def test_pass_through_handler_persists_and_calls_live_callback(self):
+    def test_pass_through_handler_persists_and_calls_live_callback(self) -> None:
         handler = self._pass_through_handler()
         for enabled in (True, False):
             with self.subTest(enabled=enabled):
@@ -83,7 +84,7 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
                 config.save_settings.assert_called_once_with()
                 callback.assert_called_once_with(enabled)
 
-    def test_pass_through_handler_respects_init_and_apply_guards(self):
+    def test_pass_through_handler_respects_init_and_apply_guards(self) -> None:
         handler = self._pass_through_handler()
         for initializing, applying in ((True, False), (False, True)):
             with self.subTest(initializing=initializing, applying=applying):
