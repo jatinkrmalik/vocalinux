@@ -1857,6 +1857,94 @@ class TestEvdevGrabAndForwarding:
         assert backend._event_is_shortcut(10, self._key_event(30, 1)) is False  # KEY_A
         assert backend._event_is_shortcut(10, self._syn_event()) is False
 
+    def test_passthrough_skips_replay_when_nothing_is_withheld(self) -> None:
+        """No synthetic presses or syncs are emitted without a pending modifier."""
+        backend = EvdevKeyboardBackend(shortcut="ctrl+ctrl")
+        fd = 10
+        clone = MagicMock()
+        backend._forwarders = {fd: clone}
+        backend._forwarded_held = {fd: set()}
+        backend._withheld_modifier = {fd: {}}
+
+        backend.set_pass_shortcut_to_apps(True)
+        backend.set_pass_shortcut_to_apps(True)
+
+        assert backend.pass_shortcut_to_apps is True
+        clone.write_event.assert_not_called()
+        clone.syn.assert_not_called()
+
+        backend.set_pass_shortcut_to_apps(False)
+        assert backend.pass_shortcut_to_apps is False
+
+    def test_passthrough_without_forwarder_handles_held_ctrl(self) -> None:
+        """An ungrabbed keyboard safely transitions while Ctrl is held."""
+        backend = EvdevKeyboardBackend(shortcut="ctrl+ctrl", mode="toggle")
+        fd = 10
+        press = self._key_event(29, 1)
+        release = self._key_event(29, 0)
+
+        assert backend._event_is_shortcut(fd, press) is True
+        assert backend._withheld_modifier[fd][29][1] is False
+        assert fd not in backend._forwarders
+
+        backend.set_pass_shortcut_to_apps(True)
+
+        assert backend.pass_shortcut_to_apps is True
+        assert backend._withheld_modifier[fd][29][1] is True
+        assert backend._event_is_shortcut(fd, release) is False
+        assert backend._withheld_modifier[fd] == {}
+
+    def test_passthrough_sync_failure_releases_failed_forwarder(self) -> None:
+        """A failed uinput frame sync must release the broken virtual keyboard."""
+        backend = EvdevKeyboardBackend(shortcut="ctrl+ctrl")
+        fd = 10
+        clone = MagicMock()
+        clone.syn.side_effect = OSError(errno.EIO, "uinput unavailable")
+        backend._forwarders = {fd: clone}
+        backend._forwarded_held = {fd: set()}
+
+        press = self._key_event(29, 1)
+        assert backend._event_is_shortcut(fd, press) is True
+
+        with patch.object(backend._hub, "_release_failed_forwarder") as release_failed:
+            backend.set_pass_shortcut_to_apps(True)
+            release_failed.assert_called_once_with(fd, clone)
+
+        clone.write_event.assert_called_once_with(press)
+        clone.syn.assert_called_once_with()
+        assert backend.pass_shortcut_to_apps is True
+
+    def test_passthrough_combo_keeps_swallowed_press_and_release_paired(self) -> None:
+        """Enabling pass-through must not leak a release without its press."""
+        backend = EvdevKeyboardBackend(shortcut="ctrl+r", mode="toggle")
+        fd = 10
+        backend._combo_pressed = {29}
+
+        key_r = backend._combo_main_code
+        assert key_r is not None
+
+        assert backend._event_is_shortcut(fd, self._key_event(key_r, 1)) is True
+
+        backend.set_pass_shortcut_to_apps(True)
+
+        assert backend._event_is_shortcut(fd, self._key_event(key_r, 2)) is True
+        assert backend._event_is_shortcut(fd, self._key_event(key_r, 0)) is True
+        assert fd not in backend._combo_swallowed
+
+        assert backend._event_is_shortcut(fd, self._key_event(key_r, 1)) is False
+        assert backend._event_is_shortcut(fd, self._key_event(key_r, 0)) is False
+
+    def test_disabling_combo_passthrough_preserves_forwarded_key_up(self) -> None:
+        """Switching off pass-through cannot strand a previously forwarded key."""
+        backend = EvdevKeyboardBackend(shortcut="ctrl+r", mode="toggle")
+        fd = 10
+        backend._forwarded_held = {fd: {19}}
+
+        backend.set_pass_shortcut_to_apps(True)
+        backend.set_pass_shortcut_to_apps(False)
+
+        assert backend._event_is_shortcut(fd, self._key_event(19, 0)) is False
+
     def test_pass_through_double_tap_still_fires_and_forwards_ctrl(self) -> None:
         """Opted-in Ctrl taps must reach the app without losing detection (#950)."""
         backend = EvdevKeyboardBackend(shortcut="ctrl+ctrl", mode="toggle")
