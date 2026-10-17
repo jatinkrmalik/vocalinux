@@ -47,6 +47,8 @@ Configure under **Settings → Shortcuts**:
 
 Existing configs keep their saved shortcut. Left/right modifier keys and custom modifier+key combos (for example `Alt+R`) are supported.
 
+Enable **Pass Shortcut Keys to Applications** under **Settings → Dictation → Keyboard Shortcuts** to keep modifier actions such as Ctrl+mouse-wheel zoom working. Dictation still detects the configured shortcut, but the shortcut keys will also reach the foreground app, which may respond to them. This is off by default.
+
 ## Voice commands
 
 Optional spoken commands for punctuation and editing (can be disabled in Settings).

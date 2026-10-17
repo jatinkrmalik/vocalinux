@@ -2632,6 +2632,7 @@ class SettingsDialog(Gtk.Dialog):
         language_shortcuts_update_callback: Optional[Callable[[], None]] = None,
         history_update_callback: Optional[Callable[[], None]] = None,
         history_clear_callback: Optional[Callable[[], None]] = None,
+        hotkey_passthrough_update_callback: Optional[Callable[[bool], None]] = None,
     ):
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         # Force window decorations (title-bar close) on all WMs. An in-window
@@ -2647,6 +2648,7 @@ class SettingsDialog(Gtk.Dialog):
         self.update_status_callback = update_status_callback
         self.overlay_enabled_callback = overlay_enabled_callback
         self.hotkey_listener_update_callback = hotkey_listener_update_callback
+        self.hotkey_passthrough_update_callback = hotkey_passthrough_update_callback
         self.language_shortcuts_update_callback = language_shortcuts_update_callback
         self.history_update_callback = history_update_callback
         self.history_clear_callback = history_clear_callback
@@ -5203,6 +5205,23 @@ class SettingsDialog(Gtk.Dialog):
         )
         group.add_row(self.shortcut_row)
 
+        # Optional non-suppressing shortcut detection (#950).
+        self.pass_shortcut_to_apps_switch = Gtk.Switch()
+        self.pass_shortcut_to_apps_switch.set_active(
+            self.config_manager.get_bool("shortcuts", "pass_shortcut_to_apps", False)
+        )
+        self.pass_shortcut_to_apps_switch.set_tooltip_text(
+            "Forward shortcut presses and releases to applications while "
+            "still triggering dictation. Apps may also react to the shortcut."
+        )
+        self.pass_shortcut_to_apps_row = PreferenceRow(
+            title="Pass Shortcut Keys to Applications",
+            subtitle="Preserve Ctrl+wheel zoom and other modifier actions",
+            widget=self.pass_shortcut_to_apps_switch,
+            keywords=("passthrough", "suppress", "modifier", "mouse wheel"),
+        )
+        group.add_row(self.pass_shortcut_to_apps_row)
+
         # Custom shortcut: modifier+key combos (e.g. Alt+R) for users who want
         # something the preset modifiers can't express (split keyboards, etc.).
         custom_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -5272,6 +5291,9 @@ class SettingsDialog(Gtk.Dialog):
         # Connect signals
         self.shortcut_combo.connect("changed", self._on_shortcut_changed)
         self.shortcut_mode_combo.connect("changed", self._on_shortcut_mode_changed)
+        self.pass_shortcut_to_apps_switch.connect(
+            "state-set", self._on_pass_shortcut_to_apps_toggled
+        )
         self.disable_internal_hotkey_switch.connect(
             "state-set", self._on_disable_internal_hotkey_toggled
         )
@@ -5281,7 +5303,12 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_internal_hotkey_sensitivity(self, disabled: bool) -> None:
         """Grey out the built-in shortcut controls when external activation is on."""
-        for row in (self.mode_row, self.shortcut_row, self.custom_shortcut_row):
+        for row in (
+            self.mode_row,
+            self.shortcut_row,
+            self.custom_shortcut_row,
+            self.pass_shortcut_to_apps_row,
+        ):
             row.set_sensitive(not disabled)
 
         if disabled:
@@ -5294,6 +5321,17 @@ class SettingsDialog(Gtk.Dialog):
             self._update_shortcut_ui_for_mode(
                 self.config_manager.get_str("shortcuts", "mode", "toggle")
             )
+
+    def _on_pass_shortcut_to_apps_toggled(self, widget: Gtk.Switch, state: bool) -> bool:
+        """Persist and live-apply shortcut pass-through."""
+        if self._initializing or self._applying_settings:
+            return False
+        enabled = bool(state)
+        self.config_manager.set("shortcuts", "pass_shortcut_to_apps", enabled)
+        self.config_manager.save_settings()
+        if self.hotkey_passthrough_update_callback:
+            self.hotkey_passthrough_update_callback(enabled)
+        return False
 
     def _on_disable_internal_hotkey_toggled(self, widget: Gtk.Switch, state: bool) -> bool:
         """Handle toggle of the external-activation switch."""
