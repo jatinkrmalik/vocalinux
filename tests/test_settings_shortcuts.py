@@ -37,6 +37,13 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         """Test that shortcuts section is built in __init__."""
         self.assertIn("self._build_shortcuts_section()", self.source_code)
 
+    def test_pass_through_option_persists_and_live_applies(self):
+        """The opt-in has a switch, persistence and a live callback (#950)."""
+        self.assertIn("self.pass_shortcut_to_apps_switch = Gtk.Switch()", self.source_code)
+        self.assertIn("pass_shortcut_to_apps", self.source_code)
+        self.assertIn("def _on_pass_shortcut_to_apps_toggled(", self.source_code)
+        self.assertIn("self.hotkey_passthrough_update_callback(enabled)", self.source_code)
+
     def test_shortcut_combo_widget_created(self):
         """Test that shortcut combo box widget is created."""
         self.assertIn("self.shortcut_combo = Gtk.ComboBoxText()", self.source_code)
@@ -306,7 +313,14 @@ class TestExternalActivationToggle(unittest.TestCase):
             self.source_code,
         )
         self.assertIn(
-            "for row in (self.mode_row, self.shortcut_row, self.custom_shortcut_row):",
+            (
+                "for row in (\n"
+                "            self.mode_row,\n"
+                "            self.shortcut_row,\n"
+                "            self.custom_shortcut_row,\n"
+                "            self.pass_shortcut_to_apps_row,\n"
+                "        ):"
+            ),
             self.source_code,
         )
         self.assertIn("row.set_sensitive(not disabled)", self.source_code)
