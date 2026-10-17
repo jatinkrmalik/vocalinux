@@ -1915,6 +1915,70 @@ class TestEvdevGrabAndForwarding:
         assert backend._event_is_shortcut(fd, self._key_event(29, 0)) is False
         assert backend._withheld_modifier[fd] == {}
 
+    def test_concurrent_pass_through_enable_does_not_stick_ctrl(self) -> None:
+        """A release cannot overtake replayed Ctrl-down on the virtual keyboard."""
+        backend = EvdevKeyboardBackend(shortcut="ctrl+ctrl", mode="toggle")
+        fd = 10
+        press, release = self._key_event(29, 1), self._key_event(29, 0)
+        device, forwarder = MagicMock(), MagicMock()
+        backend._forwarders = {fd: forwarder}
+        backend._forwarded_held = {fd: set()}
+        backend._hub._dispatch_event(fd, device, press, (backend,))
+
+        replay_started, allow_replay = threading.Event(), threading.Event()
+        release_started, release_done = threading.Event(), threading.Event()
+        written, errors = [], []
+
+        def write_event(event):
+            if event is press:
+                replay_started.set()
+                assert allow_replay.wait(3), "Replay timed out"
+            written.append(event)
+
+        def run(callback):
+            try:
+                callback()
+            except BaseException as exc:
+                errors.append(exc)
+
+        def release_ctrl():
+            release_started.set()
+            try:
+                backend._hub._dispatch_event(fd, device, release, (backend,))
+            finally:
+                release_done.set()
+
+        forwarder.write_event.side_effect = write_event
+
+        enabler = threading.Thread(
+            target=run,
+            args=(lambda: backend.set_pass_shortcut_to_apps(True),),
+        )
+        releaser = threading.Thread(target=run, args=(release_ctrl,))
+
+        try:
+            enabler.start()
+            assert replay_started.wait(2), "Ctrl-down was not replayed"
+
+            releaser.start()
+            assert release_started.wait(2)
+
+            assert not release_done.wait(0.1), "Release slipped through during replay"
+        finally:
+            allow_replay.set()
+            if enabler.ident is not None:
+                enabler.join(timeout=3)
+            if releaser.ident is not None:
+                releaser.join(timeout=3)
+
+        assert not errors, errors
+        assert not enabler.is_alive() and not releaser.is_alive()
+        assert written == [press, release]
+        assert backend.pass_shortcut_to_apps is True
+        assert backend._withheld_modifier[fd] == {}
+        assert backend._forwarded_held[fd] == set()
+        forwarder.syn.assert_called_once_with()
+
     def test_disabling_pass_through_keeps_existing_key_release(self) -> None:
         backend = EvdevKeyboardBackend(shortcut="ctrl+ctrl", mode="toggle")
         fd = 10

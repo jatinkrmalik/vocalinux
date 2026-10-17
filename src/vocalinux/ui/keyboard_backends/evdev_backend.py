@@ -749,6 +749,7 @@ class EvdevDeviceHub:
         # additionally tells a monitor thread whose join() timed out that its
         # incarnation is over, even when running has gone True again.
         self._lifecycle_lock = threading.Lock()
+        self._dispatch_lock = threading.RLock()
         self._generation = 0
         self._init_device_state()
 
@@ -943,6 +944,18 @@ class EvdevDeviceHub:
             self._dispatch_event(fd, device, event, engines, generation)
 
     def _dispatch_event(
+        self,
+        fd: int,
+        device: InputDevice,
+        event: InputEvent,
+        engines: Sequence["EvdevKeyboardBackend"],
+        generation: Optional[int] = None,
+    ) -> None:
+        """Keep event handling atomic with pass-through changes."""
+        with self._dispatch_lock:
+            self._dispatch_event_locked(fd, device, event, engines, generation)
+
+    def _dispatch_event_locked(
         self,
         fd: int,
         device: InputDevice,
@@ -1643,20 +1656,21 @@ class EvdevKeyboardBackend(KeyboardBackend):
         Replay withheld presses and sync their input frame so mouse-wheel
         actions can see the modifier before the next keyboard event.
         """
-        enabled = bool(enabled)
-        if enabled and not self.pass_shortcut_to_apps:
-            for fd, withheld in list(self._withheld_modifier.items()):
-                if not any(not entry[1] for entry in withheld.values()):
-                    continue
-                self._replay_withheld_modifiers(fd)
-                forwarder = self._forwarders.get(fd)
-                if forwarder is not None:
-                    try:
-                        forwarder.syn()
-                    except (OSError, IOError) as exc:
-                        logger.error("Failed to sync replayed shortcut on fd %s: %s", fd, exc)
-                        self._hub._release_failed_forwarder(fd, forwarder)
-        super().set_pass_shortcut_to_apps(enabled)
+        with self._hub._dispatch_lock:
+            enabled = bool(enabled)
+            if enabled and not self.pass_shortcut_to_apps:
+                for fd, withheld in list(self._withheld_modifier.items()):
+                    if not any(not entry[1] for entry in withheld.values()):
+                        continue
+                    self._replay_withheld_modifiers(fd)
+                    forwarder = self._forwarders.get(fd)
+                    if forwarder is not None:
+                        try:
+                            forwarder.syn()
+                        except (OSError, IOError) as exc:
+                            logger.error("Failed to sync replayed shortcut on fd %s: %s", fd, exc)
+                            self._hub._release_failed_forwarder(fd, forwarder)
+            super().set_pass_shortcut_to_apps(enabled)
 
     def set_shortcut(self, shortcut: str) -> None:
         """Update the shortcut and recompute combo key targets."""

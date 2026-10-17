@@ -4,8 +4,11 @@ Tests for keyboard shortcuts section in settings dialog.
 Uses source code inspection to avoid GTK mocking issues.
 """
 
+import ast
 import os
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 
 def _get_source_code() -> str:
@@ -37,12 +40,64 @@ class TestSettingsDialogShortcutsSection(unittest.TestCase):
         """Test that shortcuts section is built in __init__."""
         self.assertIn("self._build_shortcuts_section()", self.source_code)
 
-    def test_pass_through_option_persists_and_live_applies(self):
-        """The opt-in has a switch, persistence and a live callback (#950)."""
-        self.assertIn("self.pass_shortcut_to_apps_switch = Gtk.Switch()", self.source_code)
-        self.assertIn("pass_shortcut_to_apps", self.source_code)
-        self.assertIn("def _on_pass_shortcut_to_apps_toggled(", self.source_code)
-        self.assertIn("self.hotkey_passthrough_update_callback(enabled)", self.source_code)
+    def _pass_through_handler(self):
+        """Compile the real method without importing the whole GTK UI."""
+        cls = next(
+            x
+            for x in ast.parse(self.source_code).body
+            if isinstance(x, ast.ClassDef) and x.name == "SettingsDialog"
+        )
+        method = next(
+            x
+            for x in cls.body
+            if isinstance(x, ast.FunctionDef) and x.name == "_on_pass_shortcut_to_apps_toggled"
+        )
+        namespace = {"Gtk": SimpleNamespace(Switch=object)}
+        exec(
+            compile(ast.Module(body=[method], type_ignores=[]), "settings.py", "exec"),
+            namespace,
+        )
+        return namespace[method.name]
+
+    def test_pass_through_signal_is_connected(self):
+        self.assertIn(
+            "self.pass_shortcut_to_apps_switch.connect(\n"
+            '            "state-set", self._on_pass_shortcut_to_apps_toggled\n'
+            "        )",
+            self.source_code,
+        )
+
+    def test_pass_through_handler_persists_and_calls_live_callback(self):
+        handler = self._pass_through_handler()
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                config, callback = Mock(), Mock()
+                dialog = SimpleNamespace(
+                    _initializing=False,
+                    _applying_settings=False,
+                    config_manager=config,
+                    hotkey_passthrough_update_callback=callback,
+                )
+                self.assertIs(handler(dialog, None, enabled), False)
+                config.set.assert_called_once_with("shortcuts", "pass_shortcut_to_apps", enabled)
+                config.save_settings.assert_called_once_with()
+                callback.assert_called_once_with(enabled)
+
+    def test_pass_through_handler_respects_init_and_apply_guards(self):
+        handler = self._pass_through_handler()
+        for initializing, applying in ((True, False), (False, True)):
+            with self.subTest(initializing=initializing, applying=applying):
+                config, callback = Mock(), Mock()
+                dialog = SimpleNamespace(
+                    _initializing=initializing,
+                    _applying_settings=applying,
+                    config_manager=config,
+                    hotkey_passthrough_update_callback=callback,
+                )
+                self.assertIs(handler(dialog, None, True), False)
+                config.set.assert_not_called()
+                config.save_settings.assert_not_called()
+                callback.assert_not_called()
 
     def test_shortcut_combo_widget_created(self):
         """Test that shortcut combo box widget is created."""
