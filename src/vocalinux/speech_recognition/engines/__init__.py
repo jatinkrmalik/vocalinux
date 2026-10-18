@@ -4,9 +4,9 @@ New engine implementations are registered here so the recognition manager can
 discover them without hard-coding every backend.
 """
 
-from typing import Type
 import importlib.util
 import logging
+from typing import Type
 
 from ...common_types import Engine, EngineType
 

@@ -10,9 +10,8 @@ import pytest
 sys.modules["gi"] = MagicMock()
 sys.modules["gi.repository"] = MagicMock()
 
-from vocalinux.common_types import Engine, EngineType
+from vocalinux.common_types import Engine, EngineType, SpeechEngine
 from vocalinux.speech_recognition.engines.faster_whisper_engine import FasterWhisperEngine
-from vocalinux.common_types import SpeechEngine
 from vocalinux.utils.faster_whisper_model_info import (
     FASTER_WHISPER_MODEL_INFO,
     get_compute_type,
