@@ -15,6 +15,7 @@ User and maintainer documentation for Vocalinux.
 | [GATEWAY_EMBED.md](GATEWAY_EMBED.md) | Users | Optional local VocaGateway integration |
 | [CUSTOM_DICTIONARY_DESIGN.md](CUSTOM_DICTIONARY_DESIGN.md) | Contributors | Custom terms and correction design |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Contributors | Application modules, data flow, and threads |
+| [Performance benchmarks](benchmarks/README.md) | Contributors | Before and after charts for the performance pass |
 | [AUR.md](AUR.md) | Arch users / maintainers | AUR packages and publish secrets |
 | [RELEASE_PROCESS.md](RELEASE_PROCESS.md) | Maintainers | Version bump, checklist, tagging |
 
