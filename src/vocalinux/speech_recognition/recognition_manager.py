@@ -462,7 +462,7 @@ class SpeechRecognitionManager:
 
         # Speech detection parameters (load defaults, will be overridden by configure)
         self.vad_sensitivity = kwargs.get("vad_sensitivity", 3)
-        self.silence_timeout = kwargs.get("silence_timeout", 2.0)
+        self.silence_timeout = kwargs.get("silence_timeout", 1.2)
 
         # Silero VAD (neural-network-based, falls back to amplitude if unavailable)
         self._silero_vad = load_silero_vad()

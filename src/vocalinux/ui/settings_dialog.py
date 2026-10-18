@@ -7686,7 +7686,7 @@ class SettingsDialog(Gtk.Dialog):
         self._engine_for_language_memory = self.current_engine
         self.current_model_size = settings["model_size"]
         self.current_vad = settings.get("vad_sensitivity", 3)
-        self.current_silence = settings.get("silence_timeout", 2.0)
+        self.current_silence = settings.get("silence_timeout", 1.2)
 
         logger.info(
             f"Starting dialog with settings: engine={self.current_engine}, model={self.current_model_size}"
@@ -7885,7 +7885,7 @@ class SettingsDialog(Gtk.Dialog):
         language = sr_settings.get("language", "en-us")
         model_size = self.config_manager.get_model_size_for_engine(engine)
         vad_sensitivity = sr_settings.get("vad_sensitivity", 3)
-        silence_timeout = sr_settings.get("silence_timeout", 2.0)
+        silence_timeout = sr_settings.get("silence_timeout", 1.2)
 
         logger.info(
             f"Loaded current settings: engine={engine}, language={language}, model_size={model_size}, "
@@ -9683,7 +9683,7 @@ class SettingsDialog(Gtk.Dialog):
         self.update_recognition_progress("Listening", info="Starting recognition test...")
 
         # Enough room for one utterance plus the configured silence window.
-        delay = float(selected_settings.get("silence_timeout", 2.0)) + 2.0
+        delay = float(selected_settings.get("silence_timeout", 1.2)) + 2.0
         threading.Thread(target=self._stop_test_after_delay, args=(delay,)).start()
 
     def _test_text_callback(self, text: str):

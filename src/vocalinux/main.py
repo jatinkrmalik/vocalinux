@@ -527,7 +527,7 @@ def main():
         logger.info(f"Using model={model_size} (saved for engine {engine})")
 
     vad_sensitivity = saved_settings.get("vad_sensitivity", 3)
-    silence_timeout = saved_settings.get("silence_timeout", 2.0)
+    silence_timeout = saved_settings.get("silence_timeout", 1.2)
     stop_sound_guard_ms = saved_settings.get("stop_sound_guard_ms", 200)
     voice_commands_enabled = saved_settings.get("voice_commands_enabled")  # None = auto
     audio_device_index = audio_settings.get("device_index", None)

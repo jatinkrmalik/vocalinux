@@ -126,7 +126,7 @@ DEFAULT_CONFIG = {
         "parakeet_model_size": "v3-european",  # Parakeet TDT 0.6B v3 (25 European languages)
         "faster_whisper_model_size": "tiny",  # Default model for faster-whisper engine
         "vad_sensitivity": 3,  # Voice Activity Detection sensitivity (1-5)
-        "silence_timeout": 2.0,  # Seconds of silence before stopping
+        "silence_timeout": 1.2,  # Seconds of silence before stopping
         "stop_sound_guard_ms": 200,  # Small tail trim to avoid the stop sound without clipping speech
         "voice_commands_enabled": None,  # None = auto (enabled for VOSK, disabled for Whisper)
         "remote_api_url": "",  # Remote speech recognition server URL (e.g. http://192.168.1.100:8080)
