@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import Any, TYPE_CHECKING, Callable, Optional, Union, cast
 
 if TYPE_CHECKING:
     import numpy as np
@@ -51,6 +51,7 @@ from ..ui.config_manager import _multilingual_sibling
 from ..utils import faster_whisper_model_info as faster_whisper
 from ..utils import parakeet_model_info as parakeet
 from ..utils.host_process import host_env
+from ..utils.whispercpp_model_info import ComputeBackend
 from ..utils.model_checksums import (
     ChecksumError,
     expected_for,
@@ -146,8 +147,9 @@ def resolve_whisper_language(language: str) -> Optional[str]:
     if language == "auto":
         return None
     info = SUPPORTED_LANGUAGES.get(language)
-    if info is not None and "whisper" in info:
-        return info["whisper"]
+    language_info = cast(Optional[dict[str, str]], info)
+    if language_info is not None and "whisper" in language_info:
+        return language_info["whisper"]
     # Legacy fallback for codes not present in the catalog.
     if language == "en-us":
         return "en"
@@ -410,9 +412,9 @@ class SpeechRecognitionManager:
         )
         self._vosk_dictionary_warned = False
         self.state = RecognitionState.IDLE
-        self.audio_thread = None
-        self.recognition_thread = None
-        self.model = None
+        self.audio_thread: Optional[threading.Thread] = None
+        self.recognition_thread: Optional[threading.Thread] = None
+        self.model: Any = None
         self.recognizer = None  # Added for VOSK
         self.command_processor = CommandProcessor(language=self.language)
 
@@ -487,7 +489,9 @@ class SpeechRecognitionManager:
         self.whispercpp_entropy_thold = kwargs.get("whispercpp_entropy_thold", 2.4)
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
-        self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
+        self.whispercpp_n_threads = cast(
+            Optional[int], kwargs.get("whispercpp_n_threads", None)
+        )
         self._whispercpp_effective_threads: Optional[int] = None
         self.whispercpp_gpu_device = kwargs.get("whispercpp_gpu_device", None)
 
@@ -498,7 +502,7 @@ class SpeechRecognitionManager:
         self.remote_api_model = kwargs.get("remote_api_model", "whisper-1")
         self._http_session = None
 
-        self._faster_whisper_engine = None
+        self._faster_whisper_engine: Any = None
 
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
@@ -507,14 +511,14 @@ class SpeechRecognitionManager:
         # Recording control flags
         self.should_record = False
         self._recognition_mode = "toggle"  # "toggle" or "push_to_talk"
-        self.audio_buffer = []
+        self.audio_buffer: list[bytes] = []
         # Monotonic time the current buffer's first chunk was captured,
         # propagated onto each enqueued _AudioSegment.
         self._segment_started_at: Optional[float] = None
         self._recording_segment_has_speech = False
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
-        self._segment_queue = queue.Queue(maxsize=32)
+        self._segment_queue: queue.Queue[tuple[_AudioSegment, str]] = queue.Queue(maxsize=32)
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
@@ -1126,7 +1130,7 @@ class SpeechRecognitionManager:
             else:
                 logger.debug("Whisper returned empty transcription")
 
-            return text
+            return cast(str, text)
 
         except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"Error in Whisper transcription: {e}", exc_info=True)
@@ -1337,11 +1341,11 @@ class SpeechRecognitionManager:
                 logger.warning("faster-whisper engine not ready during transcription")
                 return ""
 
-            return self._faster_whisper_engine.transcribe(
+            return cast(str, self._faster_whisper_engine.transcribe(
                 audio_buffer,
                 language=self._dictation_language(language),
                 initial_prompt=self._get_dictionary_prompt(),
-            )
+            ))
         except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"Error in faster-whisper transcription: {e}", exc_info=True)
             return ""
@@ -1573,10 +1577,7 @@ class SpeechRecognitionManager:
         Args:
             model_path: Filesystem path to the GGML model file.
         """
-        import time
-
         from ..utils.whispercpp_model_info import (
-            ComputeBackend,
             _prefer_discrete_vulkan_device,
             detect_compute_backend,
             detect_cpu_info,
@@ -1722,8 +1723,8 @@ class SpeechRecognitionManager:
         error: RuntimeError,
         model_path: str,
         model_kwargs: dict[str, object],
-        cpu_backend: object,
-    ) -> object:
+        cpu_backend: str,
+    ) -> str:
         """Handle GPU backend failure by falling back to CPU.
 
         Args:
@@ -1835,7 +1836,10 @@ class SpeechRecognitionManager:
                             ",".join(unsupported),
                         )
                     if candidate_probs:
-                        lang = max(candidate_probs, key=candidate_probs.get)
+                        lang = max(
+                            candidate_probs,
+                            key=cast(Callable[[str], float], candidate_probs.get),
+                        )
                         logger.info(
                             "whisper.cpp restricted language detection: detected=%s %.3f, candidates=%s, using=%s %.3f",
                             detected[0],
@@ -2127,7 +2131,7 @@ class SpeechRecognitionManager:
                 stream = self.model.create_stream()
                 stream.accept_waveform(16000, audio_float)
                 self.model.decode_stream(stream)
-                return stream.result.text.strip()
+                return cast(str, stream.result.text.strip())
 
         except (RuntimeError, OSError, ValueError) as e:
             audio_info = (
@@ -2390,7 +2394,7 @@ class SpeechRecognitionManager:
             result = response.json()
 
             # whisper.cpp server format returns {"text": "..."}
-            return result.get("text", "")
+            return cast(str, result.get("text", ""))
 
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Cannot connect to remote server {url}: {e}")
@@ -2664,7 +2668,7 @@ class SpeechRecognitionManager:
             system_model_path = os.path.join(system_dir, model_name)
             if os.path.exists(system_model_path):
                 logger.info(f"Found pre-installed model at: {system_model_path}")
-                return system_model_path
+                return cast(str, system_model_path)
 
         # If not found anywhere, return the user path (will be created if needed)
         logger.debug(f"No existing model found, will use: {user_model_path}")

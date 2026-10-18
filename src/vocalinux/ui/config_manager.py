@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from ..utils.paths import config_dir
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES
@@ -347,7 +347,8 @@ def resolve_whispercpp_variant(
     # The "layout" sentinel is deliberately not in the catalog, so it reads as
     # non-English here and derives the multilingual variant -- which is what a
     # mode that can land on any language needs (#821).
-    language_is_english = SUPPORTED_LANGUAGES.get(language_id, {}).get("whisper") == "en"
+    language_info = cast(dict[str, str], SUPPORTED_LANGUAGES.get(language_id, {}))
+    language_is_english = language_info.get("whisper") == "en"
 
     def stand_in(variant: str) -> str:
         # Only language-derived results reach this helper; an explicit pick is
@@ -430,7 +431,9 @@ class ConfigManager:
             return
 
         try:
-            detected = detect_system_language(SUPPORTED_LANGUAGES)
+            detected = detect_system_language(
+                cast(dict[str, dict[str, str]], SUPPORTED_LANGUAGES)
+            )
         except Exception as exc:  # pragma: no cover - detection must never block startup
             logger.debug(f"Language detection failed: {exc}")
             return
@@ -744,7 +747,7 @@ class ConfigManager:
 
     def get_settings(self) -> dict[str, Any]:
         """Get the entire configuration dictionary."""
-        return self.config
+        return cast(dict[str, Any], self.config)
 
     def get_model_size_for_engine(self, engine: str) -> str:
         """Return the model id the engine should load for ``engine``.
@@ -764,7 +767,7 @@ class ConfigManager:
             saved = sr_config.get("model_size", "small" if engine == "vosk" else "tiny")
 
         if engine.lower() != "whisper_cpp":
-            return saved
+            return cast(str, saved)
 
         # Unpinned configs store the bare size; the engine still needs the
         # language-derived loadable id (and leftover ``{size}.en`` must not
@@ -826,9 +829,9 @@ class ConfigManager:
         if enabled is None:
             # Auto mode: enabled for VOSK, disabled for Whisper engines
             engine = sr_config.get("engine", "whisper_cpp")
-            return engine == "vosk"
+            return bool(engine == "vosk")
 
-        return enabled
+        return cast(bool, enabled)
 
     def update_speech_recognition_settings(self, settings: dict[str, Any]) -> None:
         """Update multiple speech recognition settings at once."""

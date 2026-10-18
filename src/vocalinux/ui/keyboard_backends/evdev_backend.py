@@ -1610,8 +1610,8 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self._hub._known_engines.add(self)
         self._hub.reset_if_idle()
 
-        self.last_trigger_time = 0
-        self.last_key_press_time = 0
+        self.last_trigger_time: float = 0.0
+        self.last_key_press_time: float = 0.0
         self.double_tap_threshold = 0.3  # seconds
         self.key_pressed_devices: set[int] = set()
 

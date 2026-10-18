@@ -36,7 +36,11 @@ gi.require_version("Gdk", "3.0")
 # Need GLib for idle_add
 from gi.repository import Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
-from ..common_types import RecognitionState, _EvdevCaptureDevice  # noqa: E402
+from ..common_types import (  # noqa: E402
+    RecognitionState,
+    SpeechRecognitionManagerProtocol,
+    _EvdevCaptureDevice,
+)
 from ..custom_dictionary import normalize_corrections  # noqa: E402
 from ..gateway_embed import GatewayStatus, get_gateway_embed_manager  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
@@ -181,7 +185,7 @@ def _resolve_audio_device_selection(
     if saved_raw_name:
         for idx, name, _is_default in devices:
             if name == saved_raw_name:
-                return idx
+                return int(idx)
     if saved_index is not None:
         for idx, _name, _is_default in devices:
             if idx == saved_index:
@@ -364,12 +368,14 @@ def _language_for_whispercpp_variant(dialog: Any) -> Optional[str]:
         and getattr(dialog, "_initializing", False) is True
     ):
         return LANGUAGE_FOLLOWS_LAYOUT
-    return dialog.language_combo.get_active_id() or dialog.language
+    value = dialog.language_combo.get_active_id() or dialog.language
+    return str(value)
 
 
 def _language_is_english(language_id: str) -> bool:
     """Return whether a language ID maps to English for Whisper."""
-    return SUPPORTED_LANGUAGES.get(language_id, {}).get("whisper") == "en"
+    info = SUPPORTED_LANGUAGES.get(language_id, {})
+    return isinstance(info, dict) and info.get("whisper") == "en"
 
 
 def _decode_simple_languages(primary: str, wants_second: bool, secondary: Optional[str]) -> str:
@@ -604,7 +610,7 @@ _FAMILY_ICON_PX = 22
 
 def _color_luminance(color: Any) -> float:
     """Relative luminance of a Gdk.RGBA (0 = black, 1 = white)."""
-    return 0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue
+    return float(0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue)
 
 
 def _rgba_to_hex(color: Any) -> str:
@@ -1626,10 +1632,11 @@ def _is_vosk_model_downloaded(size: str, language: str) -> bool:
         return False
 
     # Auto-detect is not supported by VOSK, fall back to en-us
-    if language == "auto" or language not in VOSK_MODEL_INFO[size]["languages"]:
+    languages = cast(dict[str, str], VOSK_MODEL_INFO[size]["languages"])
+    if language == "auto" or language not in languages:
         language = "en-us"
 
-    model_name = VOSK_MODEL_INFO[size]["languages"][language]
+    model_name = languages[language]
 
     # Check user's local models directory
     user_model_path = os.path.join(MODELS_DIR, model_name)
@@ -2122,7 +2129,7 @@ class PreferencesGroup(Gtk.Box):
         self.title = title
         self.description = description
         self.keywords = tuple(keywords)
-        self.rows = []
+        self.rows: list[Gtk.Widget] = []
 
         # Header with title (optional icon aligned to the top-right)
         if title:
@@ -2392,8 +2399,8 @@ class SettingsPage:
         self.name = name
         self.title = title
         self.icon_name = icon_name
-        self.groups = []
-        self.extras = []
+        self.groups: list[Any] = []
+        self.extras: list[Any] = []
         self.sidebar_row = None
         self.match_count_label = None
         self.update_badge_label = None
@@ -2615,11 +2622,11 @@ class SettingsDialog(Gtk.Dialog):
         self,
         parent: Gtk.Window,
         config_manager: "ConfigManager",
-        speech_engine: "SpeechRecognitionManager",
-        shortcut_update_callback: callable = None,
+        speech_engine: "SpeechRecognitionManagerProtocol",
+        shortcut_update_callback: Optional[Callable[..., Any]] = None,
         initial_page: Optional[str] = None,
         pending_update: Optional[ReleaseInfo] = None,
-        update_status_callback: callable = None,
+        update_status_callback: Optional[Callable[..., Any]] = None,
         overlay_enabled_callback: Optional[Callable[[bool], None]] = None,
         hotkey_listener_update_callback: Optional[Callable[[], None]] = None,
         language_shortcuts_update_callback: Optional[Callable[[], None]] = None,
@@ -2647,7 +2654,9 @@ class SettingsDialog(Gtk.Dialog):
         # populated by _build_language_shortcuts_section.
         self._language_shortcut_rows: list[dict] = []
         self._language_shortcut_add_row: Optional[PreferenceRow] = None
-        self._recording_shortcut_target = None
+        self._recording_shortcut_target: Optional[
+            tuple[Any, Callable[[str], None], Any, Any]
+        ] = None
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -2658,13 +2667,13 @@ class SettingsDialog(Gtk.Dialog):
         # Set while simple mode steers the advanced controls, so their own change
         # handlers do not each trigger a separate engine reload.
         self._simple_driving = False
-        self.advanced_box = None
+        self.advanced_box: Any = None
         self.advanced_island = None
-        self.advanced_expander = None
+        self.advanced_expander: Any = None
         self.unused_island = None
         self.unused_expander = None
         self.simple_page = None
-        self.simple_group = None
+        self.simple_group: Any = None
         self.engine_group = None
         self._processing_language_change = (
             False  # Flag to prevent recursive language change handling
@@ -2673,7 +2682,7 @@ class SettingsDialog(Gtk.Dialog):
         # engine-coerced fallbacks (e.g. Vosk forcing en-us for Greek). Parakeet
         # forces language=auto for honesty; this restores the preference when the
         # user returns to Whisper/cpp. Do not store engine-coerced fallbacks here.
-        self._last_non_parakeet_language = None
+        self._last_non_parakeet_language: Optional[str] = None
         self._engine_for_language_memory = None
         # Set from the saved config in _load_and_apply_settings; the switch itself
         # is the source of truth once the dialog is built (#821).
@@ -2879,7 +2888,7 @@ class SettingsDialog(Gtk.Dialog):
         # Restore the saved mode and point the simple questions at the live model
         # before the first visibility pass, so nothing flashes the wrong group.
         self._sync_simple_from_advanced()
-        self.advanced_expander.set_expanded(
+        cast(Any, self.advanced_expander).set_expanded(
             bool(self.config_manager.get("speech_recognition", "show_advanced", False))
         )
 
@@ -5257,7 +5266,9 @@ class SettingsDialog(Gtk.Dialog):
         # names (entry, apply_fn, button, hint_label) so one recorder serves the
         # main shortcut and every per-language row (#805).
         self._recording_shortcut = False
-        self._recording_shortcut_target = None
+        self._recording_shortcut_target: Optional[
+            tuple[Any, Callable[[str], None], Any, Any]
+        ] = None
         self._evdev_shortcut_recorder = None
         self.connect("key-press-event", self._on_shortcut_key_press)
         self.connect("destroy", self._on_shortcut_recorder_destroy)
@@ -7909,7 +7920,7 @@ class SettingsDialog(Gtk.Dialog):
         """Return the selected whisper.cpp model variant."""
         variant_id = self.model_variant_combo.get_active_id()
         if variant_id:
-            return variant_id
+            return cast(str, variant_id)
 
         size_id = self.model_combo.get_active_id()
         model_size = size_id.lower() if size_id else "small"
@@ -7923,7 +7934,7 @@ class SettingsDialog(Gtk.Dialog):
         return _recommended_whispercpp_variant_for_language(
             recommended_model,
             reason,
-            language_id,
+            cast(str, language_id),
         )
 
     def _downloaded_alternative_for(self, recommended: str) -> Optional[str]:
@@ -7939,8 +7950,9 @@ class SettingsDialog(Gtk.Dialog):
             return None
 
         language_id = _language_for_whispercpp_variant(self)
-        wants_english = _language_is_english(language_id)
-        recommended_mb = WHISPERCPP_MODEL_INFO.get(recommended, {}).get("size_mb", 0)
+        wants_english = _language_is_english(cast(str, language_id))
+        recommended_info = WHISPERCPP_MODEL_INFO.get(recommended, {})
+        recommended_mb = cast(int, recommended_info.get("size_mb", 0))
 
         # An English-only recommendation must not be answered with multilingual
         # weights: they weigh the same and recognise English worse, which is the
@@ -7952,24 +7964,25 @@ class SettingsDialog(Gtk.Dialog):
         for model_name in list_downloaded_whispercpp_models():
             if model_name in NON_DICTATION_MODELS:
                 continue
-            info = WHISPERCPP_MODEL_INFO.get(model_name)
+            info = cast(Optional[dict[str, Any]], WHISPERCPP_MODEL_INFO.get(model_name))
             if not info:
                 continue
             if is_english_only_whispercpp_model(model_name) and not wants_english:
                 continue
             if needs_english_only and not is_english_only_whispercpp_model(model_name):
                 continue
-            if info["size_mb"] < recommended_mb:
+            size_mb = cast(int, info["size_mb"])
+            if size_mb < recommended_mb:
                 continue
-            if best_mb is None or info["size_mb"] < best_mb:
-                best, best_mb = model_name, info["size_mb"]
+            if best_mb is None or size_mb < best_mb:
+                best, best_mb = model_name, size_mb
 
         return best
 
     def _get_default_whispercpp_variant_for_size(self, model_size: str) -> Optional[str]:
         """Return the default specialization for a user-selected size."""
         language_id = _language_for_whispercpp_variant(self)
-        return _default_whispercpp_variant_for_size(model_size, language_id)
+        return _default_whispercpp_variant_for_size(model_size, cast(str, language_id))
 
     def _on_apply_recommendation(self, _button: Any) -> None:
         """Set both pickers to the model the card is offering.
@@ -8212,7 +8225,9 @@ class SettingsDialog(Gtk.Dialog):
         """
         pinned = self.config_manager.get_model_variant_for_engine("whisper_cpp")
         language_id = _language_for_whispercpp_variant(self)
-        return resolve_whispercpp_variant(saved_model_for_engine, pinned, language_id)
+        return resolve_whispercpp_variant(
+            saved_model_for_engine, pinned, cast(str, language_id)
+        )
 
     def _populate_whispercpp_model_options(self, saved_model_for_engine: str):
         """Populate whisper.cpp size and specialization selectors."""
@@ -8244,7 +8259,7 @@ class SettingsDialog(Gtk.Dialog):
             if size_variant in WHISPERCPP_MODEL_INFO:
                 info = WHISPERCPP_MODEL_INFO[size_variant]
                 status = "✓" if is_whispercpp_model_downloaded(size_variant) else "↓"
-                display_text += f" ({_format_size(info['size_mb'])}) {status}"
+                display_text += f" ({_format_size(cast(int, info['size_mb']))}) {status}"
             if model_size == recommended_size:
                 display_text += " ★"
             self.model_combo.append(model_size, display_text)
@@ -8265,7 +8280,7 @@ class SettingsDialog(Gtk.Dialog):
         recommended_model, _ = self._get_recommended_whispercpp_model_for_language()
 
         for model_name in variants:
-            info = WHISPERCPP_MODEL_INFO[model_name]
+            info = cast(dict[str, Any], WHISPERCPP_MODEL_INFO[model_name])
             is_downloaded = is_whispercpp_model_downloaded(model_name)
             status = "✓" if is_downloaded else "↓"
             star = " ★" if model_name == recommended_model else ""
@@ -8282,7 +8297,9 @@ class SettingsDialog(Gtk.Dialog):
             # so English picks .en instead of leaving Standard multilingual stuck.
             # Follow mode uses the layout sentinel here so an English *display*
             # does not retarget onto .en and then refuse the mode.
-            model_to_set = _whispercpp_variant_for_language(model_to_set, language_id)
+            model_to_set = _whispercpp_variant_for_language(
+                model_to_set, cast(str, language_id)
+            )
             if model_to_set not in variants:
                 model_to_set = None
         if not model_to_set and recommended_model in variants:
@@ -8331,8 +8348,8 @@ class SettingsDialog(Gtk.Dialog):
 
         if engine == "whisper_cpp":
             for name in list_downloaded_whispercpp_models():
-                info = WHISPERCPP_MODEL_INFO[name]
-                size_mb = info["size_mb"] if isinstance(info.get("size_mb"), int) else 0
+                info = cast(dict[str, Any], WHISPERCPP_MODEL_INFO[name])
+                size_mb = cast(int, info["size_mb"])
                 items.append(
                     (
                         name,
@@ -8343,8 +8360,8 @@ class SettingsDialog(Gtk.Dialog):
                 )
         elif engine == "whisper":
             for name in _list_downloaded_whisper_models():
-                info = WHISPER_MODEL_INFO[name]
-                size_mb = info["size_mb"] if isinstance(info.get("size_mb"), int) else 0
+                info = cast(dict[str, Any], WHISPER_MODEL_INFO[name])
+                size_mb = cast(int, info["size_mb"])
                 items.append(
                     (
                         name,
@@ -8358,9 +8375,9 @@ class SettingsDialog(Gtk.Dialog):
                 lang_info = SUPPORTED_LANGUAGES.get(model.language, {})
                 lang_name = model.language
                 if isinstance(lang_info, dict):
-                    name = lang_info.get("name")
-                    if isinstance(name, str):
-                        lang_name = name
+                    language_name_value = lang_info.get("name")
+                    if isinstance(language_name_value, str):
+                        lang_name = language_name_value
                 items.append(
                     (
                         model.dirname,
@@ -8466,7 +8483,7 @@ class SettingsDialog(Gtk.Dialog):
         delete_btn.get_style_context().add_class("destructive-action")
         response = dialog.run()
         dialog.destroy()
-        return response == Gtk.ResponseType.YES
+        return cast(bool, response == Gtk.ResponseType.YES)
 
     def _delete_model_from_disk(self, model_id: str) -> None:
         """Delete a downloaded model for the selected engine."""
@@ -8969,7 +8986,7 @@ class SettingsDialog(Gtk.Dialog):
         """Expand or collapse the advanced island, remembering the choice."""
         expanded = expander.get_expanded()
         if expanded:
-            self.advanced_box.show_all()
+            cast(Any, self.advanced_box).show_all()
             # Per-engine visibility has to run after show_all, which would
             # otherwise reveal rows the active engine does not use.
             self._update_engine_specific_ui()
@@ -9054,7 +9071,7 @@ class SettingsDialog(Gtk.Dialog):
 
     def _update_simple_visibility(self) -> None:
         """Show the simple questions, with the second language only when asked for."""
-        self.simple_group.show_all()
+        cast(Any, self.simple_group).show_all()
         wants_second = self.simple_multi_switch.get_active()
         _set_no_show_all_visible(self.simple_second_language_row, wants_second)
 

@@ -14,7 +14,7 @@ import subprocess
 import threading
 import time
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 
 from ..utils.host_process import host_env
 from ..utils.paths import config_dir
@@ -150,7 +150,7 @@ class TextInjector:
         self._state_lock = threading.Lock()
         self._abort_injections = threading.Event()
         self.last_typed_count = 0
-        self._clipboard_tool_health = {}
+        self._clipboard_tool_health: dict[str, bool] = {}
         self._clipboard_timeout = 0.35
         # Overlapping ydotool pastes: bump generation to cancel stale restores;
         # target keeps the original pre-injection clipboard across the window.
@@ -1565,7 +1565,9 @@ class TextInjector:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = json.load(f)
-                return config.get("text_injection", {}).get("copy_to_clipboard", False)
+                    return cast(
+                        bool, config.get("text_injection", {}).get("copy_to_clipboard", False)
+                    )
         except Exception as e:
             logger.debug(f"Could not read copy_to_clipboard setting: {e}")
         return False
