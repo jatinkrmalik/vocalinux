@@ -1293,6 +1293,7 @@ class TestWhispercppInitialization(unittest.TestCase):
                     tuple(call.kwargs["n_threads"] for call in model_class.call_args_list),
                     expected_threads,
                 )
+                self.assertEqual(manager._whispercpp_effective_threads, expected_threads[-1])
 
     def test_init_whispercpp_import_error(self):
         """Test whisper.cpp when import fails."""

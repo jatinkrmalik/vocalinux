@@ -488,6 +488,7 @@ class SpeechRecognitionManager:
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
         self.whispercpp_n_threads = kwargs.get("whispercpp_n_threads", None)
+        self._whispercpp_effective_threads: Optional[int] = None
         self.whispercpp_gpu_device = kwargs.get("whispercpp_gpu_device", None)
 
         # Remote API settings
@@ -1684,6 +1685,7 @@ class SpeechRecognitionManager:
         else:
             n_threads = self._whispercpp_cpu_thread_count()
 
+        self._whispercpp_effective_threads = n_threads
         load_start_time = time.time()
         loaded_backend = runtime_backend
 
@@ -1698,18 +1700,19 @@ class SpeechRecognitionManager:
                 model_error, model_path, model_kwargs, ComputeBackend.CPU
             )
 
+        effective_threads = self._whispercpp_effective_threads
+        if effective_threads is None:
+            effective_threads = n_threads
+
         load_duration = time.time() - load_start_time
-        if has_gpu_libs:
-            logger.info(
-                f"whisper.cpp configured with n_threads={n_threads} "
-                f"(GPU backend: {actual_gpu_backend})"
-            )
-        else:
-            logger.info(
-                f"whisper.cpp configured with n_threads={n_threads} "
-                f"(CPU-only; pywhispercpp lacks GPU libraries)"
-            )
-        logger.info(f"whisper.cpp model loaded in {load_duration:.2f}s ({loaded_backend} backend)")
+        logger.info(
+            f"whisper.cpp configured with n_threads={effective_threads} "
+            f"({loaded_backend} backend)"
+        )
+        logger.info(
+            f"whisper.cpp model loaded in {load_duration:.2f}s "
+            f"({loaded_backend} backend, n_threads={effective_threads})"
+        )
 
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
@@ -1754,8 +1757,11 @@ class SpeechRecognitionManager:
         os.environ["GGML_VULKAN"] = "0"
         os.environ["GGML_CUDA"] = "0"
         cpu_model_kwargs = model_kwargs.copy()
-        cpu_model_kwargs["n_threads"] = self._whispercpp_cpu_thread_count()
+        cpu_thread_count = self._whispercpp_cpu_thread_count()
+        cpu_model_kwargs["n_threads"] = cpu_thread_count
+        self._whispercpp_effective_threads = cpu_thread_count
         self.model = self._load_model_with_compatible_params(model_path, cpu_model_kwargs)
+        logger.info("Reloaded on CPU with n_threads=%d", cpu_thread_count)
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
 

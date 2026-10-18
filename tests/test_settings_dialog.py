@@ -1624,11 +1624,17 @@ class TestAboutColorSchemeRead(unittest.TestCase):
     def test_about_section_reads_os_scheme_once_per_build(self) -> None:
         from vocalinux.ui import settings_dialog
 
-        with patch.object(
-            settings_dialog.Gtk,
-            "Dialog",
-            type("TestGtkDialog", (), {}),
-        ):
+        test_dialog_base = type("TestGtkDialog", (), {})
+
+        def reload_settings_dialog() -> None:
+            importlib.reload(settings_dialog)
+            self.assertNotIn(
+                test_dialog_base,
+                getattr(settings_dialog.SettingsDialog, "__mro__", ()),
+            )
+
+        self.addCleanup(reload_settings_dialog)
+        with patch.object(settings_dialog.Gtk, "Dialog", test_dialog_base):
             importlib.reload(settings_dialog)
 
         dialog = MagicMock()
