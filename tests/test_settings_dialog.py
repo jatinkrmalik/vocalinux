@@ -1406,8 +1406,8 @@ class TestAboutPage(unittest.TestCase):
     def test_talk_to_us_sits_above_updates(self):
         self.assertLess(self.about.find('title="Talk to us"'), self.about.find('title="Updates"'))
         self.assertLess(
-            self.about.find("self.about_tab.pack_start(talk_group"),
-            self.about.find("self.about_tab.pack_start(updates_group"),
+            self.about.find("about_tab.pack_start(talk_group"),
+            self.about.find("about_tab.pack_start(updates_group"),
         )
 
     def test_channel_check_shares_one_row(self):
