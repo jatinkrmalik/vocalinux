@@ -3687,6 +3687,29 @@ class SpeechRecognitionManager:
 
         self._process_audio_buffer(audio_buffer)
 
+    def _transcribe_with_vosk(self, audio_buffer: list[bytes]) -> Optional[str]:
+        """Transcribe one audio segment with the initialized Vosk recognizer."""
+        with self._model_lock:
+            if self.recognizer is None:
+                logger.warning("Recognizer is None during processing, returning empty result")
+                return None
+            for data in audio_buffer:
+                self.recognizer.AcceptWaveform(data)
+
+            result = json.loads(self.recognizer.FinalResult())
+            return result.get("text", "")
+
+    def _transcribe_remote_api_segment(
+        self, audio_buffer: list[bytes], language: Optional[str]
+    ) -> Optional[str]:
+        """Snapshot the HTTP session and transcribe one remote API segment."""
+        with self._model_lock:
+            session = self._http_session
+        if session is None:
+            logger.error("Remote API HTTP session not initialized")
+            return None
+        return self._transcribe_with_remote_api(audio_buffer, session, language)
+
     def _process_audio_buffer(
         self, audio_buffer: list[bytes], language: Optional[str] = None
     ) -> None:
@@ -3702,47 +3725,28 @@ class SpeechRecognitionManager:
             language = getattr(audio_buffer, "language", None)
         dictation_language = self._dictation_language(language)
 
-        if self.engine == "vosk":
-            # Lock recognizer access to prevent race condition with reconfigure
-            with self._model_lock:
-                # Check if recognizer is still valid
-                if self.recognizer is None:
-                    logger.warning("Recognizer is None during processing, returning empty result")
-                    return
-                for data in audio_buffer:
-                    self.recognizer.AcceptWaveform(data)
-
-                result = json.loads(self.recognizer.FinalResult())
-                text = result.get("text", "")
-
-        elif self.engine == "whisper":
-            text = self._transcribe_with_whisper(audio_buffer, dictation_language)
-
-        elif self.engine == "whisper_cpp":
-            text = self._transcribe_with_whispercpp(audio_buffer, dictation_language)
-
-        elif self.engine == "parakeet":
-            text = self._transcribe_with_parakeet(audio_buffer)
-
-        elif self.engine == "faster_whisper":
-            text = self._transcribe_with_faster_whisper(audio_buffer, dictation_language)
-
-        elif self.engine == "remote_api":
-            # Snapshot the HTTP session under lock to prevent race with
-            # reconfigure() / reinitialize_after_resume() which close/recreate
-            # the session under _model_lock.  The snapshot (a local reference)
-            # remains valid even if another thread closes the old session —
-            # urllib3's PoolManager keeps existing connections alive until the
-            # in-flight request completes.
-            with self._model_lock:
-                session = self._http_session
-            if session is None:
-                logger.error("Remote API HTTP session not initialized")
-                return
-            text = self._transcribe_with_remote_api(audio_buffer, session, dictation_language)
-
-        else:
+        transcribers: dict[str, Callable[[], Optional[str]]] = {
+            "vosk": lambda: self._transcribe_with_vosk(audio_buffer),
+            "whisper": lambda: self._transcribe_with_whisper(
+                audio_buffer, dictation_language
+            ),
+            "whisper_cpp": lambda: self._transcribe_with_whispercpp(
+                audio_buffer, dictation_language
+            ),
+            "parakeet": lambda: self._transcribe_with_parakeet(audio_buffer),
+            "faster_whisper": lambda: self._transcribe_with_faster_whisper(
+                audio_buffer, dictation_language
+            ),
+            "remote_api": lambda: self._transcribe_remote_api_segment(
+                audio_buffer, dictation_language
+            ),
+        }
+        transcriber = transcribers.get(self.engine)
+        if transcriber is None:
             logger.error(f"Unknown engine: {self.engine}")
+            return
+        text = transcriber()
+        if text is None:
             return
 
         # Process text - either with voice commands or pass through directly

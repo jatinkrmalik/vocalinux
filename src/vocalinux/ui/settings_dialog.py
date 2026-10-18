@@ -44,6 +44,7 @@ from ..common_types import (  # noqa: E402
 from ..custom_dictionary import normalize_corrections  # noqa: E402
 from ..gateway_embed import GatewayStatus, get_gateway_embed_manager  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
+from ..speech_recognition.engines import available_engines  # noqa: E402
 from ..utils import parakeet_model_info as parakeet  # noqa: E402
 from ..utils.faster_whisper_model_info import delete_model as delete_faster_whisper_model
 from ..utils.faster_whisper_model_info import (  # noqa: E402
@@ -821,57 +822,20 @@ WHISPER_MODEL_INFO = {
 }
 
 
-def _module_available(name: str) -> bool:
-    try:
-        return importlib.util.find_spec(name) is not None
-    except (ImportError, ValueError):
-        return False
-
-
 def get_available_engines() -> dict[str, bool]:
-    """
-    Detect which speech recognition engines are available/installed.
-    Returns a dictionary of engine_name -> availability (bool).
-    """
-    engines = {
-        "vosk": False,
-        "whisper": False,
-        "whisper_cpp": False,
-        "parakeet": False,
-        "faster_whisper": False,
-        "remote_api": False,
+    """Preserve the legacy engine-to-availability mapping."""
+    available = set(available_engines())
+    return {
+        name: name in available
+        for name in (
+            "vosk",
+            "whisper",
+            "whisper_cpp",
+            "parakeet",
+            "faster_whisper",
+            "remote_api",
+        )
     }
-
-    engines["vosk"] = _module_available("vosk")
-    engines["whisper"] = _module_available("whisper")
-    engines["faster_whisper"] = _module_available("faster_whisper")
-
-    # Check whisper.cpp (pywhispercpp)
-    try:
-        from pywhispercpp.model import Model
-
-        engines["whisper_cpp"] = True
-    except ImportError:
-        pass
-
-    # Check Parakeet (sherpa-onnx)
-    try:
-        import sherpa_onnx  # noqa: F401
-
-        engines["parakeet"] = True
-    except ImportError:
-        pass
-
-    # Remote API is always available (only requires requests package)
-    try:
-        import requests  # noqa: F401
-
-        engines["remote_api"] = True
-    except ImportError:
-        pass
-
-    logger.debug(f"Available engines: {engines}")
-    return engines
 
 
 # Models directory

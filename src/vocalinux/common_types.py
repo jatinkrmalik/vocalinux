@@ -4,7 +4,7 @@ This module provides type definitions to avoid circular imports.
 """
 
 from enum import Enum, auto
-from typing import Any, Callable, Iterable, Optional, Protocol  # noqa: F401
+from typing import Any, Callable, Iterable, Optional, Protocol, runtime_checkable  # noqa: F401
 
 
 class RecognitionState(Enum):
@@ -44,6 +44,32 @@ class Engine(Protocol):
 
     def is_ready(self) -> bool:
         """Return True if the engine is initialized and ready to transcribe."""
+        ...
+
+    def cleanup(self) -> None:
+        """Release any engine resources."""
+        ...
+
+
+@runtime_checkable
+class SpeechEngine(Protocol):
+    """Runtime-checkable contract for speech transcription engines."""
+
+    def init(self) -> None:
+        """Initialize the engine and load any required models."""
+        ...
+
+    def is_ready(self) -> bool:
+        """Return True if the engine is initialized and ready to transcribe."""
+        ...
+
+    def transcribe(
+        self,
+        audio_buffer: list[bytes],
+        language: Optional[str] = None,
+        initial_prompt: Optional[str] = None,
+    ) -> str:
+        """Transcribe audio chunks with optional per-call language and prompt."""
         ...
 
     def cleanup(self) -> None:

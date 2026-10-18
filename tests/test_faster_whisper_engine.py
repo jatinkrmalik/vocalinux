@@ -12,6 +12,7 @@ sys.modules["gi.repository"] = MagicMock()
 
 from vocalinux.common_types import Engine, EngineType
 from vocalinux.speech_recognition.engines.faster_whisper_engine import FasterWhisperEngine
+from vocalinux.common_types import SpeechEngine
 from vocalinux.utils.faster_whisper_model_info import (
     FASTER_WHISPER_MODEL_INFO,
     get_compute_type,
@@ -271,9 +272,10 @@ class TestFasterWhisperEngine:
         )
         return whisper_mock
 
-    def test_engine_implements_protocol(self):
+    def test_engine_implements_protocol(self) -> None:
         """Test that FasterWhisperEngine satisfies the Engine Protocol."""
         engine = FasterWhisperEngine(model_size="tiny")
+        assert isinstance(engine, SpeechEngine)
         assert hasattr(engine, "init")
         assert hasattr(engine, "transcribe")
         assert hasattr(engine, "is_ready")
