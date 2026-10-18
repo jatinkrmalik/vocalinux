@@ -33,6 +33,17 @@ from .remote_desktop_portal import (
 
 _PORTAL_SUBMIT_TIMEOUT_S = 195.0  # portal's _START_TIMEOUT_S + _REQUEST_TIMEOUT_S
 _X11_PASTE_MIN_CHARS = 30
+_X11_TEXT_CLIPBOARD_TARGETS = frozenset(
+    {
+        "utf8_string",
+        "string",
+        "text",
+        "text/plain",
+        "text/plain;charset=utf-8",
+        "compound_text",
+    }
+)
+_X11_CLIPBOARD_META_TARGETS = frozenset({"targets", "timestamp", "multiple", "save_targets"})
 
 logger = logging.getLogger(__name__)
 
@@ -1854,9 +1865,14 @@ class TextInjector:
             and self._paste_long_text_enabled()
         ):
             self._wait_for_modifiers_released()
-            if self._inject_via_clipboard_paste(text, env=env):
+            if self._clipboard_holds_non_text():
+                logger.info(
+                    "Clipboard holds non-text content; typing instead of pasting to preserve it"
+                )
+            elif self._inject_via_clipboard_paste(text, env=env):
                 return
-            logger.warning("Long-text clipboard paste failed; falling back to xdotool typing")
+            else:
+                logger.warning("Long-text clipboard paste failed; falling back to xdotool typing")
 
         # Inject text using xdotool
         try:
@@ -2053,6 +2069,40 @@ class TextInjector:
                 continue
 
         return "" if saw_empty else None
+
+    def _clipboard_holds_non_text(self) -> bool:
+        """Return whether the X11 clipboard has no readable text target."""
+        if self.environment != DesktopEnvironment.X11:
+            return False
+        if not shutil.which("xclip"):
+            return self._read_clipboard() is None
+
+        try:
+            result = subprocess.run(
+                ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=1.0,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=host_env(),
+            )
+        except (subprocess.TimeoutExpired, OSError, UnicodeDecodeError):
+            logger.debug("Could not inspect X11 clipboard targets")
+            return self._read_clipboard() is None
+
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+
+        targets = {
+            target.strip().casefold() for target in result.stdout.splitlines() if target.strip()
+        }
+        if not targets:
+            return False
+
+        content_targets = targets.difference(_X11_CLIPBOARD_META_TARGETS)
+        return not any(target in _X11_TEXT_CLIPBOARD_TARGETS for target in content_targets)
 
     def _paste_shortcut_preference(self) -> str:
         """Return the configured clipboard-paste shortcut id."""

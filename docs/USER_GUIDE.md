@@ -34,7 +34,7 @@ When Vocalinux injects through the clipboard (the usual Wayland / ydotool path),
 
 On non-US layouts such as German Neo, that chord uses the key that types **v** on the active layout (not physical KEY_V). Nested terminal panels inside an IDE are often invisible to window-class detection. If paste lands as a literal `^V` or does nothing, open **Settings → Dictation → Clipboard Paste Shortcut** and choose **Ctrl+Shift+V**.
 
-On X11, **Paste long dictations** opts in to clipboard-pasting dictations of 30 or more characters instead of typing them key by key. It is off by default. Vocalinux restores the previous clipboard contents after pasting unless **Copy to Clipboard** is enabled.
+On X11, **Paste long dictations** opts in to clipboard-pasting dictations of 30 or more characters instead of typing them key by key. It is off by default. Vocalinux restores the previous clipboard contents after pasting unless **Copy to Clipboard** is enabled. If the clipboard contains an image or other non-text content, Vocalinux types the dictation and leaves that content alone.
 
 **Other audio.** Settings → Audio → Other audio can lower speakers and headphones while the microphone is open, then put that volume back. It stays off until you turn it on. Level while dictating is a percent of the current volume (0 is silent). Quitting mid-dictation puts the volume back; if the app crashes first, the next launch does.
 
