@@ -3190,8 +3190,11 @@ class TextInjector:
         except (TypeError, ValueError):
             return 0.012
 
-    def _log_current_window_info(self):
+    def _log_current_window_info(self) -> None:
         """Log information about the current window/application for debugging."""
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
         try:
             if (
                 self.environment == DesktopEnvironment.X11
@@ -3203,7 +3206,7 @@ class TextInjector:
         except Exception as e:
             logger.debug(f"Could not get window info: {e}")
 
-    def _log_x11_window_info(self):
+    def _log_x11_window_info(self) -> None:
         """Log X11 window information."""
         env = os.environ.copy()
 
@@ -3238,7 +3241,7 @@ class TextInjector:
                 timeout=2,
             )
             window_name = result.stdout.strip()
-            logger.info(f"Target window: '{window_name}' (ID: {window_id})")
+            logger.debug(f"Target window: '{window_name}' (ID: {window_id})")
 
             # Prefer xprop; xdotool classname is last-resort when xprop is missing
             # (see focused_window.read_wm_class).
@@ -3262,12 +3265,12 @@ class TextInjector:
             try:
                 with open(f"/proc/{window_pid}/comm", "r") as f:
                     process_name = f.read().strip()
-                logger.info(f"Target process: {process_name} (PID: {window_pid})")
+                logger.debug(f"Target process: {process_name} (PID: {window_pid})")
             except Exception:
                 pass
 
         except subprocess.TimeoutExpired:
-            logger.warning("Timeout getting window information")
+            logger.debug("Timeout getting window information")
         except subprocess.CalledProcessError as e:
             logger.debug(f"xdotool command failed: {e.stderr}")
         except Exception as e:

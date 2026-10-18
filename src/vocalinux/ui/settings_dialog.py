@@ -17,6 +17,7 @@ UX Design Notes:
 - Modal dialog for model downloads (explicit confirmation for large downloads)
 """
 
+import importlib.util
 import itertools
 import logging
 import math
@@ -639,9 +640,13 @@ def _about_surface_is_dark() -> bool:
     return False
 
 
-def _about_ink_hex(widget: Optional[Gtk.Widget] = None) -> str:
+def _about_ink_hex(
+    widget: Optional[Gtk.Widget] = None,
+    dark: Optional[bool] = None,
+) -> str:
     """Ink for currentColor marks: theme fg when known, else light/dark defaults."""
-    dark = _about_surface_is_dark()
+    if dark is None:
+        dark = _about_surface_is_dark()
     if widget is not None:
         ctx = widget.get_style_context()
         for name in ("theme_fg_color", "theme_text_color", "fg_color"):
@@ -810,7 +815,14 @@ WHISPER_MODEL_INFO = {
 }
 
 
-def get_available_engines():
+def _module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def get_available_engines() -> dict[str, bool]:
     """
     Detect which speech recognition engines are available/installed.
     Returns a dictionary of engine_name -> availability (bool).
@@ -824,21 +836,9 @@ def get_available_engines():
         "remote_api": False,
     }
 
-    # Check VOSK
-    try:
-        import vosk
-
-        engines["vosk"] = True
-    except ImportError:
-        pass
-
-    # Check OpenAI Whisper
-    try:
-        import whisper
-
-        engines["whisper"] = True
-    except ImportError:
-        pass
+    engines["vosk"] = _module_available("vosk")
+    engines["whisper"] = _module_available("whisper")
+    engines["faster_whisper"] = _module_available("faster_whisper")
 
     # Check whisper.cpp (pywhispercpp)
     try:
@@ -853,13 +853,6 @@ def get_available_engines():
         import sherpa_onnx  # noqa: F401
 
         engines["parakeet"] = True
-    except ImportError:
-        pass
-
-    try:
-        from faster_whisper import WhisperModel  # noqa: F401
-
-        engines["faster_whisper"] = True
     except ImportError:
         pass
 
@@ -6219,7 +6212,10 @@ class SettingsDialog(Gtk.Dialog):
         self.power_user_switch.connect("state-set", self._on_power_user_toggled)
 
     def _about_mark_image(
-        self, icon_name: str, pixel_size: int = _ABOUT_ICON_TEXT_PX
+        self,
+        icon_name: str,
+        pixel_size: int = _ABOUT_ICON_TEXT_PX,
+        dark: Optional[bool] = None,
     ) -> Optional[Gtk.Image]:
         """Load a currentColor SVG and paint it to match the dialog foreground."""
         from gi.repository import GdkPixbuf
@@ -6230,7 +6226,7 @@ class SettingsDialog(Gtk.Dialog):
         if not os.path.exists(path):
             return None
         try:
-            ink = _about_ink_hex(self)
+            ink = _about_ink_hex(self, dark)
             with open(path, encoding="utf-8") as handle:
                 svg = handle.read().replace("currentColor", ink)
             loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
@@ -6254,6 +6250,7 @@ class SettingsDialog(Gtk.Dialog):
         label: str = "Open",
         icon_name: Optional[str] = None,
         width: int = 100,
+        dark: Optional[bool] = None,
     ) -> Gtk.Button:
         """Button that opens a trusted About URL.
 
@@ -6266,7 +6263,7 @@ class SettingsDialog(Gtk.Dialog):
         if label == "Open":
             _set_accessible_name(button, tooltip)
         if icon_name:
-            image = self._about_mark_image(icon_name)
+            image = self._about_mark_image(icon_name, dark=dark)
             if image is not None:
                 image.set_margin_end(8)
                 button.set_image(image)
@@ -6282,13 +6279,18 @@ class SettingsDialog(Gtk.Dialog):
         subtitle: str,
         icon_names: tuple[str, ...],
         tooltip: str,
+        dark: Optional[bool] = None,
     ) -> Gtk.Button:
         """Compact icon + name tile that opens a family site."""
         inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         marks = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         marks.set_valign(Gtk.Align.CENTER)
         for icon_name in icon_names:
-            icon = self._about_mark_image(icon_name, pixel_size=_FAMILY_ICON_PX)
+            icon = self._about_mark_image(
+                icon_name,
+                pixel_size=_FAMILY_ICON_PX,
+                dark=dark,
+            )
             if icon is not None:
                 marks.pack_start(icon, False, False, 0)
         inner.pack_start(marks, False, False, 0)
@@ -6556,12 +6558,13 @@ class SettingsDialog(Gtk.Dialog):
 
         threading.Thread(target=test_connection, daemon=True).start()
 
-    def _build_about_section(self):
+    def _build_about_section(self) -> None:
         """Build the About page using the same PreferenceRow cards as other pages."""
         from gi.repository import GdkPixbuf
 
         from ..utils.resource_manager import ResourceManager
 
+        dark = _about_surface_is_dark()
         about_icon = None
         logo_path = ResourceManager().get_icon_path("vocalinux")
         if os.path.exists(logo_path):
@@ -6601,6 +6604,7 @@ class SettingsDialog(Gtk.Dialog):
                 "Open vocalinux.com website",
                 label="Website",
                 width=110,
+                dark=dark,
             ),
             False,
             False,
@@ -6612,6 +6616,7 @@ class SettingsDialog(Gtk.Dialog):
                 "Open the Vocalinux GitHub repository",
                 label="Source code",
                 width=120,
+                dark=dark,
             ),
             False,
             False,
@@ -6647,6 +6652,7 @@ class SettingsDialog(Gtk.Dialog):
             label="Report a bug or idea",
             icon_name="github",
             width=200,
+            dark=dark,
         )
         talk_group.add_row(
             PreferenceRow(
@@ -6669,6 +6675,7 @@ class SettingsDialog(Gtk.Dialog):
                     label=label,
                     icon_name=icon_name,
                     width=width,
+                    dark=dark,
                 ),
                 False,
                 False,
@@ -6770,7 +6777,7 @@ class SettingsDialog(Gtk.Dialog):
         family_grid.set_margin_top(4)
         family_grid.set_margin_bottom(8)
         for index, (url, title, subtitle, icon_names, open_name) in enumerate(_VOCAHQ_FAMILY_LINKS):
-            tile = self._family_tile(url, title, subtitle, icon_names, open_name)
+            tile = self._family_tile(url, title, subtitle, icon_names, open_name, dark=dark)
             family_grid.attach(tile, index % 2, index // 2, 1, 1)
         family_row = Gtk.ListBoxRow()
         family_row.set_activatable(False)

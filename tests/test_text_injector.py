@@ -4,6 +4,7 @@ Tests for text injection functionality.
 
 import contextlib
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -565,6 +566,32 @@ class TestTextInjector(unittest.TestCase):
 
         result = injector.inject_text("Test")
         self.assertTrue(result)
+
+    def test_window_info_subprocesses_run_only_at_debug(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+
+        with patch.object(injector, "_inject_with_xdotool"):
+            self.mock_subprocess.reset_mock()
+            with self.assertLogs(
+                "vocalinux.text_injection.text_injector",
+                level=logging.INFO,
+            ):
+                self.assertTrue(injector.inject_text("Test"))
+            self.mock_subprocess.assert_not_called()
+
+            self.mock_subprocess.reset_mock()
+            with self.assertLogs(
+                "vocalinux.text_injection.text_injector",
+                level=logging.DEBUG,
+            ):
+                self.assertTrue(injector.inject_text("Test"))
+
+        self.assertGreater(self.mock_subprocess.call_count, 0)
+        self.assertEqual(
+            self.mock_subprocess.call_args_list[0].args[0],
+            ["xdotool", "getactivewindow"],
+        )
 
     def test_inject_text_returns_false_on_failure(self):
         """Test that inject_text returns False on failure."""

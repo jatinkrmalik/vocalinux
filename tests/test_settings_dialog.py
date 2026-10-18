@@ -10,9 +10,12 @@ UX Design Notes tested:
 - No action buttons - uses title bar close (GNOME HIG)
 """
 
+import importlib
 import sys
 import time
 import unittest
+from functools import partial
+from importlib.machinery import ModuleSpec
 from unittest.mock import MagicMock, Mock, call, patch
 
 # Mock GTK before importing anything that might use it
@@ -50,6 +53,49 @@ mock_config_manager.get = Mock(
 mock_config_manager.update_speech_recognition_settings = Mock()
 mock_config_manager.set = Mock()
 mock_config_manager.save_settings = Mock()
+
+
+class TestAvailableEngines(unittest.TestCase):
+    def test_module_specs_control_availability_without_importing(self) -> None:
+        from vocalinux.ui import settings_dialog
+
+        module_names = ("vosk", "whisper", "faster_whisper")
+        for available_modules in (set(module_names), set()):
+            with self.subTest(available_modules=available_modules):
+                with patch.dict(sys.modules):
+                    for module_name in module_names:
+                        sys.modules.pop(module_name, None)
+
+                    def find_spec(name: str) -> ModuleSpec | None:
+                        if name in available_modules:
+                            return ModuleSpec(name, loader=None)
+                        return None
+
+                    with patch.object(
+                        settings_dialog.importlib.util,
+                        "find_spec",
+                        side_effect=find_spec,
+                    ):
+                        engines = settings_dialog.get_available_engines()
+
+                    for module_name in module_names:
+                        self.assertEqual(
+                            engines[module_name],
+                            module_name in available_modules,
+                        )
+                        self.assertNotIn(module_name, sys.modules)
+
+    def test_module_available_handles_spec_errors(self) -> None:
+        from vocalinux.ui import settings_dialog
+
+        for error in (ImportError, ValueError):
+            with self.subTest(error=error):
+                with patch.object(
+                    settings_dialog.importlib.util,
+                    "find_spec",
+                    side_effect=error,
+                ):
+                    self.assertFalse(settings_dialog._module_available("missing"))
 
 
 def apply_settings_internal(dialog, settings: dict) -> bool:
@@ -1572,6 +1618,63 @@ class TestAboutInk(unittest.TestCase):
             self.assertEqual(_about_ink_hex(), _ABOUT_INK_ON_DARK)
         else:
             self.assertIn(_about_ink_hex(), {_ABOUT_INK, _ABOUT_INK_ON_DARK})
+
+
+class TestAboutColorSchemeRead(unittest.TestCase):
+    def test_about_section_reads_os_scheme_once_per_build(self) -> None:
+        from vocalinux.ui import settings_dialog
+
+        with patch.object(
+            settings_dialog.Gtk,
+            "Dialog",
+            type("TestGtkDialog", (), {}),
+        ):
+            importlib.reload(settings_dialog)
+
+        dialog = MagicMock()
+        dialog.config_manager.get_str.return_value = "stable"
+        dialog._about_mark_image = partial(settings_dialog.SettingsDialog._about_mark_image, dialog)
+        dialog._about_open_button = partial(
+            settings_dialog.SettingsDialog._about_open_button,
+            dialog,
+        )
+        dialog._family_tile = partial(settings_dialog.SettingsDialog._family_tile, dialog)
+
+        def make_widget(*_args: object, **_kwargs: object) -> Mock:
+            return Mock()
+
+        with patch(
+            "vocalinux.ui.settings_dialog.Gtk.Settings.get_default",
+            return_value=None,
+        ):
+            with patch.object(
+                settings_dialog,
+                "PreferenceRow",
+                new=make_widget,
+            ):
+                with patch.object(
+                    settings_dialog,
+                    "PreferencesGroup",
+                    new=make_widget,
+                ):
+                    with patch.object(
+                        settings_dialog,
+                        "_combo_with_suffix",
+                        new=make_widget,
+                    ):
+                        with patch(
+                            "vocalinux.utils.gtk_color_scheme.read_os_color_scheme",
+                            side_effect=["prefer-light", "prefer-dark"],
+                        ) as read_color_scheme:
+                            with patch(
+                                "vocalinux.ui.settings_dialog.os.path.exists",
+                                return_value=True,
+                            ):
+                                settings_dialog.SettingsDialog._build_about_section(dialog)
+                                self.assertEqual(read_color_scheme.call_count, 1)
+
+                                settings_dialog.SettingsDialog._build_about_section(dialog)
+                                self.assertEqual(read_color_scheme.call_count, 2)
 
 
 class TestSettingsControlColumn(unittest.TestCase):

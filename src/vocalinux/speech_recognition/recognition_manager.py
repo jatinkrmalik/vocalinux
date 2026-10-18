@@ -10,6 +10,7 @@ import importlib.util
 import inspect
 import json
 import logging
+import multiprocessing
 import os
 import queue
 import re
@@ -1344,7 +1345,7 @@ class SpeechRecognitionManager:
             logger.error(f"Error in faster-whisper transcription: {e}", exc_info=True)
             return ""
 
-    def _init_whispercpp(self):
+    def _init_whispercpp(self) -> None:
         """Initialize the whisper.cpp speech recognition engine."""
         try:
             _preload_pywhispercpp_shared_libraries()
@@ -1434,9 +1435,15 @@ class SpeechRecognitionManager:
             logger.info("Removed the unverified model; it will be downloaded again")
             return False
 
-    def _build_whispercpp_model_kwargs(self, n_threads: int) -> dict:
+    def _whispercpp_cpu_thread_count(self) -> int:
+        if self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0:
+            return self.whispercpp_n_threads
+        return max(1, min(multiprocessing.cpu_count() - 2, 8))
+
+    def _build_whispercpp_model_kwargs(self, n_threads: int) -> dict[str, object]:
         model_kwargs = {
             "n_threads": n_threads,
+            "print_progress": False,
             "suppress_blank": True,
             "no_speech_thold": self.whispercpp_no_speech_thold,
             "entropy_thold": self.whispercpp_entropy_thold,
@@ -1565,7 +1572,6 @@ class SpeechRecognitionManager:
         Args:
             model_path: Filesystem path to the GGML model file.
         """
-        import multiprocessing
         import time
 
         from ..utils.whispercpp_model_info import (
@@ -1671,12 +1677,12 @@ class SpeechRecognitionManager:
 
         has_gpu_libs = actual_gpu_backend in ("vulkan", "cuda")
 
-        if self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0:
-            n_threads = self.whispercpp_n_threads
-        elif has_gpu_libs:
+        if has_gpu_libs and not (
+            self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0
+        ):
             n_threads = max(1, multiprocessing.cpu_count() // 4)
         else:
-            n_threads = max(1, min(multiprocessing.cpu_count() - 2, 8))
+            n_threads = self._whispercpp_cpu_thread_count()
 
         load_start_time = time.time()
         loaded_backend = runtime_backend
@@ -1708,7 +1714,13 @@ class SpeechRecognitionManager:
         self._model_initialized = True
         logger.info("whisper.cpp engine initialized successfully.")
 
-    def _handle_gpu_fallback(self, error, model_path: str, model_kwargs: dict, cpu_backend):
+    def _handle_gpu_fallback(
+        self,
+        error: RuntimeError,
+        model_path: str,
+        model_kwargs: dict[str, object],
+        cpu_backend: object,
+    ) -> object:
         """Handle GPU backend failure by falling back to CPU.
 
         Args:
@@ -1741,7 +1753,9 @@ class SpeechRecognitionManager:
         # Force CPU backend by disabling GPU backends
         os.environ["GGML_VULKAN"] = "0"
         os.environ["GGML_CUDA"] = "0"
-        self.model = self._load_model_with_compatible_params(model_path, model_kwargs)
+        cpu_model_kwargs = model_kwargs.copy()
+        cpu_model_kwargs["n_threads"] = self._whispercpp_cpu_thread_count()
+        self.model = self._load_model_with_compatible_params(model_path, cpu_model_kwargs)
         logger.info("Successfully loaded model with CPU backend")
         return cpu_backend
 
