@@ -10,11 +10,12 @@ UX Design Notes tested:
 - No action buttons - uses title bar close (GNOME HIG)
 """
 
-import importlib
+import os
+import subprocess
 import sys
+import textwrap
 import time
 import unittest
-from functools import partial
 from unittest.mock import MagicMock, Mock, call, patch
 
 # Mock GTK before importing anything that might use it
@@ -1601,77 +1602,45 @@ class TestAboutInk(unittest.TestCase):
 
 class TestAboutColorSchemeRead(unittest.TestCase):
     def test_about_section_reads_os_scheme_once_per_build(self) -> None:
-        from vocalinux.ui import settings_about, settings_dialog
+        script = textwrap.dedent("""
+            from unittest.mock import MagicMock, patch
 
-        class TestDialogBase:
-            pass
+            from vocalinux.ui import settings_about, settings_dialog
 
-        gtk_modules = [
-            settings_about.Gtk,
-            sys.modules["gi.repository"].Gtk,
-            sys.modules["gi.repository.Gtk"],
-        ]
-        patched_modules: set[int] = set()
-        dialog_base_patches = []
-        for gtk_module in gtk_modules:
-            if id(gtk_module) in patched_modules:
-                continue
-            patched_modules.add(id(gtk_module))
-            dialog_base_patch = patch.object(gtk_module, "Dialog", TestDialogBase)
-            dialog_base_patch.start()
-            dialog_base_patches.append(dialog_base_patch)
-        self.addCleanup(importlib.reload, settings_about)
-        for dialog_base_patch in dialog_base_patches:
-            self.addCleanup(dialog_base_patch.stop)
-        settings_about = importlib.reload(settings_about)
-
-        dialog = MagicMock()
-        dialog.config_manager.get_str.return_value = "stable"
-        dialog._about_mark_image = partial(
-            settings_about.AboutSectionMixin._about_mark_image, dialog
-        )
-        dialog._about_open_button = partial(
-            settings_about.AboutSectionMixin._about_open_button,
-            dialog,
-        )
-        dialog._family_tile = partial(settings_about.AboutSectionMixin._family_tile, dialog)
-
-        def make_widget(*_args: object, **_kwargs: object) -> Mock:
-            return Mock()
-
-        gtk = MagicMock()
-        gtk.Settings.get_default.return_value = None
-        with patch.object(settings_about, "Gtk", new=gtk):
-            with patch.object(
-                settings_dialog,
-                "PreferenceRow",
-                new=make_widget,
+            dialog = MagicMock()
+            gtk = MagicMock()
+            gtk.Settings.get_default.return_value = None
+            with (
+                patch.object(settings_about, "Gtk", new=gtk),
+                patch.object(settings_dialog, "PreferenceRow", return_value=MagicMock()),
+                patch.object(settings_dialog, "PreferencesGroup", return_value=MagicMock()),
+                patch.object(settings_dialog, "_combo_with_suffix", return_value=MagicMock()),
+                patch.object(settings_dialog, "_combo_chrome"),
+                patch.object(settings_dialog, "_style_action_button"),
+                patch.object(settings_dialog, "_set_accessible_name"),
+                patch("vocalinux.ui.settings_about.os.path.exists", return_value=False),
+                patch(
+                    "vocalinux.utils.gtk_color_scheme.read_os_color_scheme",
+                    return_value="prefer-light",
+                ) as read_color_scheme,
             ):
-                with patch.object(
-                    settings_dialog,
-                    "PreferencesGroup",
-                    new=make_widget,
-                ):
-                    with patch.object(
-                        settings_dialog,
-                        "_combo_with_suffix",
-                        new=make_widget,
-                    ):
-                        with patch.object(settings_dialog, "_combo_chrome"):
-                            with patch.object(settings_dialog, "_style_action_button"):
-                                with patch.object(settings_dialog, "_set_accessible_name"):
-                                    with patch(
-                                        "vocalinux.utils.gtk_color_scheme.read_os_color_scheme",
-                                        side_effect=["prefer-light", "prefer-dark"],
-                                    ) as read_color_scheme:
-                                        with patch(
-                                            "vocalinux.ui.settings_about.os.path.exists",
-                                            return_value=True,
-                                        ):
-                                            settings_about.AboutSectionMixin._build_about_section(
-                                                dialog
-                                            )
-                                            self.assertEqual(read_color_scheme.call_count, 1)
+                settings_about.AboutSectionMixin._build_about_section(dialog)
+                assert read_color_scheme.call_count == 1, read_color_scheme.call_count
+                print(f"ABOUT_SCHEME_READS={read_color_scheme.call_count}")
+            """)
+        env = os.environ.copy()
+        worktree_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+        env["PYTHONPATH"] = os.pathsep.join(
+            path for path in (worktree_src, env.get("PYTHONPATH", "")) if path
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            env=env,
+            text=True,
+        )
+        self.assertIn("ABOUT_SCHEME_READS=1", result.stdout)
 
 
 class TestPasteLongTextPreference(unittest.TestCase):
