@@ -4502,6 +4502,17 @@ class SettingsDialog(Gtk.Dialog):
         logger.info(f"Paste shortcut set to {self.config_manager.get_paste_shortcut()}")
         return False
 
+    def _on_paste_long_text_toggled(self, _widget: Gtk.Switch, state: bool) -> bool:
+        """Handle the long-dictation clipboard-paste switch."""
+        if _handlers_suppressed(self):
+            return False
+
+        enabled = bool(state)
+        self.config_manager.set_paste_long_text(enabled)
+        self.config_manager.save_settings()
+        logger.info("Paste long dictations toggled: %s", enabled)
+        return False
+
     def _update_sound_effects_sensitivity(self, enabled: bool) -> None:
         """Gray out the tone picker while sound effects are disabled."""
         self.tone_row.set_sensitive(enabled)
@@ -5076,6 +5087,19 @@ class SettingsDialog(Gtk.Dialog):
         )
         output_group.add_row(paste_shortcut_row)
 
+        self.paste_long_text_switch = Gtk.Switch()
+        paste_long_text_row = PreferenceRow(
+            title="Paste long dictations",
+            subtitle=(
+                "X11: paste text of 30+ characters through the clipboard instead of typing "
+                "it key by key. Much faster; restores the clipboard unless Copy to Clipboard "
+                "is enabled."
+            ),
+            widget=self.paste_long_text_switch,
+            keywords=("paste", "long text", "X11", "clipboard", "speed"),
+        )
+        output_group.add_row(paste_long_text_row)
+
         self.recognition_settings_tab.pack_start(output_group, False, False, 0)
         self.copy_to_clipboard_switch.connect("state-set", self._on_copy_to_clipboard_toggled)
         self.dictation_pad_switch.connect("state-set", self._on_dictation_pad_toggled)
@@ -5084,6 +5108,7 @@ class SettingsDialog(Gtk.Dialog):
             "state-set", self._on_append_trailing_space_toggled
         )
         self.paste_shortcut_combo.connect("changed", self._on_paste_shortcut_changed)
+        self.paste_long_text_switch.connect("state-set", self._on_paste_long_text_toggled)
 
         if not silero_active:
             vad_info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -7690,6 +7715,7 @@ class SettingsDialog(Gtk.Dialog):
         auto_capitalize = text_injection_settings.get("auto_capitalize", True)
         append_trailing_space = text_injection_settings.get("append_trailing_space", True)
         paste_shortcut = self.config_manager.get_paste_shortcut()
+        paste_long_text = self.config_manager.get_paste_long_text()
         history_enabled = bool(history_settings.get("enabled", True))
         # A hand-edited config.json can hold a non-numeric value; sanitize so a
         # bad preference cannot crash the settings dialog.
@@ -7703,6 +7729,7 @@ class SettingsDialog(Gtk.Dialog):
         self.dictation_pad_switch.set_active(dictate_to_pad)
         self.auto_capitalize_switch.set_active(auto_capitalize)
         self.append_trailing_space_switch.set_active(append_trailing_space)
+        self.paste_long_text_switch.set_active(paste_long_text)
         if not self.paste_shortcut_combo.set_active_id(paste_shortcut):
             self.paste_shortcut_combo.set_active_id(DEFAULT_PASTE_SHORTCUT)
         sound_effects_enabled = self.config_manager.is_sound_effects_enabled()

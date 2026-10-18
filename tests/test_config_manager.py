@@ -86,6 +86,15 @@ class TestConfigManager(unittest.TestCase):
         )
         self.assertTrue(os.path.exists(self.temp_config_dir))
 
+    def test_paste_long_text_defaults_to_off_and_can_be_changed(self) -> None:
+        config_manager = ConfigManager()
+        self.assertFalse(DEFAULT_CONFIG["text_injection"]["paste_long_text"])
+        self.assertFalse(config_manager.get_paste_long_text())
+        config_manager.set_paste_long_text(True)
+        self.assertTrue(config_manager.get_paste_long_text())
+        config_manager.set_paste_long_text(False)
+        self.assertFalse(config_manager.get_paste_long_text())
+
     def test_ensure_config_dir(self):
         """Test that _ensure_config_dir creates the directory."""
         # Delete the config directory to test creation

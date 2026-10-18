@@ -196,6 +196,7 @@ DEFAULT_CONFIG = {
         # Clipboard-paste chord: auto-detect terminals, or force Ctrl+V /
         # Ctrl+Shift+V when a nested terminal panel is not detected.
         "paste_shortcut": "auto",
+        "paste_long_text": False,  # Faster clipboard paste for long X11 dictations
         # Text-injection backend: "auto" autodetects, or pin "ibus"/"wtype"/
         # "ydotool"/"xdotool" when autodetection is wrong (#476).
         # VOCALINUX_FORCE_BACKEND overrides this for a single run.
@@ -912,6 +913,16 @@ class ConfigManager:
         if "text_injection" not in self.config:
             self.config["text_injection"] = {}
         self.config["text_injection"]["paste_shortcut"] = normalize_paste_shortcut(shortcut)
+
+    def get_paste_long_text(self) -> bool:
+        """Return whether long X11 dictations should use clipboard paste."""
+        return self.get_bool("text_injection", "paste_long_text", False)
+
+    def set_paste_long_text(self, enabled: bool) -> None:
+        """Save whether long X11 dictations should use clipboard paste."""
+        if "text_injection" not in self.config:
+            self.config["text_injection"] = {}
+        self.config["text_injection"]["paste_long_text"] = bool(enabled)
 
     def get_language_shortcuts(self) -> list[dict[str, str]]:
         """Return validated ``[{"shortcut", "language"}]`` bindings (#805).

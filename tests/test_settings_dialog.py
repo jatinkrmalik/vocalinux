@@ -1683,6 +1683,62 @@ class TestAboutColorSchemeRead(unittest.TestCase):
                                 self.assertEqual(read_color_scheme.call_count, 2)
 
 
+class TestPasteLongTextPreference(unittest.TestCase):
+    def test_switch_loads_and_saves(self) -> None:
+        from vocalinux.ui import settings_dialog
+
+        test_dialog_base = type("TestGtkDialog", (), {})
+
+        def restore_module() -> None:
+            importlib.reload(settings_dialog)
+            self.assertNotIn(
+                test_dialog_base,
+                getattr(settings_dialog.SettingsDialog, "__mro__", ()),
+            )
+
+        self.addCleanup(restore_module)
+        with patch.object(settings_dialog.Gtk, "Dialog", test_dialog_base):
+            importlib.reload(settings_dialog)
+
+        dialog = MagicMock()
+        dialog.config_manager.get_settings.return_value = {
+            "general": {},
+            "ui": {},
+            "text_injection": {},
+            "history": {},
+            "auto_pause": {},
+            "model_keepalive": {},
+            "post_processing": {},
+            "advanced": {},
+        }
+        dialog.config_manager.get_paste_long_text.return_value = True
+        dialog.config_manager.get_paste_shortcut.return_value = "auto"
+        dialog._get_current_settings.return_value = {
+            "engine": "whisper_cpp",
+            "language": "auto",
+            "model_size": "tiny",
+            "vad_sensitivity": 3,
+            "silence_timeout": 2.0,
+        }
+        dialog._follow_layout_supported.return_value = False
+
+        with patch.object(
+            settings_dialog, "get_available_engines", return_value={"whisper_cpp": True}
+        ):
+            with patch("vocalinux.ui.autostart_manager.is_autostart_enabled", return_value=False):
+                settings_dialog.SettingsDialog._load_and_apply_settings(dialog)
+        dialog.paste_long_text_switch.set_active.assert_called_once_with(True)
+
+        dialog.config_manager.reset_mock()
+        with patch.object(settings_dialog, "_handlers_suppressed", return_value=False):
+            result = settings_dialog.SettingsDialog._on_paste_long_text_toggled(
+                dialog, MagicMock(), True
+            )
+        self.assertFalse(result)
+        dialog.config_manager.set_paste_long_text.assert_called_once_with(True)
+        dialog.config_manager.save_settings.assert_called_once_with()
+
+
 class TestSettingsControlColumn(unittest.TestCase):
     """Dropdowns, steppers, and action buttons share one right-hand column."""
 
