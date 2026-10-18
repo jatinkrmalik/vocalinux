@@ -431,9 +431,7 @@ class ConfigManager:
             return
 
         try:
-            detected = detect_system_language(
-                cast(dict[str, dict[str, str]], SUPPORTED_LANGUAGES)
-            )
+            detected = detect_system_language(cast(dict[str, dict[str, str]], SUPPORTED_LANGUAGES))
         except Exception as exc:  # pragma: no cover - detection must never block startup
             logger.debug(f"Language detection failed: {exc}")
             return

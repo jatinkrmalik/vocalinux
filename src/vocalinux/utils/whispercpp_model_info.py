@@ -546,9 +546,7 @@ def _model_file_path(model_name: str) -> str:
 
     model_info = WHISPERCPP_MODEL_INFO.get(model_name)
     if model_info and model_info.get("url"):
-        return os.path.join(
-            whispercpp_dir, os.path.basename(cast(str, model_info["url"]))
-        )
+        return os.path.join(whispercpp_dir, os.path.basename(cast(str, model_info["url"])))
 
     return os.path.join(whispercpp_dir, f"ggml-{model_name}.bin")
 

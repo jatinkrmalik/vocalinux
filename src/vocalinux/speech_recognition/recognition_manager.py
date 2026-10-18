@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, TYPE_CHECKING, Callable, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
 if TYPE_CHECKING:
     import numpy as np
@@ -51,7 +51,6 @@ from ..ui.config_manager import _multilingual_sibling
 from ..utils import faster_whisper_model_info as faster_whisper
 from ..utils import parakeet_model_info as parakeet
 from ..utils.host_process import host_env
-from ..utils.whispercpp_model_info import ComputeBackend
 from ..utils.model_checksums import (
     ChecksumError,
     expected_for,
@@ -76,6 +75,7 @@ from ..utils.whisper_model_info import (
 from ..utils.whispercpp_model_info import (
     NON_DICTATION_MODELS,
     WHISPERCPP_MODEL_INFO,
+    ComputeBackend,
     get_model_path,
     is_english_only_model,
     is_model_downloaded,
@@ -489,9 +489,7 @@ class SpeechRecognitionManager:
         self.whispercpp_entropy_thold = kwargs.get("whispercpp_entropy_thold", 2.4)
         self.whispercpp_logprob_thold = kwargs.get("whispercpp_logprob_thold", -1.0)
         self.whispercpp_no_speech_thold = kwargs.get("whispercpp_no_speech_thold", 0.6)
-        self.whispercpp_n_threads = cast(
-            Optional[int], kwargs.get("whispercpp_n_threads", None)
-        )
+        self.whispercpp_n_threads = cast(Optional[int], kwargs.get("whispercpp_n_threads", None))
         self._whispercpp_effective_threads: Optional[int] = None
         self.whispercpp_gpu_device = kwargs.get("whispercpp_gpu_device", None)
 
@@ -1341,11 +1339,14 @@ class SpeechRecognitionManager:
                 logger.warning("faster-whisper engine not ready during transcription")
                 return ""
 
-            return cast(str, self._faster_whisper_engine.transcribe(
-                audio_buffer,
-                language=self._dictation_language(language),
-                initial_prompt=self._get_dictionary_prompt(),
-            ))
+            return cast(
+                str,
+                self._faster_whisper_engine.transcribe(
+                    audio_buffer,
+                    language=self._dictation_language(language),
+                    initial_prompt=self._get_dictionary_prompt(),
+                ),
+            )
         except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"Error in faster-whisper transcription: {e}", exc_info=True)
             return ""
@@ -3727,9 +3728,7 @@ class SpeechRecognitionManager:
 
         transcribers: dict[str, Callable[[], Optional[str]]] = {
             "vosk": lambda: self._transcribe_with_vosk(audio_buffer),
-            "whisper": lambda: self._transcribe_with_whisper(
-                audio_buffer, dictation_language
-            ),
+            "whisper": lambda: self._transcribe_with_whisper(audio_buffer, dictation_language),
             "whisper_cpp": lambda: self._transcribe_with_whispercpp(
                 audio_buffer, dictation_language
             ),
