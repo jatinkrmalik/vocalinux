@@ -19,7 +19,10 @@ from unittest.mock import MagicMock, Mock, call, patch
 # Mock GTK before importing anything that might use it
 sys.modules["gi"] = MagicMock()
 sys.modules["gi.repository"] = MagicMock()
-sys.modules["gi.repository.Gtk"] = MagicMock()
+mock_gtk = MagicMock()
+mock_gtk.Dialog = type("MockGtkDialog", (), {})
+sys.modules["gi.repository"].Gtk = mock_gtk
+sys.modules["gi.repository.Gtk"] = mock_gtk
 sys.modules["gi.repository.GLib"] = MagicMock()
 sys.modules["gi.repository.Gdk"] = MagicMock()
 sys.modules["gi.repository.Pango"] = MagicMock()
@@ -1616,10 +1619,9 @@ class TestAboutColorSchemeRead(unittest.TestCase):
         def make_widget(*_args: object, **_kwargs: object) -> Mock:
             return Mock()
 
-        with patch(
-            "vocalinux.ui.settings_about.Gtk.Settings.get_default",
-            return_value=None,
-        ):
+        gtk = MagicMock()
+        gtk.Settings.get_default.return_value = None
+        with patch.object(settings_about, "Gtk", new=gtk):
             with patch.object(
                 settings_dialog,
                 "PreferenceRow",
@@ -1635,16 +1637,21 @@ class TestAboutColorSchemeRead(unittest.TestCase):
                         "_combo_with_suffix",
                         new=make_widget,
                     ):
-                        with patch(
-                            "vocalinux.utils.gtk_color_scheme.read_os_color_scheme",
-                            side_effect=["prefer-light", "prefer-dark"],
-                        ) as read_color_scheme:
-                            with patch(
-                                "vocalinux.ui.settings_about.os.path.exists",
-                                return_value=True,
-                            ):
-                                settings_about.AboutSectionMixin._build_about_section(dialog)
-                                self.assertEqual(read_color_scheme.call_count, 1)
+                        with patch.object(settings_dialog, "_combo_chrome"):
+                            with patch.object(settings_dialog, "_style_action_button"):
+                                with patch.object(settings_dialog, "_set_accessible_name"):
+                                    with patch(
+                                        "vocalinux.utils.gtk_color_scheme.read_os_color_scheme",
+                                        side_effect=["prefer-light", "prefer-dark"],
+                                    ) as read_color_scheme:
+                                        with patch(
+                                            "vocalinux.ui.settings_about.os.path.exists",
+                                            return_value=True,
+                                        ):
+                                            settings_about.AboutSectionMixin._build_about_section(
+                                                dialog
+                                            )
+                                            self.assertEqual(read_color_scheme.call_count, 1)
 
 
 class TestPasteLongTextPreference(unittest.TestCase):
