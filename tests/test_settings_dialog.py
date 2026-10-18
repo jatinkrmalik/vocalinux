@@ -10,6 +10,7 @@ UX Design Notes tested:
 - No action buttons - uses title bar close (GNOME HIG)
 """
 
+import importlib
 import sys
 import time
 import unittest
@@ -19,10 +20,7 @@ from unittest.mock import MagicMock, Mock, call, patch
 # Mock GTK before importing anything that might use it
 sys.modules["gi"] = MagicMock()
 sys.modules["gi.repository"] = MagicMock()
-mock_gtk = MagicMock()
-mock_gtk.Dialog = type("MockGtkDialog", (), {})
-sys.modules["gi.repository"].Gtk = mock_gtk
-sys.modules["gi.repository.Gtk"] = mock_gtk
+sys.modules["gi.repository.Gtk"] = MagicMock()
 sys.modules["gi.repository.GLib"] = MagicMock()
 sys.modules["gi.repository.Gdk"] = MagicMock()
 sys.modules["gi.repository.Pango"] = MagicMock()
@@ -1604,6 +1602,17 @@ class TestAboutInk(unittest.TestCase):
 class TestAboutColorSchemeRead(unittest.TestCase):
     def test_about_section_reads_os_scheme_once_per_build(self) -> None:
         from vocalinux.ui import settings_about, settings_dialog
+
+        gtk_module = settings_about.Gtk
+
+        class TestDialogBase:
+            pass
+
+        dialog_base_patch = patch.object(gtk_module, "Dialog", TestDialogBase)
+        dialog_base_patch.start()
+        self.addCleanup(importlib.reload, settings_about)
+        self.addCleanup(dialog_base_patch.stop)
+        settings_about = importlib.reload(settings_about)
 
         dialog = MagicMock()
         dialog.config_manager.get_str.return_value = "stable"
