@@ -82,7 +82,7 @@ format: _tooling
 # Run type checking (mypy)
 typecheck: _tooling
     @echo "Running mypy..."
-    uv run --no-sync mypy src/
+    uv run --locked --only-group lint mypy src/
 
 # Build distribution packages
 build:
