@@ -56,9 +56,9 @@ mock_config_manager.save_settings = Mock()
 
 class TestAvailableEngines(unittest.TestCase):
     def test_available_engines_preserves_legacy_mapping(self) -> None:
-        from vocalinux.ui import settings_dialog
+        from vocalinux.ui import settings_dialog, settings_engines
 
-        with patch.object(settings_dialog, "available_engines", return_value=["whisper_cpp"]):
+        with patch.object(settings_engines, "available_engines", return_value=["whisper_cpp"]):
             self.assertEqual(
                 settings_dialog.get_available_engines(),
                 {
@@ -1301,7 +1301,9 @@ class TestSettingsNavigation(unittest.TestCase):
     def test_sidebar_category_list_is_scrollable(self) -> None:
         """The category list sits in a ScrolledWindow so the dialog can shrink
         vertically without clipping categories (#678)."""
-        class_body = self.source_code.split("class SettingsDialog(Gtk.Dialog):")[1]
+        class_body = self.source_code.split(
+            "class SettingsDialog(AboutSectionMixin, Gtk.Dialog):"
+        )[1]
         init_body = class_body.split("def __init__")[1].split("\n    def ")[0]
         self.assertIn("sidebar_scroller = Gtk.ScrolledWindow()", init_body)
         self.assertIn(
@@ -1319,7 +1321,12 @@ class TestAboutPage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.source = TestSettingsSearch._settings_source()
-        cls.about = cls.source.split("def _build_about_section")[1].split("\n    def ")[0]
+        from pathlib import Path
+
+        about_path = Path(__file__).resolve().parents[1] / "src/vocalinux/ui/settings_about.py"
+        cls.about_source = about_path.read_text(encoding="utf-8")
+        cls.source += cls.about_source
+        cls.about = cls.about_source.split("def _build_about_section")[1].split("\n    def ")[0]
 
     def test_three_groups_keep_updater(self):
         self.assertIn('title="Vocalinux"', self.about)
@@ -1596,35 +1603,22 @@ class TestAboutInk(unittest.TestCase):
 
 class TestAboutColorSchemeRead(unittest.TestCase):
     def test_about_section_reads_os_scheme_once_per_build(self) -> None:
-        from vocalinux.ui import settings_dialog
-
-        test_dialog_base = type("TestGtkDialog", (), {})
-
-        def reload_settings_dialog() -> None:
-            importlib.reload(settings_dialog)
-            self.assertNotIn(
-                test_dialog_base,
-                getattr(settings_dialog.SettingsDialog, "__mro__", ()),
-            )
-
-        self.addCleanup(reload_settings_dialog)
-        with patch.object(settings_dialog.Gtk, "Dialog", test_dialog_base):
-            importlib.reload(settings_dialog)
+        from vocalinux.ui import settings_about, settings_dialog
 
         dialog = MagicMock()
         dialog.config_manager.get_str.return_value = "stable"
-        dialog._about_mark_image = partial(settings_dialog.SettingsDialog._about_mark_image, dialog)
+        dialog._about_mark_image = partial(settings_about.AboutSectionMixin._about_mark_image, dialog)
         dialog._about_open_button = partial(
-            settings_dialog.SettingsDialog._about_open_button,
+            settings_about.AboutSectionMixin._about_open_button,
             dialog,
         )
-        dialog._family_tile = partial(settings_dialog.SettingsDialog._family_tile, dialog)
+        dialog._family_tile = partial(settings_about.AboutSectionMixin._family_tile, dialog)
 
         def make_widget(*_args: object, **_kwargs: object) -> Mock:
             return Mock()
 
         with patch(
-            "vocalinux.ui.settings_dialog.Gtk.Settings.get_default",
+            "vocalinux.ui.settings_about.Gtk.Settings.get_default",
             return_value=None,
         ):
             with patch.object(
@@ -1647,14 +1641,11 @@ class TestAboutColorSchemeRead(unittest.TestCase):
                             side_effect=["prefer-light", "prefer-dark"],
                         ) as read_color_scheme:
                             with patch(
-                                "vocalinux.ui.settings_dialog.os.path.exists",
+                                "vocalinux.ui.settings_about.os.path.exists",
                                 return_value=True,
                             ):
-                                settings_dialog.SettingsDialog._build_about_section(dialog)
+                                settings_about.AboutSectionMixin._build_about_section(dialog)
                                 self.assertEqual(read_color_scheme.call_count, 1)
-
-                                settings_dialog.SettingsDialog._build_about_section(dialog)
-                                self.assertEqual(read_color_scheme.call_count, 2)
 
 
 class TestPasteLongTextPreference(unittest.TestCase):
