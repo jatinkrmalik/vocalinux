@@ -162,13 +162,13 @@ _VOCAHQ_FAMILY_LINKS = (
     ),
 )
 
+
 def _can_open_url(url: str) -> bool:
     """Return True for GitHub project URLs or the About page allowlist."""
     return bool(url) and (url in _ABOUT_OPEN_URLS or is_trusted_release_url(url))
 
 
-
-class AboutSectionMixin:
+class AboutSectionMixin(Gtk.Dialog):
     """Build About content on the Settings dialog."""
 
     def _about_mark_image(
@@ -280,7 +280,17 @@ class AboutSectionMixin:
 
     def _build_about_section(self: Any) -> None:
         """Build the About page using the same PreferenceRow cards as other pages."""
+        about_tab = getattr(self, "about_tab")
+        config_manager = getattr(self, "config_manager")
+        on_check_updates_clicked = getattr(self, "_on_check_updates_clicked")
+        on_update_channel_changed = getattr(self, "_on_update_channel_changed")
+        on_open_release_clicked = getattr(self, "_on_open_release_clicked")
+
+        from gi.repository import GdkPixbuf
+
+        from ..utils.resource_manager import ResourceManager
         from .settings_dialog import (
+            _CONTROL_WIDTH,
             DEFAULT_UPDATE_CHANNEL,
             PreferenceRow,
             PreferencesGroup,
@@ -289,9 +299,6 @@ class AboutSectionMixin:
             _set_accessible_name,
             _style_action_button,
         )
-        from gi.repository import GdkPixbuf
-
-        from ..utils.resource_manager import ResourceManager
 
         dark = _about_surface_is_dark()
         about_icon = None
@@ -365,7 +372,7 @@ class AboutSectionMixin:
             keywords=("license", "agpl", "gpl", "copyright"),
         )
         app_group.add_row(license_row)
-        self.about_tab.pack_start(app_group, False, False, 0)
+        about_tab.pack_start(app_group, False, False, 0)
 
         talk_group = PreferencesGroup(
             title="Talk to us",
@@ -418,7 +425,7 @@ class AboutSectionMixin:
                 keywords=("discord", "x", "twitter", "email", "mail"),
             )
         )
-        self.about_tab.pack_start(talk_group, False, False, 0)
+        about_tab.pack_start(talk_group, False, False, 0)
 
         updates_group = PreferencesGroup(
             title="Updates",
@@ -437,7 +444,7 @@ class AboutSectionMixin:
             ),
         )
         saved_channel = normalize_channel(
-            self.config_manager.get_str("updates", "channel", DEFAULT_UPDATE_CHANNEL)
+            config_manager.get_str("updates", "channel", DEFAULT_UPDATE_CHANNEL)
         )
         self.update_channel_combo.set_active_id(saved_channel)
 
@@ -447,7 +454,7 @@ class AboutSectionMixin:
         self.check_updates_btn.set_tooltip_text(
             "Look up the latest release for this channel on GitHub"
         )
-        self.check_updates_btn.connect("clicked", self._on_check_updates_clicked)
+        self.check_updates_btn.connect("clicked", on_check_updates_clicked)
 
         self.update_status_row = PreferenceRow(
             title="Channel",
@@ -460,9 +467,9 @@ class AboutSectionMixin:
             keywords=("channel", "stable", "nightly", "beta", "status", "check"),
         )
         updates_group.add_row(self.update_status_row)
-        self.about_tab.pack_start(updates_group, False, False, 0)
+        about_tab.pack_start(updates_group, False, False, 0)
 
-        self.update_channel_combo.connect("changed", self._on_update_channel_changed)
+        self.update_channel_combo.connect("changed", on_update_channel_changed)
 
         self.release_notes_group = PreferencesGroup(
             title="What's New",
@@ -478,7 +485,7 @@ class AboutSectionMixin:
             self.open_release_btn,
             "Open the latest release page",
         )
-        self.open_release_btn.connect("clicked", self._on_open_release_clicked)
+        self.open_release_btn.connect("clicked", on_open_release_clicked)
         self.release_notes_row = PreferenceRow(
             title="Release notes",
             subtitle="Notes appear here after a successful update check.",
@@ -489,7 +496,7 @@ class AboutSectionMixin:
         if self.release_notes_row.subtitle_label is not None:
             self.release_notes_row.subtitle_label.set_max_width_chars(72)
         self.release_notes_group.add_row(self.release_notes_row)
-        self.about_tab.pack_start(self.release_notes_group, False, False, 0)
+        about_tab.pack_start(self.release_notes_group, False, False, 0)
         self.release_notes_group.hide()
 
         family_group = PreferencesGroup(
@@ -512,4 +519,4 @@ class AboutSectionMixin:
         family_row.set_activatable(False)
         family_row.add(family_grid)
         family_group.add_row(family_row)
-        self.about_tab.pack_start(family_group, False, False, 0)
+        about_tab.pack_start(family_group, False, False, 0)

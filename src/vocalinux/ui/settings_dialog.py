@@ -128,9 +128,13 @@ from .keyboard_backends import (  # noqa: E402
     parse_shortcut_spec,
 )
 from .keyboard_backends.evdev_backend import MODIFIER_KEY_CODES  # noqa: E402
-from .transcription_history import sanitize_max_items  # noqa: E402
-
 from .settings_about import (  # noqa: F401
+    _ABOUT_ICON_TEXT_PX,
+    _ABOUT_INK,
+    _ABOUT_INK_ON_DARK,
+    _ABOUT_OPEN_URLS,
+    _FAMILY_ICON_PX,
+    _VOCAHQ_FAMILY_LINKS,
     GITHUB_ISSUES_URL,
     GITHUB_REPO_URL,
     VOCAGATEWAY_SITE_URL,
@@ -143,12 +147,6 @@ from .settings_about import (  # noqa: F401
     VOCAPHONE_SITE_URL,
     VOCAWIN_SITE_URL,
     AboutSectionMixin,
-    _ABOUT_ICON_TEXT_PX,
-    _ABOUT_INK,
-    _ABOUT_INK_ON_DARK,
-    _ABOUT_OPEN_URLS,
-    _FAMILY_ICON_PX,
-    _VOCAHQ_FAMILY_LINKS,
     _about_ink_hex,
     _about_surface_is_dark,
     _can_open_url,
@@ -160,13 +158,14 @@ from .settings_engines import (  # noqa: F401
     NON_DICTATION_MODELS,
     SUPPORTED_LANGUAGES,
     VOSK_MODEL_INFO,
+    WHISPER_MODEL_INFO,
     WHISPERCPP_MODEL_INFO,
     WHISPERCPP_MODEL_SIZES,
-    WHISPER_MODEL_INFO,
     default_variant_for_size,
     get_available_engines,
     parakeet,
 )
+from .transcription_history import sanitize_max_items  # noqa: E402
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -600,7 +599,6 @@ _SHORTCUT_MODE_COMBO_LABELS = {
     "toggle": "Toggle",
     "push_to_talk": "Push-to-Talk",
 }
-
 
 
 def _set_accessible_name(widget: Gtk.Widget, name: str) -> None:
@@ -2424,7 +2422,7 @@ class ModelDownloadDialog(Gtk.Dialog):
         self.add_button("OK", Gtk.ResponseType.OK)
 
 
-class SettingsDialog(AboutSectionMixin, Gtk.Dialog):
+class SettingsDialog(AboutSectionMixin):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
     def __init__(
@@ -2463,9 +2461,9 @@ class SettingsDialog(AboutSectionMixin, Gtk.Dialog):
         # populated by _build_language_shortcuts_section.
         self._language_shortcut_rows: list[dict] = []
         self._language_shortcut_add_row: Optional[PreferenceRow] = None
-        self._recording_shortcut_target: Optional[
-            tuple[Any, Callable[[str], None], Any, Any]
-        ] = None
+        self._recording_shortcut_target: Optional[tuple[Any, Callable[[str], None], Any, Any]] = (
+            None
+        )
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -5075,9 +5073,9 @@ class SettingsDialog(AboutSectionMixin, Gtk.Dialog):
         # names (entry, apply_fn, button, hint_label) so one recorder serves the
         # main shortcut and every per-language row (#805).
         self._recording_shortcut = False
-        self._recording_shortcut_target: Optional[
-            tuple[Any, Callable[[str], None], Any, Any]
-        ] = None
+        self._recording_shortcut_target: Optional[tuple[Any, Callable[[str], None], Any, Any]] = (
+            None
+        )
         self._evdev_shortcut_recorder = None
         self.connect("key-press-event", self._on_shortcut_key_press)
         self.connect("destroy", self._on_shortcut_recorder_destroy)
@@ -7704,9 +7702,7 @@ class SettingsDialog(AboutSectionMixin, Gtk.Dialog):
         """
         pinned = self.config_manager.get_model_variant_for_engine("whisper_cpp")
         language_id = _language_for_whispercpp_variant(self)
-        return resolve_whispercpp_variant(
-            saved_model_for_engine, pinned, cast(str, language_id)
-        )
+        return resolve_whispercpp_variant(saved_model_for_engine, pinned, cast(str, language_id))
 
     def _populate_whispercpp_model_options(self, saved_model_for_engine: str):
         """Populate whisper.cpp size and specialization selectors."""
@@ -7776,9 +7772,7 @@ class SettingsDialog(AboutSectionMixin, Gtk.Dialog):
             # so English picks .en instead of leaving Standard multilingual stuck.
             # Follow mode uses the layout sentinel here so an English *display*
             # does not retarget onto .en and then refuse the mode.
-            model_to_set = _whispercpp_variant_for_language(
-                model_to_set, cast(str, language_id)
-            )
+            model_to_set = _whispercpp_variant_for_language(model_to_set, cast(str, language_id))
             if model_to_set not in variants:
                 model_to_set = None
         if not model_to_set and recommended_model in variants:

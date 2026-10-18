@@ -10,7 +10,6 @@ UX Design Notes tested:
 - No action buttons - uses title bar close (GNOME HIG)
 """
 
-import importlib
 import sys
 import time
 import unittest
@@ -1301,9 +1300,7 @@ class TestSettingsNavigation(unittest.TestCase):
     def test_sidebar_category_list_is_scrollable(self) -> None:
         """The category list sits in a ScrolledWindow so the dialog can shrink
         vertically without clipping categories (#678)."""
-        class_body = self.source_code.split(
-            "class SettingsDialog(AboutSectionMixin, Gtk.Dialog):"
-        )[1]
+        class_body = self.source_code.split("class SettingsDialog(AboutSectionMixin):")[1]
         init_body = class_body.split("def __init__")[1].split("\n    def ")[0]
         self.assertIn("sidebar_scroller = Gtk.ScrolledWindow()", init_body)
         self.assertIn(
@@ -1607,7 +1604,9 @@ class TestAboutColorSchemeRead(unittest.TestCase):
 
         dialog = MagicMock()
         dialog.config_manager.get_str.return_value = "stable"
-        dialog._about_mark_image = partial(settings_about.AboutSectionMixin._about_mark_image, dialog)
+        dialog._about_mark_image = partial(
+            settings_about.AboutSectionMixin._about_mark_image, dialog
+        )
         dialog._about_open_button = partial(
             settings_about.AboutSectionMixin._about_open_button,
             dialog,
@@ -1651,19 +1650,6 @@ class TestAboutColorSchemeRead(unittest.TestCase):
 class TestPasteLongTextPreference(unittest.TestCase):
     def test_switch_loads_and_saves(self) -> None:
         from vocalinux.ui import settings_dialog
-
-        test_dialog_base = type("TestGtkDialog", (), {})
-
-        def restore_module() -> None:
-            importlib.reload(settings_dialog)
-            self.assertNotIn(
-                test_dialog_base,
-                getattr(settings_dialog.SettingsDialog, "__mro__", ()),
-            )
-
-        self.addCleanup(restore_module)
-        with patch.object(settings_dialog.Gtk, "Dialog", test_dialog_base):
-            importlib.reload(settings_dialog)
 
         dialog = MagicMock()
         dialog.config_manager.get_settings.return_value = {
