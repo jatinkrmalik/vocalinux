@@ -133,7 +133,7 @@ def _scripted_stream(probs_per_chunk, manager, max_iters=None, chunk_bytes=None)
 
     def _read(*args, **kwargs):
         counter["n"] += 1
-        if counter["n"] >= limit:
+        if counter["n"] > limit:
             manager.should_record = False
         return payload
 

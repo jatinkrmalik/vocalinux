@@ -237,7 +237,12 @@ class TestStartStopRecognition(unittest.TestCase):
         mgr.audio_thread = MagicMock()
         mgr.audio_thread.is_alive.return_value = True
         events = []
-        mgr.audio_thread.join.side_effect = lambda timeout=None: events.append("join")
+
+        def capture_exited(timeout: float | None = None) -> None:
+            events.append("join")
+            mgr.audio_thread.is_alive.return_value = False
+
+        mgr.audio_thread.join.side_effect = capture_exited
 
         with patch(
             "vocalinux.speech_recognition.recognition_manager.play_stop_sound",

@@ -504,6 +504,9 @@ class TestStartStopRecognition(unittest.TestCase):
         manager.start_recognition()
         manager.audio_thread = self.threadInstance
         manager.recognition_thread = self.threadInstance
+        self.threadInstance.join.side_effect = lambda timeout=None: setattr(
+            self.threadInstance.is_alive, "return_value", False
+        )
 
         manager.stop_recognition()
 
@@ -809,6 +812,8 @@ class TestReconfiguration(unittest.TestCase):
         manager.audio_thread = self.threadInstance
         manager.recognition_thread = self.threadInstance
 
+        # The previous capture thread has finished before a new start.
+        self.threadInstance.is_alive.return_value = False
         # Start listening
         manager.start_recognition()
         self.assertEqual(manager.state, RecognitionState.LISTENING)
