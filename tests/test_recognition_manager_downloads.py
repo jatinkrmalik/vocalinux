@@ -1390,11 +1390,12 @@ class TestAudioReconnection:
 
         sleep_durations = []
 
-        def track_sleep(duration):
+        def track_wait(duration):
             sleep_durations.append(duration)
+            return False
 
         with patch.dict("sys.modules", {"pyaudio": mock_pyaudio_mod}):
-            with patch("time.sleep", side_effect=track_sleep):
+            with patch.object(manager._session.cancel, "wait", side_effect=track_wait):
                 manager._reconnection_attempts = 0
                 manager._attempt_audio_reconnection(mock_audio_instance)
                 first_delay = sleep_durations[-1]

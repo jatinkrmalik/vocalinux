@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple
 
 from ..utils.host_process import host_env
+from .errors import CaptureStalledError
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +324,7 @@ class PipeWireCaptureSource:
     ) -> None:
         self.device_index = device_index
         self.device_name = device_name
+        self.last_error: Optional[OSError] = None
         self.audio: Any = None
         self.stream: Optional["subprocess.Popen[bytes]"] = None
         self.sample_rate = sample_rate
@@ -375,6 +377,7 @@ class PipeWireCaptureSource:
         self, audio_instance: Any, should_continue: Optional[Callable[[], bool]] = None
     ) -> bool:
         """Close the current process and spawn a fresh one. True on success."""
+        self.last_error = None
         self.close()
         if should_continue is not None and not should_continue():
             return False
@@ -384,6 +387,7 @@ class PipeWireCaptureSource:
                 self.close()
                 return False
         except (IOError, OSError) as exc:
+            self.last_error = exc
             logger.error("PipeWire reconnection failed: %s", exc)
             return False
         return True
@@ -422,7 +426,7 @@ class PipeWireCaptureSource:
             left = deadline - time.monotonic()
             if left <= 0:
                 code = process.poll()
-                raise IOError(
+                raise CaptureStalledError(
                     "pw-record stalled: no audio for "
                     f"{self._STALL_TIMEOUT_SECONDS:.0f}s (exit status {code})"
                 )

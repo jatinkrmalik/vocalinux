@@ -276,6 +276,8 @@ def test_capture_thread_failure_releases_reload_worker(
     manager._buffered_reload_session = True
     manager._buffered_capture_failed = False
     manager._capture_finished.clear()
+    manager.should_record = True
+    manager.state = RecognitionState.LISTENING
     # The audio thread exits through its ImportError teardown: no
     # stop_recognition handoff is left to set _capture_finished.
     monkeypatch.setitem(sys.modules, "pyaudio", None)
@@ -285,7 +287,7 @@ def test_capture_thread_failure_releases_reload_worker(
 
     assert manager._buffered_capture_failed
     assert not manager.should_record
-    assert manager.state == RecognitionState.ERROR
+    assert manager.state == RecognitionState.IDLE
     assert manager._capture_finished.is_set()
 
     manager._cancel_buffered_session.set()

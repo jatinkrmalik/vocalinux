@@ -17,6 +17,7 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from .errors import CaptureStalledError
 from .pipewire import (
     PIPEWIRE_INDEX_BASE,
     _test_pipewire_input,
@@ -36,10 +37,6 @@ CAPTURE_CHUNK = 1024
 STALL_TIMEOUT_SECONDS = 5.0
 _READ_POLL_SECONDS = 0.01
 _PA_INPUT_OVERFLOWED = -9981
-
-
-class CaptureStalledError(IOError):
-    """The capture device stopped delivering audio frames."""
 
 
 def _read_frames_bounded(
@@ -823,6 +820,8 @@ class PortAudioCaptureSource:
     ) -> None:
         self.device_index = device_index
         self.device_name = device_name
+        self.resolved_device_name: Optional[str] = None
+        self.last_error: Optional[OSError] = None
         self.audio: Any = None
         self.stream: Any = None
         self.sample_rate = 16000
@@ -903,6 +902,7 @@ class PortAudioCaptureSource:
                 logger.info(
                     f"Using audio device [{resolved_device_index}]: {device_info.get('name')}"
                 )
+            self.resolved_device_name = device_info.get("name")
         except (IOError, OSError):
             logger.warning(f"Could not get info for device index {resolved_device_index}")
 
@@ -984,6 +984,7 @@ class PortAudioCaptureSource:
         self.audio = audio_instance
 
         new_stream: Any = None
+        self.last_error = None
         try:
             # Close existing stream if it exists
             if self.stream:
@@ -1051,6 +1052,9 @@ class PortAudioCaptureSource:
 
             if test_data:
                 self.stream = new_stream
+                self.resolved_device_name = _get_device_info_safe(
+                    audio_instance, resolved_device_index
+                ).get("name")
                 logger.info("Audio reconnection successful")
                 return True
             else:
@@ -1059,6 +1063,7 @@ class PortAudioCaptureSource:
                 return False
 
         except (IOError, OSError) as e:
+            self.last_error = e
             logger.error(f"Audio reconnection failed: {e}")
             _safe_close_stream(new_stream)
             return False

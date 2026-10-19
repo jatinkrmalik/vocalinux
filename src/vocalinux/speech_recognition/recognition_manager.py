@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 from ..audio.capture import (  # noqa: F401  (re-exported for compatibility)
     _STICKY_LOCK_MIN_MEAN_SQUARE,
+    CaptureStalledError,
     PortAudioCaptureSource,
     _alsa_handler,
     _downmix_to_mono,
@@ -104,6 +105,9 @@ class _CaptureSession:
         self.stop_complete = threading.Event()
         self.stop_owner: Optional[threading.Thread] = None
         self.stopping = False
+        self.stall_recovery_attempted = False
+        self.stall_error: Optional[OSError] = None
+        self.device_name = "System Default"
         self.segments: queue.Queue = queue.Queue(maxsize=32)
 
 
@@ -534,6 +538,7 @@ class SpeechRecognitionManager:
         self._lifecycle_lock = threading.RLock()
         self._worker_session = threading.local()
         self._session = _CaptureSession()
+        self._capture_finished = self._session.capture_finished
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue = queue.Queue(maxsize=32)
@@ -3186,8 +3191,8 @@ class SpeechRecognitionManager:
         self._capture_finished = session.capture_finished
         self._buffered_reload_session = reload_in_background
         self._reload_pending = reload_in_background
+        self._buffered_capture_failed = False
         if reload_in_background:
-            self._buffered_capture_failed = False
             self._capture_finished.clear()
             self._cancel_buffered_session.clear()
 
@@ -3303,10 +3308,12 @@ class SpeechRecognitionManager:
             audio_thread.join(timeout=_CAPTURE_JOIN_SECONDS)
 
         self.release_playback_duck()
-        if not audio_thread or not audio_thread.is_alive():
-            play_stop_sound()
-        else:
-            logger.warning("Capture is still alive; suppressing stop cue")
+        # Capture failure has its own cue, after device teardown.
+        if not self._buffered_capture_failed:
+            if not audio_thread or not audio_thread.is_alive():
+                play_stop_sound()
+            else:
+                logger.warning("Capture is still alive; suppressing stop cue")
 
         if self._buffer_lock.acquire(timeout=_FINAL_BUFFER_SECONDS):
             try:
@@ -3357,16 +3364,17 @@ class SpeechRecognitionManager:
             if not self._cancel_buffered_session.is_set():
                 self._perform_recognition()
         except (ChecksumError, ImportError, OSError, RuntimeError, ValueError):
-            logger.exception("Failed to reload model or transcribe buffered speech")
-            play_error_sound()
-            _show_notification(
-                "Dictation Failed",
-                "Could not reload the speech model or transcribe the recording. Please try again.",
-                "dialog-warning",
-            )
+            if not self._buffered_capture_failed:
+                logger.exception("Failed to reload model or transcribe buffered speech")
+                play_error_sound()
+                _show_notification(
+                    "Dictation Failed",
+                    "Could not reload the speech model or transcribe the recording. Please try again.",
+                    "dialog-warning",
+                )
         finally:
             self._reload_pending = False
-            if self.should_record:
+            if self.should_record and not self._buffered_capture_failed:
                 self.stop_recognition()
             self._finish_buffered_session()
 
@@ -3474,30 +3482,35 @@ class SpeechRecognitionManager:
 
     def _record_audio(self) -> None:
         """Record audio from the microphone with reconnection logic."""
-        # Lazy import to avoid circular dependency
-        from ..ui.audio_feedback import play_error_sound  # noqa: F401
-
         session = self._session
         source = None
         audio = None
+        failure: Optional[Exception] = None
 
         def recording() -> bool:
             return self._owns_session() and self.should_record and not session.cancel.is_set()
 
-        try:
-            import numpy as np
-        except ImportError as e:
-            logger.error(f"Failed to import required audio libraries: {e}")
-            logger.error("Please install required dependencies: pip install pyaudio numpy")
-            self.should_record = False
-            self.release_playback_duck()
-            play_error_sound()
-            self._buffered_capture_failed = True
-            self._update_state(RecognitionState.ERROR)
-            self._signal_buffered_capture_done()
-            return
+        def recover(error: OSError) -> bool:
+            if not recording():
+                return False
+            if session.stall_error is None:
+                session.device_name = self._capture_device_name(source)
+            if isinstance(error, CaptureStalledError):
+                session.stall_error = session.stall_error or error
+            if session.stall_error is not None:
+                if session.stall_recovery_attempted:
+                    return False
+                session.stall_recovery_attempted = True
+            recovered = self._attempt_audio_reconnection(audio, should_continue=recording)
+            validation_error = getattr(self._capture_source, "last_error", None)
+            if isinstance(validation_error, CaptureStalledError):
+                session.stall_error = session.stall_error or validation_error
+                session.stall_recovery_attempted = True
+            return recovered and recording()
 
         try:
+            import numpy as np
+
             # PyAudio configuration
             CHUNK = 1024
 
@@ -3510,21 +3523,14 @@ class SpeechRecognitionManager:
             source = self._new_capture_source()
             audio = None
             if getattr(source, "requires_pyaudio", True):
-                try:
-                    import pyaudio
-                except ImportError as e:
-                    logger.error(f"Failed to import required audio libraries: {e}")
-                    logger.error("Please install required dependencies: pip install pyaudio numpy")
-                    self.should_record = False
-                    self.release_playback_duck()
-                    play_error_sound()
-                    self._buffered_capture_failed = True
-                    self._update_state(RecognitionState.ERROR)
-                    self._signal_buffered_capture_done()
-                    return
+                import pyaudio
+
                 self._pyaudio_instance = pyaudio.PyAudio()
                 audio = self._pyaudio_instance
+                source.audio = audio
             self._capture_source = source
+            if not recording():
+                return
             # The attempt count belongs to this session — a previous thread
             # may still be finishing and must not leave its retries here.
             # _last_audio_error_time stays: it also throttles a device that
@@ -3541,17 +3547,21 @@ class SpeechRecognitionManager:
                 logger.error(f"Failed to open audio stream: {e}")
                 logger.error("This may indicate a problem with the audio device or permissions.")
 
-                # Attempt reconnection
-                if not self._attempt_audio_reconnection(audio):
-                    self.should_record = False
-                    self.release_playback_duck()
-                    play_error_sound()
-                    self._buffered_capture_failed = True
-                    self._update_state(RecognitionState.ERROR)
+                if not recording():
                     return
+                if not recover(e):
+                    failure = e
+                    return
+                source = self._capture_source
+                assert source is not None
+                audio = source.audio
             else:
                 RATE = source.sample_rate
 
+            if not recording():
+                return
+            if session.stall_error is None:
+                session.device_name = self._capture_device_name(source)
             self._sync_capture_state()
 
             logger.info("Audio recording started")
@@ -3563,7 +3573,6 @@ class SpeechRecognitionManager:
                 self._recording_segment_has_speech = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
-            capture_failed = False
             # Accumulator for 512-sample Silero chunks.  When the capture rate
             # is higher than 16 kHz (e.g. 48 kHz), resampling produces fewer
             # than 1024 samples per read (~341 at 48 kHz), so the buffer may
@@ -3708,6 +3717,9 @@ class SpeechRecognitionManager:
                             logger.debug(f"Audio level callback error: {e}")
 
                 except (IOError, OSError) as e:
+                    if not recording():
+                        break
+                    failure = e
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
 
@@ -3717,36 +3729,28 @@ class SpeechRecognitionManager:
                     ):  # Prevent rapid reconnection attempts
                         self._last_audio_error_time = current_time
 
-                        if self._attempt_audio_reconnection(audio):
+                        if recover(e):
+                            failure = None
                             logger.info("Audio reconnection successful, continuing recording")
                             # The session source may have been rebuilt (e.g.
                             # the configured device switched between a mic and
                             # a PipeWire sink) — keep reading the new source.
                             source = self._capture_source
+                            assert source is not None
+                            audio = source.audio
                             continue  # Continue recording with the reopened source
                         else:
                             logger.error("Audio reconnection failed, stopping recording")
-                            capture_failed = True
                             break
                     else:
                         logger.warning(
                             "Audio error occurred too soon after last error, stopping recording"
                         )
-                        capture_failed = True
                         break
                 except Exception as e:
                     logger.error(f"Unexpected error reading audio data: {e}")
-                    capture_failed = True
+                    failure = e
                     break
-
-            # A dead microphone must not leave other audio lowered, or the
-            # session stuck in LISTENING, until the user happens to stop.
-            if capture_failed:
-                self.should_record = False
-                self.release_playback_duck()
-                play_error_sound()
-                self._buffered_capture_failed = True
-                self._update_state(RecognitionState.ERROR)
 
             # Log summary
             if not speech_detected_in_session and max_level_seen < 5:
@@ -3759,16 +3763,19 @@ class SpeechRecognitionManager:
             logger.info("Audio recording stopped")
 
         except Exception as e:
+            failure = e
             logger.error(f"Error in audio recording: {e}")
-            self.should_record = False
-            self.release_playback_duck()
-            play_error_sound()
-            self._buffered_capture_failed = True
-            self._update_state(RecognitionState.ERROR)
         finally:
+            if failure is not None and recording():
+                self._buffered_capture_failed = True
             try:
+                # Reconnection may have rebuilt the source even on failure.
+                source = self._capture_source or source
                 if source is not None:
                     source.close()
+            except (OSError, RuntimeError) as e:
+                failure = failure or e
+                logger.error("Failed to close audio capture: %s", e)
             finally:
                 # close() owns the PyAudio instance as well as the stream.
                 # Only clear manager fields still bound to this source.
@@ -3780,7 +3787,55 @@ class SpeechRecognitionManager:
                     self._last_audio_error_time = 0
                     self._capture_source = None
 
+                if failure is not None and recording():
+                    self._report_capture_failure(session, failure)
                 self._signal_buffered_capture_done()
+
+    def _capture_device_name(self, source: object) -> str:
+        """Describe the resolved capture device before recovery can replace it."""
+        name = getattr(source, "resolved_device_name", None)
+        if isinstance(name, str) and name:
+            return name
+        node = getattr(source, "source", None)
+        name = getattr(node, "display_name", None)
+        if isinstance(name, str) and name:
+            return name
+        name = getattr(source, "device_name", None)
+        if isinstance(name, str) and name:
+            return name
+        info = _get_device_info_safe(
+            getattr(source, "audio", None), getattr(source, "device_index", None)
+        )
+        name = info.get("name")
+        return name if isinstance(name, str) and name else "System Default"
+
+    def _report_capture_failure(self, session: _CaptureSession, error: Exception) -> None:
+        """Report once after owner-thread teardown, then complete the failed session."""
+        with self._lifecycle_lock:
+            if not self._owns_session() or session.cancel.is_set():
+                return
+            self.should_record = False
+            self._buffered_capture_failed = True
+            self.release_playback_duck()
+            self._update_state(RecognitionState.ERROR)
+        play_error_sound()
+        if isinstance(error, CaptureStalledError):
+            session.stall_error = session.stall_error or error
+        if session.stall_error is not None:
+            logger.error("Microphone '%s' stalled: %s", session.device_name, session.stall_error)
+            _show_notification(
+                "Microphone Stalled",
+                f"{session.device_name} stopped delivering audio. "
+                "Open Settings to test or select another microphone, then try dictation again.",
+                "dialog-warning",
+            )
+        else:
+            logger.error("Audio capture failed for '%s': %s", session.device_name, error)
+        self.stop_recognition()
+        if self._buffered_reload_session and (
+            self.recognition_thread is None or not self.recognition_thread.is_alive()
+        ):
+            self._finish_buffered_session()
 
     def _process_final_buffer(self) -> None:
         """Process the final audio buffer after silence is detected."""
@@ -4244,6 +4299,10 @@ class SpeechRecognitionManager:
         )
         source = getattr(self, "_capture_source", None)
         if source is None or isinstance(source, PipeWireCaptureSource) != want_pipewire:
+            if source is not None:
+                source.close()
+                self._audio_stream = None
+                self._pyaudio_instance = None
             source = self._new_capture_source()
             self._capture_source = source
         else:
@@ -4263,16 +4322,30 @@ class SpeechRecognitionManager:
         if source.audio is not None:
             self._pyaudio_instance = source.audio
 
-    def _attempt_audio_reconnection(self, audio_instance) -> bool:
+    def _attempt_audio_reconnection(
+        self, audio_instance: object, should_continue: Optional[Callable[[], bool]] = None
+    ) -> bool:
         """
         Attempt to reconnect to the audio device.
 
         Args:
             audio_instance: The PyAudio instance to use for reconnection
+            should_continue: Optional session predicate; False cancels recovery.
 
         Returns:
             bool: True if reconnection was successful, False otherwise
         """
+        session = self._session
+
+        def continuing() -> bool:
+            return (
+                self._owns_session()
+                and not session.cancel.is_set()
+                and (should_continue is None or should_continue())
+            )
+
+        if not continuing():
+            return False
         self._reconnection_attempts += 1
 
         if self._reconnection_attempts > self._max_reconnection_attempts:
@@ -4288,13 +4361,17 @@ class SpeechRecognitionManager:
         )
 
         # Wait before attempting reconnection
-        time.sleep(delay)
+        if session.cancel.wait(delay) or not continuing():
+            return False
 
+        previous_source = self._capture_source
         source = self._capture_source_for_session()
         # The source may not know about the stream it is asked to replace
         # (e.g. when tests drive this method directly).
         source.stream = getattr(self, "_audio_stream", None)
         audio = audio_instance
+        if previous_source is not None and source is not previous_source:
+            audio = None  # The old source terminated its own PortAudio instance.
         if getattr(source, "requires_pyaudio", True) and audio is None:
             # A session that started on a PipeWire sink never built a PyAudio
             # instance; a PortAudio source still needs one to reopen.
@@ -4305,10 +4382,15 @@ class SpeechRecognitionManager:
 
                     audio = pyaudio.PyAudio()
                     self._pyaudio_instance = audio
+                    source.audio = audio
                 except (ImportError, OSError, AttributeError) as e:
                     logger.error(f"Failed to initialize PyAudio for reconnection: {e}")
                     return False
-        ok = source.reopen(audio)
+        if not continuing():
+            return False
+        ok = source.reopen(audio, should_continue=continuing)
+        if not continuing():
+            return False
         self._sync_capture_state()
         return ok
 
