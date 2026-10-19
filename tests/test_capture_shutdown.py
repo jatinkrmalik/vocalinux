@@ -1,13 +1,16 @@
 """Deterministic shutdown races without microphone hardware or model loading."""
 
+import importlib
 import queue
 import sys
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from types import ModuleType
 from typing import Callable
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -246,7 +249,7 @@ class _AutoPauseFlow:
     def __init__(
         self, manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Import at test time so collection does not pin the tray's mocked GLib.
+        # The fixture isolates this import from other tests' mocked GLib modules.
         from vocalinux.ui.tray_indicator import TrayIndicator
 
         self.manager = manager
@@ -309,9 +312,6 @@ class _AutoPauseFlow:
             use_glib=False,
         )
         self.tray._auto_pause_monitor = self.monitor
-        assert manager.start_recognition()
-        assert self.loading.wait(1)
-        self.reload_worker = manager.recognition_thread
         self.backend.cleanup.side_effect = lambda: self.cleanup_during_reload.append(
             self.reload_worker.is_alive()
         )
@@ -343,18 +343,117 @@ class _AutoPauseFlow:
             assert not worker.is_alive()
 
 
+@contextmanager
+def _isolated_tray_import() -> Iterator[ModuleType]:
+    """Restore local modules and package bindings, including newly imported dependencies."""
+    saved_modules = {
+        name: module
+        for name, module in sys.modules.copy().items()
+        if name == "vocalinux" or name.startswith("vocalinux.")
+    }
+    saved_packages = {
+        name: (module, vars(module).copy())
+        for name, module in saved_modules.items()
+        if isinstance(module, ModuleType) and hasattr(module, "__path__")
+    }
+    try:
+        # A cached tray may be bound to a different test's GLib mock.
+        sys.modules.pop("vocalinux.ui.tray_indicator", None)
+        yield importlib.import_module("vocalinux.ui.tray_indicator")
+    finally:
+        module_names = set(saved_modules) | {
+            name for name in sys.modules.copy() if name.startswith("vocalinux.")
+        }
+        for name in module_names:
+            if name in saved_modules:
+                sys.modules[name] = saved_modules[name]
+            else:
+                sys.modules.pop(name, None)
+            parent_name, _, attribute = name.rpartition(".")
+            if parent_name in saved_packages:
+                parent, attributes = saved_packages[parent_name]
+                if attribute in attributes:
+                    setattr(parent, attribute, attributes[attribute])
+                else:
+                    vars(parent).pop(attribute, None)
+
+
 @pytest.fixture
 def auto_pause_flow(
     manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[_AutoPauseFlow, None, None]:
-    flow = _AutoPauseFlow(manager, monkeypatch)
-    try:
-        yield flow
-    finally:
-        flow.release_load.set()
-        flow.release_unload.set()
-        flow.release_resume.set()
-        flow.join([flow.reload_worker] + flow.unload_threads + flow.resume_threads)
+    with _isolated_tray_import():
+        flow = _AutoPauseFlow(manager, monkeypatch)
+        try:
+            assert manager.start_recognition()
+            flow.reload_worker = manager.recognition_thread
+            assert flow.loading.wait(1)
+            yield flow
+        finally:
+            flow.release_load.set()
+            flow.release_unload.set()
+            flow.release_resume.set()
+            flow.join(
+                [
+                    worker
+                    for worker in (manager.audio_thread, manager.recognition_thread)
+                    if worker is not None
+                ]
+                + flow.unload_threads
+                + flow.resume_threads
+            )
+
+
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("package_attribute", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+def test_tray_import_restores_modules_and_package_attributes(
+    monkeypatch: pytest.MonkeyPatch, cached: bool, package_attribute: bool, fail: bool
+) -> None:
+    """An earlier GLib mock must not survive an isolated flow through import caching."""
+    import vocalinux.ui
+
+    tray_name = "vocalinux.ui.tray_indicator"
+    settings_name = "vocalinux.ui.settings_dialog"
+    # Model a cached tray and a freshly imported dependency independently of
+    # their package attributes; those bindings can be absent or out of sync.
+    old_tray = ModuleType(tray_name)
+    old_tray.GLib = MagicMock()
+    old_attribute = ModuleType(tray_name)
+    if cached:
+        monkeypatch.setitem(sys.modules, tray_name, old_tray)
+    else:
+        monkeypatch.delitem(sys.modules, tray_name, raising=False)
+    monkeypatch.delitem(sys.modules, settings_name, raising=False)
+    for attribute in ("tray_indicator", "settings_dialog"):
+        if package_attribute:
+            monkeypatch.setattr(vocalinux.ui, attribute, old_attribute, raising=False)
+        else:
+            monkeypatch.delattr(vocalinux.ui, attribute, raising=False)
+
+    for _ in range(2):
+        glib = MagicMock()
+        monkeypatch.setattr(sys.modules["gi.repository"], "GLib", glib)
+        with pytest.raises(RuntimeError, match="flow failed") if fail else nullcontext():
+            with _isolated_tray_import() as tray:
+                assert tray is not old_tray
+                assert tray.GLib is glib
+                assert vocalinux.ui.tray_indicator is tray
+                assert vocalinux.ui.settings_dialog is sys.modules[settings_name]
+                assert tray.TrayIndicator._reinit_keyboard_fallback(Mock()) is glib.SOURCE_REMOVE
+                if fail:
+                    raise RuntimeError("flow failed")
+
+        if cached:
+            assert sys.modules[tray_name] is old_tray
+        else:
+            assert tray_name not in sys.modules
+        assert settings_name not in sys.modules
+        for attribute in ("tray_indicator", "settings_dialog"):
+            if package_attribute:
+                assert vars(vocalinux.ui)[attribute] is old_attribute
+            else:
+                assert attribute not in vars(vocalinux.ui)
 
 
 @pytest.mark.parametrize(

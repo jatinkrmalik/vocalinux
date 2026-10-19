@@ -2,6 +2,7 @@
 
 import importlib
 import sys
+import threading
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -411,6 +412,13 @@ def _reconfigure_manager():
     manager.model_size = "tiny"
     manager.language = "en-us"
     manager._defer_download = True
+    # Request gating needs an allocated token and concrete resume state.
+    manager._model_request_lock = threading.Lock()
+    manager._model_request = object()
+    manager._auto_resume_pending = False
+    manager._new_model_request = lambda **kwargs: manager_class._new_model_request(
+        manager, **kwargs
+    )
     # reconfigure() dispatches through _init_selected_engine(); bind the real
     # method so force_reinit still reaches _init_whispercpp on this mock.
     manager._init_selected_engine = lambda: manager_class._init_selected_engine(manager)
