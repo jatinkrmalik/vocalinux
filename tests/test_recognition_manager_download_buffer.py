@@ -714,6 +714,7 @@ class TestAudioDeviceReconnection(unittest.TestCase):
         mock_audio = MagicMock()
         mock_stream = MagicMock()
         mock_audio.open.return_value = mock_stream
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"audio_data"
 
         result = manager._attempt_audio_reconnection(mock_audio)

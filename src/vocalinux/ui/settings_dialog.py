@@ -2655,6 +2655,8 @@ class SettingsDialog(Gtk.Dialog):
         self._language_shortcut_rows: list[dict] = []
         self._language_shortcut_add_row: Optional[PreferenceRow] = None
         self._recording_shortcut_target = None
+        self._audio_test_cancel: Optional[threading.Event] = None
+        self.connect("destroy", self._cancel_audio_test)
         self._test_active = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
@@ -7501,6 +7503,7 @@ class SettingsDialog(Gtk.Dialog):
     def _on_settings_dialog_response(self, dialog, response_id):
         """Persist deferred text edits before the settings dialog closes."""
         if response_id in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
+            self._cancel_audio_test()
             self._flush_advanced_prompt_if_dirty()
             self._resync_engine_ui_if_unapplied()
 
@@ -10169,8 +10172,26 @@ For now, the engine has been reverted to VOSK."""
         logger.info(f"Audio device changed to: [{device_index}] {device_name}")
         self.audio_test_status.set_markup(f"<i>Selected: {device_label}</i>")
 
+    def _cancel_audio_test(self, *_args: object) -> None:
+        """Cancel capture and invalidate any queued result when Settings closes."""
+        cancel = getattr(self, "_audio_test_cancel", None)
+        if cancel is not None:
+            cancel.set()
+        self._audio_test_cancel = None
+
+    def _complete_audio_test(self, result: dict, cancel: threading.Event) -> bool:
+        """Deliver only the current test's result on the GTK main thread."""
+        if cancel.is_set() or self._audio_test_cancel is not cancel:
+            return False
+        self._audio_test_cancel = None
+        self._handle_audio_test_result(result)
+        return False
+
     def _on_test_audio_clicked(self, widget):
         """Handle test audio button click."""
+        self._cancel_audio_test()
+        cancel = threading.Event()
+        self._audio_test_cancel = cancel
         self.test_audio_btn.set_sensitive(False)
         self.test_audio_btn.set_label("Testing...")
         self.audio_test_status.set_markup("<i>Recording... speak into your microphone</i>")
@@ -10179,11 +10200,13 @@ For now, the engine has been reverted to VOSK."""
         device_id = self.audio_device_combo.get_active_id()
         device_index = None if device_id == "-1" else int(device_id)
 
-        def run_test():
+        def run_test() -> None:
             from ..speech_recognition.recognition_manager import test_audio_input
 
-            result = test_audio_input(device_index=device_index, duration=2.0)
-            GLib.idle_add(self._handle_audio_test_result, result)
+            result = test_audio_input(
+                device_index=device_index, duration=2.0, should_continue=lambda: not cancel.is_set()
+            )
+            GLib.idle_add(self._complete_audio_test, result, cancel)
 
         threading.Thread(target=run_test, daemon=True).start()
 

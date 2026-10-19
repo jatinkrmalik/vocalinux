@@ -371,11 +371,18 @@ class PipeWireCaptureSource:
             env=host_env(),
         )
 
-    def reopen(self, audio_instance: Any) -> bool:
+    def reopen(
+        self, audio_instance: Any, should_continue: Optional[Callable[[], bool]] = None
+    ) -> bool:
         """Close the current process and spawn a fresh one. True on success."""
         self.close()
+        if should_continue is not None and not should_continue():
+            return False
         try:
             self.open()
+            if should_continue is not None and not should_continue():
+                self.close()
+                return False
         except (IOError, OSError) as exc:
             logger.error("PipeWire reconnection failed: %s", exc)
             return False
@@ -386,14 +393,16 @@ class PipeWireCaptureSource:
     #: emits zeros — so a long gap means the process is wedged, not quiet.
     _STALL_TIMEOUT_SECONDS = 5.0
 
-    def read_chunk(self) -> bytes:
+    def read_chunk(self, should_continue: Optional[Callable[[], bool]] = None) -> Optional[bytes]:
         """Return one 1024-frame chunk of mono int16 PCM.
 
         Raises IOError when the process dies or when no samples arrive within
         ``_STALL_TIMEOUT_SECONDS`` — a blocking ``read`` would keep the
         capture thread (and ``_buffer_lock``) held forever on a wedged
-        pw-record, preventing a clean stop.
+        pw-record, preventing a clean stop. Return None on cancellation.
         """
+        if should_continue is not None and not should_continue():
+            return None
         process = self.stream
         if process is None or process.stdout is None:
             raise IOError("PipeWire capture stream is not open")
@@ -408,6 +417,8 @@ class PipeWireCaptureSource:
         parts: List[bytes] = []
         remaining = need
         while remaining > 0:
+            if should_continue is not None and not should_continue():
+                return None
             left = deadline - time.monotonic()
             if left <= 0:
                 code = process.poll()
@@ -417,11 +428,15 @@ class PipeWireCaptureSource:
                 )
             if fd is not None:
                 try:
-                    ready, _, _ = select.select([fd], [], [], left)
+                    ready, _, _ = select.select(
+                        [fd], [], [], min(left, 0.01) if should_continue is not None else left
+                    )
                 except (OSError, ValueError) as exc:
                     raise IOError(f"PipeWire capture read failed: {exc}") from exc
                 if not ready:
                     continue
+                if should_continue is not None and not should_continue():
+                    return None
                 try:
                     chunk = os.read(fd, remaining)
                 except OSError as exc:
@@ -433,6 +448,8 @@ class PipeWireCaptureSource:
                     chunk = process.stdout.read(remaining)
                 except (OSError, ValueError) as exc:
                     raise IOError(f"PipeWire capture read failed: {exc}") from exc
+            if should_continue is not None and not should_continue():
+                return None
             if not chunk:
                 code = process.poll()
                 raise IOError(f"pw-record stopped streaming (exit status {code})")
@@ -473,13 +490,18 @@ class PipeWireCaptureSource:
         self.stream = None
 
 
-def _test_pipewire_input(device_index: int, duration: float = 1.0) -> dict:
+def _test_pipewire_input(
+    device_index: int,
+    duration: float = 1.0,
+    should_continue: Optional[Callable[[], bool]] = None,
+) -> dict:
     """
     Test capture from a PipeWire system-audio source.
 
     Args:
         device_index: Negative PipeWire source index (see PIPEWIRE_INDEX_BASE)
         duration: How long to record in seconds
+        should_continue: Optional predicate; False cancels the test.
 
     Returns:
         Dictionary in the same shape as :func:`test_audio_input`.
@@ -495,6 +517,9 @@ def _test_pipewire_input(device_index: int, duration: float = 1.0) -> dict:
         "error": None,
     }
 
+    if should_continue is not None and not should_continue():
+        result["error"] = "Audio test cancelled"
+        return result
     if resolve_pipewire_source(device_index, None) is None:
         result["error"] = "PipeWire system-audio source is not available"
         return result
@@ -503,17 +528,25 @@ def _test_pipewire_input(device_index: int, duration: float = 1.0) -> dict:
     try:
         import numpy as np
 
+        if should_continue is not None and not should_continue():
+            result["error"] = "Audio test cancelled"
+            return result
         source.open()
         result["device_name"] = source.source.display_name if source.source else "Unknown"
         result["sample_rate"] = source.sample_rate
         all_amplitudes = []
         chunks_to_read = max(1, int(source.sample_rate * duration / source._CHUNK_FRAMES))
         for _ in range(chunks_to_read):
-            data = source.read_chunk()
+            data = source.read_chunk(should_continue=should_continue)
+            if data is None:
+                result["error"] = "Audio test cancelled"
+                break
             audio_data = np.frombuffer(data, dtype=np.int16)
             all_amplitudes.extend(np.abs(audio_data))
 
-        if all_amplitudes:
+        if should_continue is not None and not should_continue():
+            result["error"] = "Audio test cancelled"
+        if all_amplitudes and result["error"] is None:
             all_amplitudes = np.array(all_amplitudes)
             max_amplitude = float(np.max(all_amplitudes))
             result["success"] = True

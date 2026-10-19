@@ -153,11 +153,13 @@ class CaptureSource(Protocol):
         """Resolve the input device and open the capture stream."""
         ...
 
-    def read_chunk(self) -> bytes:
-        """Return one chunk of mono 16 kHz int16 PCM audio."""
+    def read_chunk(self, should_continue: Optional[Callable[[], bool]] = None) -> Optional[bytes]:
+        """Return mono 16 kHz int16 PCM, or None when cancelled."""
         ...
 
-    def reopen(self, audio_instance: Any) -> bool:
+    def reopen(
+        self, audio_instance: Any, should_continue: Optional[Callable[[], bool]] = None
+    ) -> bool:
         """Re-open the stream after a device failure. True on success."""
         ...
 

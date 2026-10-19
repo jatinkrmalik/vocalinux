@@ -868,6 +868,7 @@ class TestModuleLevelFunctions(unittest.TestCase):
 
         # Create mock for PyAudio
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00" * 2048
 
         mock_pyaudio_instance = MagicMock()

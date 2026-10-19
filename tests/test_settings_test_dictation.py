@@ -2,6 +2,7 @@
 
 import importlib
 import sys
+import threading
 from typing import Any, Optional
 from unittest.mock import MagicMock, Mock, patch
 
@@ -490,3 +491,65 @@ def test_cancel_worker_reraises_unexpected_defect() -> None:
 
     assert raised is True
     glib.idle_add.assert_not_called()
+
+
+def test_audio_test_cancellation_invalidates_queued_results() -> None:
+    """A closed dialog and a superseded test must never receive stale UI work."""
+    dialog = Mock()
+    old_cancel = threading.Event()
+    dialog._audio_test_cancel = old_cancel
+    SettingsDialog._cancel_audio_test(dialog)
+    assert old_cancel.is_set()
+    assert dialog._audio_test_cancel is None
+    assert SettingsDialog._complete_audio_test(dialog, {}, old_cancel) is False
+    dialog._handle_audio_test_result.assert_not_called()
+
+    current = threading.Event()
+    dialog._audio_test_cancel = current
+    assert SettingsDialog._complete_audio_test(dialog, {}, threading.Event()) is False
+    dialog._handle_audio_test_result.assert_not_called()
+    assert SettingsDialog._complete_audio_test(dialog, {"success": True}, current) is False
+    dialog._handle_audio_test_result.assert_called_once_with({"success": True})
+    assert dialog._audio_test_cancel is None
+
+
+def test_settings_close_cancels_audio_before_persisting_edits() -> None:
+    """The response path cancels even if the caller delays destruction."""
+    dialog = Mock()
+    SettingsDialog._on_settings_dialog_response(
+        dialog, dialog, settings_dialog.Gtk.ResponseType.CLOSE
+    )
+    assert dialog.method_calls[0][0] == "_cancel_audio_test"
+    dialog._cancel_audio_test.assert_called_once_with()
+
+
+def test_settings_audio_worker_propagates_cancellation() -> None:
+    """Closing Settings cancels the predicate held by its background worker."""
+    dialog = Mock()
+    dialog._audio_test_cancel = None
+    dialog.audio_device_combo.get_active_id.return_value = "-1"
+    dialog._cancel_audio_test = SettingsDialog._cancel_audio_test.__get__(dialog)
+    with (
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+        patch.object(settings_dialog, "GLib") as glib,
+        patch("vocalinux.speech_recognition.recognition_manager.test_audio_input") as test_audio,
+    ):
+        SettingsDialog._on_test_audio_clicked(dialog, None)
+        worker = thread_cls.call_args.kwargs["target"]
+        cancel = dialog._audio_test_cancel
+
+        def capture(**kwargs: Any) -> dict:
+            assert kwargs["device_index"] is None
+            assert kwargs["should_continue"]()
+            dialog._cancel_audio_test()
+            assert not kwargs["should_continue"]()
+            return {"success": False, "error": "cancelled"}
+
+        test_audio.side_effect = capture
+        worker()
+        assert cancel.is_set()
+        glib.idle_add.assert_called_once()
+        callback, result, token = glib.idle_add.call_args.args
+        assert callback == dialog._complete_audio_test
+        assert result["success"] is False
+        assert token is cancel

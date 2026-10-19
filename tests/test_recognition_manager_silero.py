@@ -137,6 +137,7 @@ def _scripted_stream(probs_per_chunk, manager, max_iters=None, chunk_bytes=None)
             manager.should_record = False
         return payload
 
+    stream.get_read_available.return_value = 1024
     stream.read.side_effect = _read
     return stream
 
@@ -256,6 +257,7 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         """Losing the microphone during reload must fail instead of dropping audio."""
         self.mgr._buffered_reload_session = True
         stream = MagicMock()
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = OSError("microphone disconnected")
         pyaudio_mod, _audio = _make_pyaudio_module(stream)
 
@@ -277,6 +279,7 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         self.mgr._buffered_reload_session = True
         self.mgr._last_audio_error_time = time.time()
         stream = MagicMock()
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = OSError("microphone still disconnected")
         pyaudio_mod, _audio = _make_pyaudio_module(stream)
 
@@ -362,6 +365,7 @@ class TestRecordAudioAmplitudeFallback(unittest.TestCase):
                 self.mgr.should_record = False
             return payload
 
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = _read
         pyaudio_mod, _ = _make_pyaudio_module(stream)
         with (
@@ -422,6 +426,7 @@ class TestAudioLevelCallback(unittest.TestCase):
                 mgr.should_record = False
             return b"\x00" * (1024 * 2)
 
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = _read
         pyaudio_mod, _ = _make_pyaudio_module(stream)
         with (
