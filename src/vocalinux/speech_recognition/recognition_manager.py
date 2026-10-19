@@ -476,8 +476,9 @@ class SpeechRecognitionManager:
         self._download_openers: set[threading.Thread] = set()
         self._defer_download = defer_download
         self._model_initialized = False
-        # True while auto-pause has unloaded the model for a configured app/game
+        # True while a configured app/game blocks dictation, including pending unloads
         self._auto_paused = False
+        self._auto_pause_request: Optional[object] = None
         # True while idle keep-alive has unloaded the model (dictation may lazy-reload)
         self._idle_unloaded = False
         self.buffer_during_reload = bool(kwargs.get("buffer_during_reload", False))
@@ -4427,14 +4428,52 @@ class SpeechRecognitionManager:
                   lazy-reload via :meth:`ensure_model_loaded`.
                 - ``"manual"`` / other: unload only without setting pause/idle flags.
         """
-        self._cancel_reload_recording()
-        logger.info("Unloading speech model (reason=%s)", reason)
+        pause_request = None
+        reload_worker = None
+        if reason == "auto_pause":
+            # Serialize the guard and worker snapshot with recognition starts;
+            # release the lifecycle lock before cancellation joins the worker.
+            with self._lifecycle_lock:
+                pause_request = object()
+                self._auto_pause_request = pause_request
+                self._auto_paused = True
+                self._idle_unloaded = False
+                reload_worker = self.recognition_thread
+
+        try:
+            self._cancel_reload_recording()
+        except TimeoutError:
+            if reason != "auto_pause":
+                raise
+            # The monitor will not retry while the app is still running. Keep
+            # dictation blocked and release resources only after this worker exits.
+            threading.Thread(
+                target=self._unload_after_reload,
+                args=(reload_worker, pause_request),
+                daemon=True,
+            ).start()
+            return
 
         if self.state != RecognitionState.IDLE:
             logger.info("Stopping active recognition before model unload")
             self.stop_recognition()
 
+        self._unload_model_resources(reason, pause_request)
+
+    def _unload_after_reload(self, worker: threading.Thread, pause_request: object) -> None:
+        """Finish a timed-out auto-pause away from the monitor/GTK callback."""
+        worker.join()
+        self._unload_model_resources("auto_pause", pause_request)
+
+    def _unload_model_resources(self, reason: str, pause_request: Optional[object] = None) -> None:
+        """Release resources after reload cancellation has completed."""
+        logger.info("Unloading speech model (reason=%s)", reason)
+
         with self._model_lock:
+            # Resume invalidates the request before cancellation and shares this
+            # lock for reinitialization. Stale work must not unload its new model.
+            if reason == "auto_pause" and self._auto_pause_request is not pause_request:
+                return
             self.model = None
             self.recognizer = None
             if self._faster_whisper_engine is not None:
@@ -4449,8 +4488,6 @@ class SpeechRecognitionManager:
             self._model_initialized = False
 
         if reason == "auto_pause":
-            self._auto_paused = True
-            self._idle_unloaded = False
             logger.info("Speech model unloaded; dictation blocked until auto-pause clears")
         elif reason == "idle_keepalive":
             # Auto-pause owns lifecycle if both could apply
@@ -4469,7 +4506,7 @@ class SpeechRecognitionManager:
 
     @property
     def is_auto_paused(self) -> bool:
-        """True when the model was unloaded for auto-pause and not yet reloaded."""
+        """True while auto-pause blocks dictation, even if unload is still pending."""
         return bool(self._auto_paused)
 
     @property
@@ -4498,7 +4535,7 @@ class SpeechRecognitionManager:
 
         return self.model_ready
 
-    def reinitialize_after_resume(self):
+    def reinitialize_after_resume(self) -> None:
         """Reinitialize the speech engine after system resume from suspend.
 
         Stops any active recognition, releases stale model resources,
@@ -4507,6 +4544,8 @@ class SpeechRecognitionManager:
 
         Also used after auto-pause / idle keep-alive to reload the model.
         """
+        # Invalidate deferred unloads even when cancellation below times out.
+        self._auto_pause_request = None
         self._cancel_reload_recording()
         logger.info("Reinitializing speech engine after system resume")
 

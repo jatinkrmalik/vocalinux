@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from vocalinux.auto_pause_monitor import AutoPauseMonitor
 from vocalinux.common_types import RecognitionState
 from vocalinux.speech_recognition import recognition_manager as rm
 
@@ -203,6 +204,8 @@ def test_reload_callers_report_timeout_before_engine_handoff(
     original_model = manager.model
     original_timeout = manager.silence_timeout
     settings = {"silence_timeout": 1.25} if operation == "reconfigure" else {}
+    if operation == "unload_model":
+        settings = {"reason": "manual"}
     loading = threading.Event()
     release = threading.Event()
 
@@ -234,6 +237,189 @@ def test_reload_callers_report_timeout_before_engine_handoff(
         manager.reconfigure(**settings)
         assert manager.silence_timeout == 1.25
     assert manager.start_recognition()
+
+
+@pytest.mark.parametrize("resume", ["after_unload", "during_reload", "before_deferred_unload"])
+def test_monitor_auto_pause_survives_reload_timeout(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch, resume: str
+) -> None:
+    """A one-shot monitor pause guards dictation until a real resume succeeds."""
+    manager.buffer_during_reload = True
+    manager._idle_unloaded = True
+    manager._model_initialized = False
+    loading = threading.Event()
+    release_load = threading.Event()
+    deferred_started = threading.Event()
+    release_deferred = threading.Event()
+    deferred_threads: list[threading.Thread] = []
+    resume_threads: list[threading.Thread] = []
+    cleanup_during_reload: list[bool] = []
+    resume_errors: list[TimeoutError] = []
+    resumed_model = object()
+    backend = Mock()
+    http_session = Mock()
+    manager._faster_whisper_engine = backend
+    manager._http_session = http_session
+
+    def load() -> None:
+        loading.set()
+        assert release_load.wait(3)
+        manager.model = object()
+        manager._model_initialized = True
+
+    def reinit() -> None:
+        manager.model = resumed_model
+        manager._model_initialized = True
+
+    unload_after_reload = manager._unload_after_reload
+
+    def deferred_unload(worker: threading.Thread, request: object) -> None:
+        deferred_threads.append(threading.current_thread())
+        deferred_started.set()
+        assert release_deferred.wait(3)
+        unload_after_reload(worker, request)
+
+    def on_resume() -> None:
+        try:
+            manager.reinitialize_after_resume()
+        except TimeoutError as exc:
+            resume_errors.append(exc)
+
+    monkeypatch.setattr(manager, "_init_selected_engine", load)
+    monkeypatch.setattr(manager, "_init_vosk", reinit)
+    monkeypatch.setattr(manager, "_record_audio", lambda: None)
+    monkeypatch.setattr(manager, "_unload_after_reload", deferred_unload)
+    transcribe = Mock()
+    monkeypatch.setattr(manager, "_process_audio_buffer", transcribe)
+    pause = Mock(side_effect=manager.unload_model)
+    running = {"game"}
+    monitor = AutoPauseMonitor(
+        get_config=lambda: (True, ["game"], 5),
+        on_pause=pause,
+        on_resume=on_resume,
+        process_snapshot=lambda: running,
+        use_glib=False,
+    )
+    assert manager.start_recognition()
+    assert loading.wait(1)
+    reload_worker = manager.recognition_thread
+    backend.cleanup.side_effect = lambda: cleanup_during_reload.append(reload_worker.is_alive())
+    if resume != "before_deferred_unload":
+        release_deferred.set()
+    try:
+        started = time.monotonic()
+        assert monitor.check_once()
+        assert time.monotonic() - started < 0.5
+        assert deferred_started.wait(1)
+        assert not release_load.is_set()
+        assert reload_worker.is_alive()
+        assert monitor.paused
+        assert manager.is_auto_paused
+        assert not manager.is_idle_unloaded
+        assert not manager.start_recognition()
+        backend.cleanup.assert_not_called()
+        http_session.close.assert_not_called()
+        assert monitor.check_once()
+        pause.assert_called_once_with()
+
+        if resume == "during_reload":
+            running.clear()
+            started = time.monotonic()
+            assert not monitor.check_once()
+            assert time.monotonic() - started < 0.5
+            assert len(resume_errors) == 1
+            assert "still loading" in str(resume_errors[0])
+            assert not monitor.paused
+            # A failed resume keeps the existing guard until a successful retry.
+            assert manager.is_auto_paused
+            assert not manager.start_recognition()
+        elif resume == "before_deferred_unload":
+            # Start a real resume while loading is blocked, then release the
+            # loader inside the cancellation budget instead of timing out.
+            resume_waiting = threading.Event()
+            cancel_reload = manager._cancel_reload_recording
+
+            def cancel_on_resume() -> None:
+                resume_waiting.set()
+                cancel_reload()
+
+            monkeypatch.setattr(manager, "_cancel_reload_recording", cancel_on_resume)
+            monkeypatch.setattr(rm, "_RECOGNITION_JOIN_SECONDS", 1)
+            running.clear()
+            resuming = threading.Thread(target=monitor.check_once)
+            resume_threads.append(resuming)
+            resuming.start()
+            assert resume_waiting.wait(1)
+            assert reload_worker.is_alive()
+
+        release_load.set()
+        reload_worker.join(1)
+        assert not reload_worker.is_alive()
+        for worker in resume_threads:
+            worker.join(2)
+            assert not worker.is_alive()
+        assert not manager._buffered_reload_session
+        assert manager.state == RecognitionState.IDLE
+        transcribe.assert_not_called()
+
+        if resume == "before_deferred_unload":
+            assert not monitor.paused
+            assert not resume_errors
+            assert manager.model is resumed_model
+            assert not manager.is_auto_paused
+            # Let stale deferred work run after resumed dictation has started.
+            monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+            assert manager.start_recognition()
+            release_deferred.set()
+        else:
+            assert not manager.start_recognition()
+
+        for worker in deferred_threads:
+            worker.join(1)
+            assert not worker.is_alive()
+
+        if resume == "after_unload":
+            assert manager.model is None
+            assert not manager._model_initialized
+            assert manager.is_auto_paused
+            assert not manager.is_idle_unloaded
+            assert not manager.start_recognition()
+            backend.cleanup.assert_called_once_with()
+            http_session.close.assert_called_once_with()
+            assert cleanup_during_reload == [False]
+            assert monitor.check_once()
+            pause.assert_called_once_with()
+            running.clear()
+            assert not monitor.check_once()
+        elif resume == "during_reload":
+            # Resume invalidation precedes its bounded cancellation, even on error.
+            backend.cleanup.assert_not_called()
+            http_session.close.assert_not_called()
+            assert manager.model is not None
+            assert manager.is_auto_paused
+            manager.reinitialize_after_resume()
+
+        assert manager.model is resumed_model
+        assert manager.model_ready
+        assert not manager.is_auto_paused
+        assert not manager.is_idle_unloaded
+        backend.cleanup.assert_called_once_with()
+        http_session.close.assert_called_once_with()
+        assert cleanup_during_reload == [False]
+        if resume == "before_deferred_unload":
+            assert manager.state == RecognitionState.LISTENING
+            assert manager.should_record
+        else:
+            monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+            assert manager.start_recognition()
+    finally:
+        release_load.set()
+        release_deferred.set()
+        reload_worker.join(2)
+        assert not reload_worker.is_alive()
+        for worker in resume_threads + deferred_threads:
+            worker.join(2)
+            assert not worker.is_alive()
 
 
 def test_late_recognizer_keeps_its_queue_and_cannot_change_next_session(
