@@ -37,6 +37,7 @@ CAPTURE_CHUNK = 1024
 STALL_TIMEOUT_SECONDS = 5.0
 _READ_POLL_SECONDS = 0.01
 _PA_INPUT_OVERFLOWED = -9981
+_PA_ALSA = 8
 
 
 def _read_frames_bounded(
@@ -389,6 +390,58 @@ def _resolve_valid_input_device(audio: Any, preferred_index: Optional[int] = Non
     return input_device_indices[0]
 
 
+def _resolve_system_default(audio: Any) -> Optional[int]:
+    """Prefer ALSA's sound-server PCM when PortAudio substituted hardware.
+
+    A real host default stays implicit. ALSA can silently promote arbitrary
+    hardware when its ``default`` PCM is busy or absent; in that case the
+    input-capable ``pulse`` PCM follows the desktop's selected microphone.
+    This only inspects enumeration metadata and never probes a stream.
+    """
+    default_info = _get_device_info_safe(audio)
+    name = default_info.get("name", "Unknown")
+    if isinstance(name, str) and (
+        name.strip().lower() in {"default", "pulse", "pipewire"} or _is_virtual_device(name)
+    ):
+        return None
+    host_api_index = default_info.get("hostApi")
+    if not isinstance(host_api_index, int):
+        return None
+    try:
+        host_info = audio.get_host_api_info_by_index(host_api_index)
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        return None
+    if not isinstance(host_info, dict) or host_info.get("type") != _PA_ALSA:
+        return None
+
+    try:
+        device_count = int(audio.get_device_count())
+    except (IOError, OSError, TypeError, ValueError, AttributeError):
+        device_count = 0
+    for index in range(max(0, device_count)):
+        info = _get_device_info_safe(audio, index)
+        pcm_name = info.get("name", "")
+        channels = info.get("maxInputChannels", 0)
+        if (
+            isinstance(pcm_name, str)
+            and pcm_name.strip().lower() == "pulse"
+            and not _is_virtual_device(pcm_name)
+            and isinstance(channels, (int, float))
+            and channels > 0
+            and info.get("hostApi", host_api_index) == host_api_index
+        ):
+            logger.info("ALSA default resolved to '%s'; using pulse PCM [%s]", name, index)
+            return index
+
+    logger.warning(
+        "System Default resolved to ALSA device '%s' [%s]; no input-capable pulse PCM "
+        "is available. Using that fallback device.",
+        name,
+        default_info.get("index", "unknown"),
+    )
+    return None
+
+
 def _open_capture_stream(audio: Any, device_index: Optional[int] = None) -> tuple[int, int, object]:
     """
     Negotiate a working (channels, sample_rate) and return the opened stream.
@@ -705,13 +758,12 @@ def test_audio_input(
 
         audio = pyaudio.PyAudio()
 
-        # Get device info for display. Keep open_device_index as None for
-        # System Default so PortAudio opens the host default instead of an
-        # explicit pseudo-device index like "default" / DeepFilterNet (#624).
-        open_device_index = device_index
+        # Keep valid host defaults implicit; the shared resolver only pins
+        # a sound-server PCM when ALSA silently substituted hardware.
+        open_device_index = _resolve_system_default(audio) if device_index is None else device_index
         try:
-            if device_index is not None:
-                info = audio.get_device_info_by_index(device_index)
+            if open_device_index is not None:
+                info = audio.get_device_info_by_index(open_device_index)
             else:
                 info = audio.get_default_input_device_info()
             result["device_name"] = info.get("name", "Unknown")
@@ -854,7 +906,7 @@ class PortAudioCaptureSource:
         # Fall back to the stored index, then to the system default.
         use_system_default = self.device_index is None and self.device_name is None
         if use_system_default:
-            resolved_device_index = None
+            resolved_device_index = _resolve_system_default(audio)
         else:
             resolved_device_index = _resolve_device_by_name(
                 audio, self.device_name, self.device_index
@@ -867,7 +919,7 @@ class PortAudioCaptureSource:
             logger.warning(
                 "No safe audio input devices enumerated; " "falling back to system default capture."
             )
-            resolved_device_index = None
+            resolved_device_index = _resolve_system_default(audio)
             use_system_default = True
 
         # Log available devices for debugging (skip virtual devices)
@@ -920,12 +972,7 @@ class PortAudioCaptureSource:
             "frames_per_buffer": CAPTURE_CHUNK,
         }
 
-        # Use the resolved device (skip if already system default)
-        try:
-            default_idx = audio.get_default_input_device_info().get("index")
-        except (IOError, OSError):
-            default_idx = None
-        if resolved_device_index is not None and resolved_device_index != default_idx:
+        if resolved_device_index is not None:
             stream_kwargs["input_device_index"] = resolved_device_index
 
         self.stream = audio.open(**stream_kwargs)
@@ -997,7 +1044,7 @@ class PortAudioCaptureSource:
             # Resolve a valid input device — by name first, then by index
             use_system_default = self.device_index is None and self.device_name is None
             if use_system_default:
-                resolved_device_index = None
+                resolved_device_index = _resolve_system_default(audio_instance)
             else:
                 resolved_device_index = _resolve_device_by_name(
                     audio_instance, self.device_name, self.device_index
@@ -1009,7 +1056,7 @@ class PortAudioCaptureSource:
                     "Reconnection: no safe input devices enumerated; "
                     "falling back to system default capture."
                 )
-                resolved_device_index = None
+                resolved_device_index = _resolve_system_default(audio_instance)
 
             # Negotiate the format and open the capture stream in ONE
             # PortAudio open — Bluetooth SCO devices abort with heap
@@ -1032,12 +1079,7 @@ class PortAudioCaptureSource:
                     "frames_per_buffer": CAPTURE_CHUNK,
                 }
 
-                # Use resolved device (skip if already system default)
-                try:
-                    default_idx = audio_instance.get_default_input_device_info().get("index")
-                except (IOError, OSError):
-                    default_idx = None
-                if resolved_device_index is not None and resolved_device_index != default_idx:
+                if resolved_device_index is not None:
                     stream_kwargs["input_device_index"] = resolved_device_index
 
                 new_stream = audio_instance.open(**stream_kwargs)
