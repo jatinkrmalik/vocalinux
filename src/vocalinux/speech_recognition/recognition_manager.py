@@ -109,6 +109,9 @@ class _CaptureSession:
         self.stall_error: Optional[OSError] = None
         self.device_name = "System Default"
         self.segments: queue.Queue = queue.Queue(maxsize=32)
+        # A dispatched callback can outlive the bounded recognition join.
+        # A new session must not start until that callback has returned.
+        self.dispatching = 0
 
 
 class _AudioSegment(list):
@@ -548,7 +551,7 @@ class SpeechRecognitionManager:
         self._reconnection_attempts = 0
         self._max_reconnection_attempts = 5
         self._reconnection_delay = 1.0  # Initial delay in seconds
-        self._last_audio_error_time = 0
+        self._last_audio_error_time: float = 0.0
         self._audio_stream = None
         self._pyaudio_instance = None
         self._capture_sample_rate = 16000  # Default, updated when device is opened
@@ -3128,6 +3131,9 @@ class SpeechRecognitionManager:
                 return False
             if self._session.stop_owner is not None and not self._session.stop_complete.is_set():
                 return False
+            if self._session.dispatching:
+                logger.warning("Cannot start recognition while a previous callback is finishing")
+                return False
             return self._start_recognition(mode)
 
     def _start_recognition(self, mode: str = "toggle") -> bool:
@@ -3215,6 +3221,7 @@ class SpeechRecognitionManager:
             logger.error("Cannot start recognition while the previous buffer is locked")
             self._buffered_reload_session = False
             self._reload_pending = False
+            self._restore_language_after_oneshot()
             return False
         try:
             self.audio_buffer = []
@@ -3567,7 +3574,7 @@ class SpeechRecognitionManager:
             logger.info("Audio recording started")
 
             # Record audio while should_record is True
-            silence_counter = 0
+            silence_counter: float = 0.0
             speech_detected_in_session = False
             with self._buffer_lock:
                 self._recording_segment_has_speech = False
@@ -3784,7 +3791,7 @@ class SpeechRecognitionManager:
                     self._pyaudio_instance = None
                     self._capture_downmix_channel = None
                     self._reconnection_attempts = 0
-                    self._last_audio_error_time = 0
+                    self._last_audio_error_time = 0.0
                     self._capture_source = None
 
                 if failure is not None and recording():
@@ -3924,26 +3931,41 @@ class SpeechRecognitionManager:
                 processed_text = text.strip()
                 actions = []
 
-            # Call text callbacks with processed text
-            logger.debug(
-                f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
-            )
-            if processed_text:
-                started_at = getattr(audio_buffer, "started_at", None)
-                if started_at is None:
-                    started_at = time.monotonic()
-                for segment_callback in self.segment_callbacks:
-                    segment_callback(processed_text, started_at)
-                for callback in self.text_callbacks:
-                    logger.debug(
-                        f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
-                    )
-                    callback(processed_text)
+            # Claim callback dispatch after potentially slow corrections and
+            # command parsing. Either a newer start wins first and this worker
+            # drops its result, or that start declines until callbacks finish.
+            # Do not hold the lifecycle lock across arbitrary callbacks: stop
+            # must stay bounded even if a callback blocks.
+            lifecycle_lock = getattr(self, "_lifecycle_lock", nullcontext())
+            with lifecycle_lock:
+                if not self._owns_session():
+                    return
+                session = getattr(self, "_session", None)
+                if session is not None:
+                    session.dispatching += 1
+            try:
+                logger.debug(
+                    f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+                )
+                if processed_text:
+                    started_at = getattr(audio_buffer, "started_at", None)
+                    if started_at is None:
+                        started_at = time.monotonic()
+                    for segment_callback in self.segment_callbacks:
+                        segment_callback(processed_text, started_at)
+                    for callback in self.text_callbacks:
+                        logger.debug(
+                            f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                        )
+                        callback(processed_text)
 
-            # Call action callbacks for each action
-            for action in actions:
-                for callback in self.action_callbacks:
-                    callback(action)
+                for action in actions:
+                    for callback in self.action_callbacks:
+                        callback(action)
+            finally:
+                if session is not None:
+                    with lifecycle_lock:
+                        session.dispatching -= 1
 
     def _perform_recognition(self) -> None:
         """Perform speech recognition in real-time."""

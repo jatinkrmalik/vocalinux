@@ -7,6 +7,7 @@ callbacks — not a parallel reimplementation of the match logic.
 
 import os
 import sys
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -442,7 +443,10 @@ class TestUnloadModelAndAutoPauseBlock(unittest.TestCase):
     """SpeechRecognitionManager.unload_model and start_recognition guard."""
 
     def _make_manager(self):
-        from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+        from vocalinux.speech_recognition.recognition_manager import (
+            SpeechRecognitionManager,
+            _CaptureSession,
+        )
 
         with patch.object(SpeechRecognitionManager, "__init__", lambda self: None):
             mgr = SpeechRecognitionManager()
@@ -460,6 +464,12 @@ class TestUnloadModelAndAutoPauseBlock(unittest.TestCase):
         mgr._http_session = None
         mgr._faster_whisper_engine = None
         mgr._reconnection_attempts = 0
+        mgr._lifecycle_lock = threading.RLock()
+        mgr._worker_session = threading.local()
+        mgr._session = _CaptureSession()
+        mgr._buffer_lock = threading.Lock()
+        mgr.audio_thread = None
+        mgr.recognition_thread = None
         mgr._update_state = MagicMock()
         mgr._init_vosk = MagicMock()
         mgr._init_whisper = MagicMock()

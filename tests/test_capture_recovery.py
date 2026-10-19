@@ -18,21 +18,24 @@ def manager(monkeypatch: pytest.MonkeyPatch) -> Generator[rm.SpeechRecognitionMa
     monkeypatch.setattr(rm.SpeechRecognitionManager, "_init_vosk", lambda self: None)
     monkeypatch.setattr(rm, "load_silero_vad", lambda: None)
     monkeypatch.setitem(sys.modules, "numpy", sys._vocalinux_real_numpy)
-    for name in ("play_start_sound", "play_stop_sound", "play_error_sound", "_show_notification"):
+    for name in ("play_start_sound", "play_stop_sound", "play_error_sound"):
         monkeypatch.setattr(rm, name, Mock())
-    instance = rm.SpeechRecognitionManager(engine="vosk")
-    instance.model = object()
-    instance._model_initialized = True
-    instance._reconnection_delay = 0
-    instance.stop_sound_guard_ms = 0
-    yield instance
-    instance._session.cancel.set()
-    if instance.should_record:
-        instance.stop_recognition()
-    for worker in (instance.audio_thread, instance.recognition_thread):
-        if worker is not None:
-            worker.join(2)
-            assert not worker.is_alive()
+    # Close this patch before the autouse notification patch exits.
+    with monkeypatch.context() as patcher:
+        patcher.setattr(rm, "_show_notification", Mock())
+        instance = rm.SpeechRecognitionManager(engine="vosk")
+        instance.model = object()
+        instance._model_initialized = True
+        instance._reconnection_delay = 0
+        instance.stop_sound_guard_ms = 0
+        yield instance
+        instance._session.cancel.set()
+        if instance.should_record:
+            instance.stop_recognition()
+        for worker in (instance.audio_thread, instance.recognition_thread):
+            if worker is not None:
+                worker.join(2)
+                assert not worker.is_alive()
 
 
 @pytest.fixture

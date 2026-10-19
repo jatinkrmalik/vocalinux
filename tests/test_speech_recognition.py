@@ -419,6 +419,10 @@ class TestSpeechRecognition(unittest.TestCase):
         manager.should_record = True
         manager.audio_thread = self.mock_thread
         manager.recognition_thread = self.mock_thread
+        self.mock_thread.is_alive.return_value = True
+        self.mock_thread.join.side_effect = lambda *_args, **_kwargs: setattr(
+            self.mock_thread.is_alive, "return_value", False
+        )
 
         # Reset mocks
         self.mock_play_stop.reset_mock()

@@ -210,6 +210,10 @@ class TestSpeechRecognition(unittest.TestCase):
         # Stop recognition
         manager.audio_thread = self.threadInstance
         manager.recognition_thread = self.threadInstance
+        self.threadInstance.is_alive.return_value = True
+        self.threadInstance.join.side_effect = lambda *_args, **_kwargs: setattr(
+            self.threadInstance.is_alive, "return_value", False
+        )
         manager.stop_recognition()
 
         # Verify stopped state

@@ -20,25 +20,28 @@ def manager(monkeypatch: pytest.MonkeyPatch) -> Generator[rm.SpeechRecognitionMa
     monkeypatch.setattr(rm.SpeechRecognitionManager, "_init_vosk", lambda self: None)
     monkeypatch.setattr(rm, "load_silero_vad", lambda: None)
     monkeypatch.setitem(sys.modules, "numpy", sys._vocalinux_real_numpy)
-    for name in ("play_start_sound", "play_stop_sound", "play_error_sound", "_show_notification"):
+    for name in ("play_start_sound", "play_stop_sound", "play_error_sound"):
         monkeypatch.setattr(rm, name, Mock())
     monkeypatch.setattr(rm, "_CAPTURE_JOIN_SECONDS", 0.02)
     monkeypatch.setattr(rm, "_RECOGNITION_JOIN_SECONDS", 0.02)
     monkeypatch.setattr(rm, "_RECOGNITION_FINAL_JOIN_SECONDS", 0.02)
     monkeypatch.setattr(rm, "_FINAL_BUFFER_SECONDS", 0.02)
-    instance = rm.SpeechRecognitionManager(engine="vosk")
-    instance.model = object()
-    instance._model_initialized = True
-    instance.stop_sound_guard_ms = 0
-    yield instance
-    instance._session.cancel.set()
-    instance.should_record = False
-    instance._capture_finished.set()
-    instance._signal_recognition_stop()
-    for worker in (instance.audio_thread, instance.recognition_thread):
-        if worker is not None:
-            worker.join(2)
-            assert not worker.is_alive()
+    # Restore this patch before the autouse notification patch exits.
+    with monkeypatch.context() as patcher:
+        patcher.setattr(rm, "_show_notification", Mock())
+        instance = rm.SpeechRecognitionManager(engine="vosk")
+        instance.model = object()
+        instance._model_initialized = True
+        instance.stop_sound_guard_ms = 0
+        yield instance
+        instance._session.cancel.set()
+        instance.should_record = False
+        instance._capture_finished.set()
+        instance._signal_recognition_stop()
+        for worker in (instance.audio_thread, instance.recognition_thread):
+            if worker is not None:
+                worker.join(2)
+                assert not worker.is_alive()
 
 
 def test_blocked_read_leaves_lock_available_and_preserves_final_speech(
@@ -274,6 +277,88 @@ def test_late_recognizer_keeps_its_queue_and_cannot_change_next_session(
         new_queue.get_nowait()
     assert attempts == [[b"old speech"]]
     restore.assert_not_called()
+
+
+def test_stale_recognizer_cannot_deliver_text_after_slow_corrections(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    correcting = threading.Event()
+    release = threading.Event()
+    delivered: list[str] = []
+
+    def correct(text: str) -> str:
+        correcting.set()
+        assert release.wait(2)
+        return text
+
+    manager.engine = "whisper"
+    manager._voice_commands_enabled = False
+    manager.text_callbacks.append(delivered.append)
+    monkeypatch.setattr(manager, "_record_audio", lambda: None)
+    monkeypatch.setattr(manager, "_transcribe_with_whisper", lambda audio, language: "old text")
+    monkeypatch.setattr(manager, "_apply_dictionary_corrections", correct)
+    assert manager.start_recognition()
+    manager._segment_queue.put_nowait(([b"old speech"], "en"))
+    assert correcting.wait(1)
+    old_worker = manager.recognition_thread
+    try:
+        manager.stop_recognition()
+        monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+        assert manager.start_recognition()
+    finally:
+        release.set()
+        old_worker.join(1)
+    assert not old_worker.is_alive()
+    assert delivered == []
+    assert manager.state == RecognitionState.LISTENING
+
+
+def test_stop_stays_bounded_and_restart_waits_for_active_text_callback(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    delivering = threading.Event()
+    release = threading.Event()
+
+    def deliver(_text: str) -> None:
+        delivering.set()
+        assert release.wait(2)
+
+    manager.engine = "whisper"
+    manager._voice_commands_enabled = False
+    manager.text_callbacks.append(deliver)
+    monkeypatch.setattr(manager, "_record_audio", lambda: None)
+    monkeypatch.setattr(manager, "_transcribe_with_whisper", lambda audio, language: "old text")
+    assert manager.start_recognition()
+    manager._segment_queue.put_nowait(([b"old speech"], "en"))
+    assert delivering.wait(1)
+    old_worker = manager.recognition_thread
+    try:
+        started = time.monotonic()
+        manager.stop_recognition()
+        assert time.monotonic() - started < 0.5
+        assert not manager.start_recognition()
+    finally:
+        release.set()
+        old_worker.join(1)
+    assert not old_worker.is_alive()
+    monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+    assert manager.start_recognition()
+
+
+def test_failed_start_restores_one_shot_language_after_buffer_timeout(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_language = manager.language
+    monkeypatch.setattr(manager, "_serving_model_supports_language_switch", lambda: True)
+    monkeypatch.setattr(manager, "_can_relanguage_without_reload", lambda: True)
+    with manager._buffer_lock:
+        assert not manager.start_recognition_with_language("de")
+    assert manager.language == original_language
+    assert manager._oneshot_language_restore is None
+    monkeypatch.setattr(manager, "_record_audio", lambda: None)
+    monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+    assert manager.start_recognition()
+    assert manager._session_language == original_language
 
 
 def test_healthy_stop_adds_no_polling_delay(manager: rm.SpeechRecognitionManager) -> None:
