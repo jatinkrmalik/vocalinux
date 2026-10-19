@@ -17,7 +17,8 @@ import subprocess
 import sys
 import threading
 import time
-from contextlib import nullcontext
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
@@ -478,7 +479,12 @@ class SpeechRecognitionManager:
         self._model_initialized = False
         # True while a configured app/game blocks dictation, including pending unloads
         self._auto_paused = False
-        self._auto_pause_request: Optional[object] = None
+        # Request publication must never wait for a native model load. Resource
+        # changes are serialized separately by _model_lock.
+        self._model_request_lock = threading.Lock()
+        self._model_request: Optional[object] = None
+        # Distinguish a recovery obligation from a configured app's active pause.
+        self._auto_resume_pending = False
         # True while idle keep-alive has unloaded the model (dictation may lazy-reload)
         self._idle_unloaded = False
         self.buffer_during_reload = bool(kwargs.get("buffer_during_reload", False))
@@ -967,7 +973,7 @@ class SpeechRecognitionManager:
 
         except ImportError:
             logger.error("Failed to import VOSK. Please install it with 'pip install vosk'")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     @staticmethod
@@ -1085,11 +1091,11 @@ class SpeechRecognitionManager:
         except ImportError as e:
             logger.error(f"Failed to import required libraries for Whisper: {e}")
             logger.error("Please install with: pip install openai-whisper torch")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
         except (RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize Whisper engine: {e}")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     def _transcribe_with_whisper(
@@ -1290,7 +1296,7 @@ class SpeechRecognitionManager:
         except ImportError as e:
             logger.error(f"Failed to import faster-whisper engine: {e}")
             logger.error("Please install with: pip install faster-whisper")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
         try:
@@ -1346,7 +1352,7 @@ class SpeechRecognitionManager:
             logger.info("faster-whisper engine initialized successfully.")
         except (ImportError, RuntimeError, OSError, ValueError, ChecksumError) as e:
             logger.error(f"Failed to initialize faster-whisper engine: {e}", exc_info=True)
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     def _transcribe_with_faster_whisper(
@@ -1438,11 +1444,11 @@ class SpeechRecognitionManager:
             logger.error(f"Failed to import pywhispercpp: {e}")
             logger.error(f"Python path: {sys.path}")
             logger.error("Please install with: pip install pywhispercpp")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
         except (FileNotFoundError, RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     @staticmethod
@@ -2114,11 +2120,11 @@ class SpeechRecognitionManager:
         except ImportError as e:
             logger.error(f"Failed to import sherpa-onnx: {e}")
             logger.error("Please install it with 'pip install sherpa-onnx'")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
         except (ChecksumError, FileNotFoundError, RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize Parakeet engine: {e}", exc_info=True)
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     def _transcribe_with_parakeet(self, audio_buffer: list[bytes]) -> str:
@@ -2981,19 +2987,25 @@ class SpeechRecognitionManager:
         """Get the last recorded audio level (0-100)."""
         return self._last_audio_level
 
-    def _update_state(self, new_state: RecognitionState) -> None:
+    def _update_state(
+        self, new_state: RecognitionState, *, model_request: Optional[object] = None
+    ) -> None:
         """
         Update the recognition state and notify callbacks.
 
         Args:
             new_state: The new recognition state
+            model_request: Ignore publication if this model request was superseded.
         """
         # Serialize the ownership check and state write with a new start.
         # Lightweight __new__-built consumers have no lifecycle lock.
         with getattr(self, "_lifecycle_lock", nullcontext()):
             if not self._owns_session():
                 return
-            self.state = new_state
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if not self._owns_model_request(model_request):
+                    return
+                self.state = new_state
             if new_state in (RecognitionState.IDLE, RecognitionState.ERROR):
                 # A per-language shortcut's override lasts for exactly one
                 # dictation (#805); restore the configured language here so every
@@ -4132,6 +4144,8 @@ class SpeechRecognitionManager:
             f"audio_device={audio_device_index}, audio_device_name={audio_device_name}"
         )
 
+        # A successful reconfigure takes over any unfinished auto-resume.
+        request = self._new_model_request(inherit_resume=True)
         self._cancel_reload_recording()
 
         whispercpp_attrs = tuple(
@@ -4248,7 +4262,11 @@ class SpeechRecognitionManager:
 
             # Lock model access during reinitialization to prevent race condition
             # with transcription threads that may be using the model/recognizer
-            with self._model_lock:
+            with self._model_lock, self._model_request_context(request):
+                with getattr(self, "_model_request_lock", nullcontext()):
+                    if self._model_request is not request:
+                        self._defer_download = old_defer
+                        return
                 # Release old resources explicitly if necessary (Python's GC might handle it)
                 self.model = None
                 self.recognizer = None
@@ -4260,6 +4278,9 @@ class SpeechRecognitionManager:
                         self._http_session.close()
                     self._http_session = None
                 try:
+                    with getattr(self, "_model_request_lock", nullcontext()):
+                        if self._model_request is not request:
+                            return
                     self._init_selected_engine()
                     logger.info("Speech engine re-initialized successfully.")
                 except Exception as e:
@@ -4296,6 +4317,14 @@ class SpeechRecognitionManager:
         else:
             # If only VOSK params changed, just log it
             logger.info("Applied VAD/silence timeout changes.")
+
+        with getattr(self, "_model_request_lock", nullcontext()):
+            resume_pending = self._model_request is request and self._auto_resume_pending
+        if resume_pending:
+            if restart_needed:
+                self._finish_model_resume(request)
+            else:
+                self._reinitialize_model(request)
 
     def _new_capture_source(self) -> Union[PortAudioCaptureSource, PipeWireCaptureSource]:
         """Build the capture source matching the configured device."""
@@ -4428,17 +4457,11 @@ class SpeechRecognitionManager:
                   lazy-reload via :meth:`ensure_model_loaded`.
                 - ``"manual"`` / other: unload only without setting pause/idle flags.
         """
-        pause_request = None
-        reload_worker = None
-        if reason == "auto_pause":
-            # Serialize the guard and worker snapshot with recognition starts;
-            # release the lifecycle lock before cancellation joins the worker.
-            with self._lifecycle_lock:
-                pause_request = object()
-                self._auto_pause_request = pause_request
-                self._auto_paused = True
-                self._idle_unloaded = False
-                reload_worker = self.recognition_thread
+        # Serialize the guard and worker snapshot with recognition starts;
+        # release the lifecycle lock before cancellation joins the worker.
+        with self._lifecycle_lock:
+            request = self._new_model_request(auto_pause=reason == "auto_pause")
+            reload_worker = self.recognition_thread
 
         try:
             self._cancel_reload_recording()
@@ -4449,7 +4472,7 @@ class SpeechRecognitionManager:
             # dictation blocked and release resources only after this worker exits.
             threading.Thread(
                 target=self._unload_after_reload,
-                args=(reload_worker, pause_request),
+                args=(reload_worker, request),
                 daemon=True,
             ).start()
             return
@@ -4458,24 +4481,39 @@ class SpeechRecognitionManager:
             logger.info("Stopping active recognition before model unload")
             self.stop_recognition()
 
-        self._unload_model_resources(reason, pause_request)
+        if not self._unload_model_resources(reason, request, blocking=reason != "auto_pause"):
+            # A deferred resume may already be initializing under _model_lock.
+            # The new pause takes effect immediately without waiting for it.
+            threading.Thread(
+                target=self._unload_after_reload,
+                args=(reload_worker, request),
+                daemon=True,
+            ).start()
 
-    def _unload_after_reload(self, worker: threading.Thread, pause_request: object) -> None:
+    def _unload_after_reload(self, worker: Optional[threading.Thread], request: object) -> None:
         """Finish a timed-out auto-pause away from the monitor/GTK callback."""
-        worker.join()
-        self._unload_model_resources("auto_pause", pause_request)
+        if worker is not None:
+            worker.join()
+        self._unload_model_resources("auto_pause", request)
 
-    def _unload_model_resources(self, reason: str, pause_request: Optional[object] = None) -> None:
+    def _unload_model_resources(self, reason: str, request: object, blocking: bool = True) -> bool:
         """Release resources after reload cancellation has completed."""
-        logger.info("Unloading speech model (reason=%s)", reason)
-
-        with self._model_lock:
-            # Resume invalidates the request before cancellation and shares this
-            # lock for reinitialization. Stale work must not unload its new model.
-            if reason == "auto_pause" and self._auto_pause_request is not pause_request:
-                return
-            self.model = None
-            self.recognizer = None
+        if not self._model_lock.acquire(blocking=blocking):
+            return False
+        try:
+            # Check after taking the resource lock: a newer resume may have
+            # replaced the model while this cleanup was waiting for it.
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if self._model_request is not request:
+                    return True
+                old_model, old_recognizer = self.model, self.recognizer
+                self.model = None
+                self.recognizer = None
+                self._model_initialized = False
+            # Last-reference drops can run native destructors. Keep them out of
+            # the request lock so a newer pause can publish its guard promptly.
+            del old_model, old_recognizer
+            logger.info("Unloading speech model (reason=%s)", reason)
             if self._faster_whisper_engine is not None:
                 self._faster_whisper_engine.cleanup()
                 self._faster_whisper_engine = None
@@ -4485,17 +4523,13 @@ class SpeechRecognitionManager:
                 except Exception:
                     logger.debug("Error closing HTTP session during unload", exc_info=True)
                 self._http_session = None
-            self._model_initialized = False
-
-        if reason == "auto_pause":
-            logger.info("Speech model unloaded; dictation blocked until auto-pause clears")
-        elif reason == "idle_keepalive":
-            # Auto-pause owns lifecycle if both could apply
-            if not self._auto_paused:
-                self._idle_unloaded = True
-            logger.info("Speech model unloaded after idle keep-alive timeout")
-        else:
-            logger.info("Speech model unloaded")
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if self._model_request is request and reason == "idle_keepalive":
+                    # Auto-pause owns lifecycle if both could apply.
+                    if not self._auto_paused:
+                        self._idle_unloaded = True
+        finally:
+            self._model_lock.release()
 
         try:
             import gc
@@ -4503,6 +4537,51 @@ class SpeechRecognitionManager:
             gc.collect()
         except Exception:
             pass
+        return True
+
+    def _new_model_request(
+        self, auto_pause: bool = False, auto_resume: bool = False, inherit_resume: bool = False
+    ) -> object:
+        """Invalidate older work without waiting for model resources or workers."""
+        with getattr(self, "_model_request_lock", nullcontext()):
+            request = object()
+            self._model_request = request
+            self._auto_resume_pending = auto_resume or (
+                inherit_resume and getattr(self, "_auto_resume_pending", False)
+            )
+            if auto_pause or auto_resume:
+                self._auto_paused = True
+                self._idle_unloaded = False
+            return request
+
+    @contextmanager
+    def _model_request_context(self, request: object) -> Iterator[None]:
+        """Bind initializer state writes to the request owning this thread."""
+        context = getattr(self, "_worker_session", None)
+        if context is None:
+            self._worker_session = context = threading.local()
+        previous = getattr(context, "model_request", None)
+        context.model_request = request
+        try:
+            yield
+        finally:
+            context.model_request = previous
+
+    def _owns_model_request(self, request: Optional[object] = None) -> bool:
+        """Check request ownership while the caller holds the request lock."""
+        if request is None:
+            request = getattr(getattr(self, "_worker_session", None), "model_request", None)
+        return request is None or self._model_request is request
+
+    def _set_engine_error(self) -> None:
+        """Publish an initializer error only while its request is current."""
+        with getattr(self, "_model_request_lock", nullcontext()):
+            if self._owns_model_request():
+                self.state = RecognitionState.ERROR
+
+    def cancel_pending_auto_pause(self) -> None:
+        """Invalidate deferred pause/resume work before another lifecycle operation."""
+        self._new_model_request()
 
     @property
     def is_auto_paused(self) -> bool:
@@ -4535,7 +4614,7 @@ class SpeechRecognitionManager:
 
         return self.model_ready
 
-    def reinitialize_after_resume(self) -> None:
+    def reinitialize_after_resume(self, *, auto_resume: bool = False) -> None:
         """Reinitialize the speech engine after system resume from suspend.
 
         Stops any active recognition, releases stale model resources,
@@ -4543,52 +4622,112 @@ class SpeechRecognitionManager:
         are in a clean state for new dictation.
 
         Also used after auto-pause / idle keep-alive to reload the model.
+        Auto-resume completes in the background if the old reload is still
+        running; other callers retain the explicit cancellation timeout.
         """
-        # Invalidate deferred unloads even when cancellation below times out.
-        self._auto_pause_request = None
-        self._cancel_reload_recording()
+        with getattr(self, "_lifecycle_lock", nullcontext()):
+            request = self._new_model_request(auto_resume=auto_resume)
+            reload_worker = getattr(self, "recognition_thread", None)
+        try:
+            self._cancel_reload_recording()
+        except TimeoutError:
+            if not auto_resume:
+                raise
+            threading.Thread(
+                target=self._resume_after_reload,
+                args=(reload_worker, request),
+                daemon=True,
+            ).start()
+            return
         logger.info("Reinitializing speech engine after system resume")
 
         if self.state != RecognitionState.IDLE:
             logger.info("Stopping active recognition before resume reinit")
             self.stop_recognition()
 
-        with self._model_lock:
-            self.model = None
-            self.recognizer = None
+        if not self._reinitialize_model(request, blocking=not auto_resume):
+            threading.Thread(
+                target=self._resume_after_reload,
+                args=(reload_worker, request),
+                daemon=True,
+            ).start()
+
+    def _resume_after_reload(self, worker: Optional[threading.Thread], request: object) -> None:
+        """Complete only the current auto-resume, outside GTK and lifecycle locks."""
+        if worker is not None:
+            worker.join()
+        try:
+            self._reinitialize_model(request)
+        except Exception:
+            logger.error("Failed to complete deferred auto-resume", exc_info=True)
+
+    def _reinitialize_model(self, request: object, blocking: bool = True) -> bool:
+        """Serialize resource changes, then publish readiness only for this request."""
+        if not self._model_lock.acquire(blocking=blocking):
+            return False
+        failed = False
+        try:
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if self._model_request is not request:
+                    return True
+                old_model, old_recognizer = self.model, self.recognizer
+                self.model = None
+                self.recognizer = None
+                self._model_initialized = False
+            del old_model, old_recognizer
             if self._faster_whisper_engine is not None:
                 self._faster_whisper_engine.cleanup()
                 self._faster_whisper_engine = None
             if self._http_session is not None:
                 self._http_session.close()
             self._http_session = None
-            self._model_initialized = False
 
             try:
-                if self.engine == "vosk":
-                    self._init_vosk()
-                elif self.engine == "whisper":
-                    self._init_whisper()
-                elif self.engine == "whisper_cpp":
-                    self._init_whispercpp()
-                elif self.engine == "parakeet":
-                    self._init_parakeet()
-                elif self.engine == "faster_whisper":
-                    self._init_faster_whisper()
-                elif self.engine == "remote_api":
-                    self._init_remote_api()
-                else:
-                    logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
-                    return
-
-                self._auto_paused = False
-                self._idle_unloaded = False
-                logger.info("Speech engine reinitialized after resume")
+                # Destruction/cleanup above may have outlasted a newer pause.
+                with getattr(self, "_model_request_lock", nullcontext()):
+                    if self._model_request is not request:
+                        return True
+                with self._model_request_context(request):
+                    if self.engine == "vosk":
+                        self._init_vosk()
+                    elif self.engine == "whisper":
+                        self._init_whisper()
+                    elif self.engine == "whisper_cpp":
+                        self._init_whispercpp()
+                    elif self.engine == "parakeet":
+                        self._init_parakeet()
+                    elif self.engine == "faster_whisper":
+                        self._init_faster_whisper()
+                    elif self.engine == "remote_api":
+                        self._init_remote_api()
+                    else:
+                        logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
+                        return True
             except Exception:
                 logger.error("Failed to reinitialize speech engine after resume", exc_info=True)
-                self._update_state(RecognitionState.ERROR)
+                failed = True
+        finally:
+            self._model_lock.release()
+        if failed:
+            self._update_state(RecognitionState.ERROR, model_request=request)
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if self._model_request is request:
+                    self._reconnection_attempts = 0
+        else:
+            self._finish_model_resume(request)
+        return True
 
-        self._reconnection_attempts = 0
+    def _finish_model_resume(self, request: object) -> None:
+        """Publish usable dictation only for the current successful recovery."""
+        if self.state == RecognitionState.ERROR:
+            self._update_state(RecognitionState.IDLE, model_request=request)
+        with getattr(self, "_model_request_lock", nullcontext()):
+            if self._model_request is request:
+                self._auto_paused = False
+                self._idle_unloaded = False
+                self._auto_resume_pending = False
+                self._reconnection_attempts = 0
+                logger.info("Speech engine reinitialized after resume")
 
     def set_buffer_limit(self, max_chunks: int):
         """

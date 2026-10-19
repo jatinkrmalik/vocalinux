@@ -289,7 +289,9 @@ class TestReinitializeAfterResume(unittest.TestCase):
 
         mgr.reinitialize_after_resume()
 
-        mgr._update_state.assert_called_once_with(RecognitionState.ERROR)
+        mgr._update_state.assert_called_once_with(
+            RecognitionState.ERROR, model_request=mgr._model_request
+        )
 
 
 class TestTrayIndicatorResumeFlow(unittest.TestCase):
@@ -546,7 +548,7 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
     def test_on_auto_resume_calls_reinit(self):
         indicator = self._make_tray_indicator()
         indicator._on_auto_resume()
-        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once_with(auto_resume=True)
         indicator._model_keepalive.bump.assert_called_once()
 
     def test_get_model_keepalive_config(self):
@@ -582,6 +584,7 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
     def test_system_resume_skips_reinit_when_auto_paused(self, mock_glib):
         indicator = self._make_tray_indicator()
         indicator.speech_engine.is_auto_paused = True
+        indicator._auto_pause_monitor.paused = True
         indicator.config_manager.get_bool.return_value = False
         indicator._start_input_device_monitor = MagicMock()
 
@@ -654,7 +657,7 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
 
         indicator._on_auto_resume()  # must not raise
 
-        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once_with(auto_resume=True)
 
     def test_on_auto_resume_without_reinit_method(self):
         indicator = self._make_tray_indicator()

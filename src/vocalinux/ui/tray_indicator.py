@@ -1566,7 +1566,7 @@ class TrayIndicator:
         reinit = getattr(self.speech_engine, "reinitialize_after_resume", None)
         if callable(reinit):
             try:
-                reinit()
+                reinit(auto_resume=True)
             except Exception:
                 logger.error("Failed to reload speech engine after auto-pause", exc_info=True)
         keepalive = getattr(self, "_model_keepalive", None)
@@ -1575,6 +1575,9 @@ class TrayIndicator:
 
     def _on_system_suspend(self):
         """Stop active recognition before the system goes to sleep."""
+        cancel_pending = getattr(self.speech_engine, "cancel_pending_auto_pause", None)
+        if callable(cancel_pending):
+            cancel_pending()
         keepalive = getattr(self, "_model_keepalive", None)
         if keepalive is not None:
             keepalive.cancel()
@@ -1593,8 +1596,13 @@ class TrayIndicator:
         the auto-pause monitor owns model lifecycle until that app exits.
         """
         logger.info("System resumed — scheduling reinit")
-        # Use `is True` so duck-typed mocks without a real bool flag still reinit.
-        if getattr(self.speech_engine, "is_auto_paused", False) is True:
+        # The manager also stays guarded during deferred auto-resume. If sleep
+        # cancelled that work after the game exited, wake must finish recovery.
+        monitor = getattr(self, "_auto_pause_monitor", None)
+        if (
+            getattr(self.speech_engine, "is_auto_paused", False) is True
+            and getattr(monitor, "paused", None) is not False
+        ):
             logger.info("Skipping resume reinit: auto-pause still active")
         else:
             GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
