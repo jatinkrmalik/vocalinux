@@ -4317,6 +4317,14 @@ class SpeechRecognitionManager:
                         self._init_selected_engine()
                         if self.state == RecognitionState.ERROR:
                             self._update_state(RecognitionState.IDLE)
+                        with getattr(self, "_model_request_lock", nullcontext()):
+                            resume_pending = (
+                                self._model_request is request and self._auto_resume_pending
+                            )
+                        if resume_pending:
+                            # Rollback restored a usable engine, and the stale
+                            # wake callback can no longer finish this recovery.
+                            self._finish_model_resume(request)
                         logger.info(
                             "Restored previous speech engine %s after failed reconfigure",
                             self.engine,
@@ -4556,10 +4564,19 @@ class SpeechRecognitionManager:
         return True
 
     def _new_model_request(
-        self, auto_pause: bool = False, auto_resume: bool = False, inherit_resume: bool = False
-    ) -> object:
-        """Invalidate older work without waiting for model resources or workers."""
+        self,
+        auto_pause: bool = False,
+        auto_resume: bool = False,
+        inherit_resume: bool = False,
+        expected_request: Optional[object] = None,
+    ) -> Optional[object]:
+        """Invalidate older work, or reject a superseded delayed request.
+
+        Never wait for model resources or workers while publishing ownership.
+        """
         with getattr(self, "_model_request_lock", nullcontext()):
+            if expected_request is not None and self._model_request is not expected_request:
+                return None
             request = object()
             self._model_request = request
             self._auto_resume_pending = auto_resume or (
@@ -4599,6 +4616,11 @@ class SpeechRecognitionManager:
         """Invalidate deferred pause/resume work before another lifecycle operation."""
         self._new_model_request()
 
+    def prepare_auto_resume(self) -> object:
+        """Reserve automatic recovery and return its token for a delayed callback."""
+        with getattr(self, "_lifecycle_lock", nullcontext()):
+            return self._new_model_request(auto_resume=True)
+
     @property
     def is_auto_paused(self) -> bool:
         """True while auto-pause blocks dictation, even if unload is still pending."""
@@ -4630,7 +4652,9 @@ class SpeechRecognitionManager:
 
         return self.model_ready
 
-    def reinitialize_after_resume(self, *, auto_resume: bool = False) -> None:
+    def reinitialize_after_resume(
+        self, *, auto_resume: bool = False, expected_request: Optional[object] = None
+    ) -> None:
         """Reinitialize the speech engine after system resume from suspend.
 
         Stops any active recognition, releases stale model resources,
@@ -4640,9 +4664,14 @@ class SpeechRecognitionManager:
         Also used after auto-pause / idle keep-alive to reload the model.
         Auto-resume completes in the background if the old reload is still
         running; other callers retain the explicit cancellation timeout.
+        Delayed callers may pass ``expected_request`` to yield to newer work.
         """
         with getattr(self, "_lifecycle_lock", nullcontext()):
-            request = self._new_model_request(auto_resume=auto_resume)
+            request = self._new_model_request(
+                auto_resume=auto_resume, expected_request=expected_request
+            )
+            if request is None:
+                return
             reload_worker = getattr(self, "recognition_thread", None)
         try:
             self._cancel_reload_recording()

@@ -264,6 +264,7 @@ class TrayIndicator:
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
 
+        self._system_suspended = False
         self._suspend_handler = SuspendHandler(
             on_suspend=self._on_system_suspend,
             on_resume=self._on_system_resume,
@@ -1560,8 +1561,11 @@ class TrayIndicator:
             if self.speech_engine.state != RecognitionState.IDLE:
                 self.speech_engine.stop_recognition()
 
-    def _on_auto_resume(self):
+    def _on_auto_resume(self) -> None:
         """Reload speech model after configured games/apps have exited."""
+        if getattr(self, "_system_suspended", False):
+            # Wake will recover even if the monitor does not transition again.
+            return
         logger.info("Auto-pause cleared — reloading speech model")
         reinit = getattr(self.speech_engine, "reinitialize_after_resume", None)
         if callable(reinit):
@@ -1573,8 +1577,15 @@ class TrayIndicator:
         if keepalive is not None:
             keepalive.bump()
 
-    def _on_system_suspend(self):
+    def _on_system_suspend(self) -> None:
         """Stop active recognition before the system goes to sleep."""
+        self._system_suspended = True
+        monitor = getattr(self, "_auto_pause_monitor", None)
+        if getattr(monitor, "paused", False) is True:
+            # Replace pending initialization with a current unload obligation;
+            # invalidating it alone would lose cleanup until the game exits.
+            self._on_auto_pause()
+            return
         cancel_pending = getattr(self.speech_engine, "cancel_pending_auto_pause", None)
         if callable(cancel_pending):
             cancel_pending()
@@ -1585,7 +1596,7 @@ class TrayIndicator:
             logger.info("System suspending — stopping active recognition")
             self.speech_engine.stop_recognition()
 
-    def _on_system_resume(self):
+    def _on_system_resume(self) -> None:
         """Reinitialize subsystems after the system wakes up.
 
         Speech engine reinitializes after 2s (audio hardware recovers fast).
@@ -1595,17 +1606,21 @@ class TrayIndicator:
         If auto-pause still has a configured app running, skip speech reinit —
         the auto-pause monitor owns model lifecycle until that app exits.
         """
+        self._system_suspended = False
         logger.info("System resumed — scheduling reinit")
         # The manager also stays guarded during deferred auto-resume. If sleep
         # cancelled that work after the game exited, wake must finish recovery.
         monitor = getattr(self, "_auto_pause_monitor", None)
-        if (
-            getattr(self.speech_engine, "is_auto_paused", False) is True
-            and getattr(monitor, "paused", None) is not False
+        if getattr(monitor, "paused", False) is True or (
+            monitor is None and getattr(self.speech_engine, "is_auto_paused", False) is True
         ):
             logger.info("Skipping resume reinit: auto-pause still active")
         else:
-            GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
+            # Own recovery during the hardware-settle delay too, so a failed
+            # settings change can inherit it while superseding this timer.
+            prepare = getattr(self.speech_engine, "prepare_auto_resume", None)
+            request = prepare() if callable(prepare) else None
+            GLib.timeout_add_seconds(2, self._reinit_speech_after_resume, request)
 
         # External-activation mode never started the /dev/input listener in
         # the first place; watching it here on every resume would open the
@@ -1615,15 +1630,21 @@ class TrayIndicator:
         else:
             GLib.timeout_add_seconds(2, self._start_input_device_monitor)
 
-    def _reinit_speech_after_resume(self):
+    def _reinit_speech_after_resume(self, request: Optional[object] = None) -> bool:
+        """Recover only while this wake still owns the model lifecycle."""
+        monitor = getattr(self, "_auto_pause_monitor", None)
+        if getattr(self, "_system_suspended", False) or getattr(monitor, "paused", False) is True:
+            return False
         try:
-            self.speech_engine.reinitialize_after_resume()
+            reinit = getattr(self.speech_engine, "reinitialize_after_resume", None)
+            if callable(reinit):
+                reinit(auto_resume=True, expected_request=request)
         except Exception:
             logger.error("Failed to reinitialize after resume", exc_info=True)
         keepalive = getattr(self, "_model_keepalive", None)
         if keepalive is not None:
             keepalive.bump()
-        return GLib.SOURCE_REMOVE
+        return False
 
     def _start_input_device_monitor(self):
         """Watch /dev/input for changes; restart keyboard when devices settle."""

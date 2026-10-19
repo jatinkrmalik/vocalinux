@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager, nullcontext
+from functools import partial
 from pathlib import Path
 from types import ModuleType
 from typing import Callable
@@ -303,6 +304,18 @@ class _AutoPauseFlow:
         self.tray = TrayIndicator.__new__(TrayIndicator)
         self.tray.speech_engine = manager
         self.tray._model_keepalive = Mock()
+        self.wake_callbacks: list[Callable[[], bool]] = []
+
+        def schedule(seconds: int, callback: Callable[..., bool], *args: object) -> int:
+            assert seconds == 2
+            assert callback == self.tray._reinit_speech_after_resume
+            self.wake_callbacks.append(partial(callback, *args))
+            return len(self.wake_callbacks)
+
+        monkeypatch.setattr(
+            sys.modules[TrayIndicator.__module__].GLib, "timeout_add_seconds", schedule
+        )
+        monkeypatch.setattr(self.tray, "_external_activation_active", lambda: True)
         self.running: set[str] = set()
         self.monitor = AutoPauseMonitor(
             get_config=lambda: (True, ["game"], 5),
@@ -575,12 +588,9 @@ def test_new_monitor_transition_invalidates_deferred_resume(
 
 
 @pytest.mark.parametrize("pending", ["unload", "resume"])
-@pytest.mark.parametrize(
-    "operation", ["manual", "idle_keepalive", "reconfigure", "system_resume", "suspend"]
-)
+@pytest.mark.parametrize("operation", ["manual", "idle_keepalive", "reconfigure", "system_resume"])
 def test_lifecycle_operation_supersedes_deferred_auto_pause_work(
     manager: rm.SpeechRecognitionManager,
-    monkeypatch: pytest.MonkeyPatch,
     auto_pause_flow: _AutoPauseFlow,
     pending: str,
     operation: str,
@@ -595,16 +605,13 @@ def test_lifecycle_operation_supersedes_deferred_auto_pause_work(
             flow.resume_started.clear()
 
     started = time.monotonic()
-    if operation == "suspend":
-        flow.tray._on_system_suspend()
-    else:
-        with pytest.raises(TimeoutError, match="still loading"):
-            if operation == "reconfigure":
-                manager.reconfigure(silence_timeout=1.25)
-            elif operation == "system_resume":
-                manager.reinitialize_after_resume()
-            else:
-                manager.unload_model(reason=operation)
+    with pytest.raises(TimeoutError, match="still loading"):
+        if operation == "reconfigure":
+            manager.reconfigure(silence_timeout=1.25)
+        elif operation == "system_resume":
+            manager.reinitialize_after_resume()
+        else:
+            manager.unload_model(reason=operation)
     assert time.monotonic() - started < 0.5
     assert manager.silence_timeout != 1.25
     if operation == "reconfigure" and pending == "resume":
@@ -629,22 +636,315 @@ def test_lifecycle_operation_supersedes_deferred_auto_pause_work(
     flow.http_session.close.assert_not_called()
     assert manager.model is loaded_model
     assert manager.is_auto_paused
-    if operation == "suspend":
-        from vocalinux.ui import tray_indicator
 
-        schedule = Mock()
-        monkeypatch.setattr(tray_indicator.GLib, "timeout_add_seconds", schedule)
-        monkeypatch.setattr(flow.tray, "_external_activation_active", lambda: True)
-        flow.tray._on_system_resume()
-        if pending == "unload":
-            schedule.assert_not_called()
+
+@pytest.mark.parametrize("exit_before_wake", [False, True])
+@pytest.mark.parametrize("suspends", [1, 2])
+def test_suspend_retains_unload_while_game_persists(
+    manager: rm.SpeechRecognitionManager,
+    auto_pause_flow: _AutoPauseFlow,
+    exit_before_wake: bool,
+    suspends: int,
+) -> None:
+    """Sleep cannot abandon cleanup or allow dictation while the monitor stays paused."""
+    flow = auto_pause_flow
+    flow.poll(True)
+    assert flow.unload_started.wait(1)
+    for _ in range(suspends):
+        flow.unload_started.clear()
+        started = time.monotonic()
+        flow.tray._on_system_suspend()
+        assert time.monotonic() - started < 0.5
+        assert flow.unload_started.wait(1)
+        assert manager.is_auto_paused
+        assert not manager.start_recognition()
+    assert len(flow.unload_threads) == suspends + 1
+    flow.release_unload.set()
+    flow.backend.cleanup.assert_not_called()
+    flow.http_session.close.assert_not_called()
+    if exit_before_wake:
+        flow.finish_reload()
+        flow.join(flow.unload_threads)
+        assert manager.model is None
+
+    flow.tray._on_system_resume()
+    assert not flow.wake_callbacks
+    flow.poll(True)
+    if not exit_before_wake:
+        flow.finish_reload()
+        flow.join(flow.unload_threads)
+    flow.reinit.assert_not_called()
+    assert len(flow.unload_threads) == suspends + 1
+    assert manager.model is None
+    assert manager.is_auto_paused
+    assert not manager.start_recognition()
+    flow.backend.cleanup.assert_called_once_with()
+    flow.http_session.close.assert_called_once_with()
+    assert flow.cleanup_during_reload == [False]
+
+    flow.poll(False)
+    flow.reinit.assert_called_once_with()
+    assert manager.model_ready
+    assert not manager.is_auto_paused
+
+
+@pytest.mark.parametrize("exit_before_wake", [False, True])
+@pytest.mark.parametrize("game_exit", ["before_suspend", "during_suspend"])
+def test_wake_recovers_auto_resume_without_monitor_transition(
+    manager: rm.SpeechRecognitionManager,
+    monkeypatch: pytest.MonkeyPatch,
+    auto_pause_flow: _AutoPauseFlow,
+    exit_before_wake: bool,
+    game_exit: str,
+) -> None:
+    """Wake rearms canceled recovery, even when the native worker still owns the model."""
+    flow = auto_pause_flow
+    flow.poll(True)
+    assert flow.unload_started.wait(1)
+    if game_exit == "before_suspend":
+        flow.poll(False)
+        assert flow.resume_started.wait(1)
+    flow.unload_started.clear()
+    flow.tray._on_system_suspend()
+    if game_exit == "during_suspend":
+        assert flow.unload_started.wait(1)
+        flow.poll(False)
+        assert not flow.resume_started.is_set()
+    stale_resumes = len(flow.resume_threads)
+    flow.release_resume.set()
+    flow.release_unload.set()
+    if exit_before_wake:
+        flow.finish_reload()
+        flow.join(flow.resume_threads + flow.unload_threads)
+        flow.reinit.assert_not_called()
+    assert manager.is_auto_paused
+    assert not manager.start_recognition()
+
+    flow.tray._on_system_resume()
+    assert len(flow.wake_callbacks) == 1
+    flow.resume_started.clear()
+    started = time.monotonic()
+    flow.wake_callbacks[0]()
+    assert time.monotonic() - started < 0.5
+    if not exit_before_wake:
+        assert flow.resume_started.wait(1)
+        assert len(flow.resume_threads) == stale_resumes + 1
+        assert manager.is_auto_paused
+        assert not manager.start_recognition()
+        flow.backend.cleanup.assert_not_called()
+        flow.http_session.close.assert_not_called()
+        flow.finish_reload()
+    flow.join(flow.resume_threads + flow.unload_threads)
+    flow.poll(False)
+    flow.reinit.assert_called_once_with()
+    assert manager.model is flow.resumed_model
+    assert manager.model_ready
+    assert not manager.is_auto_paused
+    flow.backend.cleanup.assert_called_once_with()
+    flow.http_session.close.assert_called_once_with()
+    assert flow.cleanup_during_reload == [False]
+    monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+    assert manager.start_recognition()
+
+
+@pytest.mark.parametrize("stage", ["delayed", "deferred"])
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "pause",
+        "pause_resume",
+        "suspend",
+        "manual",
+        "reconfigure",
+        "reconfigure_model",
+        "system_resume",
+    ],
+)
+def test_new_lifecycle_request_supersedes_wake_recovery(
+    manager: rm.SpeechRecognitionManager,
+    auto_pause_flow: _AutoPauseFlow,
+    stage: str,
+    operation: str,
+) -> None:
+    """Neither a timer nor deferred wake initialization can override a newer request."""
+    flow = auto_pause_flow
+    flow.poll(True)
+    assert flow.unload_started.wait(1)
+    flow.poll(False)
+    assert flow.resume_started.wait(1)
+    flow.tray._on_system_suspend()
+    flow.tray._on_system_resume()
+    stale_wake = flow.wake_callbacks[0]
+    if stage == "deferred":
+        flow.resume_started.clear()
+        stale_wake()
+        assert flow.resume_started.wait(1)
+        assert len(flow.resume_threads) == 2
+
+    flow.resume_started.clear()
+    if operation in ("pause", "pause_resume"):
+        flow.unload_started.clear()
+        flow.poll(True)
+        assert flow.unload_started.wait(1)
+        if operation == "pause_resume":
             flow.poll(False)
-        else:
-            schedule.assert_called_once_with(2, flow.tray._reinit_speech_after_resume)
-            schedule.call_args.args[1]()
-        assert not manager.is_auto_paused
-        assert manager.model_ready
+            assert flow.resume_started.wait(1)
+    elif operation == "suspend":
+        flow.tray._on_system_suspend()
+        # Run the first wake's timer after a second wake, when a sleep flag
+        # alone cannot reject it. Ownership must still belong to the new wake.
+        flow.tray._on_system_resume()
+        assert len(flow.wake_callbacks) == 2
+    else:
+        with pytest.raises(TimeoutError, match="still loading"):
+            if operation == "manual":
+                manager.unload_model(reason="manual")
+            elif operation in ("reconfigure", "reconfigure_model"):
+                manager.reconfigure(
+                    silence_timeout=1.25, force_reinit=operation == "reconfigure_model"
+                )
+            else:
+                manager.reinitialize_after_resume()
+        if operation in ("reconfigure", "reconfigure_model"):
+            assert flow.resume_started.wait(1)
+            assert manager.silence_timeout != 1.25
+
+    resumes = len(flow.resume_threads)
+    if stage == "delayed":
+        stale_wake()
+        assert len(flow.resume_threads) == resumes
+    flow.finish_reload()
+    loaded_model = manager.model
+    flow.release_resume.set()
+    flow.release_unload.set()
+    flow.join(flow.resume_threads + flow.unload_threads)
+    recovered = operation in ("pause_resume", "reconfigure", "reconfigure_model")
+    if recovered:
         flow.reinit.assert_called_once_with()
+        assert manager.model is flow.resumed_model
+        assert manager.model_ready
+        assert not manager.is_auto_paused
+    else:
+        flow.reinit.assert_not_called()
+        assert manager.is_auto_paused
+        assert not manager.start_recognition()
+        if operation == "pause":
+            assert manager.model is None
+        else:
+            assert manager.model is loaded_model
+            flow.backend.cleanup.assert_not_called()
+            flow.http_session.close.assert_not_called()
+    if recovered or operation == "pause":
+        flow.backend.cleanup.assert_called_once_with()
+        flow.http_session.close.assert_called_once_with()
+        assert flow.cleanup_during_reload == [False]
+    if operation == "suspend":
+        flow.wake_callbacks[-1]()
+        flow.reinit.assert_called_once_with()
+        assert manager.model_ready
+        assert not manager.is_auto_paused
+
+
+@pytest.mark.parametrize("stage", ["delayed", "deferred"])
+@pytest.mark.parametrize("new_pause", [False, True])
+def test_reconfigure_rollback_completes_inherited_wake_recovery(
+    manager: rm.SpeechRecognitionManager,
+    monkeypatch: pytest.MonkeyPatch,
+    auto_pause_flow: _AutoPauseFlow,
+    stage: str,
+    new_pause: bool,
+) -> None:
+    """A restored engine recovers dictation unless a newer game pause owns it."""
+    flow = auto_pause_flow
+    flow.poll(True)
+    assert flow.unload_started.wait(1)
+    flow.poll(False)
+    assert flow.resume_started.wait(1)
+    flow.tray._on_system_suspend()
+    flow.tray._on_system_resume()
+    stale_wake = flow.wake_callbacks[0]
+    if stage == "deferred":
+        flow.resume_started.clear()
+        stale_wake()
+        assert flow.resume_started.wait(1)
+    flow.finish_reload()
+    previous = manager._snapshot_reconfigure_state()
+    previous_defer = manager._defer_download
+    rolling_back = threading.Event()
+    release_rollback = threading.Event()
+    settings_error = RuntimeError("new engine failed")
+    errors: list[Exception] = []
+    restored_settings: list[dict[str, object]] = []
+
+    def reject_settings() -> None:
+        manager._model_initialized = False
+        manager._set_engine_error()
+        raise settings_error
+
+    def restore() -> None:
+        restored_settings.append(manager._snapshot_reconfigure_state())
+        rolling_back.set()
+        assert release_rollback.wait(3)
+        flow._reinit()
+
+    def reconfigure() -> None:
+        try:
+            manager.reconfigure(engine="whisper", model_size="small", silence_timeout=1.25)
+        except Exception as error:
+            errors.append(error)
+
+    flow.reinit.side_effect = restore
+    monkeypatch.setattr(manager, "_init_whisper", reject_settings)
+    monkeypatch.setattr(
+        manager,
+        "_init_selected_engine",
+        rm.SpeechRecognitionManager._init_selected_engine.__get__(manager),
+    )
+    settings_worker = threading.Thread(target=reconfigure)
+    try:
+        settings_worker.start()
+        assert rolling_back.wait(1)
+        assert manager.is_auto_paused
+        assert not manager.start_recognition()
+        if new_pause:
+            flow.unload_started.clear()
+            flow.poll(True)
+            assert flow.unload_started.wait(1)
+        release_rollback.set()
+        flow.join([settings_worker])
+        assert errors == [settings_error]
+        assert restored_settings == [previous]
+        assert manager._snapshot_reconfigure_state() == previous
+        assert manager._defer_download is previous_defer
+        assert manager.model is flow.resumed_model
+        assert manager.model_ready
+        assert manager.is_auto_paused is new_pause
+        if stage == "delayed":
+            stale_wake()
+        flow.release_resume.set()
+        flow.release_unload.set()
+        flow.join(flow.resume_threads + flow.unload_threads)
+        flow.reinit.assert_called_once_with()
+        if new_pause:
+            assert manager.model is None
+            assert manager.is_auto_paused
+            assert not manager.start_recognition()
+            flow.poll(False)
+            assert flow.reinit.call_count == 2
+        else:
+            # The monitor already resumed before suspend; it need not
+            # transition again to clear the guard after rejected settings.
+            flow.poll(False)
+            flow.reinit.assert_called_once_with()
+        assert manager.model is flow.resumed_model
+        assert manager.model_ready
+        assert not manager.is_auto_paused
+        monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+        assert manager.start_recognition()
+    finally:
+        release_rollback.set()
+        if settings_worker.ident is not None:
+            flow.join([settings_worker])
 
 
 def test_new_auto_resume_supersedes_waiting_resume(

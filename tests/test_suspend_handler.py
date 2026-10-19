@@ -304,6 +304,9 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
             indicator = TrayIndicator.__new__(TrayIndicator)
 
         indicator.speech_engine = MagicMock()
+        indicator.speech_engine.prepare_auto_resume.return_value = object()
+        indicator.speech_engine.is_auto_paused = False
+        indicator._auto_pause_monitor = None
         indicator.config_manager = MagicMock()
         indicator.config_manager.get_bool.return_value = False
         indicator._external_activation_unavailable = False
@@ -318,22 +321,64 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
 
         indicator._reinit_speech_after_resume()
 
-        indicator.speech_engine.reinitialize_after_resume.assert_called_once()
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once_with(
+            auto_resume=True, expected_request=None
+        )
 
     def test_reinit_speech_returns_source_remove(self):
-        from gi.repository import GLib
-
         indicator = self._make_tray_indicator()
 
         result = indicator._reinit_speech_after_resume()
 
-        assert result == GLib.SOURCE_REMOVE
+        assert result is False
 
     def test_reinit_speech_failure_is_caught(self):
         indicator = self._make_tray_indicator()
         indicator.speech_engine.reinitialize_after_resume.side_effect = RuntimeError("boom")
 
         indicator._reinit_speech_after_resume()
+
+    def test_reinit_speech_uses_captured_request(self) -> None:
+        indicator = self._make_tray_indicator()
+        request = indicator.speech_engine.prepare_auto_resume.return_value
+
+        indicator._reinit_speech_after_resume(request)
+
+        indicator.speech_engine.reinitialize_after_resume.assert_called_once_with(
+            auto_resume=True, expected_request=request
+        )
+
+    def test_reinit_speech_skips_new_game_pause(self) -> None:
+        indicator = self._make_tray_indicator()
+        indicator._auto_pause_monitor = MagicMock(paused=True)
+        indicator._model_keepalive = MagicMock()
+
+        indicator._reinit_speech_after_resume(object())
+
+        indicator.speech_engine.reinitialize_after_resume.assert_not_called()
+        indicator._model_keepalive.bump.assert_not_called()
+
+    def test_reinit_speech_skips_new_suspend(self) -> None:
+        indicator = self._make_tray_indicator()
+        indicator._model_keepalive = MagicMock()
+        indicator._on_system_suspend()
+
+        indicator._reinit_speech_after_resume(object())
+
+        indicator.speech_engine.reinitialize_after_resume.assert_not_called()
+        indicator._model_keepalive.bump.assert_not_called()
+        indicator.speech_engine.cancel_pending_auto_pause.assert_called_once_with()
+
+    def test_suspend_stops_active_recognition(self) -> None:
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.state = RecognitionState.LISTENING
+        indicator._model_keepalive = MagicMock()
+
+        indicator._on_system_suspend()
+
+        assert indicator._system_suspended
+        indicator.speech_engine.stop_recognition.assert_called_once_with()
+        indicator._model_keepalive.cancel.assert_called_once_with()
 
     @patch("vocalinux.ui.tray_indicator.GLib")
     def test_on_system_resume_schedules_speech_and_monitor(self, mock_glib):
@@ -345,6 +390,8 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
         assert len(calls) == 2
         assert calls[0][0][0] == 2
         assert calls[0][0][1] == indicator._reinit_speech_after_resume
+        assert calls[0][0][2] is indicator.speech_engine.prepare_auto_resume.return_value
+        indicator.speech_engine.prepare_auto_resume.assert_called_once_with()
         assert calls[1][0][0] == 2
         assert calls[1][0][1] == indicator._start_input_device_monitor
 
@@ -360,6 +407,7 @@ class TestTrayIndicatorResumeFlow(unittest.TestCase):
         calls = mock_glib.timeout_add_seconds.call_args_list
         assert len(calls) == 1
         assert calls[0][0][1] == indicator._reinit_speech_after_resume
+        assert calls[0][0][2] is indicator.speech_engine.prepare_auto_resume.return_value
 
     @patch("vocalinux.ui.tray_indicator.Gio")
     @patch("vocalinux.ui.tray_indicator.GLib")
@@ -551,6 +599,26 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
         indicator.speech_engine.reinitialize_after_resume.assert_called_once_with(auto_resume=True)
         indicator._model_keepalive.bump.assert_called_once()
 
+    def test_auto_resume_during_suspend_waits_for_wake(self) -> None:
+        indicator = self._make_tray_indicator()
+        indicator._on_system_suspend()
+
+        indicator._on_auto_resume()
+
+        indicator.speech_engine.reinitialize_after_resume.assert_not_called()
+        indicator._model_keepalive.bump.assert_not_called()
+
+    def test_suspend_reissues_unload_when_game_stays_active(self) -> None:
+        indicator = self._make_tray_indicator()
+        indicator._auto_pause_monitor.paused = True
+
+        indicator._on_system_suspend()
+
+        assert indicator._system_suspended
+        indicator.speech_engine.unload_model.assert_called_once_with(reason="auto_pause")
+        indicator.speech_engine.cancel_pending_auto_pause.assert_not_called()
+        indicator._model_keepalive.cancel.assert_called_once_with()
+
     def test_get_model_keepalive_config(self):
         indicator = self._make_tray_indicator()
         indicator.config_manager.get_bool.return_value = True
@@ -593,6 +661,39 @@ class TestTrayAutoPauseWiring(unittest.TestCase):
         assert mock_glib.timeout_add_seconds.call_count == 1
         assert (
             mock_glib.timeout_add_seconds.call_args[0][1] == indicator._start_input_device_monitor
+        )
+        indicator.speech_engine.prepare_auto_resume.assert_not_called()
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_system_resume_rechecks_monitor_even_without_manager_guard(
+        self, mock_glib: MagicMock
+    ) -> None:
+        indicator = self._make_tray_indicator()
+        indicator._auto_pause_monitor.paused = True
+        indicator.config_manager.get_bool.return_value = False
+
+        indicator._on_system_resume()
+
+        mock_glib.timeout_add_seconds.assert_called_once_with(
+            2, indicator._start_input_device_monitor
+        )
+
+    @patch("vocalinux.ui.tray_indicator.GLib")
+    def test_system_resume_schedules_guarded_recovery_when_game_is_gone(
+        self, mock_glib: MagicMock
+    ) -> None:
+        indicator = self._make_tray_indicator()
+        indicator.speech_engine.is_auto_paused = True
+        indicator.config_manager.get_bool.return_value = False
+        indicator._system_suspended = True
+
+        indicator._on_system_resume()
+
+        assert not indicator._system_suspended
+        assert mock_glib.timeout_add_seconds.call_args_list[0].args == (
+            2,
+            indicator._reinit_speech_after_resume,
+            indicator.speech_engine.prepare_auto_resume.return_value,
         )
 
     @patch("vocalinux.ui.tray_indicator.GLib")
