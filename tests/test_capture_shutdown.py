@@ -578,7 +578,7 @@ def test_new_monitor_transition_invalidates_deferred_resume(
 @pytest.mark.parametrize(
     "operation", ["manual", "idle_keepalive", "reconfigure", "system_resume", "suspend"]
 )
-def test_lifecycle_operation_invalidates_deferred_auto_pause_work(
+def test_lifecycle_operation_supersedes_deferred_auto_pause_work(
     manager: rm.SpeechRecognitionManager,
     monkeypatch: pytest.MonkeyPatch,
     auto_pause_flow: _AutoPauseFlow,
@@ -591,6 +591,8 @@ def test_lifecycle_operation_invalidates_deferred_auto_pause_work(
     if pending == "resume":
         flow.poll(False)
         assert flow.resume_started.wait(1)
+        if operation == "reconfigure":
+            flow.resume_started.clear()
 
     started = time.monotonic()
     if operation == "suspend":
@@ -605,11 +607,23 @@ def test_lifecycle_operation_invalidates_deferred_auto_pause_work(
                 manager.unload_model(reason=operation)
     assert time.monotonic() - started < 0.5
     assert manager.silence_timeout != 1.25
+    if operation == "reconfigure" and pending == "resume":
+        assert flow.resume_started.wait(1)
+        assert len(flow.resume_threads) == 2
     flow.finish_reload()
     loaded_model = manager.model
     flow.release_resume.set()
     flow.release_unload.set()
     flow.join(flow.resume_threads + flow.unload_threads)
+    if operation == "reconfigure" and pending == "resume":
+        flow.reinit.assert_called_once_with()
+        flow.backend.cleanup.assert_called_once_with()
+        flow.http_session.close.assert_called_once_with()
+        assert flow.cleanup_during_reload == [False]
+        assert manager.model is flow.resumed_model
+        assert manager.model_ready
+        assert not manager.is_auto_paused
+        return
     flow.reinit.assert_not_called()
     flow.backend.cleanup.assert_not_called()
     flow.http_session.close.assert_not_called()
@@ -654,6 +668,127 @@ def test_new_auto_resume_supersedes_waiting_resume(
     assert manager.model is flow.resumed_model
     assert manager.model_ready
     assert not manager.is_auto_paused
+
+
+@pytest.mark.parametrize("restart", [False, True])
+@pytest.mark.parametrize("attempts", [1, 2])
+def test_failed_reconfigure_retains_deferred_resume(
+    manager: rm.SpeechRecognitionManager,
+    monkeypatch: pytest.MonkeyPatch,
+    auto_pause_flow: _AutoPauseFlow,
+    restart: bool,
+    attempts: int,
+) -> None:
+    """Rejected settings recover the saved engine without another monitor transition."""
+    flow = auto_pause_flow
+    flow.poll(True)
+    assert flow.unload_started.wait(1)
+    flow.poll(False)
+    assert flow.resume_started.wait(1)
+    previous = manager._snapshot_reconfigure_state()
+    loaded_model = manager.model
+    initialized_settings: list[dict[str, object]] = []
+
+    def initialize() -> None:
+        initialized_settings.append(manager._snapshot_reconfigure_state())
+        flow._reinit()
+
+    flow.reinit.side_effect = initialize
+    rejected_init = Mock()
+    monkeypatch.setattr(manager, "_init_whisper", rejected_init)
+    for attempt in range(attempts):
+        flow.resume_started.clear()
+        started = time.monotonic()
+        with pytest.raises(TimeoutError, match="still loading"):
+            manager.reconfigure(
+                engine="whisper" if restart else None,
+                model_size="small" if restart else None,
+                silence_timeout=1.25,
+            )
+        assert time.monotonic() - started < 0.5
+        assert flow.resume_started.wait(1)
+        assert len(flow.resume_threads) == attempt + 2
+        assert manager._snapshot_reconfigure_state() == previous
+        assert manager.model is loaded_model
+        assert manager.is_auto_paused
+        assert not manager.start_recognition()
+        flow.reinit.assert_not_called()
+        flow.backend.cleanup.assert_not_called()
+        flow.http_session.close.assert_not_called()
+
+    # Both stale and current resumes can run, but must wait for the native worker.
+    flow.release_resume.set()
+    flow.finish_reload()
+    flow.join(flow.resume_threads)
+    flow.release_unload.set()
+    flow.join(flow.unload_threads)
+    flow.poll(False)
+    assert len(flow.resume_threads) == attempts + 1
+    flow.reinit.assert_called_once_with()
+    rejected_init.assert_not_called()
+    assert initialized_settings == [previous]
+    assert manager._snapshot_reconfigure_state() == previous
+    assert manager.model is flow.resumed_model
+    assert manager.model_ready
+    assert not manager.is_auto_paused
+    flow.backend.cleanup.assert_called_once_with()
+    flow.http_session.close.assert_called_once_with()
+    assert flow.cleanup_during_reload == [False]
+    monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+    assert manager.start_recognition()
+
+
+@pytest.mark.parametrize("restart", [False, True])
+@pytest.mark.parametrize("operation", ["pause", "suspend", "manual", "system_resume"])
+def test_new_request_supersedes_failed_reconfigure_recovery(
+    manager: rm.SpeechRecognitionManager,
+    auto_pause_flow: _AutoPauseFlow,
+    restart: bool,
+    operation: str,
+) -> None:
+    """A failed settings attempt cannot revive recovery superseded by newer work."""
+    flow = auto_pause_flow
+    flow.poll(True)
+    assert flow.unload_started.wait(1)
+    flow.poll(False)
+    assert flow.resume_started.wait(1)
+    flow.resume_started.clear()
+    with pytest.raises(TimeoutError, match="still loading"):
+        manager.reconfigure(silence_timeout=1.25, force_reinit=restart)
+    assert flow.resume_started.wait(1)
+    assert len(flow.resume_threads) == 2
+
+    started = time.monotonic()
+    if operation == "pause":
+        flow.unload_started.clear()
+        flow.poll(True)
+        assert flow.unload_started.wait(1)
+    elif operation == "suspend":
+        flow.tray._on_system_suspend()
+    else:
+        with pytest.raises(TimeoutError, match="still loading"):
+            if operation == "system_resume":
+                manager.reinitialize_after_resume()
+            else:
+                manager.unload_model(reason="manual")
+    assert time.monotonic() - started < 0.5
+    flow.finish_reload()
+    loaded_model = manager.model
+    flow.release_resume.set()
+    flow.release_unload.set()
+    flow.join(flow.resume_threads + flow.unload_threads)
+    flow.reinit.assert_not_called()
+    assert manager.is_auto_paused
+    assert not manager.start_recognition()
+    if operation == "pause":
+        assert manager.model is None
+        flow.backend.cleanup.assert_called_once_with()
+        flow.http_session.close.assert_called_once_with()
+        assert flow.cleanup_during_reload == [False]
+    else:
+        assert manager.model is loaded_model
+        flow.backend.cleanup.assert_not_called()
+        flow.http_session.close.assert_not_called()
 
 
 @pytest.mark.parametrize("restart", [False, True])

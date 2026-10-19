@@ -4144,9 +4144,25 @@ class SpeechRecognitionManager:
             f"audio_device={audio_device_index}, audio_device_name={audio_device_name}"
         )
 
-        # A successful reconfigure takes over any unfinished auto-resume.
-        request = self._new_model_request(inherit_resume=True)
-        self._cancel_reload_recording()
+        # Reconfigure takes over any unfinished auto-resume, even if the
+        # settings must be rejected while the old reload is still running.
+        with getattr(self, "_lifecycle_lock", nullcontext()):
+            request = self._new_model_request(inherit_resume=True)
+            reload_worker = getattr(self, "recognition_thread", None)
+        try:
+            self._cancel_reload_recording()
+        except TimeoutError:
+            with getattr(self, "_model_request_lock", nullcontext()):
+                resume_pending = self._model_request is request and self._auto_resume_pending
+            if resume_pending:
+                # No settings have changed yet. Recover the saved engine once
+                # it is safe, without extending the explicit settings timeout.
+                threading.Thread(
+                    target=self._resume_after_reload,
+                    args=(reload_worker, request),
+                    daemon=True,
+                ).start()
+            raise
 
         whispercpp_attrs = tuple(
             name for name in self._RECONFIGURE_STATE_ATTRS if name.startswith("whispercpp_")
