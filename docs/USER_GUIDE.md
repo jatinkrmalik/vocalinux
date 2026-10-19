@@ -36,6 +36,20 @@ On non-US layouts such as German Neo, that chord uses the key that types **v** o
 
 **Other audio.** Settings → Audio → Other audio can lower speakers and headphones while the microphone is open, then put that volume back. It stays off until you turn it on. Level while dictating is a percent of the current volume (0 is silent). Quitting mid-dictation puts the volume back; if the app crashes first, the next launch does.
 
+## Audio input
+
+Open **Settings → Audio → Input Device** to select a specific microphone or choose
+**System Default**. A valid explicit microphone selection uses that device and
+bypasses the System Default preference below.
+
+With **System Default**, Vocalinux leaves valid default or virtual inputs under
+the audio system's control rather than pinning a hardware device.
+
+On ALSA only, if PortAudio substitutes arbitrary hardware for the default input,
+Vocalinux prefers an input-capable `pulse` PCM on the same host API to follow the
+microphone selected in desktop sound settings. If no suitable `pulse` PCM exists,
+it keeps PortAudio's fallback device and logs a warning.
+
 ## Shortcuts
 
 Configure under **Settings → Shortcuts**:

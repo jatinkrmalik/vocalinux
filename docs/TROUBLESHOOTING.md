@@ -31,6 +31,17 @@ vocalinux
 4. Reset a bad device index: set `audio.device_index` to `null` in `~/.config/vocalinux/config.json`
 5. Bluetooth mics: try a wired device to isolate SCO capture issues
 
+### Microphone Stalled
+
+A **Microphone Stalled** notification means the selected input stopped delivering
+audio. Vocalinux stops the failed dictation attempt.
+
+Open **Settings → Audio**. Use **Microphone Test → Test** to record two seconds and
+check the audio level, or select a different **Input Device**, then retry
+dictation. **Test Dictation** is a separate speech-recognition test. See
+[Audio input](USER_GUIDE.md#audio-input) for explicit microphone selection and
+**System Default** behavior.
+
 ## GTK / AppIndicator / `No module named gi`
 
 Recreate the venv with system site packages:
