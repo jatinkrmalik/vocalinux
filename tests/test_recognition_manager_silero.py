@@ -234,6 +234,46 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         self._drive(probs=[0.95] * 20, vad_sensitivity=3)
         self.assertEqual(len(self.enqueued), 0, "speech should keep silence counter at 0, no flush")
 
+    def test_continuous_speech_flushes_before_buffer_cap(self) -> None:
+        """A pause-free hold must be queued, not trimmed, when it grows long."""
+        # 20 chunks * 0.064s = 1.28s. With a 0.5s segment limit the loop
+        # queues ~0.5s of audio and starts a fresh segment, twice.
+        self.mgr._max_segment_seconds = 0.5
+        self._drive(probs=[0.95] * 20, vad_sensitivity=3)
+        self.assertEqual(len(self.enqueued), 2)
+        self.assertEqual(len(self.mgr.audio_buffer), 4)
+        self.assertLess(len(self.mgr.audio_buffer), self.mgr._max_buffer_size)
+
+    def test_chunk_budget_flushes_before_cap_on_short_chunks(self) -> None:
+        """The 75% chunk-budget limit must win when chunks are short.
+
+        A high capture rate makes each chunk short, so a 90 s time limit would
+        be reached long after the destructive cap. The flush point has to
+        derive from the chunk budget in that case, or the trim sees speech.
+        """
+        # 10 chunks * 0.064s = 0.64s of buffer, so 75% is 7.5 chunks -> flush
+        # at chunk 8, two chunks before the cap could trim.
+        self.mgr._max_buffer_size = 10
+        self.mgr._max_segment_seconds = 90.0
+        self._drive(probs=[0.95] * 10, vad_sensitivity=3)
+        self.assertEqual(len(self.enqueued), 1)
+        self.assertEqual(len(self.enqueued[0]), 8)
+        self.assertEqual(len(self.mgr.audio_buffer), 2)
+        self.assertLess(len(self.mgr.audio_buffer), self.mgr._max_buffer_size)
+        # Every captured chunk is either queued or still buffered: no trim.
+        self.assertEqual(
+            sum(len(segment) for segment in self.enqueued) + len(self.mgr.audio_buffer),
+            10,
+        )
+
+    def test_speech_during_reload_is_not_flushed(self) -> None:
+        """A model reload keeps the utterance intact rather than enqueuing it."""
+        self.mgr._max_segment_seconds = 0.5
+        self.mgr._reload_pending = True
+        self._drive(probs=[0.95] * 20, vad_sensitivity=3)
+        self.assertEqual(self.enqueued, [])
+        self.assertEqual(len(self.mgr.audio_buffer), 20)
+
     def test_reload_keeps_speech_across_silence(self) -> None:
         """Speech during reload stays together despite intervening silence."""
         self.mgr._reload_pending = True

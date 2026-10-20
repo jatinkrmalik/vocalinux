@@ -516,6 +516,14 @@ class SpeechRecognitionManager:
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
+        # Longest stretch of continuous speech kept in one buffer before it is
+        # queued for transcription. A push-to-talk hold (or a toggle session
+        # that never goes quiet) otherwise grows the buffer until the safety
+        # cap above discards its oldest audio. The effective flush point is
+        # also capped at 75% of that chunk budget, so a device with short
+        # chunks (high capture rate) can never reach the destructive trim
+        # before the segment is flushed.
+        self._max_segment_seconds = 90.0
         self._reconnection_attempts = 0
         self._max_reconnection_attempts = 5
         self._reconnection_delay = 1.0  # Initial delay in seconds
@@ -3577,6 +3585,36 @@ class SpeechRecognitionManager:
                                 )
                             speech_detected_in_session = True
                         silence_counter = 0
+
+                    # Continuous speech with no pause (a held push-to-talk
+                    # key, or a toggle session that never goes quiet) keeps
+                    # one segment growing until the safety cap silently drops
+                    # its oldest audio. Queue the segment long before that so
+                    # every word is transcribed in order while recording keeps
+                    # going. Capture chunks are 16 kHz mono, so their duration
+                    # follows from the byte count at any negotiated rate.
+                    chunk_seconds = len(data) / (2 * 16000)
+                    if chunk_seconds > 0 and self._recording_segment_has_speech:
+                        buffered_seconds = len(self.audio_buffer) * chunk_seconds
+                        flush_seconds = min(
+                            self._max_segment_seconds,
+                            self._max_buffer_size * chunk_seconds * 0.75,
+                        )
+                        if buffered_seconds >= flush_seconds and not getattr(
+                            self, "_reload_pending", False
+                        ):
+                            with self._buffer_lock:
+                                segment = self.audio_buffer.copy()
+                                self.audio_buffer = []
+                            self._recording_segment_has_speech = False
+                            silence_counter = 0
+                            logger.info(
+                                "Continuing dictation: queued %.0fs segment "
+                                "(%d chunks) for transcription",
+                                buffered_seconds,
+                                len(segment),
+                            )
+                            self._enqueue_audio_segment(segment)
                 except (IOError, OSError) as e:
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
