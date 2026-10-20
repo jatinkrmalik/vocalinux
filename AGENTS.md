@@ -114,6 +114,8 @@ Website: `web/AGENTS.md`, `web/PRODUCT.md`, `web/DESIGN.md`. Do not duplicate si
 
 ## Dependencies (uv)
 
+Use **uv 0.13.3** for `just lock` and `just export-check`, matching CI. Other versions in the supported contributor range can order equivalent platform markers differently; export verification compares files byte-for-byte. Update the CI pins and regenerate exports together when changing the generation version.
+
 `uv.lock` is authoritative. `just lock` regenerates it, the hash-pinned `requirements/*.txt` exports, and `packaging/flatpak/python3-dependencies.yaml`. The AppImage build installs from `runtime`/`vad` plus `appimage.txt`; `install.sh` consumes the runtime and selected extras with `--require-hashes --no-deps --no-build-isolation`, then installs the project with `--no-deps --no-build-isolation`. **Do not edit `requirements/*.txt` by hand**, nor the url/sha256 pairs in `packaging/flatpak/python3-dependencies.yaml`. Change `pyproject.toml` (or `requirements/whisper.in` for the Whisper engine, `requirements/appimage*.in` for the AppImage), run `just lock`, and commit the lock plus the exports with the manifest change.
 
 | Constraint | Rule |
