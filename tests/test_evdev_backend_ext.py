@@ -243,6 +243,36 @@ B: REL=100
                 result = find_keyboard_devices()
                 assert result == ["/dev/input/event3"]
 
+    def test_find_keyboard_devices_keeps_hidpp_keyboards(self) -> None:
+        """Logitech HID++ keyboards report REL_X/Y like their mice; kept by name."""
+        # Real blocks from one Bolt receiver: keyboards and mouse share the
+        # same REL bitmap, only the name tells them apart.
+        mock_proc_content = """I: Bus=0003 Vendor=046d Product=408a Version=0111
+N: Name="Logitech MX Keys"
+H: Handlers=sysrq kbd leds mouse1 event3
+B: EV=12001f
+B: KEY=3f00733fff 0 0 483ffff17aff32d bfd4444600000000 ffff0001 130ff38b17d007 ffff7bfad941dfff ffbeffdfffefffff fffffffffffffffe
+B: REL=1943
+B: ABS=100000000
+I: Bus=0003 Vendor=046d Product=4088 Version=0111
+N: Name="Logitech ERGO K860"
+H: Handlers=sysrq kbd leds mouse0 event4
+B: EV=12001f
+B: KEY=3f00733fff 0 0 483ffff17aff32d bfd4444600000000 ffff0001 130ff38b17d007 ffff7bfad941dfff ffbeffdfffefffff fffffffffffffffe
+B: REL=1943
+B: ABS=100000000
+I: Bus=0003 Vendor=046d Product=4082 Version=0111
+N: Name="Logitech MX Master 3"
+H: Handlers=sysrq kbd leds mouse2 event5
+B: EV=120017
+B: KEY=ffff0000 1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe
+B: REL=1943
+"""
+        with patch("builtins.open", mock_open(read_data=mock_proc_content)):
+            with patch("os.path.exists", return_value=True):
+                result = find_keyboard_devices()
+                assert result == ["/dev/input/event3", "/dev/input/event4"]
+
     def test_find_keyboard_devices_pointer_axes_split_bitmap(self) -> None:
         """Pointer axes are read from the low word of a multi-word bitmap."""
         mock_proc_content = """I: Bus=0003 Vendor=046d Product=c52b Version=1201
@@ -415,6 +445,36 @@ class TestFindKeyboardDevicesFromEvdev:
         assert _find_keyboard_devices_from_evdev() == [
             "/dev/input/event0",
             "/dev/input/event3",
+        ]
+
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.InputDevice")
+    @patch("vocalinux.ui.keyboard_backends.evdev_backend.evdev")
+    def test_keeps_hidpp_keyboards(self, mock_evdev: Mock, mock_input_device: Mock) -> None:
+        """HID++ keyboards and mice share capabilities; only the name differs."""
+        hidpp_caps = {
+            ecodes.EV_KEY: [ecodes.KEY_A, ecodes.KEY_RIGHTALT, ecodes.BTN_LEFT],
+            ecodes.EV_REL: [
+                ecodes.REL_X,
+                ecodes.REL_Y,
+                ecodes.REL_HWHEEL,
+                ecodes.REL_WHEEL,
+                ecodes.REL_WHEEL_HI_RES,
+                ecodes.REL_HWHEEL_HI_RES,
+            ],
+        }
+        names = {
+            "/dev/input/event3": "Logitech MX Keys",
+            "/dev/input/event4": "Logitech ERGO K860",
+            "/dev/input/event5": "Logitech MX Master 3",
+        }
+        devices = self._devices({path: hidpp_caps for path in names})
+        for path, name in names.items():
+            devices[path].name = name
+        mock_evdev.list_devices.return_value = list(names)
+        mock_input_device.side_effect = lambda path: devices[path]
+        assert _find_keyboard_devices_from_evdev() == [
+            "/dev/input/event3",
+            "/dev/input/event4",
         ]
 
 

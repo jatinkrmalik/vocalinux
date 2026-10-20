@@ -375,11 +375,17 @@ def find_keyboard_devices() -> list[str]:
 
 
 # Bits 0 and 1 of a REL or ABS capability bitmap: REL_X|REL_Y or
-# ABS_X|ABS_Y — pointer motion. A keyboard never reports both; devices
-# that do are mice, trackpads or tablets, and monitoring one meant
-# grabbing it and piping all cursor movement through the reader thread,
-# which showed up as periodic cursor stutter (#900).
+# ABS_X|ABS_Y — pointer motion. Devices that report both are mice,
+# trackpads or tablets, and monitoring one meant grabbing it and piping
+# all cursor movement through the reader thread, which showed up as
+# periodic cursor stutter (#900).
 _POINTER_AXIS_BITS = 0x3
+
+# Logitech HID++ keyboards (MX Keys, ERGO K860, ...) expose one node with
+# the same REL_X/REL_Y bitmap as the mice on their receiver, so their
+# capabilities cannot tell them apart: the device name is kept as the
+# exception to the pointer-axis rule.
+_KEYBOARD_NAME_RE = re.compile(r"keyboard|\bkeys\b|\bK\d{3,4}\b", re.IGNORECASE)
 
 # Key codes only real keyboards report: the modifiers plus KEY_A — the
 # same set the evdev fallback requires. Button-only devices (power/sleep
@@ -460,6 +466,11 @@ def _bitmap_low_bits(hex_bitmap: str) -> int:
     return _bitmap_to_int(hex_bitmap) & ((1 << 64) - 1)
 
 
+def _name_looks_like_keyboard(device_name: str) -> bool:
+    """True when the device name says keyboard despite pointer axes."""
+    return bool(_KEYBOARD_NAME_RE.search(device_name or ""))
+
+
 def _proc_block_has_pointer_axes(device: dict[str, Any]) -> bool:
     """True when a parsed /proc device block reports pointer motion axes."""
     abs_bits = _bitmap_low_bits(device.get("abs", ""))
@@ -503,7 +514,9 @@ def _parse_keyboard_devices_from_proc(proc_file: TextIO) -> list[str]:
                     "Skipping non-keyboard device during keyboard discovery: "
                     f"{device.get('name', '?')} ({device.get('handlers', [])})"
                 )
-        elif _proc_block_has_pointer_axes(device):
+        elif _proc_block_has_pointer_axes(device) and not _name_looks_like_keyboard(
+            device.get("name", "")
+        ):
             logger.debug(
                 "Skipping pointer device during keyboard discovery: "
                 f"{device.get('name', '?')} ({device.get('handlers', [])})"
@@ -580,7 +593,11 @@ def _find_keyboard_devices_from_evdev() -> list[str]:
         except (OSError, IOError, TypeError, ValueError):
             continue
 
-        if capabilities and _capabilities_have_pointer_axes(capabilities):
+        if (
+            capabilities
+            and _capabilities_have_pointer_axes(capabilities)
+            and not _name_looks_like_keyboard(device_name)
+        ):
             # Mice/tablets also report EV_KEY for their buttons; monitoring
             # a pointer pipes all cursor movement through this reader.
             logger.debug(f"Skipping pointer device during keyboard discovery: {device_name}")
