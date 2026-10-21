@@ -11,7 +11,7 @@ import sys
 import threading
 import unittest
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Optional
 from unittest import mock
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -1713,7 +1713,10 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
         with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
             injector = TextInjector()
             injector.environment = DesktopEnvironment.WAYLAND_XDOTOOL
-            with patch.object(injector, "_should_use_terminal_paste", return_value=False):
+            with (
+                patch.object(injector, "_should_use_terminal_paste", return_value=False),
+                patch.object(injector, "_clipboard_holds_non_text", return_value=False),
+            ):
                 result = injector.inject_text("привет")
 
             self.assertTrue(result)
@@ -1732,6 +1735,37 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
                 any(c[:2] == ["xdotool", "type"] for c in calls),
                 "must not fall through to the layout-dependent type path when the paste succeeds",
             )
+
+    def test_xwayland_keeps_a_non_text_clipboard(self) -> None:
+        """An image on the X11 clipboard is not overwritten by an XWayland paste."""
+
+        def which_side_effect(cmd: str) -> Optional[str]:
+            if cmd in ("xdotool", "xclip"):
+                return f"/usr/bin/{cmd}"
+            return None
+
+        self.mock_which.side_effect = which_side_effect
+        self.mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch.dict("os.environ", {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            injector = TextInjector()
+            injector.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+            with (
+                patch.object(injector, "_clipboard_holds_non_text", return_value=True),
+                patch.object(injector, "_inject_via_clipboard_paste") as paste,
+            ):
+                injector._inject_with_xdotool("hi")
+
+        paste.assert_not_called()
+        calls = [c.args[0] for c in self.mock_subprocess.call_args_list if c.args]
+        self.assertTrue(any(c[:2] == ["xdotool", "type"] for c in calls))
+
+    def test_xwayland_checks_x11_clipboard_targets(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+        self._mock_x11_clipboard_targets("TARGETS\nimage/png\n")
+
+        self.assertTrue(injector._clipboard_holds_non_text())
 
     def test_inject_with_xdotool_xwayland_uses_terminal_paste_chord(self) -> None:
         """XWayland xclip paste must still use Ctrl+Shift+V in terminals (#734)."""
