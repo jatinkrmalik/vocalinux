@@ -12,8 +12,10 @@ returning scripted speech probabilities. Verifies:
 """
 
 import sys
+import threading
 import time
 import unittest  # noqa: E402
+from typing import Optional
 from unittest.mock import MagicMock, patch  # noqa: E402
 
 # Earlier test modules install `sys.modules["numpy"] = MagicMock()` at module
@@ -171,7 +173,16 @@ class TestRecordAudioSileroPath(unittest.TestCase):
 
         # Capture flushes triggered by the silence-detection branch
         self.enqueued = []
-        self.mgr._enqueue_audio_segment = lambda buf: self.enqueued.append(list(buf))
+        self.enqueued_gates: list[Optional[threading.Event]] = []
+
+        def enqueue_segment(
+            audio_buffer: list[bytes],
+            release_gate: Optional[threading.Event] = None,
+        ) -> None:
+            self.enqueued.append(list(audio_buffer))
+            self.enqueued_gates.append(release_gate)
+
+        self.mgr._enqueue_audio_segment = enqueue_segment
 
     def _drive(
         self,
@@ -341,6 +352,30 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         self._drive(probs=[0.6] * 20, vad_sensitivity=1)
         self.assertEqual(len(self.enqueued), 0)
 
+    def test_push_to_talk_flushes_carry_the_session_release_gate(self) -> None:
+        """Mid-hold segments carry the session gate, which capture exit opens."""
+        self.mgr._recognition_mode = "push_to_talk"
+        self.mgr._max_segment_seconds = 0.5
+        self.mgr._key_release_gate = threading.Event()
+        gate = self.mgr._key_release_gate
+
+        self._drive(probs=[0.95] * 20, vad_sensitivity=3)
+
+        self.assertGreater(len(self.enqueued_gates), 0)
+        self.assertTrue(all(enqueued_gate is gate for enqueued_gate in self.enqueued_gates))
+        self.assertTrue(gate.is_set())
+
+    def test_toggle_flushes_do_not_carry_a_release_gate(self) -> None:
+        """Toggle-mode segments are not gated even though capture exit opens its event."""
+        self.mgr._max_segment_seconds = 0.5
+        self.mgr._key_release_gate = threading.Event()
+        gate = self.mgr._key_release_gate
+
+        self._drive(probs=[0.95] * 20, vad_sensitivity=3)
+
+        self.assertEqual(self.enqueued_gates, [None, None])
+        self.assertTrue(gate.is_set())
+
     def test_sensitivity_highest_accepts_borderline_speech(self):
         """At sensitivity=5 (threshold 0.3), prob=0.6 is speech, no flush."""
         self._drive(probs=[0.6] * 20, vad_sensitivity=5)
@@ -390,7 +425,16 @@ class TestRecordAudioAmplitudeFallback(unittest.TestCase):
         self.mgr._silero_vad = None
 
         self.enqueued = []
-        self.mgr._enqueue_audio_segment = lambda buf: self.enqueued.append(list(buf))
+        self.enqueued_gates: list[Optional[threading.Event]] = []
+
+        def enqueue_segment(
+            audio_buffer: list[bytes],
+            release_gate: Optional[threading.Event] = None,
+        ) -> None:
+            self.enqueued.append(list(audio_buffer))
+            self.enqueued_gates.append(release_gate)
+
+        self.mgr._enqueue_audio_segment = enqueue_segment
 
     def _drive(self, payload, max_iters):
         stream = MagicMock()
@@ -448,7 +492,7 @@ class TestAudioLevelCallback(unittest.TestCase):
         mgr.silence_timeout = 0.5
         mgr.vad_sensitivity = 3
         mgr._silero_vad = None
-        mgr._enqueue_audio_segment = lambda buf: None
+        mgr._enqueue_audio_segment = MagicMock()
 
         levels = []
         mgr._audio_level_callbacks = [levels.append]

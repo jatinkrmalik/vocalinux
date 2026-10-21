@@ -96,6 +96,7 @@ class _AudioSegment(list):
     ``time.monotonic()`` timestamp of its first captured chunk. That stamp
     is what lets a listener tell speech captured before a point in time
     from speech captured after it, however late the decode finishes.
+    A push-to-talk ``release_gate`` holds callbacks until the key is released.
     """
 
     def __init__(
@@ -103,6 +104,7 @@ class _AudioSegment(list):
         chunks: list[bytes],
         started_at: Optional[float],
         language: Optional[str] = None,
+        release_gate: Optional[threading.Event] = None,
     ) -> None:
         super().__init__(chunks)
         self.started_at = started_at
@@ -110,6 +112,7 @@ class _AudioSegment(list):
         # outlives its session must not transcribe a stale segment in a newer
         # session's language.
         self.language = language
+        self.release_gate = release_gate
 
 
 def _pywhispercpp_distribution_version() -> Optional[tuple[int, ...]]:
@@ -517,6 +520,8 @@ class SpeechRecognitionManager:
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue: queue.Queue[tuple[_AudioSegment, str]] = queue.Queue(maxsize=32)
+        self._key_release_gate = threading.Event()
+        self._key_release_gate.set()
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
@@ -531,7 +536,7 @@ class SpeechRecognitionManager:
         self._reconnection_attempts = 0
         self._max_reconnection_attempts = 5
         self._reconnection_delay = 1.0  # Initial delay in seconds
-        self._last_audio_error_time = 0
+        self._last_audio_error_time = 0.0
         self._audio_stream = None
         self._pyaudio_instance = None
         self._capture_sample_rate = 16000  # Default, updated when device is opened
@@ -3191,6 +3196,7 @@ class SpeechRecognitionManager:
         self.audio_buffer = []
         self._segment_started_at = None
         self._segment_queue = queue.Queue(maxsize=32)
+        self._key_release_gate = threading.Event()
 
         # Start the audio recording thread
         self.audio_thread = threading.Thread(target=self._record_audio)
@@ -3219,6 +3225,7 @@ class SpeechRecognitionManager:
         # sees the dictation as ended. The volume goes back only once the
         # microphone thread has left the device, and before the stop cue.
         self.should_record = False
+        self._key_release_gate.set()
         self._update_state(RecognitionState.PROCESSING)
         self._cancel_pending_playback_duck()
 
@@ -3388,25 +3395,26 @@ class SpeechRecognitionManager:
             # ran or was refused by the guards inside start_recognition.
             self._pending_language_override = None
 
-    def _record_audio(self):
+    def _record_audio(self) -> None:
         """Record audio from the microphone with reconnection logic."""
+        gate = self._key_release_gate
         # Lazy import to avoid circular dependency
         from ..ui.audio_feedback import play_error_sound  # noqa: F401
 
         try:
-            import numpy as np
-        except ImportError as e:
-            logger.error(f"Failed to import required audio libraries: {e}")
-            logger.error("Please install required dependencies: pip install pyaudio numpy")
-            self.should_record = False
-            self.release_playback_duck()
-            play_error_sound()
-            self._buffered_capture_failed = True
-            self._update_state(RecognitionState.ERROR)
-            self._signal_buffered_capture_done()
-            return
+            try:
+                import numpy as np
+            except ImportError as e:
+                logger.error(f"Failed to import required audio libraries: {e}")
+                logger.error("Please install required dependencies: pip install pyaudio numpy")
+                self.should_record = False
+                self.release_playback_duck()
+                play_error_sound()
+                self._buffered_capture_failed = True
+                self._update_state(RecognitionState.ERROR)
+                self._signal_buffered_capture_done()
+                return
 
-        try:
             # PyAudio configuration
             CHUNK = 1024
 
@@ -3468,7 +3476,7 @@ class SpeechRecognitionManager:
             logger.info("Audio recording started")
 
             # Record audio while should_record is True
-            silence_counter = 0
+            silence_counter = 0.0
             speech_detected_in_session = False
             self._recording_segment_has_speech = False
             log_level_interval = 0  # Counter for periodic level logging
@@ -3618,6 +3626,7 @@ class SpeechRecognitionManager:
                     # every word is transcribed in order while recording keeps
                     # going. Capture chunks are 16 kHz mono, so their duration
                     # follows from the byte count at any negotiated rate.
+                    # Push-to-talk text is held until the key is released.
                     chunk_seconds = len(data) / (2 * 16000)
                     if chunk_seconds > 0 and self._recording_segment_has_speech:
                         buffered_seconds = len(self.audio_buffer) * chunk_seconds
@@ -3635,11 +3644,17 @@ class SpeechRecognitionManager:
                             silence_counter = 0
                             logger.info(
                                 "Continuing dictation: queued %.0fs segment "
-                                "(%d chunks) for transcription",
+                                "(%d chunks) for transcription; push-to-talk text "
+                                "will be held until release",
                                 buffered_seconds,
                                 len(segment),
                             )
-                            self._enqueue_audio_segment(segment)
+                            self._enqueue_audio_segment(
+                                segment,
+                                release_gate=(
+                                    gate if self._recognition_mode == "push_to_talk" else None
+                                ),
+                            )
                 except (IOError, OSError) as e:
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
@@ -3713,6 +3728,7 @@ class SpeechRecognitionManager:
             self._buffered_capture_failed = True
             self._update_state(RecognitionState.ERROR)
         finally:
+            gate.set()
             self._signal_buffered_capture_done()
 
     def _process_final_buffer(self):
@@ -3800,6 +3816,11 @@ class SpeechRecognitionManager:
                 processed_text = text.strip()
                 actions = []
 
+            gate = getattr(audio_buffer, "release_gate", None)
+            if (processed_text or actions) and gate is not None and not gate.is_set():
+                logger.info("Holding transcribed text until the push-to-talk key is released")
+                gate.wait()
+
             # Call text callbacks with processed text
             logger.debug(
                 f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
@@ -3881,9 +3902,17 @@ class SpeechRecognitionManager:
             # sound). Forcing IDLE would paint the tray idle and make the
             # next Alt+F12 start a second session (#739).
 
-    def _enqueue_audio_segment(self, audio_buffer: list[bytes]):
+    def _enqueue_audio_segment(
+        self,
+        audio_buffer: list[bytes],
+        release_gate: Optional[threading.Event] = None,
+    ) -> None:
         """Queue an audio segment for asynchronous transcription."""
-        segment = _AudioSegment(audio_buffer.copy(), self._segment_started_at)
+        segment = _AudioSegment(
+            audio_buffer.copy(),
+            self._segment_started_at,
+            release_gate=release_gate,
+        )
         if not segment:
             logger.warning("_enqueue_audio_segment called with empty buffer")
             return
