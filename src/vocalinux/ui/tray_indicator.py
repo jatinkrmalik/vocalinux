@@ -49,7 +49,7 @@ from ..speech_recognition.diarization import (
 from ..suspend_handler import SuspendHandler
 from ..utils.host_process import host_env
 from ..utils.resource_manager import ResourceManager
-from ..utils.update_checker import ReleaseInfo
+from ..utils.update_checker import DEFAULT_CHECK_AUTOMATICALLY, ReleaseInfo
 from ..utils.update_monitor import UpdateMonitor
 from ..utils.whispercpp_model_info import TDRZ_MODEL, WHISPERCPP_MODEL_INFO, is_model_downloaded
 from . import notifications
@@ -134,6 +134,7 @@ class TrayIndicator:
     # Tests build TrayIndicator stubs with __new__ that skip __init__; keep a
     # class-level default so teardown paths like _quit() still find the list.
     _language_shortcut_managers: list = []
+    _indicator_title: str = "Vocalinux"
 
     #: Same for the push-to-talk owner slot: a __new__-built stub must answer
     #: "no binding owns the live session" instead of raising on release paths.
@@ -235,6 +236,7 @@ class TrayIndicator:
         # IconThemePath so gray→red→gray→red actually turns red again.
         self._last_icon_key: Optional[str] = None
         self._icon_theme_nudge = False
+        self._indicator_title = "Vocalinux"
 
         # Register for speech recognition state changes
         self.speech_engine.register_state_callback(self._on_recognition_state_changed)
@@ -288,7 +290,7 @@ class TrayIndicator:
 
         # Background GitHub update checks (tray menu + optional notification)
         self._update_monitor = UpdateMonitor(
-            get_channel=self._get_update_channel,
+            get_enabled=self._update_checks_enabled,
             on_result=self._on_update_check_result,
         )
         self._update_monitor.start()
@@ -557,6 +559,7 @@ class TrayIndicator:
                 self.indicator.set_icon_theme_path(ICON_DIR)
             self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
             self.indicator.set_title("Vocalinux")
+            self._indicator_title = "Vocalinux"
         except Exception as e:
             logger.error(f"Failed to create AppIndicator: {e}")
             GLib.idle_add(self._show_appindicator_error_dialog, str(e))
@@ -576,6 +579,11 @@ class TrayIndicator:
         # Add menu items
         self._add_menu_item("Start Voice Typing", self._on_start_clicked)
         self._add_menu_item("Stop Voice Typing", self._on_stop_clicked)
+        self._cancel_menu_item = self._add_menu_item(
+            "Cancel Transcription", self._on_cancel_transcription_clicked
+        )
+        self._cancel_menu_item.set_no_show_all(True)
+        self._cancel_menu_item.hide()
         self._add_menu_item("Transcribe Audio File\u2026", self._on_transcribe_file_clicked)
         self._add_menu_separator()
 
@@ -706,6 +714,8 @@ class TrayIndicator:
 
     def _toggle_recognition(self) -> None:
         """Toggle the recognition state between IDLE and LISTENING."""
+        if self._cancel_if_transcribing():
+            return
         with self._ptt_lock:
             self._ptt_owner = None
             if self.speech_engine.state == RecognitionState.IDLE:
@@ -715,10 +725,22 @@ class TrayIndicator:
 
     def _start_recognition(self) -> None:
         """Start voice recognition (for push-to-talk mode)."""
+        if self._cancel_if_transcribing():
+            return
         self._push_to_talk_press(
             self.shortcut_manager,
             lambda: self.speech_engine.start_recognition(mode="push_to_talk"),
         )
+
+    def _cancel_if_transcribing(self) -> bool:
+        """Cancel a running transcription; the recording hotkey doubles as cancel (#991)."""
+        if self.speech_engine.state != RecognitionState.PROCESSING:
+            return False
+        is_transcribing = getattr(self.speech_engine, "is_transcribing", None)
+        if not callable(is_transcribing) or is_transcribing() is not True:
+            return False
+        cancel = getattr(self.speech_engine, "cancel_transcription", None)
+        return callable(cancel) and cancel() is True
 
     def _push_to_talk_press(
         self, manager: Optional[KeyboardShortcutManager], start: Callable[[], bool]
@@ -760,6 +782,8 @@ class TrayIndicator:
         dictating it stops, matching the main toggle's behaviour regardless
         of which language the current utterance is in.
         """
+        if self._cancel_if_transcribing():
+            return
         with self._ptt_lock:
             self._ptt_owner = None
             if self.speech_engine.state == RecognitionState.IDLE:
@@ -771,6 +795,8 @@ class TrayIndicator:
         self, language: str, manager: Optional[KeyboardShortcutManager] = None
     ) -> None:
         """Push-to-talk start for a per-language shortcut (#805)."""
+        if self._cancel_if_transcribing():
+            return
         self._push_to_talk_press(
             manager,
             lambda: self.speech_engine.start_recognition_with_language(
@@ -1158,7 +1184,13 @@ class TrayIndicator:
         self.indicator.set_icon_full(icon_key, description)
         self._last_icon_key = icon_key
 
-    def _update_ui(self, state: RecognitionState):
+    def _set_indicator_title(self, title: str) -> None:
+        if getattr(self, "_indicator_title", "Vocalinux") == title:
+            return
+        self.indicator.set_title(title)
+        self._indicator_title = title
+
+    def _update_ui(self, state: RecognitionState) -> bool:
         """
         Update the UI based on the recognition state.
 
@@ -1181,19 +1213,36 @@ class TrayIndicator:
         if not hasattr(self, "indicator"):
             return False
 
+        is_transcribing = getattr(self.speech_engine, "is_transcribing", None)
+        transcribing = callable(is_transcribing) and is_transcribing() is True
+        show_cancel = state == RecognitionState.PROCESSING and transcribing
+        self._set_cancel_menu_item_visible(show_cancel)
+
         if state == RecognitionState.IDLE:
+            self._set_indicator_title("Vocalinux")
             self._set_indicator_icon(self._icon_keys["default"], "Microphone off")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
         elif state == RecognitionState.LISTENING:
+            self._set_indicator_title("Vocalinux")
             self._set_indicator_icon(self._icon_keys["active"], "Microphone on")
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.PROCESSING:
-            self._set_indicator_icon(self._icon_keys["processing"], "Processing speech")
+            if transcribing:
+                shortcut_manager = getattr(self, "shortcut_manager", None)
+                name = getattr(shortcut_manager, "shortcut_display_name", None)
+                if not isinstance(name, str) or not name:
+                    name = "the recording shortcut"
+                description = f"Transcribing, press {name} again to cancel"
+            else:
+                description = "Processing speech"
+            self._set_indicator_title(description if transcribing else "Vocalinux")
+            self._set_indicator_icon(self._icon_keys["processing"], description)
             self._set_menu_item_enabled("Start Voice Typing", False)
             self._set_menu_item_enabled("Stop Voice Typing", True)
         elif state == RecognitionState.ERROR:
+            self._set_indicator_title("Vocalinux")
             self._set_indicator_icon(self._icon_keys["default"], "Error")
             self._set_menu_item_enabled("Start Voice Typing", True)
             self._set_menu_item_enabled("Stop Voice Typing", False)
@@ -1236,6 +1285,13 @@ class TrayIndicator:
                 item.set_sensitive(enabled)
                 break
 
+    def _set_cancel_menu_item_visible(self, visible: bool) -> None:
+        item = getattr(self, "_cancel_menu_item", None)
+        if item is None or getattr(self, "menu", None) is None:
+            return
+        item.set_sensitive(visible)
+        item.set_visible(visible)
+
     def _on_start_clicked(self, widget):
         """Handle click on the Start Voice Typing menu item."""
         logger.debug("Start Voice Typing clicked")
@@ -1245,6 +1301,11 @@ class TrayIndicator:
         """Handle click on the Stop Voice Typing menu item."""
         logger.debug("Stop Voice Typing clicked")
         self.speech_engine.stop_recognition()
+
+    def _on_cancel_transcription_clicked(self, widget: Any) -> None:
+        """Cancel an in-progress transcription from the tray menu."""
+        logger.debug("Cancel Transcription clicked")
+        self.speech_engine.cancel_transcription()
 
     def _refresh_history_menu(self) -> bool:
         """Rebuild the Recent Snippets submenu from the current history."""
@@ -1319,7 +1380,7 @@ class TrayIndicator:
         logger.debug("Settings clicked")
         self._show_settings_page(None)
 
-    def _show_settings_page(self, page_name: Optional[str]):
+    def _show_settings_page(self, page_name: Optional[str]) -> None:
         """Open settings, optionally focused on a specific sidebar page."""
         dialog = self._settings_dialog
         if dialog is not None:
@@ -1343,11 +1404,15 @@ class TrayIndicator:
             update_status_callback=lambda available, release: self._apply_update_status(
                 available, release, notify=False
             ),
+            update_checks_callback=self._on_update_checks_toggled,
             overlay_enabled_callback=self.set_overlay_enabled,
             hotkey_listener_update_callback=self._setup_keyboard_shortcuts,
             language_shortcuts_update_callback=self.refresh_language_shortcuts,
             history_update_callback=self._apply_history_settings,
             history_clear_callback=self.clear_transcription_history,
+            dictation_pad_open_callback=(
+                self.dictation_pad.show_pad if self.dictation_pad is not None else None
+            ),
         )
         dialog.connect("response", self._on_settings_dialog_response)
         dialog.connect("destroy", self._on_settings_dialog_destroyed)
@@ -1364,9 +1429,18 @@ class TrayIndicator:
         if self._settings_dialog is dialog:
             self._settings_dialog = None
 
-    def _get_update_channel(self) -> str:
-        """Return the configured release channel for background update checks."""
-        return self.config_manager.get_str("updates", "channel", "stable")
+    def _update_checks_enabled(self) -> bool:
+        """Return whether background update checks are enabled."""
+        return self.config_manager.get_bool(
+            "updates", "check_automatically", DEFAULT_CHECK_AUTOMATICALLY
+        )
+
+    def _on_update_checks_toggled(self, enabled: bool) -> None:
+        """Update tray state when automatic update checks change."""
+        if not enabled:
+            self._apply_update_status(False, None, notify=False)
+        else:
+            self._update_monitor.check_now()
 
     def _on_update_check_result(self, available: bool, release: Optional[ReleaseInfo]):
         """Handle a background update-check result (already on the GLib main loop)."""
@@ -1403,6 +1477,8 @@ class TrayIndicator:
 
     def _maybe_notify_update(self, release: ReleaseInfo) -> None:
         """Send one desktop notification per new version when notifications are on."""
+        if not self._update_checks_enabled():
+            return
         if not self.config_manager.get_bool("ui", "show_notifications", True):
             return
         if self.config_manager.get_str("updates", "last_notified_version", "") == release.tag_name:

@@ -82,7 +82,7 @@ format: _tooling
 # Run type checking (mypy)
 typecheck: _tooling
     @echo "Running mypy..."
-    uv run --no-sync mypy src/
+    uv run --locked --no-sync --only-group lint mypy src/
 
 # Build distribution packages
 build:
@@ -243,7 +243,7 @@ distro-packages-check: _tooling
 flatpak-deps: _tooling
     uv run --no-sync python scripts/sync_flatpak_deps.py
 
-# Fail if the Flatpak manifest is behind requirements/runtime.txt.
+# Fail if the Flatpak manifest is behind requirements/vad.txt (runtime + [vad]).
 flatpak-deps-check: _tooling
     uv run --no-sync python scripts/sync_flatpak_deps.py --check
 

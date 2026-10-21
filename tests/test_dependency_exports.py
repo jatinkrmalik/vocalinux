@@ -53,6 +53,15 @@ def _exported_names(path: Path) -> set[str]:
     return names
 
 
+def _exported_versions(path: Path, names: set[str]) -> dict[str, str]:
+    versions = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"^([A-Za-z0-9._-]+)==([^ ;\\]+)", line)
+        if match and match.group(1).lower() in names:
+            versions[match.group(1).lower()] = match.group(2)
+    return versions
+
+
 def _extras() -> dict[str, list[str]]:
     return _pyproject()["project"]["optional-dependencies"]
 
@@ -333,6 +342,27 @@ def test_every_extra_reaches_its_own_export() -> None:
             missing.append(f"{export.relative_to(REPO_ROOT)} is missing {absent}")
     assert checked, "no extra was compared against its export"
     assert not missing, "re-run `just lock`:\n" + "\n".join(missing)
+
+
+def test_parakeet_extra_declares_sherpa_onnx_core() -> None:
+    """The lock needs an explicit dependency when armv7l wheel metadata omits it."""
+    assert "sherpa-onnx-core" in _requirement_names(_extras()["parakeet"])
+
+
+def test_parakeet_export_pins_sherpa_onnx_core_to_sherpa_version() -> None:
+    """The core library version must match the locked sherpa-onnx version."""
+    versions = _exported_versions(
+        REQUIREMENTS / "parakeet.txt", {"sherpa-onnx", "sherpa-onnx-core"}
+    )
+    assert versions["sherpa-onnx-core"] == versions["sherpa-onnx"]
+
+
+def test_parakeet_lock_pins_sherpa_onnx_core_to_sherpa_version() -> None:
+    """The lock keeps sherpa-onnx-core at the engine's version."""
+    with (REPO_ROOT / "uv.lock").open("rb") as handle:
+        packages = tomllib.load(handle)["package"]
+    versions = {package["name"]: package["version"] for package in packages if "version" in package}
+    assert versions["sherpa-onnx-core"] == versions["sherpa-onnx"]
 
 
 def test_every_extra_the_installer_installs_is_pinnable() -> None:

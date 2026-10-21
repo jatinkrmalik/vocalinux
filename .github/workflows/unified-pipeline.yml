@@ -153,6 +153,10 @@ jobs:
         run: |
           uv run --locked --only-group lint isort --check-only --diff --profile black src/ tests/
 
+      - name: Type check (mypy)
+        run: |
+          uv run --locked --only-group lint mypy src/
+
       # --locked above fails when uv.lock drifts from pyproject.toml; nothing
       # covered the step after that one. The exports are hash-pinned copies of
       # the lock written by `just lock`, and no workflow ever re-ran it, so one

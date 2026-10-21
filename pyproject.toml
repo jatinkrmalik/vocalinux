@@ -59,6 +59,9 @@ whisper = [
 ]
 parakeet = [
     "sherpa-onnx>=1.12.0,<2",
+    # Match the locked sherpa-onnx version; bump both together. armv7l wheels omit this
+    # dependency metadata, and the export test enforces the matching core pin.
+    "sherpa-onnx-core==1.13.7; platform_machine != 'armv7l'",
 ]
 faster_whisper = [
     "faster-whisper>=1.0.0,<2",
@@ -110,6 +113,7 @@ lint = [
     "black>=23.0.0",
     "isort>=5.12.0",
     "flake8>=6.0.0",
+    "mypy>=1.0.0",
 ]
 
 [project.scripts]

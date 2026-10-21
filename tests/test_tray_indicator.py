@@ -7,7 +7,9 @@ The tests focus on the business logic of the TrayIndicator class.
 
 import os
 import sys
+import threading
 import unittest
+from threading import Thread
 from types import SimpleNamespace
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -190,12 +192,133 @@ class TestTrayIndicator(unittest.TestCase):
         self.mock_speech_engine.stop_recognition.assert_called_once()
         self.mock_speech_engine.start_recognition.assert_not_called()
 
-    def test_toggle_recognition_from_processing(self):
+    def test_toggle_recognition_from_processing(self) -> None:
         """Test toggling recognition state from PROCESSING."""
         self.mock_speech_engine.state = self.RecognitionState.PROCESSING
         self.tray_indicator._toggle_recognition()
         self.mock_speech_engine.stop_recognition.assert_called_once()
         self.mock_speech_engine.start_recognition.assert_not_called()
+        self.mock_speech_engine.cancel_transcription.assert_not_called()
+
+    def test_toggle_recognition_cancels_transcription_before_lock(self) -> None:
+        self.mock_speech_engine.state = self.RecognitionState.PROCESSING
+        self.mock_speech_engine.is_transcribing.return_value = True
+        self.mock_speech_engine.cancel_transcription.return_value = True
+
+        self.tray_indicator._toggle_recognition()
+
+        self.mock_speech_engine.cancel_transcription.assert_called_once()
+        self.mock_speech_engine.stop_recognition.assert_not_called()
+        self.mock_speech_engine.start_recognition.assert_not_called()
+
+    def test_push_to_talk_cancel_clears_owner_and_release_is_noop(self) -> None:
+        self.mock_speech_engine.state = self.RecognitionState.PROCESSING
+        self.mock_speech_engine.is_transcribing.return_value = True
+        self.mock_speech_engine.cancel_transcription.return_value = True
+
+        self.tray_indicator._start_recognition()
+        self.tray_indicator._release_main_push_to_talk()
+
+        self.mock_speech_engine.cancel_transcription.assert_called_once()
+        self.mock_speech_engine.start_recognition.assert_not_called()
+        self.mock_speech_engine.stop_recognition.assert_not_called()
+
+    def test_language_hotkeys_cancel_transcription(self) -> None:
+        self.mock_speech_engine.state = self.RecognitionState.PROCESSING
+        self.mock_speech_engine.is_transcribing.return_value = True
+        self.mock_speech_engine.cancel_transcription.return_value = True
+
+        self.tray_indicator._toggle_recognition_in_language("fr")
+        self.tray_indicator._start_recognition_in_language("fr", self.mock_ksm)
+
+        self.assertEqual(self.mock_speech_engine.cancel_transcription.call_count, 2)
+        self.mock_speech_engine.start_recognition_with_language.assert_not_called()
+        self.mock_speech_engine.stop_recognition.assert_not_called()
+
+    def test_cancel_hotkey_does_not_wait_for_ptt_lock(self) -> None:
+        self.mock_speech_engine.state = self.RecognitionState.PROCESSING
+        self.mock_speech_engine.is_transcribing.return_value = True
+        self.mock_speech_engine.cancel_transcription.return_value = True
+        lock_held = threading.Event()
+        release_lock = threading.Event()
+        hotkey_finished = threading.Event()
+
+        def hold_lock() -> None:
+            with self.tray_indicator._ptt_lock:
+                lock_held.set()
+                release_lock.wait(timeout=2.0)
+
+        def press_hotkey() -> None:
+            self.tray_indicator._toggle_recognition()
+            hotkey_finished.set()
+
+        holder = Thread(target=hold_lock)
+        holder.start()
+        self.assertTrue(lock_held.wait(timeout=1.0))
+        hotkey = Thread(target=press_hotkey)
+        hotkey.start()
+        try:
+            self.assertTrue(hotkey_finished.wait(timeout=0.5))
+        finally:
+            release_lock.set()
+            holder.join(timeout=1.0)
+            hotkey.join(timeout=1.0)
+
+        self.mock_speech_engine.cancel_transcription.assert_called_once()
+
+    def test_cancel_menu_visibility_and_transcription_tooltip(self) -> None:
+        self.tray_indicator.indicator = MagicMock()
+        self.tray_indicator.menu = MagicMock()
+        self.tray_indicator._cancel_menu_item = MagicMock()
+        self.tray_indicator._icon_keys = {
+            "default": "off",
+            "active": "on",
+            "processing": "processing",
+        }
+        self.tray_indicator.shortcut_manager.shortcut_display_name = "Ctrl+Alt+V"
+        self.mock_speech_engine.state = self.RecognitionState.PROCESSING
+        self.mock_speech_engine.is_transcribing.return_value = True
+
+        with patch.object(self.tray_indicator, "_set_indicator_icon"):
+            with patch.object(self.tray_indicator, "_set_menu_item_enabled"):
+                with patch.object(self.tray_indicator, "_update_overlay"):
+                    self.tray_indicator._update_ui(self.RecognitionState.PROCESSING)
+                    self.assertEqual(
+                        self.tray_indicator.indicator.set_title.call_args.args[0],
+                        "Transcribing, press Ctrl+Alt+V again to cancel",
+                    )
+                    self.tray_indicator._cancel_menu_item.set_sensitive.assert_called_with(True)
+                    self.tray_indicator._cancel_menu_item.set_visible.assert_called_with(True)
+
+                    self.mock_speech_engine.state = self.RecognitionState.LISTENING
+                    self.tray_indicator._update_ui(self.RecognitionState.LISTENING)
+
+        self.tray_indicator._cancel_menu_item.set_sensitive.assert_called_with(False)
+        self.tray_indicator._cancel_menu_item.set_visible.assert_called_with(False)
+        self.tray_indicator.indicator.set_title.assert_called_with("Vocalinux")
+
+    def test_cancel_tooltip_uses_fallback_without_shortcut_name(self) -> None:
+        self.tray_indicator.indicator = MagicMock()
+        self.tray_indicator.menu = MagicMock()
+        self.tray_indicator._cancel_menu_item = MagicMock()
+        self.tray_indicator._icon_keys = {"default": "off", "active": "on", "processing": "busy"}
+        self.tray_indicator.shortcut_manager = MagicMock()
+        self.mock_speech_engine.state = self.RecognitionState.PROCESSING
+        self.mock_speech_engine.is_transcribing.return_value = True
+
+        with patch.object(self.tray_indicator, "_set_indicator_icon") as set_icon:
+            with patch.object(self.tray_indicator, "_set_menu_item_enabled"):
+                with patch.object(self.tray_indicator, "_update_overlay"):
+                    self.tray_indicator._update_ui(self.RecognitionState.PROCESSING)
+
+        set_icon.assert_called_once_with(
+            "busy", "Transcribing, press the recording shortcut again to cancel"
+        )
+
+    def test_cancel_menu_callback_calls_manager_directly(self) -> None:
+        self.tray_indicator._on_cancel_transcription_clicked(None)
+
+        self.mock_speech_engine.cancel_transcription.assert_called_once()
 
     def test_on_start_clicked(self):
         """Test start button click handler."""
@@ -325,7 +448,7 @@ class TestTrayIndicator(unittest.TestCase):
             self.assertEqual(kwargs.get("initial_page"), "about")
             mock_dialog_instance.show.assert_called_once()
 
-    def test_update_available_shows_menu_and_opens_about(self):
+    def test_update_available_shows_menu_and_opens_about(self) -> None:
         """Background update check reveals tray item and opens About with release."""
         from vocalinux.utils.update_checker import ReleaseInfo
 
@@ -375,6 +498,32 @@ class TestTrayIndicator(unittest.TestCase):
             self.assertEqual(kwargs.get("initial_page"), "about")
             self.assertEqual(kwargs.get("pending_update"), release)
             self.assertIn("update_status_callback", kwargs)
+            self.assertIn("update_checks_callback", kwargs)
+
+    def test_update_monitor_follows_build_without_channel_getter(self) -> None:
+        monitor = self.tray_indicator._update_monitor
+
+        self.assertIsNone(monitor._get_channel)
+        self.assertIs(monitor._get_enabled.__self__, self.tray_indicator)
+        self.assertIs(
+            monitor._get_enabled.__func__,
+            type(self.tray_indicator)._update_checks_enabled,
+        )
+
+    def test_automatic_update_checks_toggle_updates_tray(self) -> None:
+        menu_item = MagicMock()
+        self.tray_indicator._update_menu_item = menu_item
+        self.tray_indicator.menu = MagicMock()
+        self.tray_indicator._pending_update = MagicMock()
+
+        self.tray_indicator._on_update_checks_toggled(False)
+
+        self.assertIsNone(self.tray_indicator._pending_update)
+        menu_item.hide.assert_called_once()
+
+        self.tray_indicator._update_monitor.check_now = MagicMock()
+        self.tray_indicator._on_update_checks_toggled(True)
+        self.tray_indicator._update_monitor.check_now.assert_called_once_with()
 
     def test_update_notification_not_marked_when_notify_send_missing(self):
         """Do not record last_notified_version if notify-send cannot be spawned."""
@@ -406,6 +555,33 @@ class TestTrayIndicator(unittest.TestCase):
             self.tray_indicator._maybe_notify_update(release)
 
         self.assertEqual(recorded_sets, [])
+
+    def test_disabled_automatic_checks_do_not_send_notification(self) -> None:
+        from vocalinux.utils.update_checker import ReleaseInfo
+
+        release = ReleaseInfo(
+            tag_name="v0.99.0",
+            version="0.99.0",
+            name="v0.99.0",
+            html_url="https://github.com/VocaHQ/vocalinux/releases/tag/v0.99.0",
+            body="Notes",
+            published_at="2026-08-06T00:00:00Z",
+            prerelease=False,
+            channel="stable",
+        )
+
+        def get_bool(section: str, key: str, default: bool = False) -> bool:
+            if section == "updates" and key == "check_automatically":
+                return False
+            return default
+
+        self.tray_indicator.config_manager = self.mock_config_manager
+        self.mock_config_manager.get_bool.side_effect = get_bool
+
+        with patch("subprocess.Popen") as mock_popen:
+            self.tray_indicator._maybe_notify_update(release)
+
+        mock_popen.assert_not_called()
 
     def test_update_notification_persists_after_successful_spawn(self):
         """Record last_notified_version only after notify-send is spawned."""
@@ -970,6 +1146,23 @@ class TestTrayIndicator(unittest.TestCase):
                 kwargs["overlay_enabled_callback"],
                 self.tray_indicator.set_overlay_enabled,
             )
+
+    def test_settings_dialog_receives_dictation_pad_open_callback(self) -> None:
+        """Settings receives the live pad's show callback when one exists."""
+        import vocalinux.ui.tray_indicator as tray_module
+
+        pad = MagicMock()
+        self.tray_indicator.dictation_pad = pad
+        self.tray_indicator._settings_dialog = None
+        mock_dialog_class = MagicMock(return_value=MagicMock())
+
+        with patch.object(tray_module, "SettingsDialog", mock_dialog_class):
+            self.tray_indicator._on_settings_clicked(None)
+
+        self.assertIs(
+            mock_dialog_class.call_args.kwargs["dictation_pad_open_callback"],
+            pad.show_pad,
+        )
 
     def test_quit_destroys_overlay(self):
         mock_overlay = MagicMock()
