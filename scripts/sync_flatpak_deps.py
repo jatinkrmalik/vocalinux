@@ -5,10 +5,12 @@
 flatpak-pip-generator, from a package list typed out by hand on the command
 line recorded in its first line, and then hand-edited. Nothing regenerated it
 afterwards and no test compared it to anything, so it drifted: by 2026-09-10 ten
-of its fifteen shared packages were behind `requirements/vad.txt`, which carries
-the runtime dependencies plus the `[vad]` extra. The Flatpak installs the
-project with `pip3 install --no-deps`, so its dependency constraints are never
-evaluated during the build.
+of its fifteen shared packages were behind `requirements/runtime.txt`, including
+pywhispercpp, which sat at 1.4.1 under the project's own `>=1.5.0` floor. The
+Flatpak installs the project with `pip3 install --no-deps`, so that constraint
+is never evaluated and nothing there could notice. It now reads
+`requirements/vad.txt`, the runtime dependencies plus the `[vad]` extra, so
+Silero VAD's onnxruntime ships too (#969).
 
 This script closes the loop the other way round: it reads the hash-pinned export
 that `just lock` produces and rewrites every source in the manifest to the

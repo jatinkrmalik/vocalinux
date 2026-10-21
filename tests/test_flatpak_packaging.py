@@ -3,7 +3,7 @@
 `packaging/flatpak/python3-dependencies.yaml` was generated once from a package
 list typed on a command line, then hand-edited, then never compared to anything.
 By 2026-09-10 ten of its fifteen shared packages were behind
-`requirements/vad.txt` and two more (pydub, lxml) were still built after
+`requirements/runtime.txt` and two more (pydub, lxml) were still built after
 #705 deleted them for having no imports in `src/`.
 
 The one that mattered was pywhispercpp 1.4.1, under the project's own
