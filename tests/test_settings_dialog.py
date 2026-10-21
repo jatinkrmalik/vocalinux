@@ -16,6 +16,7 @@ import sys
 import textwrap
 import time
 import unittest
+from typing import Optional
 from unittest.mock import MagicMock, Mock, call, patch
 
 # Mock GTK before importing anything that might use it
@@ -1780,6 +1781,83 @@ class TestSettingsControlColumn(unittest.TestCase):
     def test_model_card_has_no_legend(self):
         self.assertNotIn("✓ Downloaded    ↓ Will download    ★ Recommended", self.source)
         self.assertNotIn("Tip: <b>", self.source)
+
+
+def _gpu_settings_dialog(saved_device: Optional[int]) -> MagicMock:
+    dialog = MagicMock()
+    dialog.config_manager.get.return_value = saved_device
+    dialog.gpu_device_combo.set_active_id.return_value = True
+    return dialog
+
+
+def test_gpu_dropdown_uses_ggml_indices_and_labels() -> None:
+    from vocalinux.ui import settings_dialog
+    from vocalinux.utils import whispercpp_model_info
+
+    dialog = _gpu_settings_dialog(None)
+    ggml_devices = [
+        {
+            "index": 0,
+            "name": "NVIDIA GeForce GTX 1050",
+            "backend_name": "Vulkan0",
+            "device_type": "discrete",
+        },
+        {
+            "index": 1,
+            "name": "Intel Arc",
+            "backend_name": "Vulkan1",
+            "device_type": "integrated",
+        },
+    ]
+    with patch.object(whispercpp_model_info, "detect_ggml_gpu_devices", return_value=ggml_devices):
+        settings_dialog._populate_gpu_device_choices(dialog.gpu_device_combo, None)
+
+    dialog.gpu_device_combo.append.assert_any_call("0", "[0] NVIDIA GeForce GTX 1050 (Discrete)")
+    dialog.gpu_device_combo.append.assert_any_call("1", "[1] Intel Arc (Integrated)")
+
+
+def test_gpu_dropdown_falls_back_to_vulkaninfo_when_ggml_probe_is_unavailable() -> None:
+    from vocalinux.ui import settings_dialog
+    from vocalinux.utils import whispercpp_model_info
+
+    dialog = _gpu_settings_dialog(None)
+    vulkan_devices = [
+        {"index": 1, "name": "NVIDIA GPU", "device_type": "discrete"},
+    ]
+    with (
+        patch.object(whispercpp_model_info, "detect_ggml_gpu_devices", return_value=None),
+        patch.object(settings_dialog, "detect_vulkan_devices", return_value=vulkan_devices),
+    ):
+        settings_dialog._populate_gpu_device_choices(dialog.gpu_device_combo, None)
+
+    dialog.gpu_device_combo.append.assert_any_call("1", "[1] NVIDIA GPU (Discrete)")
+
+
+def test_gpu_dropdown_selects_auto_for_stale_saved_index() -> None:
+    from vocalinux.ui import settings_dialog
+    from vocalinux.utils import whispercpp_model_info
+
+    dialog = _gpu_settings_dialog(9)
+
+    def _set_active_id(device_id: str) -> bool:
+        return device_id in {"-1", "0"}
+
+    dialog.gpu_device_combo.set_active_id.side_effect = _set_active_id
+    ggml_devices = [
+        {
+            "index": 0,
+            "name": "NVIDIA GPU",
+            "backend_name": "Vulkan0",
+            "device_type": "discrete",
+        }
+    ]
+    with patch.object(whispercpp_model_info, "detect_ggml_gpu_devices", return_value=ggml_devices):
+        settings_dialog._populate_gpu_device_choices(dialog.gpu_device_combo, 9)
+
+    assert dialog.gpu_device_combo.set_active_id.call_args_list[-2:] == [
+        call("9"),
+        call("-1"),
+    ]
 
 
 if __name__ == "__main__":
