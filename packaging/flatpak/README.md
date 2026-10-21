@@ -69,8 +69,9 @@ To disable device access while keeping GPU support for Vulkan whisper.cpp, run:
 flatpak override --user --nodevice=all --device=dri com.vocalinux.Vocalinux
 ```
 
-On native X11, hotkeys still work through the X11 listener. On Wayland, the
-built-in hotkey needs `/dev/input`: grant `--device=input` on Flatpak 1.15.6 or
+On native X11, hotkeys still work through the X11 listener, except on GNOME X11,
+where mutter never passes physical keys to that listener (#954), so it needs
+`/dev/input` like Wayland. On Wayland, the built-in hotkey needs `/dev/input`: grant `--device=input` on Flatpak 1.15.6 or
 newer, or `--device=all` on older versions. If `/dev/input` is unavailable,
 enable **Settings → Shortcuts → External Activation (Desktop Shortcut)** and
 bind a desktop shortcut to:
