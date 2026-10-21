@@ -104,7 +104,7 @@ class TestMainModule(unittest.TestCase):
 
         self.assertEqual(LANGUAGE_CHOICES, tuple(SUPPORTED_LANGUAGES.keys()))
         # Spot-check newly exposed languages (issue #565 and catalog expansion).
-        for lang in ["auto", "en-us", "hu", "ja", "ko", "ar", "nl", "pl", "uk"]:
+        for lang in ["auto", "en-us", "hu", "ja", "ko", "ar", "nl", "pl", "sl", "uk"]:
             self.assertIn(lang, LANGUAGE_CHOICES)
             with patch("sys.argv", ["vocalinux", "--language", lang]):
                 args = parse_arguments()
