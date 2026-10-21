@@ -15,7 +15,7 @@ import ctypes
 import logging
 import subprocess
 import time
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from .pipewire import (
     PIPEWIRE_INDEX_BASE,
@@ -280,7 +280,7 @@ def _resolve_valid_input_device(audio: Any, preferred_index: Optional[int] = Non
     Returns:
         A valid device index with input channels, or None if none found.
     """
-    input_device_indices = []
+    input_device_indices: list[int] = []
     default_input_index = None
 
     try:
@@ -345,7 +345,7 @@ def _resolve_valid_input_device(audio: Any, preferred_index: Optional[int] = Non
         )
 
     if default_input_index is not None and default_input_index in input_device_indices:
-        return default_input_index
+        return cast(int, default_input_index)
 
     return input_device_indices[0]
 
@@ -644,8 +644,8 @@ def test_audio_input(device_index: Optional[int] = None, duration: float = 1.0) 
         "error": None,
     }
 
-    if is_pipewire_device_index(device_index):
-        return _test_pipewire_input(device_index, duration)
+    if is_pipewire_device_index(cast(int, device_index)):
+        return _test_pipewire_input(cast(int, device_index), duration)
 
     try:
         import numpy as np
@@ -700,12 +700,12 @@ def test_audio_input(device_index: Optional[int] = None, duration: float = 1.0) 
                 return result
 
         # Record and analyze
-        all_amplitudes = []
+        all_amplitudes: list[Any] = []
         frames_to_read = int(RATE * duration / CHUNK)
 
         for _ in range(frames_to_read):
             try:
-                data = stream.read(CHUNK, exception_on_overflow=False)
+                data = cast(Any, stream).read(CHUNK, exception_on_overflow=False)
                 audio_data = np.frombuffer(data, dtype=np.int16)
                 amplitudes = np.abs(audio_data)
                 all_amplitudes.extend(amplitudes)
@@ -724,7 +724,7 @@ def test_audio_input(device_index: Optional[int] = None, duration: float = 1.0) 
             result["mean_amplitude"] = float(np.mean(all_amplitudes))
             # Signal present if max amplitude is above typical digital noise floor
             # 16-bit audio has max value of 32768, noise floor is typically < 100
-            result["has_signal"] = result["max_amplitude"] > 200
+            result["has_signal"] = cast(float, result["max_amplitude"]) > 200
 
     except ImportError as e:
         result["error"] = f"Missing dependency: {e}"

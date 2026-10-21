@@ -10,7 +10,10 @@ UX Design Notes tested:
 - No action buttons - uses title bar close (GNOME HIG)
 """
 
+import os
+import subprocess
 import sys
+import textwrap
 import time
 import unittest
 from unittest.mock import MagicMock, Mock, call, patch
@@ -50,6 +53,24 @@ mock_config_manager.get = Mock(
 mock_config_manager.update_speech_recognition_settings = Mock()
 mock_config_manager.set = Mock()
 mock_config_manager.save_settings = Mock()
+
+
+class TestAvailableEngines(unittest.TestCase):
+    def test_available_engines_preserves_legacy_mapping(self) -> None:
+        from vocalinux.ui import settings_dialog, settings_engines
+
+        with patch.object(settings_engines, "available_engines", return_value=["whisper_cpp"]):
+            self.assertEqual(
+                settings_dialog.get_available_engines(),
+                {
+                    "vosk": False,
+                    "whisper": False,
+                    "whisper_cpp": True,
+                    "parakeet": False,
+                    "faster_whisper": False,
+                    "remote_api": False,
+                },
+            )
 
 
 def apply_settings_internal(dialog, settings: dict) -> bool:
@@ -1281,7 +1302,7 @@ class TestSettingsNavigation(unittest.TestCase):
     def test_sidebar_category_list_is_scrollable(self) -> None:
         """The category list sits in a ScrolledWindow so the dialog can shrink
         vertically without clipping categories (#678)."""
-        class_body = self.source_code.split("class SettingsDialog(Gtk.Dialog):")[1]
+        class_body = self.source_code.split("class SettingsDialog(AboutSectionMixin):")[1]
         init_body = class_body.split("def __init__")[1].split("\n    def ")[0]
         self.assertIn("sidebar_scroller = Gtk.ScrolledWindow()", init_body)
         self.assertIn(
@@ -1299,7 +1320,12 @@ class TestAboutPage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.source = TestSettingsSearch._settings_source()
-        cls.about = cls.source.split("def _build_about_section")[1].split("\n    def ")[0]
+        from pathlib import Path
+
+        about_path = Path(__file__).resolve().parents[1] / "src/vocalinux/ui/settings_about.py"
+        cls.about_source = about_path.read_text(encoding="utf-8")
+        cls.source += cls.about_source
+        cls.about = cls.about_source.split("def _build_about_section")[1].split("\n    def ")[0]
 
     def test_three_groups_keep_updater(self):
         self.assertIn('title="Vocalinux"', self.about)
@@ -1382,8 +1408,8 @@ class TestAboutPage(unittest.TestCase):
     def test_talk_to_us_sits_above_updates(self):
         self.assertLess(self.about.find('title="Talk to us"'), self.about.find('title="Updates"'))
         self.assertLess(
-            self.about.find("self.about_tab.pack_start(talk_group"),
-            self.about.find("self.about_tab.pack_start(updates_group"),
+            self.about.find("about_tab.pack_start(talk_group"),
+            self.about.find("about_tab.pack_start(updates_group"),
         )
 
     def test_channel_check_shares_one_row(self):
@@ -1572,6 +1598,92 @@ class TestAboutInk(unittest.TestCase):
             self.assertEqual(_about_ink_hex(), _ABOUT_INK_ON_DARK)
         else:
             self.assertIn(_about_ink_hex(), {_ABOUT_INK, _ABOUT_INK_ON_DARK})
+
+
+class TestAboutColorSchemeRead(unittest.TestCase):
+    def test_about_section_reads_os_scheme_once_per_build(self) -> None:
+        script = textwrap.dedent("""
+            from unittest.mock import MagicMock, patch
+
+            from vocalinux.ui import settings_about, settings_dialog
+
+            dialog = MagicMock()
+            gtk = MagicMock()
+            gtk.Settings.get_default.return_value = None
+            with (
+                patch.object(settings_about, "Gtk", new=gtk),
+                patch.object(settings_dialog, "PreferenceRow", return_value=MagicMock()),
+                patch.object(settings_dialog, "PreferencesGroup", return_value=MagicMock()),
+                patch.object(settings_dialog, "_combo_with_suffix", return_value=MagicMock()),
+                patch.object(settings_dialog, "_combo_chrome"),
+                patch.object(settings_dialog, "_style_action_button"),
+                patch.object(settings_dialog, "_set_accessible_name"),
+                patch("vocalinux.ui.settings_about.os.path.exists", return_value=False),
+                patch(
+                    "vocalinux.utils.gtk_color_scheme.read_os_color_scheme",
+                    return_value="prefer-light",
+                ) as read_color_scheme,
+            ):
+                settings_about.AboutSectionMixin._build_about_section(dialog)
+                assert read_color_scheme.call_count == 1, read_color_scheme.call_count
+                print(f"ABOUT_SCHEME_READS={read_color_scheme.call_count}")
+            """)
+        env = os.environ.copy()
+        worktree_src = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+        env["PYTHONPATH"] = os.pathsep.join(
+            path for path in (worktree_src, env.get("PYTHONPATH", "")) if path
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            env=env,
+            text=True,
+        )
+        self.assertIn("ABOUT_SCHEME_READS=1", result.stdout)
+
+
+class TestPasteLongTextPreference(unittest.TestCase):
+    def test_switch_loads_and_saves(self) -> None:
+        from vocalinux.ui import settings_dialog
+
+        dialog = MagicMock()
+        dialog.config_manager.get_settings.return_value = {
+            "general": {},
+            "ui": {},
+            "text_injection": {},
+            "history": {},
+            "auto_pause": {},
+            "model_keepalive": {},
+            "post_processing": {},
+            "advanced": {},
+        }
+        dialog.config_manager.get_paste_long_text.return_value = True
+        dialog.config_manager.get_paste_shortcut.return_value = "auto"
+        dialog._get_current_settings.return_value = {
+            "engine": "whisper_cpp",
+            "language": "auto",
+            "model_size": "tiny",
+            "vad_sensitivity": 3,
+            "silence_timeout": 2.0,
+        }
+        dialog._follow_layout_supported.return_value = False
+
+        with patch.object(
+            settings_dialog, "get_available_engines", return_value={"whisper_cpp": True}
+        ):
+            with patch("vocalinux.ui.autostart_manager.is_autostart_enabled", return_value=False):
+                settings_dialog.SettingsDialog._load_and_apply_settings(dialog)
+        dialog.paste_long_text_switch.set_active.assert_called_once_with(True)
+
+        dialog.config_manager.reset_mock()
+        with patch.object(settings_dialog, "_handlers_suppressed", return_value=False):
+            result = settings_dialog.SettingsDialog._on_paste_long_text_toggled(
+                dialog, MagicMock(), True
+            )
+        self.assertFalse(result)
+        dialog.config_manager.set_paste_long_text.assert_called_once_with(True)
+        dialog.config_manager.save_settings.assert_called_once_with()
 
 
 class TestSettingsControlColumn(unittest.TestCase):

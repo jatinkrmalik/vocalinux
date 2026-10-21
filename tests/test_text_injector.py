@@ -4,6 +4,7 @@ Tests for text injection functionality.
 
 import contextlib
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -565,6 +566,32 @@ class TestTextInjector(unittest.TestCase):
 
         result = injector.inject_text("Test")
         self.assertTrue(result)
+
+    def test_window_info_subprocesses_run_only_at_debug(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+
+        with patch.object(injector, "_inject_with_xdotool"):
+            self.mock_subprocess.reset_mock()
+            with self.assertLogs(
+                "vocalinux.text_injection.text_injector",
+                level=logging.INFO,
+            ):
+                self.assertTrue(injector.inject_text("Test"))
+            self.mock_subprocess.assert_not_called()
+
+            self.mock_subprocess.reset_mock()
+            with self.assertLogs(
+                "vocalinux.text_injection.text_injector",
+                level=logging.DEBUG,
+            ):
+                self.assertTrue(injector.inject_text("Test"))
+
+        self.assertGreater(self.mock_subprocess.call_count, 0)
+        self.assertEqual(
+            self.mock_subprocess.call_args_list[0].args[0],
+            ["xdotool", "getactivewindow"],
+        )
 
     def test_inject_text_returns_false_on_failure(self):
         """Test that inject_text returns False on failure."""
@@ -1785,6 +1812,219 @@ class TestTextInjectorEdgeCases(unittest.TestCase):
             commands,
         )
         self.assertFalse(any("Escape" in command for command in commands))
+
+    def test_x11_long_text_pastes_when_enabled(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        text = "x" * 30
+        with patch.object(injector, "_paste_long_text_enabled", return_value=True):
+            with patch.object(injector, "_clipboard_holds_non_text", return_value=False):
+                with patch.object(injector, "_wait_for_modifiers_released") as wait:
+                    with patch.object(
+                        injector, "_inject_via_clipboard_paste", return_value=True
+                    ) as paste:
+                        injector._inject_with_xdotool(text)
+        wait.assert_called_once_with()
+        paste.assert_called_once_with(text, env=mock.ANY)
+
+    def test_x11_long_text_paste_is_opt_in_and_requires_thirty_chars(self) -> None:
+        for enabled, text in ((False, "x" * 30), (True, "x" * 29)):
+            with self.subTest(enabled=enabled, length=len(text)):
+                injector = TextInjector()
+                injector.environment = DesktopEnvironment.X11
+                self.mock_subprocess.reset_mock()
+                with patch.object(injector, "_paste_long_text_enabled", return_value=enabled):
+                    with patch.object(injector, "_inject_via_clipboard_paste") as paste:
+                        injector._inject_with_xdotool(text)
+                paste.assert_not_called()
+                self.assertTrue(
+                    any(
+                        call.args and call.args[0][:2] == ["xdotool", "type"]
+                        for call in self.mock_subprocess.call_args_list
+                    )
+                )
+
+    def test_x11_long_text_paste_failure_falls_back_to_typing(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        with patch.object(injector, "_paste_long_text_enabled", return_value=True):
+            with patch.object(injector, "_clipboard_holds_non_text", return_value=False):
+                with patch.object(injector, "_inject_via_clipboard_paste", return_value=False):
+                    injector._inject_with_xdotool("x" * 30)
+        self.assertTrue(
+            any(
+                call.args and call.args[0][:2] == ["xdotool", "type"]
+                for call in self.mock_subprocess.call_args_list
+            )
+        )
+
+    def _mock_x11_clipboard_targets(self, stdout: str, returncode: int = 0) -> None:
+        def which_side_effect(command: str) -> str | None:
+            return f"/usr/bin/{command}" if command in {"xclip", "xdotool"} else None
+
+        def run_side_effect(command: list[str], **kwargs: Any) -> MagicMock:
+            if command == ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"]:
+                return MagicMock(returncode=returncode, stdout=stdout, stderr="")
+            return MagicMock(returncode=0, stdout="1234", stderr="")
+
+        self.mock_which.side_effect = which_side_effect
+        self.mock_subprocess.side_effect = run_side_effect
+
+    def test_x11_long_text_types_when_clipboard_has_image_targets(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        self._mock_x11_clipboard_targets("TARGETS\nTIMESTAMP\nMULTIPLE\nSAVE_TARGETS\nimage/png\n")
+
+        with patch.object(injector, "_paste_long_text_enabled", return_value=True):
+            with patch.object(injector, "_inject_via_clipboard_paste") as paste:
+                injector._inject_with_xdotool("x" * 60)
+
+        paste.assert_not_called()
+        self.assertTrue(
+            any(
+                call.args and call.args[0][:2] == ["xdotool", "type"]
+                for call in self.mock_subprocess.call_args_list
+            )
+        )
+
+    def test_x11_long_text_pastes_when_clipboard_has_text_targets(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        self._mock_x11_clipboard_targets(
+            "TARGETS\nTIMESTAMP\nUTF8_STRING\ntext/plain;charset=utf-8\n"
+        )
+
+        with patch.object(injector, "_paste_long_text_enabled", return_value=True):
+            with patch.object(injector, "_inject_via_clipboard_paste", return_value=True) as paste:
+                injector._inject_with_xdotool("x" * 60)
+
+        paste.assert_called_once_with("x" * 60, env=mock.ANY)
+        self.assertFalse(
+            any(
+                call.args and call.args[0][:2] == ["xdotool", "type"]
+                for call in self.mock_subprocess.call_args_list
+            )
+        )
+
+    def test_x11_long_text_pastes_when_clipboard_is_empty(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        self._mock_x11_clipboard_targets("", returncode=1)
+
+        with patch.object(injector, "_paste_long_text_enabled", return_value=True):
+            with patch.object(injector, "_inject_via_clipboard_paste", return_value=True) as paste:
+                injector._inject_with_xdotool("x" * 60)
+
+        paste.assert_called_once_with("x" * 60, env=mock.ANY)
+
+    def test_x11_long_text_types_when_xclip_missing_and_clipboard_is_unreadable(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+
+        def which_side_effect(command: str) -> str | None:
+            return "/usr/bin/xdotool" if command == "xdotool" else None
+
+        self.mock_which.side_effect = which_side_effect
+
+        with patch.object(injector, "_paste_long_text_enabled", return_value=True):
+            with patch.object(injector, "_read_clipboard", return_value=None):
+                with patch.object(injector, "_inject_via_clipboard_paste") as paste:
+                    injector._inject_with_xdotool("x" * 60)
+
+        paste.assert_not_called()
+        self.assertTrue(
+            any(
+                call.args and call.args[0][:2] == ["xdotool", "type"]
+                for call in self.mock_subprocess.call_args_list
+            )
+        )
+
+    def test_x11_clipboard_meta_only_targets_are_treated_conservatively(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        self._mock_x11_clipboard_targets("TARGETS\nTIMESTAMP\nMULTIPLE\nSAVE_TARGETS\n")
+
+        self.assertTrue(injector._clipboard_holds_non_text())
+        self.mock_subprocess.assert_any_call(
+            ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=1.0,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=mock.ANY,
+        )
+
+    def test_paste_long_text_setting_is_read_from_config(self) -> None:
+        injector = TextInjector()
+        with patch(
+            "vocalinux.text_injection.text_injector.config_dir",
+            return_value="/config",
+        ):
+            with patch(
+                "vocalinux.text_injection.text_injector.os.path.exists",
+                return_value=True,
+            ):
+                with patch(
+                    "builtins.open",
+                    mock_open(read_data='{"text_injection":{"paste_long_text":true}}'),
+                ):
+                    self.assertTrue(injector._paste_long_text_enabled())
+
+    def test_xdotool_chunk_typing_has_no_inter_chunk_sleep(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        with patch.object(injector, "_paste_long_text_enabled", return_value=False):
+            self.mock_sleep.reset_mock()
+            injector._inject_with_xdotool("x" * 60)
+        self.assertNotIn((0.1,), [call.args for call in self.mock_sleep.call_args_list])
+
+    def test_plain_x11_clipboard_paste_uses_xdotool_and_x11_clipboard(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        self.assertEqual(
+            injector._clipboard_paste_command(),
+            ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+        )
+        self.assertEqual(
+            injector._clipboard_paste_command(terminal=True),
+            ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"],
+        )
+        with patch.object(injector, "_x11_clipboard_tools", return_value=["xclip"]) as tools:
+            with patch.object(injector, "_read_clipboard", return_value=None):
+                with patch.object(injector, "_copy_to_clipboard", return_value=True) as copy:
+                    self.assertTrue(injector._inject_via_clipboard_paste("dictation"))
+        tools.assert_called_once_with()
+        copy.assert_called_once_with("dictation", tools=["xclip"])
+
+    def test_terminal_paste_detection_runs_on_plain_x11(self) -> None:
+        injector = TextInjector()
+        injector.environment = DesktopEnvironment.X11
+        with patch.object(injector, "_paste_shortcut_preference", return_value="auto"):
+            with patch(
+                "vocalinux.text_injection.text_injector.is_focused_window_terminal",
+                return_value=True,
+            ) as detect_terminal:
+                self.assertTrue(injector._should_use_terminal_paste())
+        detect_terminal.assert_called_once_with()
+
+    def test_read_clipboard_prefers_x11_selection_for_x11_injection(self) -> None:
+        injector = TextInjector.__new__(TextInjector)
+        injector.environment = DesktopEnvironment.X11
+        injector._session_environment = DesktopEnvironment.WAYLAND
+
+        def which_side_effect(command: str) -> str | None:
+            return f"/usr/bin/{command}" if command in {"wl-paste", "xclip", "xsel"} else None
+
+        self.mock_which.side_effect = which_side_effect
+        self.mock_subprocess.return_value = MagicMock(returncode=0, stdout="previous", stderr="")
+        with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "w-1"}):
+            self.assertEqual(injector._read_clipboard(), "previous")
+        self.assertEqual(
+            self.mock_subprocess.call_args.args[0],
+            ["xclip", "-selection", "clipboard", "-o", "-t", "UTF8_STRING"],
+        )
 
     def test_inject_with_xdotool_terminates_options_before_the_text(self) -> None:
         """A chunk starting with '-' must type literally, not parse as a flag (#921).
