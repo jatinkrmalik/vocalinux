@@ -42,7 +42,10 @@ if "gi.repository" not in sys.modules:
     sys.modules["gi.repository"] = MagicMock()
 
 from vocalinux.common_types import RecognitionState  # noqa: E402
-from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager  # noqa: E402
+from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
+    SpeechRecognitionManager,
+    _ReleaseGate,
+)
 
 for _k, _v in _ORIG_MODULES.items():
     if _v is not None:
@@ -173,11 +176,11 @@ class TestRecordAudioSileroPath(unittest.TestCase):
 
         # Capture flushes triggered by the silence-detection branch
         self.enqueued = []
-        self.enqueued_gates: list[Optional[threading.Event]] = []
+        self.enqueued_gates: list[Optional[_ReleaseGate]] = []
 
         def enqueue_segment(
             audio_buffer: list[bytes],
-            release_gate: Optional[threading.Event] = None,
+            release_gate: Optional[_ReleaseGate] = None,
         ) -> None:
             self.enqueued.append(list(audio_buffer))
             self.enqueued_gates.append(release_gate)
@@ -356,7 +359,7 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         """Mid-hold segments carry the session gate, which capture exit opens."""
         self.mgr._recognition_mode = "push_to_talk"
         self.mgr._max_segment_seconds = 0.5
-        self.mgr._key_release_gate = threading.Event()
+        self.mgr._key_release_gate = _ReleaseGate()
         gate = self.mgr._key_release_gate
 
         self._drive(probs=[0.95] * 20, vad_sensitivity=3)
@@ -368,7 +371,7 @@ class TestRecordAudioSileroPath(unittest.TestCase):
     def test_toggle_flushes_do_not_carry_a_release_gate(self) -> None:
         """Toggle-mode segments are not gated even though capture exit opens its event."""
         self.mgr._max_segment_seconds = 0.5
-        self.mgr._key_release_gate = threading.Event()
+        self.mgr._key_release_gate = _ReleaseGate()
         gate = self.mgr._key_release_gate
 
         self._drive(probs=[0.95] * 20, vad_sensitivity=3)
@@ -425,11 +428,11 @@ class TestRecordAudioAmplitudeFallback(unittest.TestCase):
         self.mgr._silero_vad = None
 
         self.enqueued = []
-        self.enqueued_gates: list[Optional[threading.Event]] = []
+        self.enqueued_gates: list[Optional[_ReleaseGate]] = []
 
         def enqueue_segment(
             audio_buffer: list[bytes],
-            release_gate: Optional[threading.Event] = None,
+            release_gate: Optional[_ReleaseGate] = None,
         ) -> None:
             self.enqueued.append(list(audio_buffer))
             self.enqueued_gates.append(release_gate)

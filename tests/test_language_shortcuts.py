@@ -164,7 +164,10 @@ def _manager_stub(
     language_preference: str = "en-us",
 ) -> Any:
     """A manager carrying only the fields the one-shot path touches."""
-    from vocalinux.speech_recognition.recognition_manager import SpeechRecognitionManager
+    from vocalinux.speech_recognition.recognition_manager import (
+        SpeechRecognitionManager,
+        _ReleaseGate,
+    )
 
     manager = SpeechRecognitionManager.__new__(SpeechRecognitionManager)
     manager.engine = engine
@@ -178,6 +181,8 @@ def _manager_stub(
     manager._pending_language_override = None
     manager._oneshot_language_restore = None
     manager._segment_started_at = None
+    manager._key_release_gate = _ReleaseGate()
+    manager._key_release_gate.set()
     return manager
 
 

@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import unittest
+from typing import Optional
 from unittest.mock import MagicMock, call, patch
 
 # ---- Safely mock external deps, preserving stdlib ----
@@ -39,6 +40,7 @@ from vocalinux.speech_recognition.recognition_manager import (  # noqa: E402
     _AudioSegment,
     _get_supported_channels,
     _get_supported_sample_rate,
+    _ReleaseGate,
     _setup_alsa_error_handler,
     get_audio_input_devices,
 )
@@ -66,12 +68,16 @@ def _make_manager(engine="whisper_cpp", **kw):
     return mgr
 
 
+def _identity(text: str) -> str:
+    return text
+
+
 class TestPushToTalkReleaseGate(unittest.TestCase):
-    def test_gated_segment_waits_before_delivering_callbacks(self) -> None:
-        """Text, segment, and action callbacks wait for the release gate."""
+    def test_gated_segment_is_held_until_release(self) -> None:
+        """A gated segment is transcribed but delivers callbacks only on release."""
         manager = _make_manager(engine="vosk")
         manager._voice_commands_enabled = True
-        gate = threading.Event()
+        gate = _ReleaseGate()
         segment = _AudioSegment([b"audio"], None, release_gate=gate)
         delivered: list[tuple[str, str]] = []
 
@@ -90,28 +96,28 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
 
         with (
             patch.object(manager, "_transcribe_with_vosk", return_value="raw"),
-            patch.object(manager, "_apply_dictionary_corrections", side_effect=lambda text: text),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=_identity),
             patch.object(
                 manager.command_processor,
                 "process_text",
                 return_value=("hello", ["action"]),
             ),
         ):
-            worker = threading.Thread(target=manager._process_audio_buffer, args=(segment,))
-            worker.start()
-            try:
-                worker.join(timeout=0.1)
-                self.assertTrue(worker.is_alive())
-                self.assertEqual(delivered, [])
-            finally:
-                gate.set()
-                worker.join(timeout=2)
+            manager._process_audio_buffer(segment)
+            self.assertEqual(delivered, [])
+            self.assertEqual(len(gate.held), 1)
+            self.assertEqual(
+                (gate.held[0].text, gate.held[0].actions, gate.held[0].started_at),
+                ("hello", ["action"], None),
+            )
+            gate.set()
+            manager._release_held_transcripts(gate)
 
-        self.assertFalse(worker.is_alive())
         self.assertEqual(
             delivered,
             [("segment", "hello"), ("text", "hello"), ("action", "action")],
         )
+        self.assertEqual(gate.held, [])
 
     def test_ungated_and_released_segments_deliver_immediately(self) -> None:
         """Segments without a pending gate never block callback delivery."""
@@ -119,52 +125,71 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
         manager._voice_commands_enabled = False
         delivered: list[str] = []
         manager.text_callbacks.append(delivered.append)
-        opened_gate = threading.Event()
+        opened_gate = _ReleaseGate()
         opened_gate.set()
 
         with (
             patch.object(manager, "_transcribe_with_vosk", return_value="hello"),
-            patch.object(manager, "_apply_dictionary_corrections", side_effect=lambda text: text),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=_identity),
         ):
             for gate in (None, opened_gate):
                 manager._process_audio_buffer(_AudioSegment([b"audio"], None, release_gate=gate))
 
         self.assertEqual(delivered, ["hello", "hello"])
 
-    def test_gated_segments_preserve_queue_delivery_order(self) -> None:
-        """Later queued segments wait behind a mid-hold segment until release."""
+    def test_worker_transcribes_ahead_and_delivers_after_release(self) -> None:
+        """Queued segments transcribe during a hold and deliver FIFO after release."""
         manager = _make_manager(engine="vosk")
         manager._voice_commands_enabled = False
         manager.should_record = True
         manager._segment_queue = queue.Queue()
-        gate = threading.Event()
-        first_transcribed = threading.Event()
+        gate = _ReleaseGate()
+        manager._key_release_gate = gate
+        transcribed = {name: threading.Event() for name in ("first", "second", "final")}
+        processed_both = threading.Event()
         delivered: list[str] = []
         manager.text_callbacks.append(delivered.append)
 
         first = _AudioSegment([b"first"], None, release_gate=gate)
         second = _AudioSegment([b"second"], None, release_gate=gate)
-        final = _AudioSegment([b"final"], None)
-        for segment in (first, second, final):
+        final = _AudioSegment([b"final"], None, release_gate=gate)
+        for segment in (first, second):
             manager._segment_queue.put((segment, "en-us"))
 
         def transcribe(audio_buffer: list[bytes]) -> str:
             text = audio_buffer[0].decode()
-            if text == "first":
-                first_transcribed.set()
+            transcribed[text].set()
             return text
+
+        original_process = manager._process_audio_buffer
+        processed_count = 0
+
+        def process_and_signal(
+            audio_buffer: list[bytes],
+            language: Optional[str] = None,
+        ) -> None:
+            nonlocal processed_count
+            original_process(audio_buffer, language)
+            processed_count += 1
+            if processed_count == 2:
+                processed_both.set()
 
         with (
             patch.object(manager, "_transcribe_with_vosk", side_effect=transcribe),
-            patch.object(manager, "_apply_dictionary_corrections", side_effect=lambda text: text),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=_identity),
+            patch.object(manager, "_process_audio_buffer", side_effect=process_and_signal),
         ):
             worker = threading.Thread(target=manager._perform_recognition)
             worker.start()
             try:
-                self.assertTrue(first_transcribed.wait(timeout=2))
-                worker.join(timeout=0.1)
-                self.assertTrue(worker.is_alive())
+                self.assertTrue(transcribed["first"].wait(timeout=2))
+                self.assertTrue(transcribed["second"].wait(timeout=2))
+                self.assertTrue(processed_both.wait(timeout=2))
+                self.assertEqual(len(gate.held), 2)
                 self.assertEqual(delivered, [])
+                self.assertTrue(worker.is_alive())
+                gate.set()
+                manager._segment_queue.put((final, "en-us"))
             finally:
                 gate.set()
                 manager.should_record = False
@@ -173,6 +198,112 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
 
         self.assertFalse(worker.is_alive())
         self.assertEqual(delivered, ["first", "second", "final"])
+
+    def test_gate_release_without_final_segment_drains_on_timeout(self) -> None:
+        """Held transcripts drain when the open gate is noticed on queue timeout."""
+        manager = _make_manager(engine="vosk")
+        manager._voice_commands_enabled = False
+        manager.should_record = True
+        manager._segment_queue = queue.Queue()
+        gate = _ReleaseGate()
+        manager._key_release_gate = gate
+        transcribed = {name: threading.Event() for name in ("first", "second")}
+        processed_both = threading.Event()
+        delivered_both = threading.Event()
+        delivered: list[str] = []
+
+        def on_text(text: str) -> None:
+            delivered.append(text)
+            if len(delivered) == 2:
+                delivered_both.set()
+
+        manager.text_callbacks.append(on_text)
+        for name in ("first", "second"):
+            manager._segment_queue.put(
+                (_AudioSegment([name.encode()], None, release_gate=gate), "en-us")
+            )
+
+        def transcribe(audio_buffer: list[bytes]) -> str:
+            text = audio_buffer[0].decode()
+            transcribed[text].set()
+            return text
+
+        original_process = manager._process_audio_buffer
+        processed_count = 0
+
+        def process_and_signal(
+            audio_buffer: list[bytes],
+            language: Optional[str] = None,
+        ) -> None:
+            nonlocal processed_count
+            original_process(audio_buffer, language)
+            processed_count += 1
+            if processed_count == 2:
+                processed_both.set()
+
+        with (
+            patch.object(manager, "_transcribe_with_vosk", side_effect=transcribe),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=_identity),
+            patch.object(manager, "_process_audio_buffer", side_effect=process_and_signal),
+        ):
+            worker = threading.Thread(target=manager._perform_recognition)
+            worker.start()
+            try:
+                self.assertTrue(transcribed["first"].wait(timeout=2))
+                self.assertTrue(transcribed["second"].wait(timeout=2))
+                self.assertTrue(processed_both.wait(timeout=2))
+                self.assertEqual(delivered, [])
+                gate.set()
+                self.assertTrue(delivered_both.wait(timeout=2))
+                self.assertEqual(delivered, ["first", "second"])
+            finally:
+                gate.set()
+                manager.should_record = False
+                manager._segment_queue.put(None)
+                worker.join(timeout=2)
+
+        self.assertFalse(worker.is_alive())
+
+    def test_worker_exit_force_releases_held_transcripts(self) -> None:
+        """The worker's finally block delivers held text even if the gate stays closed."""
+        manager = _make_manager(engine="vosk")
+        manager._voice_commands_enabled = False
+        manager.should_record = False
+        manager._segment_queue = queue.Queue()
+        gate = _ReleaseGate()
+        manager._key_release_gate = gate
+        delivered: list[str] = []
+        manager.text_callbacks.append(delivered.append)
+        for name in ("first", "second"):
+            manager._segment_queue.put(
+                (_AudioSegment([name.encode()], None, release_gate=gate), "en-us")
+            )
+        manager._segment_queue.put(None)
+
+        def transcribe(audio_buffer: list[bytes]) -> str:
+            return audio_buffer[0].decode()
+
+        with (
+            patch.object(
+                manager,
+                "_transcribe_with_vosk",
+                side_effect=transcribe,
+            ),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=_identity),
+        ):
+            worker = threading.Thread(target=manager._perform_recognition)
+            worker.start()
+            try:
+                worker.join(timeout=2)
+                self.assertFalse(worker.is_alive())
+                self.assertFalse(gate.is_set())
+            finally:
+                if worker.is_alive():
+                    gate.set()
+                    worker.join(timeout=2)
+
+        self.assertEqual(delivered, ["first", "second"])
+        self.assertEqual(gate.held, [])
 
 
 class TestALSAErrorHandler(unittest.TestCase):
@@ -335,7 +466,7 @@ class TestStartStopRecognition(unittest.TestCase):
         mgr = _make_manager()
         mgr.state = RecognitionState.LISTENING
         mgr.should_record = True
-        gate = threading.Event()
+        gate = _ReleaseGate()
         mgr._key_release_gate = gate
         mgr.audio_thread = MagicMock()
         mgr.audio_thread.is_alive.return_value = True
@@ -343,6 +474,27 @@ class TestStartStopRecognition(unittest.TestCase):
         mgr.stop_recognition()
         self.assertFalse(mgr.should_record)
         self.assertTrue(gate.is_set())
+
+    def test_stop_enqueues_final_buffer_with_gate_only_for_push_to_talk(self) -> None:
+        for mode in ("push_to_talk", "toggle"):
+            with self.subTest(mode=mode):
+                mgr = _make_manager()
+                mgr.state = RecognitionState.LISTENING
+                mgr.should_record = True
+                mgr._recognition_mode = mode
+                mgr._key_release_gate = _ReleaseGate()
+                mgr.audio_buffer = [b"speech"]
+                mgr._recording_segment_has_speech = True
+                mgr._enqueue_audio_segment = MagicMock()
+
+                with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
+                    mgr.stop_recognition()
+
+                expected_gate = mgr._key_release_gate if mode == "push_to_talk" else None
+                mgr._enqueue_audio_segment.assert_called_once_with(
+                    [b"speech"],
+                    release_gate=expected_gate,
+                )
 
     def test_stop_sound_plays_after_audio_thread_join(self):
         mgr = _make_manager()

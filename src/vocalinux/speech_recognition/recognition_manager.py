@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, Union, cast
 
 if TYPE_CHECKING:
     import numpy as np
@@ -88,6 +88,22 @@ if TYPE_CHECKING:
     from ..custom_dictionary import CustomDictionaryManager
 
 
+class _HeldTranscript(NamedTuple):
+    """A transcript held until its push-to-talk session is released."""
+
+    text: str
+    actions: list[str]
+    started_at: Optional[float]
+
+
+class _ReleaseGate(threading.Event):
+    """Session event that gates delivery while allowing transcription to continue."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.held: list[_HeldTranscript] = []
+
+
 class _AudioSegment(list):
     """A queued audio segment that knows when its capture began.
 
@@ -96,7 +112,7 @@ class _AudioSegment(list):
     ``time.monotonic()`` timestamp of its first captured chunk. That stamp
     is what lets a listener tell speech captured before a point in time
     from speech captured after it, however late the decode finishes.
-    A push-to-talk ``release_gate`` holds callbacks until the key is released.
+    A push-to-talk ``release_gate`` holds transcribed text until the key is released.
     """
 
     def __init__(
@@ -104,7 +120,7 @@ class _AudioSegment(list):
         chunks: list[bytes],
         started_at: Optional[float],
         language: Optional[str] = None,
-        release_gate: Optional[threading.Event] = None,
+        release_gate: Optional[_ReleaseGate] = None,
     ) -> None:
         super().__init__(chunks)
         self.started_at = started_at
@@ -520,7 +536,7 @@ class SpeechRecognitionManager:
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue: queue.Queue[tuple[_AudioSegment, str]] = queue.Queue(maxsize=32)
-        self._key_release_gate = threading.Event()
+        self._key_release_gate = _ReleaseGate()
         self._key_release_gate.set()
 
         # Reliability improvements - Issue #92
@@ -3196,7 +3212,7 @@ class SpeechRecognitionManager:
         self.audio_buffer = []
         self._segment_started_at = None
         self._segment_queue = queue.Queue(maxsize=32)
-        self._key_release_gate = threading.Event()
+        self._key_release_gate = _ReleaseGate()
 
         # Start the audio recording thread
         self.audio_thread = threading.Thread(target=self._record_audio)
@@ -3255,7 +3271,12 @@ class SpeechRecognitionManager:
 
             if self.audio_buffer and self._recording_segment_has_speech:
                 logger.debug(f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks")
-                self._enqueue_audio_segment(self.audio_buffer)
+                self._enqueue_audio_segment(
+                    self.audio_buffer,
+                    release_gate=(
+                        self._key_release_gate if self._recognition_mode == "push_to_talk" else None
+                    ),
+                )
                 self.audio_buffer = []
             elif self.audio_buffer:
                 logger.debug(
@@ -3765,6 +3786,48 @@ class SpeechRecognitionManager:
             return None
         return self._transcribe_with_remote_api(audio_buffer, session, language)
 
+    def _deliver_transcript(
+        self,
+        text: str,
+        actions: list[str],
+        started_at: Optional[float],
+    ) -> None:
+        """Deliver a transcribed segment to registered callbacks."""
+        logger.debug(
+            f"processed_text='{text[:50] if text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+        )
+        if text:
+            if started_at is None:
+                started_at = time.monotonic()
+            for segment_callback in self.segment_callbacks:
+                segment_callback(text, started_at)
+            for callback in self.text_callbacks:
+                logger.debug(
+                    f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                )
+                callback(text)
+
+        for action in actions:
+            for callback in self.action_callbacks:
+                callback(action)
+
+    def _release_held_transcripts(
+        self,
+        gate: Optional[_ReleaseGate],
+        force: bool = False,
+    ) -> None:
+        """Deliver queued transcripts once their push-to-talk gate opens."""
+        if gate is None or (not gate.is_set() and not force):
+            return
+
+        while gate.held:
+            transcript = gate.held.pop(0)
+            self._deliver_transcript(
+                transcript.text,
+                transcript.actions,
+                transcript.started_at,
+            )
+
     def _process_audio_buffer(
         self, audio_buffer: list[bytes], language: Optional[str] = None
     ) -> None:
@@ -3800,10 +3863,15 @@ class SpeechRecognitionManager:
             return
         text = transcriber()
         if text is None:
+            gate = getattr(audio_buffer, "release_gate", None)
+            if gate is not None and gate.is_set():
+                self._release_held_transcripts(gate)
             return
 
         # Process text - either with voice commands or pass through directly
         logger.debug(f"_process_audio_buffer got text='{text[:50] if text else '(empty)'}...'")
+        processed_text = ""
+        actions: list[str] = []
         if text:
             # Corrections must precede command parsing: a safe replacement can
             # stop a model mishearing from triggering a destructive action.
@@ -3816,34 +3884,30 @@ class SpeechRecognitionManager:
                 processed_text = text.strip()
                 actions = []
 
-            gate = getattr(audio_buffer, "release_gate", None)
-            if (processed_text or actions) and gate is not None and not gate.is_set():
-                logger.info("Holding transcribed text until the push-to-talk key is released")
-                gate.wait()
-
-            # Call text callbacks with processed text
-            logger.debug(
-                f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
-            )
-            if processed_text:
-                started_at = getattr(audio_buffer, "started_at", None)
-                if started_at is None:
-                    started_at = time.monotonic()
-                for segment_callback in self.segment_callbacks:
-                    segment_callback(processed_text, started_at)
-                for callback in self.text_callbacks:
-                    logger.debug(
-                        f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+        gate = getattr(audio_buffer, "release_gate", None)
+        if gate is not None and not gate.is_set():
+            if processed_text or actions:
+                gate.held.append(
+                    _HeldTranscript(
+                        processed_text,
+                        actions,
+                        getattr(audio_buffer, "started_at", None),
                     )
-                    callback(processed_text)
+                )
+                logger.info("Holding transcribed text until the push-to-talk key is released")
+                return
+        elif gate is not None:
+            self._release_held_transcripts(gate)
 
-            # Call action callbacks for each action
-            for action in actions:
-                for callback in self.action_callbacks:
-                    callback(action)
+        self._deliver_transcript(
+            processed_text,
+            actions,
+            getattr(audio_buffer, "started_at", None),
+        )
 
-    def _perform_recognition(self):
+    def _perform_recognition(self) -> None:
         """Perform speech recognition in real-time."""
+        gate = self._key_release_gate
         logger.debug("_perform_recognition thread started")
         try:
             while True:
@@ -3853,6 +3917,7 @@ class SpeechRecognitionManager:
                 try:
                     queued = self._segment_queue.get(timeout=0.1)
                 except queue.Empty:
+                    self._release_held_transcripts(gate)
                     # Only exit if we're not recording AND queue is empty
                     if not self.should_record and self._segment_queue.empty():
                         logger.debug(
@@ -3881,6 +3946,7 @@ class SpeechRecognitionManager:
                                 )
                                 if self.should_record:
                                     self._update_state(RecognitionState.PROCESSING)
+                                self._release_held_transcripts(gate)
                                 self._process_audio_buffer(remaining_segment, remaining_language)
                         except queue.Empty:
                             break
@@ -3891,11 +3957,13 @@ class SpeechRecognitionManager:
                 logger.debug(f"Recognition loop - processing segment with {len(segment)} chunks")
                 if self.should_record:
                     self._update_state(RecognitionState.PROCESSING)
+                self._release_held_transcripts(gate)
                 self._process_audio_buffer(segment, segment_language)
                 if self.should_record:
                     self._update_state(RecognitionState.LISTENING)
         finally:
             logger.debug("_perform_recognition thread exiting")
+            self._release_held_transcripts(gate, force=True)
             # Do not force IDLE here. stop_recognition() already does that,
             # and a leftover worker can finish after the user has started
             # again (LISTENING, should_record still false during the start
@@ -3905,7 +3973,7 @@ class SpeechRecognitionManager:
     def _enqueue_audio_segment(
         self,
         audio_buffer: list[bytes],
-        release_gate: Optional[threading.Event] = None,
+        release_gate: Optional[_ReleaseGate] = None,
     ) -> None:
         """Queue an audio segment for asynchronous transcription."""
         segment = _AudioSegment(
