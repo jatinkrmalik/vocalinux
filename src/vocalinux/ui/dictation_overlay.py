@@ -134,6 +134,7 @@ class DictationOverlay:
         try:
             self._init_gtk_window()
             self._gtk_ready = True
+            self._GLib.idle_add(self.prewarm)
         except Exception as e:
             # Headless / missing display: keep controller usable for tests.
             logger.warning("Dictation overlay window unavailable: %s", e)
@@ -277,10 +278,31 @@ class DictationOverlay:
         except Exception:
             return False
 
+    def _display_is_wayland(self) -> bool:
+        """Check the GType name; GTK3's Gdk typelib does not expose GdkWaylandDisplay as a class."""
+        display = self._Gdk.Display.get_default()
+        if display is None:
+            return False
+        try:
+            return bool(display.__gtype__.name == "GdkWaylandDisplay")
+        except (AttributeError, TypeError):
+            return False
+
+    def _mapping_steals_focus(self) -> bool:
+        """Whether mapping the fallback can steal focus.
+
+        Mutter and other Wayland compositors activate new xdg_toplevels.
+        Layer-shell surfaces with keyboard mode NONE and X11 override-redirect
+        windows do not.
+        """
+        return self._display_is_wayland() and not self._use_layer_shell
+
     def set_enabled(self, enabled: bool) -> None:
         """Enable/disable the feature and sync the window."""
         self.controller.set_enabled(enabled)
         self._sync_window()
+        if enabled:
+            self.prewarm()
 
     def on_recognition_state(self, state: RecognitionState) -> None:
         """Handle a recognition state change (same path as the tray icon)."""
@@ -332,18 +354,12 @@ class DictationOverlay:
                 self._window.hide()
             return
 
-        # Layout before first map so the first frame is already bottom-center.
+        # Keep the first visible frame at the correct position.
         if not self._use_layer_shell:
             self._layout_bottom_strip()
 
         if not self._window.get_visible():
-            # Map once; never call present() (steals keyboard focus).
-            self._window.set_accept_focus(False)
-            self._window.set_can_focus(False)
-            self._window.set_focus_on_map(False)
-            self._window.show_all()
-            if not self._use_layer_shell:
-                self._GLib.idle_add(self._layout_bottom_strip_idle)
+            self._map_passive()
 
         try:
             self._window.set_opacity(1.0)
@@ -353,6 +369,44 @@ class DictationOverlay:
         self._start_animation()
         if self._drawing_area is not None:
             self._drawing_area.queue_draw()
+
+    def _map_passive(self) -> None:
+        """Map the window without requesting keyboard focus."""
+        if self._window is None:
+            return
+        # Map once; never call present() (steals keyboard focus).
+        self._window.set_accept_focus(False)
+        self._window.set_can_focus(False)
+        self._window.set_focus_on_map(False)
+        self._window.show_all()
+        if not self._use_layer_shell:
+            self._GLib.idle_add(self._layout_bottom_strip_idle)
+
+    def prewarm(self) -> bool:
+        """Map the Wayland fallback once while transparent, before recording starts."""
+        if (
+            not self._gtk_ready
+            or self._window is None
+            or not self.controller.enabled
+            or not self._mapping_steals_focus()
+            or self._window.get_visible()
+        ):
+            return False
+
+        # Layout before first map so the first frame is already bottom-center.
+        if not self._use_layer_shell:
+            self._layout_bottom_strip()
+
+        try:
+            self._window.set_opacity(0.0)
+        except Exception:
+            pass
+
+        self._map_passive()
+        logger.info(
+            "Dictation overlay mapped at startup so the first recording does not take focus"
+        )
+        return False
 
     def _layout_bottom_strip_idle(self) -> bool:
         self._layout_bottom_strip()
