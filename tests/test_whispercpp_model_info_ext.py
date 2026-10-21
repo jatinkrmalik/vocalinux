@@ -558,6 +558,28 @@ class TestDetectGgmlGpuDevices(unittest.TestCase):
         self.assertIsNone(_run_ggml_probe([], library_error=OSError("unavailable")))
         self.assertIsNone(_run_ggml_probe([], library=SimpleNamespace()))
 
+    def test_probe_keeps_ordinal_for_device_without_description(
+        self: "TestDetectGgmlGpuDevices",
+    ) -> None:
+        library = _fake_ggml_library(
+            [("Vulkan0", "", 1), ("Vulkan1", "NVIDIA GeForce GTX 1050", 1)]
+        )
+        library.ggml_backend_dev_description.side_effect = lambda pointer: (
+            None if pointer == 1 else b"NVIDIA GeForce GTX 1050"
+        )
+
+        devices = _run_ggml_probe([], library=library)
+
+        assert devices is not None
+        self.assertEqual([device["index"] for device in devices], [0, 1])
+        self.assertEqual(devices[0]["name"], "Vulkan0")
+        self.assertEqual(devices[1]["name"], "NVIDIA GeForce GTX 1050")
+
+    def test_probe_accepts_prerelease_version(self: "TestDetectGgmlGpuDevices") -> None:
+        devices = _run_ggml_probe([("Vulkan0", "GPU", 1)], version_string="1.5.1.dev3")
+        assert devices is not None
+        self.assertEqual(len(devices), 1)
+
 
 class TestPreferDiscreteVulkanDeviceMore(unittest.TestCase):
     """Exercise additional Vulkan selection edge cases."""
@@ -1332,25 +1354,3 @@ class TestGetBackendDisplayName(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-    def test_probe_keeps_ordinal_for_device_without_description(
-        self: "TestDetectGgmlGpuDevices",
-    ) -> None:
-        library = _fake_ggml_library(
-            [("Vulkan0", "", 1), ("Vulkan1", "NVIDIA GeForce GTX 1050", 1)]
-        )
-        library.ggml_backend_dev_description.side_effect = lambda pointer: (
-            None if pointer == 1 else b"NVIDIA GeForce GTX 1050"
-        )
-
-        devices = _run_ggml_probe([], library=library)
-
-        assert devices is not None
-        self.assertEqual([device["index"] for device in devices], [0, 1])
-        self.assertEqual(devices[0]["name"], "Vulkan0")
-        self.assertEqual(devices[1]["name"], "NVIDIA GeForce GTX 1050")
-
-    def test_probe_accepts_prerelease_version(self: "TestDetectGgmlGpuDevices") -> None:
-        devices = _run_ggml_probe([("Vulkan0", "GPU", 1)], version_string="1.5.1.dev3")
-        assert devices is not None
-        self.assertEqual(len(devices), 1)
