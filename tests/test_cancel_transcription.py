@@ -41,6 +41,23 @@ def _stop_session(manager: SpeechRecognitionManager) -> None:
         manager.stop_recognition()
 
 
+def _no_audio_capture() -> None:
+    return None
+
+
+def _stop_with_short_worker_joins(manager: SpeechRecognitionManager) -> None:
+    with patch.object(SpeechRecognitionManager, "_STOP_WORKER_JOIN_TIMEOUT_S", 0.05):
+        with patch.object(SpeechRecognitionManager, "_STOP_WORKER_FINAL_JOIN_TIMEOUT_S", 0.01):
+            _stop_session(manager)
+
+
+def _wait_for_state(manager: SpeechRecognitionManager, state: RecognitionState) -> None:
+    deadline = time.monotonic() + 2.0
+    while manager.state is not state and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert manager.state is state
+
+
 def _record_until_stopped(
     manager: SpeechRecognitionManager, capture_started: threading.Event
 ) -> None:
@@ -378,3 +395,216 @@ def test_whispercpp_skips_language_detection_when_cancelled() -> None:
 
     assert manager._transcribe_with_whispercpp(segment) == ""
     manager.model.auto_detect_language.assert_not_called()
+
+
+def test_late_worker_handoff_keeps_processing_until_transcription_finishes() -> None:
+    manager = _make_manager()
+    transcriber_started = threading.Event()
+    release_transcriber = threading.Event()
+    delivered: list[str] = []
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        transcriber_started.set()
+        assert release_transcriber.wait(timeout=3.0)
+        return "late text"
+
+    manager._transcribe_with_whispercpp = transcribe
+    manager._voice_commands_enabled = False
+    manager.register_text_callback(delivered.append)
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"slow audio"])
+
+    assert transcriber_started.wait(timeout=1.0)
+    worker_thread = manager.recognition_thread
+    _stop_with_short_worker_joins(manager)
+
+    assert manager.state is RecognitionState.PROCESSING
+    assert manager.is_transcribing()
+
+    release_transcriber.set()
+    _wait_for_state(manager, RecognitionState.IDLE)
+    assert delivered == ["late text"]
+    assert manager._worker_exited is not None
+    assert manager._worker_exited.is_set()
+    assert worker_thread is not None
+    worker_thread.join(timeout=1.0)
+    assert not worker_thread.is_alive()
+
+
+def test_cancel_late_worker_discards_text_and_next_session_succeeds() -> None:
+    manager = _make_manager()
+    transcriber_started = threading.Event()
+    release_transcriber = threading.Event()
+    next_transcription_finished = threading.Event()
+    next_text_delivered = threading.Event()
+    delivered: list[str] = []
+    transcribe_calls = 0
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        nonlocal transcribe_calls
+        transcribe_calls += 1
+        if transcribe_calls == 1:
+            transcriber_started.set()
+            assert release_transcriber.wait(timeout=3.0)
+            return "cancelled text"
+        next_transcription_finished.set()
+        return "next session"
+
+    def on_text(text: str) -> None:
+        delivered.append(text)
+        if text == "next session":
+            next_text_delivered.set()
+
+    manager._transcribe_with_whispercpp = transcribe
+    manager._voice_commands_enabled = False
+    manager.register_text_callback(on_text)
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"slow audio"])
+
+    assert transcriber_started.wait(timeout=1.0)
+    worker_exited = manager._worker_exited
+    assert worker_exited is not None
+    worker_thread = manager.recognition_thread
+    _stop_with_short_worker_joins(manager)
+    assert manager.is_transcribing()
+
+    assert manager.cancel_transcription()
+    assert manager.state is RecognitionState.IDLE
+    release_transcriber.set()
+    assert worker_exited.wait(timeout=2.0)
+    assert worker_thread is not None
+    worker_thread.join(timeout=1.0)
+    assert not worker_thread.is_alive()
+    assert manager.state is RecognitionState.IDLE
+    assert delivered == []
+
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"next audio"])
+    assert next_transcription_finished.wait(timeout=1.0)
+    assert next_text_delivered.wait(timeout=1.0)
+    assert delivered == ["next session"]
+    _stop_session(manager)
+    assert manager.state is RecognitionState.IDLE
+
+
+def test_cancelled_old_worker_does_not_change_new_session_state() -> None:
+    manager = _make_manager()
+    old_transcriber_started = threading.Event()
+    release_old_transcriber = threading.Event()
+    new_transcription_finished = threading.Event()
+    new_text_delivered = threading.Event()
+    delivered: list[str] = []
+    transcribe_calls = 0
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        nonlocal transcribe_calls
+        transcribe_calls += 1
+        if transcribe_calls == 1:
+            old_transcriber_started.set()
+            assert release_old_transcriber.wait(timeout=3.0)
+            return "old text"
+        new_transcription_finished.set()
+        return "new text"
+
+    def on_text(text: str) -> None:
+        delivered.append(text)
+        if text == "new text":
+            new_text_delivered.set()
+
+    manager._transcribe_with_whispercpp = transcribe
+    manager._voice_commands_enabled = False
+    manager.register_text_callback(on_text)
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"old audio"])
+
+    assert old_transcriber_started.wait(timeout=1.0)
+    old_worker_exited = manager._worker_exited
+    assert old_worker_exited is not None
+    old_worker_thread = manager.recognition_thread
+    _stop_with_short_worker_joins(manager)
+    old_cancel = manager._session_cancel
+    assert manager._idle_on_worker_exit is old_cancel
+    assert manager.cancel_transcription()
+    assert manager._idle_on_worker_exit is None
+
+    _start_session(manager, _no_audio_capture)
+    new_cancel = manager._session_cancel
+    assert new_cancel is not old_cancel
+    manager._enqueue_audio_segment([b"new audio"])
+    assert new_transcription_finished.wait(timeout=1.0)
+    assert new_text_delivered.wait(timeout=1.0)
+    assert delivered == ["new text"]
+
+    release_old_transcriber.set()
+    assert old_worker_thread is not None
+    old_worker_thread.join(timeout=2.0)
+    assert not old_worker_thread.is_alive()
+    assert old_worker_exited.is_set()
+    _wait_for_state(manager, RecognitionState.LISTENING)
+    assert manager._session_cancel is new_cancel
+    assert not new_cancel.is_set()
+    assert delivered == ["new text"]
+
+    _stop_session(manager)
+    assert manager.state is RecognitionState.IDLE
+
+
+def test_fast_worker_still_returns_to_idle_from_stop() -> None:
+    manager = _make_manager()
+    transcriber_finished = threading.Event()
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        transcriber_finished.set()
+        return "quick text"
+
+    manager._transcribe_with_whispercpp = transcribe
+    manager._voice_commands_enabled = False
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"quick audio"])
+
+    assert transcriber_finished.wait(timeout=1.0)
+    _stop_session(manager)
+
+    assert manager.state is RecognitionState.IDLE
+    assert manager._worker_exited is not None
+    assert manager._worker_exited.is_set()
+
+
+def test_tray_hotkey_cancels_a_worker_after_stop_join_timeout() -> None:
+    from vocalinux.ui.tray_indicator import TrayIndicator
+
+    manager = _make_manager()
+    transcriber_started = threading.Event()
+    release_transcriber = threading.Event()
+    delivered: list[str] = []
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        transcriber_started.set()
+        assert release_transcriber.wait(timeout=3.0)
+        return "cancelled text"
+
+    manager._transcribe_with_whispercpp = transcribe
+    manager._voice_commands_enabled = False
+    manager.register_text_callback(delivered.append)
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"slow audio"])
+    assert transcriber_started.wait(timeout=1.0)
+    worker_exited = manager._worker_exited
+    assert worker_exited is not None
+    worker_thread = manager.recognition_thread
+    _stop_with_short_worker_joins(manager)
+
+    tray = TrayIndicator.__new__(TrayIndicator)
+    tray.speech_engine = manager
+    tray._ptt_lock = threading.Lock()
+    tray._ptt_owner = None
+    tray._toggle_recognition()
+
+    assert manager.state is RecognitionState.IDLE
+    release_transcriber.set()
+    assert worker_exited.wait(timeout=2.0)
+    assert worker_thread is not None
+    worker_thread.join(timeout=1.0)
+    assert not worker_thread.is_alive()
+    assert manager.state is RecognitionState.IDLE
+    assert delivered == []

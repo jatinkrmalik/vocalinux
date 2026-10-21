@@ -390,6 +390,10 @@ class SpeechRecognitionManager:
     speech recognition engines (VOSK and Whisper).
     """
 
+    _STOP_WORKER_JOIN_TIMEOUT_S: float = 5.0
+    _STOP_WORKER_FINAL_JOIN_TIMEOUT_S: float = 1.0
+    _idle_on_worker_exit: Optional[threading.Event] = None
+
     def __init__(
         self,
         engine: str = "vosk",
@@ -430,6 +434,8 @@ class SpeechRecognitionManager:
         self.state = RecognitionState.IDLE
         self.audio_thread: Optional[threading.Thread] = None
         self.recognition_thread: Optional[threading.Thread] = None
+        self._worker_exited: Optional[threading.Event] = None
+        self._idle_on_worker_exit: Optional[threading.Event] = None
         self.model: Any = None
         self.recognizer = None  # Added for VOSK
         self.command_processor = CommandProcessor(language=self.language)
@@ -3204,6 +3210,8 @@ class SpeechRecognitionManager:
         logger.info("Starting speech recognition")
         with self._buffer_lock:
             self._session_cancel = threading.Event()
+            self._worker_exited = threading.Event()
+            self._idle_on_worker_exit = None
         self._update_state(RecognitionState.LISTENING)
 
         # Play the start sound
@@ -3243,11 +3251,16 @@ class SpeechRecognitionManager:
             return False
 
         cancel = self._session_cancel
-        if cancel.is_set():
-            return False
-
-        logger.info("Cancelling transcription")
-        cancel.set()
+        with self._buffer_lock:
+            if (
+                self._session_cancel is not cancel
+                or self.state not in (RecognitionState.LISTENING, RecognitionState.PROCESSING)
+                or cancel.is_set()
+            ):
+                return False
+            logger.info("Cancelling transcription")
+            cancel.set()
+            self._idle_on_worker_exit = None
         segment_queue = self._segment_queue
         buffered = getattr(self, "_buffered_reload_session", False)
         if buffered:
@@ -3278,6 +3291,7 @@ class SpeechRecognitionManager:
         session_cancel = self._session_cancel
         audio_thread = self.audio_thread
         recognition_thread = self.recognition_thread
+        worker_exited = getattr(self, "_worker_exited", None)
         logger.info("Stopping speech recognition")
 
         # Mark recording over before touching the duck so a concurrent arm
@@ -3353,16 +3367,34 @@ class SpeechRecognitionManager:
             self._signal_recognition_stop()
 
         if recognition_thread and recognition_thread.is_alive():
-            recognition_thread.join(timeout=5.0)  # Increased timeout for transcription
+            recognition_thread.join(timeout=self._STOP_WORKER_JOIN_TIMEOUT_S)
         if not session_cancel.is_set():
             self._signal_recognition_stop()
 
         if recognition_thread and recognition_thread.is_alive():
-            recognition_thread.join(timeout=1.0)
+            recognition_thread.join(timeout=self._STOP_WORKER_FINAL_JOIN_TIMEOUT_S)
 
+        with self._buffer_lock:
+            if self._session_cancel is not session_cancel:
+                return
+            worker_still_running = (
+                recognition_thread is not None
+                and worker_exited is not None
+                and not worker_exited.is_set()
+                and not session_cancel.is_set()
+            )
+            if worker_still_running:
+                self._idle_on_worker_exit = session_cancel
+            else:
+                self._recognition_mode = "toggle"
+        if worker_still_running:
+            logger.info(
+                "Transcription still running after stop; staying in PROCESSING until it finishes "
+                "or is cancelled"
+            )
+            return
         if self._session_cancel is not session_cancel:
             return
-        self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
 
     def _reload_and_recognize(self) -> None:
@@ -3889,6 +3921,7 @@ class SpeechRecognitionManager:
         logger.debug("_perform_recognition thread started")
         cancel = self._session_cancel
         segment_queue = self._segment_queue
+        worker_exited = getattr(self, "_worker_exited", None)
         try:
             while True:
                 if cancel.is_set():
@@ -3959,11 +3992,21 @@ class SpeechRecognitionManager:
                     self._update_state(RecognitionState.LISTENING)
         finally:
             logger.debug("_perform_recognition thread exiting")
-            # Do not force IDLE here. stop_recognition() already does that,
-            # and a leftover worker can finish after the user has started
-            # again (LISTENING, should_record still false during the start
-            # sound). Forcing IDLE would paint the tray idle and make the
-            # next Alt+F12 start a second session (#739).
+            hand_off = False
+            if worker_exited is not None:
+                with self._buffer_lock:
+                    worker_exited.set()
+                    hand_off = self._idle_on_worker_exit is cancel
+                    if hand_off:
+                        self._idle_on_worker_exit = None
+            if (
+                hand_off
+                and self._session_cancel is cancel
+                and not cancel.is_set()
+                and not self.should_record
+            ):
+                self._recognition_mode = "toggle"
+                self._update_state(RecognitionState.IDLE)
 
     def _enqueue_audio_segment(self, audio_buffer: list[bytes]) -> None:
         """Queue an audio segment for asynchronous transcription."""
