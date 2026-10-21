@@ -434,9 +434,7 @@ def test_follow_layout_priority_change_keeps_multilingual_variant_and_mode(
     )
     dialog._get_selected_whispercpp_model.side_effect = lambda: selected_variant["id"] or "small"
     dialog._is_selected_whispercpp_model_english_only.side_effect = lambda: (
-        settings_dialog.is_english_only_whispercpp_model(
-            dialog._get_selected_whispercpp_model()
-        )
+        settings_dialog.is_english_only_whispercpp_model(dialog._get_selected_whispercpp_model())
     )
 
     dialog_class._apply_simple_choice(dialog)

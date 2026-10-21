@@ -197,8 +197,8 @@ def test_follow_layout_auto_uses_a_readout_without_applying_settings(
     picker = _picker_stub(settings_dialog, rows=LANGS, active="en-us")
     label_text = {"value": "English (US)"}
     picker._label.set_text.side_effect = lambda text: label_text.__setitem__("value", text)
-    picker.set_active_id.side_effect = lambda item_id: settings_dialog.SearchablePicker.set_active_id(
-        picker, item_id
+    picker.set_active_id.side_effect = (
+        lambda item_id: settings_dialog.SearchablePicker.set_active_id(picker, item_id)
     )
     picker.get_active_id.side_effect = lambda: settings_dialog.SearchablePicker.get_active_id(
         picker
