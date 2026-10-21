@@ -252,6 +252,7 @@ def _dialog_for_finalize(
     buffered_reload: bool = False,
     saved_callbacks: Optional[list[Any]] = None,
     has_cancel: bool = True,
+    pending_transcription: bool = False,
 ) -> Mock:
     """Minimal dialog wired for _finalize_test / idle-wait helpers."""
     dialog = Mock()
@@ -281,6 +282,7 @@ def _dialog_for_finalize(
     )
     dialog._keep_waiting_after_timeout = SettingsDialog._keep_waiting_after_timeout.__get__(dialog)
     dialog._finish_test_restore_ui = SettingsDialog._finish_test_restore_ui.__get__(dialog)
+    dialog._test_engine_busy = SettingsDialog._test_engine_busy.__get__(dialog)
     dialog._check_test_result = Mock(return_value=False)
 
     if has_cancel:
@@ -294,14 +296,70 @@ def _dialog_for_finalize(
                 "_buffered_reload_session",
                 "stop_recognition",
                 "set_text_callbacks",
+                "has_pending_transcription",
             ]
         )
     engine.state = state
     engine._buffered_reload_session = buffered_reload
+    engine.has_pending_transcription = Mock(return_value=pending_transcription)
     engine.stop_recognition = Mock()
     engine.set_text_callbacks = Mock()
     dialog.speech_engine = engine
     return dialog
+
+
+def test_open_dictation_pad_row_invokes_callback_on_click() -> None:
+    callback = Mock()
+    dialog = Mock()
+    dialog.dictation_pad_open_callback = callback
+    dialog._on_dictation_pad_open_clicked = SettingsDialog._on_dictation_pad_open_clicked.__get__(
+        dialog
+    )
+    group = Mock()
+    button = Mock()
+    row = Mock()
+
+    with (
+        patch.object(settings_dialog.Gtk, "Button", return_value=button),
+        patch.object(settings_dialog, "PreferenceRow", return_value=row) as row_factory,
+    ):
+        SettingsDialog._add_dictation_pad_open_row(dialog, group)
+
+    group.add_row.assert_called_once_with(row)
+    row_factory.assert_called_once_with(
+        title="Open Dictation Pad",
+        subtitle="Show the Dictation Pad window",
+        widget=button,
+        keywords=("pad", "window", "open"),
+    )
+    click_callback = button.connect.call_args.args[1]
+    click_callback(button)
+    callback.assert_called_once_with()
+
+
+def test_open_dictation_pad_row_is_absent_without_callback() -> None:
+    dialog = Mock()
+    dialog.dictation_pad_open_callback = None
+    group = Mock()
+
+    with patch.object(settings_dialog.Gtk, "Button") as button_factory:
+        SettingsDialog._add_dictation_pad_open_row(dialog, group)
+
+    button_factory.assert_not_called()
+    group.add_row.assert_not_called()
+    assert dialog.dictation_pad_open_button is None
+
+
+def test_dictation_pad_switch_persists_routing_preference() -> None:
+    dialog = Mock()
+    dialog._initializing = False
+    dialog._applying_settings = False
+    dialog.config_manager = Mock()
+
+    assert SettingsDialog._on_dictation_pad_toggled(dialog, Mock(), True) is False
+
+    dialog.config_manager.set.assert_called_once_with("text_injection", "dictate_to_pad", True)
+    dialog.config_manager.save_settings.assert_called_once()
 
 
 def test_finalize_test_buffered_reload_waits_for_idle_before_restore() -> None:
@@ -354,7 +412,7 @@ def test_wait_for_idle_treats_buffered_flag_as_busy_even_if_state_idle() -> None
 
 
 def test_finalize_test_idle_path_uses_settle_delay() -> None:
-    """Non-buffered stop already reached IDLE — keep the legacy 500ms settle."""
+    """When no work remains, keep the legacy 500ms settle."""
     dialog = _dialog_for_finalize(state=RecognitionState.IDLE, buffered_reload=False)
 
     with patch.object(settings_dialog, "GLib") as glib:
@@ -366,6 +424,40 @@ def test_finalize_test_idle_path_uses_settle_delay() -> None:
     glib.timeout_add.assert_called_once_with(500, dialog._restore_callbacks_and_check_result)
     # Live callbacks still saved until the settle timeout fires.
     assert hasattr(dialog, "_saved_text_callbacks")
+
+
+def test_finalize_waits_for_pending_transcription_and_keeps_test_callback() -> None:
+    """Late recognition text stays on the test path after state becomes IDLE."""
+    live_text: list[str] = []
+
+    def live_callback(text: str) -> None:
+        live_text.append(text)
+
+    dialog = _dialog_for_finalize(state=RecognitionState.IDLE)
+    dialog._saved_text_callbacks = [live_callback]
+    dialog.speech_engine.has_pending_transcription = Mock(side_effect=[True, True, False])
+    dialog._test_text_callback = SettingsDialog._test_text_callback.__get__(dialog)
+    dialog._append_test_result = SettingsDialog._append_test_result.__get__(dialog)
+
+    with patch.object(settings_dialog, "GLib") as glib:
+        glib.idle_add.side_effect = lambda callback, *args: callback(*args)
+        SettingsDialog._finalize_test(dialog)
+
+        dialog.speech_engine.set_text_callbacks.assert_not_called()
+        assert dialog._test_active is True
+
+        dialog._test_text_callback("hello world")
+        assert dialog.test_buffer._text == "hello world"
+        assert live_text == []
+
+        assert SettingsDialog._wait_for_idle_then_restore_callbacks(dialog) is True
+        dialog.speech_engine.set_text_callbacks.assert_not_called()
+        assert SettingsDialog._wait_for_idle_then_restore_callbacks(dialog) is False
+
+    dialog.speech_engine.set_text_callbacks.assert_called_once_with([live_callback])
+    assert live_text == []
+    assert not hasattr(dialog, "_saved_text_callbacks")
+    glib.timeout_add.assert_any_call(100, dialog._wait_for_idle_then_restore_callbacks)
 
 
 def test_timeout_does_not_restore_live_while_buffered_starts_cancel() -> None:
@@ -385,6 +477,26 @@ def test_timeout_does_not_restore_live_while_buffered_starts_cancel() -> None:
     thread_cls.assert_called_once()
     assert thread_cls.call_args.kwargs["target"] == dialog._cancel_buffered_reload_then_restore
     assert thread_cls.call_args.kwargs["daemon"] is True
+
+
+def test_nonbuffered_timeout_keeps_waiting_for_pending_transcription() -> None:
+    """Do not invoke buffered cancellation for a non-buffered active worker."""
+    dialog = _dialog_for_finalize(
+        state=RecognitionState.IDLE,
+        pending_transcription=True,
+    )
+    dialog._test_idle_wait_ticks = 1799
+
+    with patch.object(settings_dialog.threading, "Thread") as thread_cls:
+        result = SettingsDialog._wait_for_idle_then_restore_callbacks(dialog)
+
+    assert result is True
+    thread_cls.assert_not_called()
+    dialog.speech_engine._cancel_reload_recording.assert_not_called()
+    dialog.speech_engine.set_text_callbacks.assert_not_called()
+    assert dialog._test_active is True
+    assert dialog._test_idle_wait_ticks == 1800
+    assert dialog._test_timeout_cancel_attempted is True
 
 
 def test_timeout_without_cancel_keeps_waiting_active() -> None:
@@ -427,6 +539,21 @@ def test_finish_after_buffered_cancel_restores_live_callbacks() -> None:
     dialog.speech_engine.set_text_callbacks.assert_called_once_with([live])
     assert not hasattr(dialog, "_saved_text_callbacks")
     glib.timeout_add.assert_called_once_with(300, dialog._check_test_result)
+
+
+def test_finish_after_buffered_cancel_resumes_waiting_if_work_remains() -> None:
+    dialog = _dialog_for_finalize(
+        state=RecognitionState.IDLE,
+        pending_transcription=True,
+    )
+
+    with patch.object(settings_dialog, "GLib") as glib:
+        result = SettingsDialog._finish_test_after_buffered_cancel(dialog)
+
+    assert result is False
+    dialog.speech_engine.set_text_callbacks.assert_not_called()
+    assert dialog._test_active is True
+    glib.timeout_add.assert_called_once_with(100, dialog._wait_for_idle_then_restore_callbacks)
 
 
 def test_cancel_buffered_reload_then_restore_schedules_finish() -> None:

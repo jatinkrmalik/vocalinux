@@ -1319,7 +1319,7 @@ class TrayIndicator:
         logger.debug("Settings clicked")
         self._show_settings_page(None)
 
-    def _show_settings_page(self, page_name: Optional[str]):
+    def _show_settings_page(self, page_name: Optional[str]) -> None:
         """Open settings, optionally focused on a specific sidebar page."""
         dialog = self._settings_dialog
         if dialog is not None:
@@ -1349,6 +1349,9 @@ class TrayIndicator:
             language_shortcuts_update_callback=self.refresh_language_shortcuts,
             history_update_callback=self._apply_history_settings,
             history_clear_callback=self.clear_transcription_history,
+            dictation_pad_open_callback=(
+                self.dictation_pad.show_pad if self.dictation_pad is not None else None
+            ),
         )
         dialog.connect("response", self._on_settings_dialog_response)
         dialog.connect("destroy", self._on_settings_dialog_destroyed)

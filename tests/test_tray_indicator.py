@@ -1024,6 +1024,23 @@ class TestTrayIndicator(unittest.TestCase):
                 self.tray_indicator.set_overlay_enabled,
             )
 
+    def test_settings_dialog_receives_dictation_pad_open_callback(self) -> None:
+        """Settings receives the live pad's show callback when one exists."""
+        import vocalinux.ui.tray_indicator as tray_module
+
+        pad = MagicMock()
+        self.tray_indicator.dictation_pad = pad
+        self.tray_indicator._settings_dialog = None
+        mock_dialog_class = MagicMock(return_value=MagicMock())
+
+        with patch.object(tray_module, "SettingsDialog", mock_dialog_class):
+            self.tray_indicator._on_settings_clicked(None)
+
+        self.assertIs(
+            mock_dialog_class.call_args.kwargs["dictation_pad_open_callback"],
+            pad.show_pad,
+        )
+
     def test_quit_destroys_overlay(self):
         mock_overlay = MagicMock()
         self.tray_indicator.overlay = mock_overlay

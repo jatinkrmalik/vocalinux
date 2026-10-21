@@ -454,6 +454,8 @@ class SpeechRecognitionManager:
         self.state = RecognitionState.IDLE
         self.audio_thread: Optional[threading.Thread] = None
         self.recognition_thread: Optional[threading.Thread] = None
+        self._recognition_workers: list[threading.Thread] = []
+        self._recognition_workers_lock = threading.Lock()
         self.model: Any = None
         self.recognizer = None  # Added for VOSK
         self.command_processor = CommandProcessor(language=self.language)
@@ -3359,6 +3361,7 @@ class SpeechRecognitionManager:
         target = self._reload_and_recognize if reload_in_background else self._perform_recognition
         self.recognition_thread = threading.Thread(target=target)
         self.recognition_thread.daemon = True
+        self._track_recognition_worker(self.recognition_thread)
         self.recognition_thread.start()
         # After the threads exist: a start that returned early must not duck.
         self._arm_playback_duck()
@@ -3442,6 +3445,28 @@ class SpeechRecognitionManager:
 
         self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
+
+    def _track_recognition_worker(self, worker: threading.Thread) -> None:
+        """Remember a recognition worker until it exits so late text is still pending."""
+        with self._recognition_workers_lock:
+            self._recognition_workers = [w for w in self._recognition_workers if w.is_alive()]
+            self._recognition_workers.append(worker)
+
+    def has_pending_transcription(self) -> bool:
+        """Return True while any recognition worker may still deliver text to text_callbacks.
+
+        A worker from an earlier session can outlive stop_recognition()'s bounded
+        joins and still be transcribing after a new session replaced
+        ``recognition_thread``. Audio left in the queue after every worker exited
+        has no consumer outside a buffered reload (tracked by
+        ``_buffered_reload_session``), so it never counts.
+        """
+        with self._recognition_workers_lock:
+            workers = list(self._recognition_workers)
+        if self.recognition_thread is not None:
+            workers.append(self.recognition_thread)
+        current = threading.current_thread()
+        return any(worker is not current and worker.is_alive() for worker in workers)
 
     def _reload_and_recognize(self) -> None:
         """Reload an idle model while the recording thread captures speech."""

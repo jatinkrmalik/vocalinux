@@ -1096,5 +1096,194 @@ class TestVoiceCommandsProperty(unittest.TestCase):
         self.assertFalse(mgr._resolve_voice_commands_enabled())
 
 
+class TestPendingTranscription(unittest.TestCase):
+    def test_live_non_current_worker_is_pending(self) -> None:
+        manager = _make_manager()
+        started = threading.Event()
+        release = threading.Event()
+
+        def worker() -> None:
+            started.set()
+            release.wait(timeout=2.0)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        try:
+            self.assertTrue(started.wait(timeout=1.0))
+            manager.recognition_thread = thread
+            self.assertTrue(manager.has_pending_transcription())
+        finally:
+            release.set()
+            thread.join(timeout=1.0)
+
+    def test_superseded_worker_is_still_pending(self) -> None:
+        manager = _make_manager()
+        started = threading.Event()
+        release = threading.Event()
+
+        def worker_a() -> None:
+            started.set()
+            release.wait(timeout=2.0)
+
+        def worker_b() -> None:
+            return
+
+        first = threading.Thread(target=worker_a, daemon=True)
+        manager._track_recognition_worker(first)
+        first.start()
+        self.assertTrue(started.wait(timeout=1.0))
+
+        second = threading.Thread(target=worker_b, daemon=True)
+        second.start()
+        second.join(timeout=1.0)
+        manager.recognition_thread = second
+
+        try:
+            self.assertTrue(manager.has_pending_transcription())
+        finally:
+            release.set()
+            first.join(timeout=1.0)
+
+        self.assertFalse(manager.has_pending_transcription())
+
+    def test_track_recognition_worker_prunes_finished_workers(self) -> None:
+        manager = _make_manager()
+
+        def finished_worker() -> None:
+            return
+
+        finished = threading.Thread(target=finished_worker, daemon=True)
+        finished.start()
+        finished.join(timeout=1.0)
+        manager._track_recognition_worker(finished)
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def active_worker() -> None:
+            started.set()
+            release.wait(timeout=2.0)
+
+        active = threading.Thread(target=active_worker, daemon=True)
+        manager._track_recognition_worker(active)
+        active.start()
+
+        try:
+            self.assertTrue(started.wait(timeout=1.0))
+            self.assertEqual(manager._recognition_workers, [active])
+        finally:
+            release.set()
+            active.join(timeout=1.0)
+
+    def test_start_recognition_tracks_worker(self) -> None:
+        manager = _make_manager()
+        manager._model_initialized = True
+        manager.model = MagicMock()
+        started = threading.Event()
+        release = threading.Event()
+
+        def record_audio() -> None:
+            return
+
+        def perform_recognition() -> None:
+            started.set()
+            release.wait(timeout=2.0)
+
+        manager._record_audio = record_audio
+        manager._perform_recognition = perform_recognition
+
+        try:
+            with (
+                patch("vocalinux.speech_recognition.recognition_manager.play_start_sound"),
+                patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"),
+                patch.object(manager, "_arm_playback_duck"),
+            ):
+                self.assertTrue(manager.start_recognition())
+                worker = manager.recognition_thread
+                self.assertIsNotNone(worker)
+                self.assertIn(worker, manager._recognition_workers)
+                self.assertTrue(started.wait(timeout=1.0))
+                release.set()
+                manager.stop_recognition()
+        finally:
+            release.set()
+            if manager.recognition_thread is not None:
+                manager.recognition_thread.join(timeout=1.0)
+
+    def test_queued_audio_without_live_worker_is_not_pending(self) -> None:
+        manager = _make_manager()
+        manager._segment_queue.put(([], "en"))
+
+        self.assertFalse(manager.has_pending_transcription())
+
+    def test_idle_manager_without_queued_audio_is_not_pending(self) -> None:
+        manager = _make_manager()
+
+        self.assertFalse(manager.has_pending_transcription())
+
+    def test_stop_recognition_signal_is_not_pending(self) -> None:
+        manager = _make_manager()
+        manager.state = RecognitionState.LISTENING
+        manager.should_record = True
+        started = threading.Event()
+
+        def worker() -> None:
+            started.set()
+            manager._perform_recognition()
+
+        thread = threading.Thread(target=worker, daemon=True)
+        manager.recognition_thread = thread
+        thread.start()
+        self.assertTrue(started.wait(timeout=1.0))
+
+        with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
+            manager.stop_recognition()
+
+        self.assertFalse(manager.has_pending_transcription())
+
+    def test_orphaned_final_segment_is_not_pending(self) -> None:
+        manager = _make_manager()
+        manager.state = RecognitionState.LISTENING
+        manager.should_record = True
+        started = threading.Event()
+        audio_release = threading.Event()
+
+        def worker() -> None:
+            started.set()
+            manager._perform_recognition()
+
+        def audio_worker() -> None:
+            audio_release.wait(timeout=1.0)
+
+        recognition_thread = threading.Thread(target=worker, daemon=True)
+        manager.recognition_thread = recognition_thread
+        recognition_thread.start()
+        self.assertTrue(started.wait(timeout=1.0))
+
+        audio_thread = threading.Thread(target=audio_worker, daemon=True)
+        manager.audio_thread = audio_thread
+        audio_thread.start()
+        manager.audio_buffer = [b"\x00\x00"] * 8
+        manager._recording_segment_has_speech = True
+
+        try:
+            with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
+                manager.stop_recognition()
+        finally:
+            audio_release.set()
+            audio_thread.join(timeout=1.0)
+            recognition_thread.join(timeout=1.0)
+
+        with manager._segment_queue.mutex:
+            self.assertTrue(any(item is not None for item in manager._segment_queue.queue))
+        self.assertFalse(manager.has_pending_transcription())
+
+    def test_worker_does_not_count_itself_as_pending(self) -> None:
+        manager = _make_manager()
+        manager.recognition_thread = threading.current_thread()
+
+        self.assertFalse(manager.has_pending_transcription())
+
+
 if __name__ == "__main__":
     unittest.main()
