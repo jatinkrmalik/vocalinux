@@ -119,6 +119,37 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
         )
         self.assertEqual(gate.held, [])
 
+    def test_old_session_gate_does_not_release_new_session_text(self) -> None:
+        """A slow worker's gate must not release a newer session's held text."""
+        manager = _make_manager(engine="vosk")
+        manager._voice_commands_enabled = False
+        delivered: list[str] = []
+        manager.text_callbacks.append(delivered.append)
+        old_gate = _ReleaseGate()
+        new_gate = _ReleaseGate()
+
+        def transcribe(audio_buffer: list[bytes]) -> str:
+            return audio_buffer[0].decode()
+
+        with (
+            patch.object(manager, "_transcribe_with_vosk", side_effect=transcribe),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=_identity),
+        ):
+            manager._process_audio_buffer(_AudioSegment([b"old"], None, release_gate=old_gate))
+            manager._process_audio_buffer(_AudioSegment([b"new"], None, release_gate=new_gate))
+            self.assertEqual(delivered, [])
+
+            # The old session's key goes up; the new session is still held.
+            old_gate.set()
+            manager._release_held_transcripts(old_gate)
+            self.assertEqual(delivered, ["old"])
+            self.assertEqual(len(new_gate.held), 1)
+
+            new_gate.set()
+            manager._release_held_transcripts(new_gate)
+
+        self.assertEqual(delivered, ["old", "new"])
+
     def test_empty_transcription_while_held_does_not_flush(self) -> None:
         """A blank mid-hold result must not release text before the key is up."""
         manager = _make_manager(engine="vosk")
