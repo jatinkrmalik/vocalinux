@@ -18,7 +18,11 @@ from typing import List, Optional, Tuple, cast
 
 from ..utils.host_process import host_env
 from ..utils.paths import config_dir
-from .focused_window import is_focused_window_terminal, read_wm_class
+from .focused_window import (
+    focused_xwayland_client_without_ibus,
+    is_focused_window_terminal,
+    read_wm_class,
+)
 from .ibus_engine import (
     IBusTextInjector,
     is_ibus_active_input_method,
@@ -1676,10 +1680,21 @@ class TextInjector:
         if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
             self._try_recover_from_fallback()
 
+        xwayland_detour = False
         try:
             with self._state_lock:
                 current_env = self.environment
                 ibus_injector = self._ibus_injector
+
+            if current_env == DesktopEnvironment.WAYLAND_IBUS and self._should_bypass_ibus():
+                # The IBus engine would commit into no input context and still
+                # report OK (#972); send this segment through XWayland instead.
+                logger.info("Focused XWayland client has no IBus input method; using xdotool")
+                with self._state_lock:
+                    if self.environment == DesktopEnvironment.WAYLAND_IBUS:
+                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                        xwayland_detour = True
+                    current_env = self.environment
 
             if (
                 current_env == DesktopEnvironment.WAYLAND_IBUS
@@ -1823,6 +1838,25 @@ class TextInjector:
             except ImportError:
                 logger.warning("Could not import audio feedback module")
             return False
+        finally:
+            if xwayland_detour:
+                with self._state_lock:
+                    if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+                        self.environment = DesktopEnvironment.WAYLAND_IBUS
+
+    def _should_bypass_ibus(self) -> bool:
+        """True when IBus cannot reach the focused window but xdotool can (#972).
+
+        Only applies when the backend was chosen automatically; a pinned IBus
+        backend is the user's call and is kept.
+        """
+        if self._backend_pin[0] == "ibus":
+            return False
+        try:
+            return focused_xwayland_client_without_ibus()
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            logger.debug(f"XWayland focus probe failed, keeping IBus: {exc}")
+            return False
 
     def _inject_with_xdotool(self, text: str) -> None:
         """
@@ -1845,12 +1879,17 @@ class TextInjector:
             os.environ.setdefault("DISPLAY", env["DISPLAY"])
             logger.debug(f"Using XWayland with DISPLAY={env['DISPLAY']}")
             self._wait_for_modifiers_released()
-            if self._inject_via_clipboard_paste(text, env=env):
+            if self._clipboard_holds_non_text():
+                logger.info(
+                    "Clipboard holds non-text content; typing instead of pasting to preserve it"
+                )
+            elif self._inject_via_clipboard_paste(text, env=env):
                 return
-            logger.warning(
-                "Clipboard paste failed, falling back to xdotool type "
-                "(character-by-character; text may be scrambled on non-US layouts)"
-            )
+            else:
+                logger.warning(
+                    "Clipboard paste failed, falling back to xdotool type "
+                    "(character-by-character; text may be scrambled on non-US layouts)"
+                )
 
             # Add a small delay to ensure text is injected properly
             time.sleep(0.3)  # Increased delay for better reliability
@@ -2038,7 +2077,7 @@ class TextInjector:
         except UnicodeEncodeError:
             return True
 
-    def _read_clipboard(self) -> Optional[str]:
+    def _read_clipboard(self, prefer_x11: Optional[bool] = None) -> Optional[str]:
         """
         Read clipboard text only.
 
@@ -2048,12 +2087,14 @@ class TextInjector:
 
         On X11 and WAYLAND_XDOTOOL this reads the X11 CLIPBOARD (xclip/xsel),
         matching the selection the xdotool paste wrote. wl-paste is a different
-        clipboard.
+        clipboard. ``prefer_x11`` overrides that choice so a caller can read the
+        clipboard it wrote even after the backend has changed.
         """
-        prefer_x11 = self.environment in (
-            DesktopEnvironment.X11,
-            DesktopEnvironment.WAYLAND_XDOTOOL,
-        )
+        if prefer_x11 is None:
+            prefer_x11 = self.environment in (
+                DesktopEnvironment.X11,
+                DesktopEnvironment.WAYLAND_XDOTOOL,
+            )
         host_is_wayland = (
             self._session_environment == DesktopEnvironment.WAYLAND
             or os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
@@ -2096,8 +2137,12 @@ class TextInjector:
         return "" if saw_empty else None
 
     def _clipboard_holds_non_text(self) -> bool:
-        """Return whether the X11 clipboard has no readable text target."""
-        if self.environment != DesktopEnvironment.X11:
+        """Return whether the X11 clipboard has no readable text target.
+
+        Checked on X11 and WAYLAND_XDOTOOL, the two routes that paste through
+        the X11 clipboard and could not restore an image or file afterwards.
+        """
+        if self.environment not in (DesktopEnvironment.X11, DesktopEnvironment.WAYLAND_XDOTOOL):
             return False
         if not shutil.which("xclip"):
             return self._read_clipboard() is None
@@ -2302,7 +2347,7 @@ class TextInjector:
                 if target is None:
                     return
                 # User copied something else during the delay — leave it alone.
-                if self._read_clipboard() != text:
+                if self._read_clipboard(prefer_x11=prefer_x11) != text:
                     logger.debug("Clipboard changed during restore delay; skipping restore")
                     return
                 if target == "":

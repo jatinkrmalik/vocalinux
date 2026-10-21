@@ -325,7 +325,7 @@ class TestTrayIndicator(unittest.TestCase):
             self.assertEqual(kwargs.get("initial_page"), "about")
             mock_dialog_instance.show.assert_called_once()
 
-    def test_update_available_shows_menu_and_opens_about(self):
+    def test_update_available_shows_menu_and_opens_about(self) -> None:
         """Background update check reveals tray item and opens About with release."""
         from vocalinux.utils.update_checker import ReleaseInfo
 
@@ -375,6 +375,32 @@ class TestTrayIndicator(unittest.TestCase):
             self.assertEqual(kwargs.get("initial_page"), "about")
             self.assertEqual(kwargs.get("pending_update"), release)
             self.assertIn("update_status_callback", kwargs)
+            self.assertIn("update_checks_callback", kwargs)
+
+    def test_update_monitor_follows_build_without_channel_getter(self) -> None:
+        monitor = self.tray_indicator._update_monitor
+
+        self.assertIsNone(monitor._get_channel)
+        self.assertIs(monitor._get_enabled.__self__, self.tray_indicator)
+        self.assertIs(
+            monitor._get_enabled.__func__,
+            type(self.tray_indicator)._update_checks_enabled,
+        )
+
+    def test_automatic_update_checks_toggle_updates_tray(self) -> None:
+        menu_item = MagicMock()
+        self.tray_indicator._update_menu_item = menu_item
+        self.tray_indicator.menu = MagicMock()
+        self.tray_indicator._pending_update = MagicMock()
+
+        self.tray_indicator._on_update_checks_toggled(False)
+
+        self.assertIsNone(self.tray_indicator._pending_update)
+        menu_item.hide.assert_called_once()
+
+        self.tray_indicator._update_monitor.check_now = MagicMock()
+        self.tray_indicator._on_update_checks_toggled(True)
+        self.tray_indicator._update_monitor.check_now.assert_called_once_with()
 
     def test_update_notification_not_marked_when_notify_send_missing(self):
         """Do not record last_notified_version if notify-send cannot be spawned."""
@@ -406,6 +432,33 @@ class TestTrayIndicator(unittest.TestCase):
             self.tray_indicator._maybe_notify_update(release)
 
         self.assertEqual(recorded_sets, [])
+
+    def test_disabled_automatic_checks_do_not_send_notification(self) -> None:
+        from vocalinux.utils.update_checker import ReleaseInfo
+
+        release = ReleaseInfo(
+            tag_name="v0.99.0",
+            version="0.99.0",
+            name="v0.99.0",
+            html_url="https://github.com/VocaHQ/vocalinux/releases/tag/v0.99.0",
+            body="Notes",
+            published_at="2026-08-06T00:00:00Z",
+            prerelease=False,
+            channel="stable",
+        )
+
+        def get_bool(section: str, key: str, default: bool = False) -> bool:
+            if section == "updates" and key == "check_automatically":
+                return False
+            return default
+
+        self.tray_indicator.config_manager = self.mock_config_manager
+        self.mock_config_manager.get_bool.side_effect = get_bool
+
+        with patch("subprocess.Popen") as mock_popen:
+            self.tray_indicator._maybe_notify_update(release)
+
+        mock_popen.assert_not_called()
 
     def test_update_notification_persists_after_successful_spawn(self):
         """Record last_notified_version only after notify-send is spawned."""

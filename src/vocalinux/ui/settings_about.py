@@ -9,7 +9,11 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from ..utils.update_checker import is_trusted_release_url, normalize_channel
+from ..utils.update_checker import (
+    DEFAULT_CHECK_AUTOMATICALLY,
+    build_channel,
+    is_trusted_release_url,
+)
 from ..version import __copyright__, __url__, __version__
 
 logger = logging.getLogger(__name__)
@@ -283,6 +287,7 @@ class AboutSectionMixin(Gtk.Dialog):
         about_tab = getattr(self, "about_tab")
         config_manager = getattr(self, "config_manager")
         on_check_updates_clicked = getattr(self, "_on_check_updates_clicked")
+        on_update_checks_toggled = getattr(self, "_on_update_checks_toggled")
         on_update_channel_changed = getattr(self, "_on_update_channel_changed")
         on_open_release_clicked = getattr(self, "_on_open_release_clicked")
 
@@ -291,7 +296,6 @@ class AboutSectionMixin(Gtk.Dialog):
         from ..utils.resource_manager import ResourceManager
         from .settings_dialog import (
             _CONTROL_WIDTH,
-            DEFAULT_UPDATE_CHANNEL,
             PreferenceRow,
             PreferencesGroup,
             _combo_chrome,
@@ -427,10 +431,31 @@ class AboutSectionMixin(Gtk.Dialog):
         )
         about_tab.pack_start(talk_group, False, False, 0)
 
+        build = build_channel()
         updates_group = PreferencesGroup(
             title="Updates",
-            description="Stable for numbered releases. Nightly for dated development builds.",
+            description=(
+                f"This is a {build} build, so background checks only look for "
+                f"{build} releases. Pick a channel below to look one up by hand."
+            ),
             keywords=("update", "version", "release", "upgrade", "appimage", "nightly", "channel"),
+        )
+
+        self.update_checks_switch = Gtk.Switch()
+        self.update_checks_switch.set_active(
+            config_manager.get_bool("updates", "check_automatically", DEFAULT_CHECK_AUTOMATICALLY)
+        )
+        self.update_checks_switch.connect("state-set", on_update_checks_toggled)
+        updates_group.add_row(
+            PreferenceRow(
+                title="Check for updates automatically",
+                subtitle=(
+                    "Look for new releases in the background and show a tray entry and a "
+                    "notification when one is out"
+                ),
+                widget=self.update_checks_switch,
+                keywords=("update", "notification", "automatic", "check", "disable"),
+            )
         )
 
         self.update_channel_combo = Gtk.ComboBoxText()
@@ -443,10 +468,7 @@ class AboutSectionMixin(Gtk.Dialog):
                 "nightly-YYYY-MM-DD build."
             ),
         )
-        saved_channel = normalize_channel(
-            config_manager.get_str("updates", "channel", DEFAULT_UPDATE_CHANNEL)
-        )
-        self.update_channel_combo.set_active_id(saved_channel)
+        self.update_channel_combo.set_active_id(build_channel())
 
         self.check_updates_btn = Gtk.Button(label="Check")
         self.check_updates_btn.get_style_context().add_class("suffix-button")
