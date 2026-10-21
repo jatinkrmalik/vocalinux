@@ -14,7 +14,7 @@ import subprocess
 import threading
 import time
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 
 from ..utils.host_process import host_env
 from ..utils.paths import config_dir
@@ -32,6 +32,18 @@ from .remote_desktop_portal import (
 )
 
 _PORTAL_SUBMIT_TIMEOUT_S = 195.0  # portal's _START_TIMEOUT_S + _REQUEST_TIMEOUT_S
+_X11_PASTE_MIN_CHARS = 30
+_X11_TEXT_CLIPBOARD_TARGETS = frozenset(
+    {
+        "utf8_string",
+        "string",
+        "text",
+        "text/plain",
+        "text/plain;charset=utf-8",
+        "compound_text",
+    }
+)
+_X11_CLIPBOARD_META_TARGETS = frozenset({"targets", "timestamp", "multiple", "save_targets"})
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +161,7 @@ class TextInjector:
         self._state_lock = threading.Lock()
         self._abort_injections = threading.Event()
         self.last_typed_count = 0
-        self._clipboard_tool_health = {}
+        self._clipboard_tool_health: dict[str, bool] = {}
         self._clipboard_timeout = 0.35
         # Overlapping ydotool pastes: bump generation to cancel stale restores;
         # target keeps the original pre-injection clipboard across the window.
@@ -1564,7 +1576,9 @@ class TextInjector:
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = json.load(f)
-                return config.get("text_injection", {}).get("copy_to_clipboard", False)
+                    return cast(
+                        bool, config.get("text_injection", {}).get("copy_to_clipboard", False)
+                    )
         except Exception as e:
             logger.debug(f"Could not read copy_to_clipboard setting: {e}")
         return False
@@ -1785,7 +1799,7 @@ class TextInjector:
                 logger.warning("Could not import audio feedback module")
             return False
 
-    def _inject_with_xdotool(self, text: str):
+    def _inject_with_xdotool(self, text: str) -> None:
         """
         Inject text using xdotool for X11 environments.
 
@@ -1844,6 +1858,21 @@ class TextInjector:
                     time.sleep(0.2)
             except Exception as e:
                 logger.debug(f"Window focus command failed: {e}")
+
+        if (
+            self.environment == DesktopEnvironment.X11
+            and len(text) >= _X11_PASTE_MIN_CHARS
+            and self._paste_long_text_enabled()
+        ):
+            self._wait_for_modifiers_released()
+            if self._clipboard_holds_non_text():
+                logger.info(
+                    "Clipboard holds non-text content; typing instead of pasting to preserve it"
+                )
+            elif self._inject_via_clipboard_paste(text, env=env):
+                return
+            else:
+                logger.warning("Long-text clipboard paste failed; falling back to xdotool typing")
 
         # Inject text using xdotool
         try:
@@ -1921,10 +1950,6 @@ class TextInjector:
                                 )
                                 typed += 1  # the '\n' the Return produced
 
-                        # Add a larger delay between chunks
-                        if i + chunk_size < len(text):
-                            time.sleep(0.1)
-
                     logger.info(
                         f"Text injected using xdotool: '{text[:20]}...' ({len(text)} chars)"
                     )
@@ -1996,10 +2021,14 @@ class TextInjector:
         Returns the text, "" if a tool reports a verifiably empty clipboard,
         or None if unreadable as text (non-text data, no tool, or error).
 
-        On WAYLAND_XDOTOOL this reads the X11 CLIPBOARD (xclip/xsel), matching
-        the selection the xdotool paste wrote. wl-paste is a different clipboard.
+        On X11 and WAYLAND_XDOTOOL this reads the X11 CLIPBOARD (xclip/xsel),
+        matching the selection the xdotool paste wrote. wl-paste is a different
+        clipboard.
         """
-        prefer_x11 = self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
+        prefer_x11 = self.environment in (
+            DesktopEnvironment.X11,
+            DesktopEnvironment.WAYLAND_XDOTOOL,
+        )
         host_is_wayland = (
             self._session_environment == DesktopEnvironment.WAYLAND
             or os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
@@ -2041,6 +2070,40 @@ class TextInjector:
 
         return "" if saw_empty else None
 
+    def _clipboard_holds_non_text(self) -> bool:
+        """Return whether the X11 clipboard has no readable text target."""
+        if self.environment != DesktopEnvironment.X11:
+            return False
+        if not shutil.which("xclip"):
+            return self._read_clipboard() is None
+
+        try:
+            result = subprocess.run(
+                ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=1.0,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=host_env(),
+            )
+        except (subprocess.TimeoutExpired, OSError, UnicodeDecodeError):
+            logger.debug("Could not inspect X11 clipboard targets")
+            return self._read_clipboard() is None
+
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+
+        targets = {
+            target.strip().casefold() for target in result.stdout.splitlines() if target.strip()
+        }
+        if not targets:
+            return False
+
+        content_targets = targets.difference(_X11_CLIPBOARD_META_TARGETS)
+        return not any(target in _X11_TEXT_CLIPBOARD_TARGETS for target in content_targets)
+
     def _paste_shortcut_preference(self) -> str:
         """Return the configured clipboard-paste shortcut id."""
         from ..ui.config_manager import DEFAULT_PASTE_SHORTCUT, normalize_paste_shortcut
@@ -2058,6 +2121,24 @@ class TextInjector:
         except Exception as exc:
             logger.debug(f"Could not read paste_shortcut setting: {exc}")
         return DEFAULT_PASTE_SHORTCUT
+
+    def _paste_long_text_enabled(self) -> bool:
+        """Return whether long X11 dictations should use clipboard paste."""
+        try:
+            import json
+
+            config_path = os.path.join(config_dir(), "config.json")
+            if not os.path.exists(config_path):
+                return False
+            with open(config_path, "r") as handle:
+                config = json.load(handle)
+            text_injection = config.get("text_injection", {})
+            if not isinstance(text_injection, dict):
+                return False
+            return bool(text_injection.get("paste_long_text", False))
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            logger.debug("Could not read paste_long_text setting: %s", exc)
+            return False
 
     def _should_use_terminal_paste(self) -> bool:
         """Return True when clipboard injection should send Ctrl+Shift+V.
@@ -2085,12 +2166,12 @@ class TextInjector:
         that chord instead. Workaround for ydotool's US-ASCII-only key events
         (see issue #362). The chord itself is sent with wtype keysyms when
         that tool is usable, otherwise with a layout-resolved ydotool keycode
-        for Latin 'v' (issue #787). On WAYLAND_XDOTOOL the copy uses xclip/xsel
-        and the chord is xdotool's, because the focused XWayland window pastes
-        the X11 CLIPBOARD (#657). Saves the previous clipboard and restores it
-        after a short delay. Overlapping pastes share one restore target
-        (pre-first-injection content) and a generation counter so stale restore
-        threads exit.
+        for Latin 'v' (issue #787). On X11 and WAYLAND_XDOTOOL the copy uses
+        xclip/xsel and the chord is xdotool's, because the focused X11/XWayland
+        window pastes the X11 CLIPBOARD (#657). Saves the previous clipboard and
+        restores it after a short delay. Overlapping pastes share one restore
+        target (pre-first-injection content) and a generation counter so stale
+        restore threads exit.
 
         Args:
             text: The text to inject.
@@ -2100,12 +2181,12 @@ class TextInjector:
         Returns:
             True if successful, False otherwise
         """
-        logger.debug(
-            "Using clipboard-paste injection for non-ASCII text "
-            "(saving clipboard to restore after paste)"
-        )
+        logger.debug("Using clipboard-paste injection (saving clipboard to restore after paste)")
 
-        prefer_x11 = self.environment == DesktopEnvironment.WAYLAND_XDOTOOL
+        prefer_x11 = self.environment in (
+            DesktopEnvironment.X11,
+            DesktopEnvironment.WAYLAND_XDOTOOL,
+        )
         tools = self._x11_clipboard_tools() if prefer_x11 else None
 
         # Inherit a pending restore target so a second paste in the delay window
@@ -2133,7 +2214,7 @@ class TextInjector:
             ):
                 self._clipboard_restore_target = previous_clipboard
 
-        # Simulate paste. XWayland uses xdotool against the X11 CLIPBOARD;
+        # Simulate paste. X11/XWayland uses xdotool against the X11 CLIPBOARD;
         # native Wayland prefers wtype keysyms, then layout-resolved ydotool.
         # ydotool syntax differs by version:
         # - 0.1.x (distro packages): named sequences, e.g. ctrl+v
@@ -2408,11 +2489,14 @@ class TextInjector:
     def _clipboard_paste_command(self, *, terminal: bool = False) -> list:
         """Return argv for the clipboard paste chord.
 
-        On WAYLAND_XDOTOOL, xdotool against the X11 CLIPBOARD (what an XWayland
-        window pastes from). Otherwise prefers wtype keysyms, then ydotool
-        with a layout-resolved keycode for 'v'.
+        On X11 and WAYLAND_XDOTOOL, xdotool pastes from the X11 CLIPBOARD.
+        Otherwise prefer wtype keysyms, then ydotool with a layout-resolved
+        keycode for 'v'.
         """
-        if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+        if self.environment in (
+            DesktopEnvironment.X11,
+            DesktopEnvironment.WAYLAND_XDOTOOL,
+        ):
             chord = "ctrl+shift+v" if terminal else "ctrl+v"
             return ["xdotool", "key", "--clearmodifiers", chord]
         if self._wtype_usable_for_paste():
@@ -3190,8 +3274,11 @@ class TextInjector:
         except (TypeError, ValueError):
             return 0.012
 
-    def _log_current_window_info(self):
+    def _log_current_window_info(self) -> None:
         """Log information about the current window/application for debugging."""
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
         try:
             if (
                 self.environment == DesktopEnvironment.X11
@@ -3203,7 +3290,7 @@ class TextInjector:
         except Exception as e:
             logger.debug(f"Could not get window info: {e}")
 
-    def _log_x11_window_info(self):
+    def _log_x11_window_info(self) -> None:
         """Log X11 window information."""
         env = os.environ.copy()
 
@@ -3238,7 +3325,7 @@ class TextInjector:
                 timeout=2,
             )
             window_name = result.stdout.strip()
-            logger.info(f"Target window: '{window_name}' (ID: {window_id})")
+            logger.debug(f"Target window: '{window_name}' (ID: {window_id})")
 
             # Prefer xprop; xdotool classname is last-resort when xprop is missing
             # (see focused_window.read_wm_class).
@@ -3262,12 +3349,12 @@ class TextInjector:
             try:
                 with open(f"/proc/{window_pid}/comm", "r") as f:
                     process_name = f.read().strip()
-                logger.info(f"Target process: {process_name} (PID: {window_pid})")
+                logger.debug(f"Target process: {process_name} (PID: {window_pid})")
             except Exception:
                 pass
 
         except subprocess.TimeoutExpired:
-            logger.warning("Timeout getting window information")
+            logger.debug("Timeout getting window information")
         except subprocess.CalledProcessError as e:
             logger.debug(f"xdotool command failed: {e.stderr}")
         except Exception as e:

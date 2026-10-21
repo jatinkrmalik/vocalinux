@@ -3007,6 +3007,7 @@ lint = [
     { name = "black" },
     { name = "flake8" },
     { name = "isort" },
+    { name = "mypy" },
 ]
 
 [package.metadata]
@@ -3053,6 +3054,7 @@ lint = [
     { name = "black", specifier = ">=23.0.0" },
     { name = "flake8", specifier = ">=6.0.0" },
     { name = "isort", specifier = ">=5.12.0" },
+    { name = "mypy", specifier = ">=1.0.0" },
 ]
 
 [[package]]

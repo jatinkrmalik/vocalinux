@@ -234,7 +234,7 @@ class TestMainModule(unittest.TestCase):
                 model_size="medium",
                 language="en-us",
                 vad_sensitivity=3,
-                silence_timeout=2.0,
+                silence_timeout=1.2,
                 stop_sound_guard_ms=200,
                 buffer_during_reload=True,
                 voice_commands_enabled=None,

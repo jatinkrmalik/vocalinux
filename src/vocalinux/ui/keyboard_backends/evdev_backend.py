@@ -26,7 +26,7 @@ import select
 import threading
 import time
 import weakref
-from typing import Any, Mapping, Optional, Sequence, TextIO
+from typing import Any, Mapping, Optional, Sequence, TextIO, cast
 
 # Try to import evdev
 try:
@@ -165,7 +165,7 @@ def _is_post_grab(event: InputEvent, grab_ts: float) -> bool:
     unreadable is treated as pre-grab — refusing the grab is the safe side.
     """
     try:
-        return event.timestamp() >= grab_ts
+        return cast(bool, event.timestamp() >= grab_ts)
     except (AttributeError, TypeError):
         return False
 
@@ -1610,8 +1610,8 @@ class EvdevKeyboardBackend(KeyboardBackend):
         self._hub._known_engines.add(self)
         self._hub.reset_if_idle()
 
-        self.last_trigger_time = 0
-        self.last_key_press_time = 0
+        self.last_trigger_time: float = 0.0
+        self.last_key_press_time: float = 0.0
         self.double_tap_threshold = 0.3  # seconds
         self.key_pressed_devices: set[int] = set()
 

@@ -603,34 +603,53 @@ class TestInitWhispercpp(unittest.TestCase):
                     except Exception:
                         pass
 
-    def test_cpu_fallback_filters_unsupported_whispercpp_params(self):
-        mgr = _make_manager(engine="whisper_cpp")
-        model = MagicMock()
-        mock_pywhispercpp = MagicMock()
-        mock_pywhispercpp.Model.return_value = model
-
-        with patch.dict(
-            "sys.modules",
-            {
-                "pywhispercpp": MagicMock(),
-                "pywhispercpp.model": mock_pywhispercpp,
-            },
+    def test_cpu_fallback_filters_unsupported_whispercpp_params(self) -> None:
+        for override, original_threads, expected_threads in (
+            (None, 2, 6),
+            (3, 2, 3),
         ):
-            with patch.object(mgr, "_get_supported_whispercpp_params", return_value={"n_threads"}):
-                loaded_backend = mgr._handle_gpu_fallback(
-                    RuntimeError("16-bit storage not supported"),
-                    "/tmp/model.bin",
-                    {"n_threads": 4, "no_context": True},
-                    "cpu",
-                )
+            with self.subTest(override=override):
+                mgr = _make_manager(engine="whisper_cpp", whispercpp_n_threads=override)
+                model = MagicMock()
+                mock_pywhispercpp = MagicMock()
+                mock_pywhispercpp.Model.return_value = model
+                model_kwargs = {"n_threads": original_threads, "no_context": True}
 
-        self.assertEqual(loaded_backend, "cpu")
-        self.assertIs(mgr.model, model)
-        self.assertEqual(mock_pywhispercpp.Model.call_count, 1)
-        self.assertEqual(
-            mock_pywhispercpp.Model.call_args.kwargs,
-            {"n_threads": 4},
-        )
+                with patch.dict(
+                    "sys.modules",
+                    {
+                        "pywhispercpp": MagicMock(),
+                        "pywhispercpp.model": mock_pywhispercpp,
+                    },
+                ):
+                    with patch.object(
+                        mgr,
+                        "_get_supported_whispercpp_params",
+                        return_value={"n_threads"},
+                    ):
+                        with patch(
+                            "vocalinux.speech_recognition.recognition_manager.multiprocessing.cpu_count",
+                            return_value=8,
+                        ):
+                            with patch(
+                                "vocalinux.speech_recognition.recognition_manager._show_notification"
+                            ):
+                                with patch.dict("os.environ", {}, clear=False):
+                                    loaded_backend = mgr._handle_gpu_fallback(
+                                        RuntimeError("16-bit storage not supported"),
+                                        "/tmp/model.bin",
+                                        model_kwargs,
+                                        "cpu",
+                                    )
+
+                self.assertEqual(loaded_backend, "cpu")
+                self.assertIs(mgr.model, model)
+                self.assertEqual(mock_pywhispercpp.Model.call_count, 1)
+                self.assertEqual(
+                    mock_pywhispercpp.Model.call_args.kwargs,
+                    {"n_threads": expected_threads},
+                )
+                self.assertEqual(model_kwargs["n_threads"], original_threads)
 
 
 class TestDownloadVoskModel(unittest.TestCase):
@@ -650,11 +669,12 @@ class TestBufferManagement(unittest.TestCase):
 
 
 class TestWhispercppModelKwargs(unittest.TestCase):
-    def test_default_model_kwargs(self):
+    def test_default_model_kwargs(self) -> None:
         mgr = _make_manager(engine="whisper_cpp")
         kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
         self.assertTrue(kwargs.get("no_timestamps"))
         self.assertTrue(kwargs.get("no_context"))
+        self.assertFalse(kwargs["print_progress"])
         self.assertNotIn("initial_prompt", kwargs)
         self.assertEqual(kwargs.get("temperature"), 0.0)
         self.assertEqual(kwargs.get("n_threads"), 4)
@@ -694,7 +714,7 @@ class TestWhispercppModelKwargs(unittest.TestCase):
         self.assertEqual(kwargs.get("no_speech_thold"), 0.8)
         self.assertEqual(kwargs.get("n_threads"), 8)
 
-    def test_model_kwargs_filter_unsupported_native_params(self):
+    def test_model_kwargs_filter_unsupported_native_params(self) -> None:
         mgr = _make_manager(engine="whisper_cpp")
         kwargs = mgr._build_whispercpp_model_kwargs(n_threads=4)
 
@@ -714,6 +734,7 @@ class TestWhispercppModelKwargs(unittest.TestCase):
         )
 
         self.assertNotIn("no_timestamps", filtered)
+        self.assertNotIn("print_progress", filtered)
         self.assertEqual(filtered["n_threads"], 4)
         self.assertTrue(filtered["no_context"])
 

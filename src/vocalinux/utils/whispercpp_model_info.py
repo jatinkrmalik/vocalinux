@@ -11,7 +11,7 @@ import os
 import re
 import subprocess
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, cast
 
 from .host_process import host_env
 from .model_checksums import whispercpp_revision
@@ -352,8 +352,8 @@ def _prefer_discrete_vulkan_device() -> Optional[int]:
     devices = _hardware_vulkan_devices()
     for device in devices:
         if device["device_type"] == "discrete":
-            return device["index"]
-    return devices[0]["index"] if devices else None
+            return cast(int, device["index"])
+    return cast(int, devices[0]["index"]) if devices else None
 
 
 def _vulkan_device_name_by_index(devices: list[dict], device_index: Optional[int]) -> Optional[str]:
@@ -361,11 +361,11 @@ def _vulkan_device_name_by_index(devices: list[dict], device_index: Optional[int
     if not devices:
         return None
     if device_index is None:
-        return devices[0]["name"]
+        return cast(str, devices[0]["name"])
     for device in devices:
         if device["index"] == device_index:
-            return device["name"]
-    return devices[0]["name"]
+            return cast(str, device["name"])
+    return cast(str, devices[0]["name"])
 
 
 @lru_cache(maxsize=1)
@@ -546,7 +546,7 @@ def _model_file_path(model_name: str) -> str:
 
     model_info = WHISPERCPP_MODEL_INFO.get(model_name)
     if model_info and model_info.get("url"):
-        return os.path.join(whispercpp_dir, os.path.basename(model_info["url"]))
+        return os.path.join(whispercpp_dir, os.path.basename(cast(str, model_info["url"])))
 
     return os.path.join(whispercpp_dir, f"ggml-{model_name}.bin")
 
