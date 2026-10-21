@@ -334,19 +334,29 @@ def test_stale_finalize_token_does_not_stop_new_test() -> None:
 
 
 def test_finalize_test_buffered_reload_waits_for_idle_before_restore() -> None:
-    """stop_recognition may return while PROCESSING; keep test callbacks."""
+    """Stop recognition runs off the GTK thread while test callbacks remain installed."""
     dialog = _dialog_for_finalize(state=RecognitionState.PROCESSING, buffered_reload=True)
     live = dialog._saved_text_callbacks[0]
 
-    with patch.object(settings_dialog, "GLib") as glib:
+    with (
+        patch.object(settings_dialog, "GLib") as glib,
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
         SettingsDialog._finalize_test(dialog)
 
+    dialog.speech_engine.stop_recognition.assert_not_called()
+    thread_cls.assert_called_once()
+    assert thread_cls.call_args.kwargs["daemon"] is True
+    assert thread_cls.call_args.kwargs["name"] == "vocalinux-test-dictation-stop"
+    thread_cls.call_args.kwargs["target"]()
     dialog.speech_engine.stop_recognition.assert_called_once()
     # Must not restore live injector yet — worker still holds the utterance.
     dialog.speech_engine.set_text_callbacks.assert_not_called()
     assert dialog._saved_text_callbacks == [live]
     assert dialog._test_active is True
     dialog.test_button.set_label.assert_called_with("Processing…")
+    dialog.test_cancel_button.set_sensitive.assert_called_with(True)
+    dialog.test_cancel_button.show.assert_called_once()
     glib.timeout_add.assert_called_once_with(100, dialog._wait_for_idle_then_restore_callbacks)
 
 
@@ -382,20 +392,55 @@ def test_wait_for_idle_treats_buffered_flag_as_busy_even_if_state_idle() -> None
     dialog.speech_engine.set_text_callbacks.assert_not_called()
 
 
-def test_finalize_test_idle_path_uses_settle_delay() -> None:
-    """Non-buffered stop already reached IDLE — keep the legacy 500ms settle."""
+def test_finalize_test_idle_path_still_polls_after_threaded_stop() -> None:
+    """Even an already-idle session uses the off-thread stop and idle poll."""
     dialog = _dialog_for_finalize(state=RecognitionState.IDLE, buffered_reload=False)
 
-    with patch.object(settings_dialog, "GLib") as glib:
+    with (
+        patch.object(settings_dialog, "GLib") as glib,
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
         SettingsDialog._finalize_test(dialog)
 
-    dialog.speech_engine.stop_recognition.assert_called_once()
-    assert dialog._test_active is False
-    dialog.test_button.set_label.assert_called_with("Test Dictation")
-    dialog.test_cancel_button.hide.assert_called_once()
-    glib.timeout_add.assert_called_once_with(500, dialog._restore_callbacks_and_check_result)
-    # Live callbacks still saved until the settle timeout fires.
+    dialog.speech_engine.stop_recognition.assert_not_called()
+    assert dialog._test_active is True
+    dialog.test_button.set_label.assert_called_with("Processing…")
+    dialog.test_cancel_button.show.assert_called_once()
+    thread_cls.assert_called_once()
+    glib.timeout_add.assert_called_once_with(100, dialog._wait_for_idle_then_restore_callbacks)
     assert hasattr(dialog, "_saved_text_callbacks")
+
+
+def test_cancel_during_processing_restores_once_without_result_check() -> None:
+    """A queued poll after cancellation must not restore callbacks a second time."""
+    dialog = _dialog_for_finalize(state=RecognitionState.PROCESSING, buffered_reload=False)
+    live = dialog._saved_text_callbacks[0]
+
+    with (
+        patch.object(settings_dialog, "GLib") as glib,
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
+        SettingsDialog._finalize_test(dialog)
+
+    assert thread_cls.call_args.kwargs["name"] == "vocalinux-test-dictation-stop"
+    dialog._test_cancelled = True
+    assert SettingsDialog._finish_test_after_user_cancel(dialog) is False
+    assert dialog.test_buffer._text == "(Test cancelled)"
+    dialog.speech_engine.set_text_callbacks.assert_called_once_with([live])
+
+    assert SettingsDialog._wait_for_idle_then_restore_callbacks(dialog) is False
+    dialog.speech_engine.set_text_callbacks.assert_called_once_with([live])
+    dialog._check_test_result.assert_not_called()
+    assert glib.timeout_add.call_count == 1
+
+
+def test_idle_poll_does_not_restore_after_cancel_flag() -> None:
+    dialog = _dialog_for_finalize(state=RecognitionState.IDLE, buffered_reload=False)
+    dialog._test_cancelled = True
+
+    assert SettingsDialog._wait_for_idle_then_restore_callbacks(dialog) is False
+    dialog.speech_engine.set_text_callbacks.assert_not_called()
+    dialog._check_test_result.assert_not_called()
 
 
 def test_timeout_does_not_restore_live_while_buffered_starts_cancel() -> None:

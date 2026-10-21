@@ -1260,6 +1260,16 @@ class TestSettingsNavigation(unittest.TestCase):
         self.assertLess(status_pack, button_pack)
         self.assertLess(test_button, cancel_button)
 
+    def test_test_dictation_stop_runs_off_gtk_thread(self) -> None:
+        """Finalization keeps the Cancel button usable while recognition stops."""
+        finalize_body = self.source_code.split("def _finalize_test")[1].split("\n    def ")[0]
+        self.assertIn("def stop_test", finalize_body)
+        self.assertIn('name="vocalinux-test-dictation-stop"', finalize_body)
+        self.assertIn(
+            "GLib.timeout_add(100, self._wait_for_idle_then_restore_callbacks)",
+            finalize_body,
+        )
+
     def test_test_dictation_scrolled_window_has_no_shadow(self) -> None:
         """GTK3 ScrolledWindow default shadow is a left stripe on GNOME/Wayland (#847)."""
         footer_body = self.source_code.split("def _build_sidebar_footer")[1].split("\n    def ")[0]

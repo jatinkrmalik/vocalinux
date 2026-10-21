@@ -9261,34 +9261,27 @@ class SettingsDialog(AboutSectionMixin):
         if getattr(self, "_test_cancelled", False):
             return False
 
-        self.speech_engine.stop_recognition()
+        self.test_button.set_sensitive(False)
+        self.test_button.set_label("Processing…")
+        self.test_cancel_button.set_sensitive(True)
+        self.test_cancel_button.show()
+        self.update_recognition_progress("Processing")
 
-        # Buffered reload's stop_recognition() returns while PROCESSING; the
-        # worker may still deliver the test utterance via current text_callbacks.
-        # Keep the test callbacks installed (and block auto-apply / re-test)
-        # until recognition reaches IDLE so we never restore the live injector
-        # early. Use GLib polling — never join the worker on the GTK thread.
-        state = getattr(self.speech_engine, "state", RecognitionState.IDLE)
-        buffered = getattr(self.speech_engine, "_buffered_reload_session", False)
-        if state in (RecognitionState.LISTENING, RecognitionState.PROCESSING) or buffered:
-            self.test_button.set_sensitive(False)
-            self.test_button.set_label("Processing…")
-            self.update_recognition_progress("Processing")
-            self._test_idle_wait_ticks = 0
-            self._test_timeout_cancel_attempted = False
-            GLib.timeout_add(100, self._wait_for_idle_then_restore_callbacks)
-            return False
+        def stop_test() -> None:
+            try:
+                self.speech_engine.stop_recognition()
+            except (AttributeError, OSError, RuntimeError, TypeError):
+                logger.exception("Test Dictation stop failed")
 
-        # Non-buffered stop already joined to IDLE; brief settle for any
-        # GLib.idle_add text delivery still in flight.
-        GLib.timeout_add(500, self._restore_callbacks_and_check_result)
+        threading.Thread(
+            target=stop_test,
+            daemon=True,
+            name="vocalinux-test-dictation-stop",
+        ).start()
 
-        self._test_active = False
-        self.test_button.set_sensitive(True)
-        self.test_button.set_label("Test Dictation")
-        self.test_cancel_button.hide()
-
-        self.update_recognition_progress("Idle")
+        self._test_idle_wait_ticks = 0
+        self._test_timeout_cancel_attempted = False
+        GLib.timeout_add(100, self._wait_for_idle_then_restore_callbacks)
 
         return False
 
@@ -9306,6 +9299,9 @@ class SettingsDialog(AboutSectionMixin):
         test callbacks and ``_test_active`` so live injectors are not restored
         early and later dictation cannot be hijacked into the test buffer.
         """
+        if getattr(self, "_test_cancelled", False) is True:
+            return False
+
         if not hasattr(self, "_saved_text_callbacks"):
             self._test_active = False
             self.test_button.set_sensitive(True)
