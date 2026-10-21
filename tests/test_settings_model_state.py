@@ -13,6 +13,7 @@ import pytest
 
 import vocalinux.ui
 from vocalinux.common_types import RecognitionState
+from vocalinux.utils.model_choice import FASTEST, priority_for_size
 
 
 @pytest.fixture(scope="module")
@@ -660,6 +661,107 @@ def test_resync_restores_language_from_saved_config(dialog_class):
     dialog._sync_language_options_for_selected_model.assert_called_once_with("fr")
     dialog._update_model_info.assert_called_once()
     dialog.engine_combo.set_active_id.assert_not_called()
+
+
+def _resync_dialog_for_language(
+    dialog_class: type[Any], saved_language: str
+) -> tuple[Mock, dict[str, Any]]:
+    dialog = _dialog_stub()
+    state: dict[str, Any] = {
+        "language": "auto",
+        "follow": False,
+        "priority": FASTEST,
+    }
+    dialog.config_manager.get_settings.return_value = {
+        "speech_recognition": {
+            "engine": "whisper_cpp",
+            "model_size": "medium",
+            "language": saved_language,
+        }
+    }
+    dialog.config_manager.get.return_value = ""
+    dialog.engine_combo.get_active_text.return_value = "whisper.cpp"
+    dialog.language_combo.get_active_id.side_effect = lambda: state["language"]
+    dialog.language_combo.set_active_id.side_effect = lambda value: state.__setitem__(
+        "language", value
+    )
+    dialog.follow_layout_switch.get_active.side_effect = lambda: state["follow"]
+    dialog.follow_layout_switch.set_active.side_effect = lambda value: state.__setitem__(
+        "follow", value
+    )
+    dialog.simple_priority_combo.get_active_id.side_effect = lambda: state["priority"]
+    dialog.simple_priority_combo.set_active_id.side_effect = lambda value: state.__setitem__(
+        "priority", value
+    )
+    dialog._get_selected_engine.return_value = "whisper_cpp"
+    dialog._get_selected_whispercpp_model.return_value = "medium"
+    dialog._get_recommended_whispercpp_model_for_language.return_value = ("small", "reason")
+    dialog._follow_layout_supported.return_value = True
+    dialog._is_selected_whispercpp_model_english_only.return_value = False
+
+    def set_combo_active_id(combo: Any, value: str) -> bool:
+        combo.set_active_id(value)
+        return True
+
+    dialog._set_combo_active_id_or_first.side_effect = set_combo_active_id
+    dialog._populate_model_options = Mock()
+    dialog._populate_language_options = Mock()
+    dialog._update_model_info = Mock()
+    dialog._update_model_picker_tooltips = Mock()
+    dialog._update_simple_visibility = Mock()
+    dialog._auto_apply_settings = Mock()
+    dialog._confirm_model_download = Mock()
+    dialog.config_manager.update_speech_recognition_settings = Mock()
+    dialog.speech_engine.try_begin_download = Mock()
+    dialog._simple_syncing = False
+    dialog._staged_model_spec = {"engine": "whisper_cpp", "model_size": "large"}
+    _bind_real(
+        dialog,
+        dialog_class,
+        "_drop_staged_model_spec_and_resync",
+        "_resync_model_ui_from_config",
+        "_sync_language_options_for_selected_model",
+        "_sync_follow_layout_controls",
+        "_update_language_warning",
+        "_sync_simple_from_advanced",
+    )
+    return dialog, state
+
+
+def test_declined_model_resync_restores_follow_layout_and_saved_simple_priority(
+    settings_dialog: Any, dialog_class: type[Any]
+) -> None:
+    dialog, state = _resync_dialog_for_language(dialog_class, "layout")
+
+    with patch.object(settings_dialog, "language_for_active_layout", return_value="en-us"):
+        dialog._drop_staged_model_spec_and_resync()
+
+    expected_priority = priority_for_size("small", "medium")
+    assert dialog._staged_model_spec is None
+    assert dialog._follow_layout_saved is True
+    assert dialog.follow_layout_switch.get_active() is True
+    assert dialog._follow_layout_active is True
+    assert dialog.language_combo.get_active_id() == "en-us"
+    assert dialog.language == "en-us"
+    assert state["priority"] == expected_priority
+    dialog.config_manager.update_speech_recognition_settings.assert_not_called()
+    dialog.speech_engine.try_begin_download.assert_not_called()
+    dialog._confirm_model_download.assert_not_called()
+    dialog._auto_apply_settings.assert_not_called()
+
+
+def test_resync_with_saved_language_disables_follow_layout(
+    dialog_class: type[Any],
+) -> None:
+    dialog, _state = _resync_dialog_for_language(dialog_class, "de")
+
+    dialog._drop_staged_model_spec_and_resync()
+
+    assert dialog._follow_layout_saved is False
+    assert dialog.follow_layout_switch.get_active() is False
+    assert dialog._follow_layout_active is False
+    assert dialog.language_combo.get_active_id() == "de"
+    assert dialog.language == "de"
 
 
 def test_picker_handlers_early_return_while_applying(dialog_class: type[Any]) -> None:

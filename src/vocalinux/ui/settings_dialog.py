@@ -8952,9 +8952,21 @@ class SettingsDialog(AboutSectionMixin):
                         self._applying_settings = was_applying
             self._populate_model_options()
             saved_language = sr_config.get("language")
-            if saved_language:
-                self._sync_language_options_for_selected_model(saved_language)
+            follow = saved_language == LANGUAGE_FOLLOWS_LAYOUT
+            self._follow_layout_saved = follow
+            resolved_language = (
+                language_for_active_layout(SUPPORTED_LANGUAGES) or "auto"
+                if follow
+                else saved_language
+            )
+            if resolved_language:
+                self._sync_language_options_for_selected_model(resolved_language)
+            with _suppressed(self, "_processing_language_change"):
+                self.follow_layout_switch.set_active(follow and self._follow_layout_supported())
+            self._sync_follow_layout_controls()
+            self._update_language_warning()
             self._update_model_info()
+            self._sync_simple_from_advanced()
         except Exception as e:  # pragma: no cover - UI resync must never mask the original error
             logger.debug(f"Could not resync model pickers: {e}")
 
