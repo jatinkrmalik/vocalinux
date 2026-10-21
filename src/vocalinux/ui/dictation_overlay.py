@@ -278,6 +278,16 @@ class DictationOverlay:
         except Exception:
             return False
 
+    def _display_is_wayland(self) -> bool:
+        """Check the GType name; GTK3's Gdk typelib does not expose GdkWaylandDisplay as a class."""
+        display = self._Gdk.Display.get_default()
+        if display is None:
+            return False
+        try:
+            return bool(display.__gtype__.name == "GdkWaylandDisplay")
+        except (AttributeError, TypeError):
+            return False
+
     def _mapping_steals_focus(self) -> bool:
         """Whether mapping the fallback can steal focus.
 
@@ -285,7 +295,7 @@ class DictationOverlay:
         Layer-shell surfaces with keyboard mode NONE and X11 override-redirect
         windows do not.
         """
-        return self._is_wayland() and not self._use_layer_shell
+        return self._display_is_wayland() and not self._use_layer_shell
 
     def set_enabled(self, enabled: bool) -> None:
         """Enable/disable the feature and sync the window."""

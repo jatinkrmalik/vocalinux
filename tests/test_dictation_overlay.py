@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from vocalinux.common_types import RecognitionState
@@ -258,7 +259,7 @@ class TestOverlayWithMockedGtkWindow(unittest.TestCase):
         overlay._use_layer_shell = False
 
         with (
-            patch.object(overlay, "_is_wayland", return_value=True),
+            patch.object(overlay, "_display_is_wayland", return_value=True),
             patch.object(overlay, "_layout_bottom_strip"),
         ):
             self.assertFalse(overlay.prewarm())
@@ -278,7 +279,7 @@ class TestOverlayWithMockedGtkWindow(unittest.TestCase):
         mock_window.is_composited.return_value = True
 
         with (
-            patch.object(overlay, "_is_wayland", return_value=True),
+            patch.object(overlay, "_display_is_wayland", return_value=True),
             patch.object(overlay, "_layout_bottom_strip"),
         ):
             overlay.prewarm()
@@ -311,13 +312,49 @@ class TestOverlayWithMockedGtkWindow(unittest.TestCase):
                 overlay._gtk_ready = gtk_ready
                 mock_window.get_visible.return_value = visible
 
-                with patch.object(overlay, "_is_wayland", return_value=wayland):
+                with patch.object(overlay, "_display_is_wayland", return_value=wayland):
                     self.assertFalse(overlay.prewarm())
 
                 mock_window.show_all.assert_not_called()
                 mock_window.set_opacity.assert_not_called()
                 overlay._window = None
                 overlay.destroy()
+
+    def test_display_is_wayland_for_wayland_gtype(self) -> None:
+        overlay = _overlay_without_gtk()
+        overlay._Gdk = MagicMock()
+        overlay._Gdk.Display.get_default.return_value = SimpleNamespace(
+            __gtype__=SimpleNamespace(name="GdkWaylandDisplay")
+        )
+
+        self.assertTrue(overlay._display_is_wayland())
+        overlay.destroy()
+
+    def test_display_is_not_wayland_for_x11_gtype(self) -> None:
+        overlay = _overlay_without_gtk()
+        overlay._Gdk = MagicMock()
+        overlay._Gdk.Display.get_default.return_value = SimpleNamespace(
+            __gtype__=SimpleNamespace(name="GdkX11Display")
+        )
+
+        self.assertFalse(overlay._display_is_wayland())
+        overlay.destroy()
+
+    def test_display_is_not_wayland_without_default_display(self) -> None:
+        overlay = _overlay_without_gtk()
+        overlay._Gdk = MagicMock()
+        overlay._Gdk.Display.get_default.return_value = None
+
+        self.assertFalse(overlay._display_is_wayland())
+        overlay.destroy()
+
+    def test_display_is_not_wayland_without_gtype(self) -> None:
+        overlay = _overlay_without_gtk()
+        overlay._Gdk = MagicMock()
+        overlay._Gdk.Display.get_default.return_value = SimpleNamespace()
+
+        self.assertFalse(overlay._display_is_wayland())
+        overlay.destroy()
 
     def test_prewarm_returns_false_when_gtk_is_unavailable(self) -> None:
         overlay = _overlay_without_gtk()
