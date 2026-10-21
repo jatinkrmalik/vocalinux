@@ -42,9 +42,10 @@ contributors (below).
 
 ## Current Scope
 
-The manifest ships the default `whisper_cpp` engine only. VOSK is omitted because
-the PyPI package is wheel-only (no sdist), so a Flathub-ready VOSK build would
-need to compile VOSK and its native deps from source.
+The manifest ships the default `whisper_cpp` engine and Silero VAD
+(`onnxruntime`). VOSK is omitted because the PyPI package is wheel-only (no
+sdist), so a Flathub-ready VOSK build would need to compile VOSK and its native
+deps from source.
 
 Global keyboard shortcuts use **evdev** (`/dev/input`).
 Text injection prefers the **RemoteDesktop portal**
@@ -96,9 +97,10 @@ flatpak-builder --run build-dir packaging/flatpak/com.vocalinux.Vocalinux.yml \
 
 ## Python Dependencies
 
-`python3-dependencies.yaml` is generated from `requirements/runtime.txt`, the
-hash-pinned export `just lock` writes out of `uv.lock`. Refresh it whenever the
-dependency set changes:
+`python3-dependencies.yaml` is generated from `requirements/vad.txt`, the
+hash-pinned export `just lock` writes out of `uv.lock`. This includes the
+runtime dependencies plus the `[vad]` extra. Refresh it whenever the dependency
+set changes:
 
 ```bash
 just flatpak-deps        # rewrite the manifest (needs PyPI)
@@ -111,7 +113,9 @@ no extra step.
 The script resolves each package's URL by looking up the digest uv already
 recorded, so the bytes this build downloads are the bytes in `uv.lock`, not
 merely the same version number. It takes a universal wheel where one exists and
-the sdist otherwise; an ABI-tagged wheel would pin the build to one SDK Python.
+the sdist otherwise. `onnxruntime` has no sdist, so its CPython-ABI wheel is
+pinned to GNOME 50's Python version and selected separately for each Flatpak
+architecture.
 
 This replaced a `flatpak-pip-generator` invocation whose package list was typed
 out on the command line. Nothing regenerated it and no test compared it to
