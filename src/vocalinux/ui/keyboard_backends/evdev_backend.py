@@ -53,6 +53,7 @@ from .base import (
     DEFAULT_SHORTCUT_MODE,
     KeyboardBackend,
     ShortcutSpec,
+    parse_shortcut,
 )
 from .layout_key_map import get_active_char_to_evdev_map
 
@@ -508,10 +509,6 @@ def _parse_keyboard_devices_from_proc(proc_file: TextIO) -> list[str]:
                     "Keeping combined keyboard+pointer device for ungrabbed monitoring: "
                     f"{device.get('name', '?')} ({device.get('handlers', [])})"
                 )
-            logger.debug(
-                "Discovered keyboard device: "
-                f"{device.get('name', '?')} ({device.get('handlers', [])})"
-            )
             for handler in device.get("handlers", []):
                 if handler.startswith("event"):
                     device_path = f"/dev/input/{handler}"
