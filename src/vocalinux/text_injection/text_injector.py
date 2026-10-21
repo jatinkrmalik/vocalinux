@@ -1174,6 +1174,16 @@ class TextInjector:
             logger.warning(f"RemoteDesktop portal shortcut failed: {e}")
             return False, list(steps)
 
+    def _close_portal_client(self) -> None:
+        """Close the RemoteDesktop portal client and clear its reference."""
+        portal = getattr(self, "_portal", None)
+        if portal is not None:
+            try:
+                portal.close()
+            except Exception as e:
+                logger.debug(f"Could not close RemoteDesktop portal client: {e}")
+        self._portal = None
+
     def _demote_portal_backend(self) -> bool:
         """Drop the portal for this run and pick the next Wayland tool.
 
@@ -1182,30 +1192,25 @@ class TextInjector:
         fallback. Returns False when nothing else exists, leaving the
         clipboard fallback to report the failure.
         """
-        portal = getattr(self, "_portal", None)
         flatpak = bool(os.environ.get("FLATPAK_ID"))
         ydotool_available = shutil.which("ydotool") is not None
-        wtype_available = shutil.which("wtype") is not None
-        xdotool_available = shutil.which("xdotool") is not None
+        if flatpak and (not ydotool_available or not self._ensure_ydotoold()):
+            logger.warning(
+                "RemoteDesktop portal failed; keeping it for the next attempt "
+                "(no working ydotool daemon in the Flatpak)"
+            )
+            return False
 
-        if flatpak:
-            if not ydotool_available or not self._ensure_ydotoold():
-                logger.warning(
-                    "RemoteDesktop portal failed; keeping it for the next attempt "
-                    "(no working ydotool daemon in the Flatpak)"
-                )
-                return False
-            tool = "ydotool"
-        else:
-            if portal is not None:
-                try:
-                    portal.close()
-                except Exception as e:
-                    logger.debug(f"Could not close RemoteDesktop portal client: {e}")
-                self._portal = None
+        self._close_portal_client()
+        if not flatpak:
             with self._state_lock:
                 self.wayland_tool = None
 
+        if flatpak:
+            tool = "ydotool"
+        else:
+            wtype_available = shutil.which("wtype") is not None
+            xdotool_available = shutil.which("xdotool") is not None
             tool = None
             if ydotool_available and self._ensure_ydotoold():
                 tool = "ydotool"
@@ -1224,13 +1229,6 @@ class TextInjector:
         with self._state_lock:
             self.wayland_tool = tool
 
-        if flatpak:
-            if portal is not None:
-                try:
-                    portal.close()
-                except Exception as e:
-                    logger.debug(f"Could not close RemoteDesktop portal client: {e}")
-                self._portal = None
         logger.warning(f"RemoteDesktop portal failed; falling back to {tool}")
         return True
 
