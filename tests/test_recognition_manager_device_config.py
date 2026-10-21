@@ -2417,7 +2417,7 @@ class TestReconfiguration(unittest.TestCase):
 
         with patch.object(manager, "_init_whisper"):
             with patch.object(manager, "stop_recognition"):
-                manager.reconfigure(engine="whisper")
+                manager.reconfigure(engine="whisper", force_download=False)
                 assert manager.engine == "whisper"
 
 

@@ -27,6 +27,7 @@ import time
 from contextlib import contextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, NamedTuple, Optional, cast
+from urllib.parse import urlparse
 
 import gi
 
@@ -43,6 +44,7 @@ from ..common_types import (  # noqa: E402
 from ..custom_dictionary import normalize_corrections  # noqa: E402
 from ..gateway_embed import GatewayStatus, get_gateway_embed_manager  # noqa: E402
 from ..speech_recognition.silero_vad import is_silero_available  # noqa: E402
+from ..utils import faster_whisper_model_info as faster_whisper
 from ..utils.faster_whisper_model_info import delete_model as delete_faster_whisper_model
 from ..utils.faster_whisper_model_info import (  # noqa: E402
     get_recommended_model as get_recommended_faster_whisper_model,
@@ -92,6 +94,7 @@ from ..utils.vosk_model_info import (  # noqa: E402
 from ..utils.whisper_model_info import (  # noqa: E402
     migrate_legacy_checkpoint_names,
     whisper_model_file,
+    whisper_model_url,
 )
 from ..utils.whispercpp_model_info import delete_model as delete_whispercpp_model
 from ..utils.whispercpp_model_info import (
@@ -283,6 +286,9 @@ def _engine_from_display(display_name: str) -> str:
         if name == display_name:
             return engine_id
     return display_name.lower()
+
+
+MODEL_SELECTION_DOC_URL = "https://github.com/VocaHQ/vocalinux/blob/main/docs/MODEL_SELECTION.md"
 
 
 def _model_display_name(model_name: str) -> str:
@@ -1208,6 +1214,11 @@ class SearchablePicker(Gtk.Box):
             self._list.remove(row)
         self._active_id = None
         self._label.set_text("")
+
+    def clear_active(self, text: str = "") -> None:
+        """Clear the selected id and show an optional readout."""
+        self._active_id = None
+        self._label.set_text(text)
 
     def get_model(self) -> list:
         """The ComboBoxText-shaped store: [display text, id] per row."""
@@ -2181,6 +2192,29 @@ def _undownloaded_model_info(language: str, engine: str, model_name: str) -> Opt
     if engine == "faster_whisper" and not is_faster_whisper_model_downloaded(model_name):
         return FASTER_WHISPER_MODEL_INFO.get(model_name, {"size_mb": 39})
     return None
+
+
+def _model_download_source_url(
+    engine: str, model_name: str, language: str, info: Optional[dict] = None
+) -> str:
+    """Return the URL used to download a selected model."""
+    catalog_url = (info or {}).get("url")
+    if catalog_url:
+        return str(catalog_url)
+    if engine == "whisper":
+        return whisper_model_url(model_name)
+    if engine == "whisper_cpp":
+        return str(WHISPERCPP_MODEL_INFO.get(model_name, {}).get("url", ""))
+    if engine == "vosk":
+        model_dir = vosk_model_dirname(model_name, language)
+        return f"https://alphacephei.com/vosk/models/{model_dir}.zip" if model_dir else ""
+    if engine == "parakeet":
+        files = parakeet.model_files(model_name)
+        return parakeet.get_model_file_url(model_name, files[0]) if files else ""
+    if engine == "faster_whisper":
+        files = faster_whisper.model_files(model_name)
+        return faster_whisper.get_model_file_url(model_name, files[0]) if files else ""
+    return ""
 
 
 def _make_download_dialog(
@@ -4641,20 +4675,18 @@ class SettingsDialog(AboutSectionMixin):
         self.model_download_button.connect("clicked", self._on_download_model_clicked)
         self.model_info_card.pack_start(self.model_download_button, False, False, 0)
 
-        # The recommendation used to be a plain label, which left the panel stating
-        # the right answer while the pickers kept the wrong one (#778).
+        model_selection_link = Gtk.LinkButton.new_with_label(
+            MODEL_SELECTION_DOC_URL, "How to choose a model"
+        )
+        model_selection_link.set_halign(Gtk.Align.START)
+        self.simple_page.pack_start(model_selection_link, False, False, 0)
+
         self.model_recommendation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.model_recommendation_box.set_no_show_all(True)
 
         self.model_recommendation = Gtk.Label(xalign=0, wrap=True)
         self.model_recommendation.get_style_context().add_class("model-info-subtitle")
         self.model_recommendation_box.pack_start(self.model_recommendation, True, True, 0)
-
-        self.model_recommendation_button = Gtk.Button(label="Use it")
-        self.model_recommendation_button.set_valign(Gtk.Align.CENTER)
-        self.model_recommendation_button.set_no_show_all(True)
-        self.model_recommendation_button.connect("clicked", self._on_apply_recommendation)
-        self.model_recommendation_box.pack_end(self.model_recommendation_button, False, False, 0)
 
         self.model_info_card.pack_start(self.model_recommendation_box, False, False, 0)
 
@@ -7461,74 +7493,10 @@ class SettingsDialog(AboutSectionMixin):
             cast(str, language_id),
         )
 
-    def _downloaded_alternative_for(self, recommended: str) -> Optional[str]:
-        """Return a model already on disk that can stand in for ``recommended``.
-
-        Every entry in these pickers is a download decision priced in gigabytes, so
-        suggesting a fresh download while something equivalent is already on disk
-        wastes the user's bandwidth (#778). Only candidates that are not smaller than
-        the recommendation qualify, so this never quietly downgrades accuracy, and
-        English-only weights are only offered when English is actually selected.
-        """
-        if recommended in WHISPERCPP_MODEL_INFO and is_whispercpp_model_downloaded(recommended):
-            return None
-
-        language_id = _language_for_whispercpp_variant(self)
-        wants_english = _language_is_english(cast(str, language_id))
-        recommended_info = WHISPERCPP_MODEL_INFO.get(recommended, {})
-        recommended_mb = cast(int, recommended_info.get("size_mb", 0))
-
-        # An English-only recommendation must not be answered with multilingual
-        # weights: they weigh the same and recognise English worse, which is the
-        # accuracy loss #776 is about.
-        needs_english_only = is_english_only_whispercpp_model(recommended)
-
-        best = None
-        best_mb = None
-        for model_name in list_downloaded_whispercpp_models():
-            if model_name in NON_DICTATION_MODELS:
-                continue
-            info = cast(Optional[dict[str, Any]], WHISPERCPP_MODEL_INFO.get(model_name))
-            if not info:
-                continue
-            if is_english_only_whispercpp_model(model_name) and not wants_english:
-                continue
-            if needs_english_only and not is_english_only_whispercpp_model(model_name):
-                continue
-            size_mb = cast(int, info["size_mb"])
-            if size_mb < recommended_mb:
-                continue
-            if best_mb is None or size_mb < best_mb:
-                best, best_mb = model_name, size_mb
-
-        return best
-
     def _get_default_whispercpp_variant_for_size(self, model_size: str) -> Optional[str]:
         """Return the default specialization for a user-selected size."""
         language_id = _language_for_whispercpp_variant(self)
         return _default_whispercpp_variant_for_size(model_size, cast(str, language_id))
-
-    def _on_apply_recommendation(self, _button: Any) -> None:
-        """Set both pickers to the model the card is offering.
-
-        Size and specialization must land under ``_populating_models`` so
-        ``_on_model_changed`` does not auto-apply the default size variant
-        (e.g. full ``large``) before the intended target (e.g. turbo q5_0).
-        """
-        target = getattr(self, "_recommended_target_model", None)
-        if not target or target not in WHISPERCPP_MODEL_INFO:
-            return
-
-        model_size = get_whispercpp_model_size(target)
-        with _suppressed(self, "_populating_models"):
-            self.model_combo.set_active_id(model_size)
-            self._populate_whispercpp_variant_options(model_size, target)
-            self.model_variant_combo.set_active_id(target)
-            self._sync_language_options_for_selected_model()
-
-        self._update_model_info()
-        self._refresh_unused_downloads()
-        self._auto_apply_settings()
 
     def _is_selected_whispercpp_model_english_only(self) -> bool:
         """Return whether the selected model is a whisper.cpp English-only variant."""
@@ -8321,9 +8289,7 @@ class SettingsDialog(AboutSectionMixin):
     def _on_language_changed(self, widget: Any) -> None:
         """Handle language selection change.
 
-        Repaint the recommendation card after the size list rebuilds so
-        ``_recommended_target_model`` / ★ / "Use it" track EN→non-EN flips
-        instead of applying a stale English-only target.
+        Repaint the model information after the size list rebuilds.
         """
         if self._processing_language_change:
             return
@@ -8393,11 +8359,16 @@ class SettingsDialog(AboutSectionMixin):
         language = self.language_combo.get_active_id() or self.language or "auto"
 
         if _is_following_layout(self):
-            # Neither simple question can say "follow the layout", and writing an
-            # answer here would let the next simple edit silently replace the mode
-            # with whatever those two controls happen to read. Refresh only the
-            # part that does not depend on the language and leave them alone.
+            # Neither simple question can say "follow the layout", so show the
+            # resolved language as a disabled readout without changing the mode.
             with _suppressed(self, "_simple_syncing"):
+                if not self.simple_language_combo.set_active_id(language):
+                    self.simple_language_combo.clear_active("Detected each time")
+                self.simple_language_row.set_sensitive(False)
+                self.simple_language_row.set_tooltip_text(
+                    "Follows your keyboard layout. Turn off Follow keyboard layout "
+                    "in Advanced to pick a language."
+                )
                 recommended, _ = self._get_recommended_whispercpp_model_for_language()
                 current = self._get_selected_whispercpp_model()
                 self.simple_priority_combo.set_active_id(
@@ -8409,6 +8380,8 @@ class SettingsDialog(AboutSectionMixin):
             self._update_simple_visibility()
             return
 
+        self.simple_language_row.set_sensitive(True)
+        self.simple_language_row.set_tooltip_text(LANGUAGE_TOOLTIP)
         is_auto = language == "auto"
 
         stored_second = self.config_manager.get("speech_recognition", "simple_second_language", "")
@@ -8487,16 +8460,22 @@ class SettingsDialog(AboutSectionMixin):
             self.engine_combo.set_active_id("whisper_cpp")
             engine = "whisper_cpp"
 
-        self._set_combo_active_id_or_first(self.language_combo, language)
-        self.language = language
+        if not _is_following_layout(self):
+            self._set_combo_active_id_or_first(self.language_combo, language)
+            self.language = language
 
         if engine != "whisper_cpp":
             return
 
         recommended, _ = self._get_recommended_whispercpp_model_for_language()
         size = size_for_priority(get_whispercpp_model_size(recommended), priority)
-        variant = _default_whispercpp_variant_for_size(size, language) or size
-        variant = self._on_disk_stand_in(variant, size, language)
+        variant_language = (
+            cast(str, _language_for_whispercpp_variant(self))
+            if _is_following_layout(self)
+            else language
+        )
+        variant = _default_whispercpp_variant_for_size(size, variant_language) or size
+        variant = self._on_disk_stand_in(variant, size, variant_language)
 
         self.model_combo.set_active_id(size)
         self._populate_whispercpp_variant_options(size, variant)
@@ -8729,6 +8708,14 @@ class SettingsDialog(AboutSectionMixin):
 
         model_display_name = _model_display_name(model_name)
         recommended_display_name = _model_display_name(recommended)
+        recommended_info = {
+            "whisper": WHISPER_MODEL_INFO,
+            "whisper_cpp": WHISPERCPP_MODEL_INFO,
+            "vosk": VOSK_MODEL_INFO,
+            "parakeet": parakeet.PARAKEET_MODEL_INFO,
+            "faster_whisper": FASTER_WHISPER_MODEL_INFO,
+        }[engine].get(recommended, {})
+        recommended_size_mb = cast(int, recommended_info.get("size_mb", 0))
 
         self.model_info_title.set_markup(f"<b>{model_display_name}</b>: {info['desc']}")
 
@@ -8741,29 +8728,19 @@ class SettingsDialog(AboutSectionMixin):
         # names a model that is not on disk (#894).
         self.model_download_button.set_visible(not is_downloaded)
 
-        target = recommended
-        message = None
-        if engine == "whisper_cpp":
-            already_have = self._downloaded_alternative_for(recommended)
-            if already_have and already_have != model_name:
-                target = already_have
-                message = (
-                    f"You already have {_model_display_name(already_have)} on disk. "
-                    "Using it needs no download."
-                )
-
-        if target == model_name:
-            self._recommended_target_model = None
+        recommendation_differs = (
+            get_whispercpp_model_size(recommended) != get_whispercpp_model_size(model_name)
+            if engine == "whisper_cpp"
+            else recommended != model_name
+        )
+        if not recommendation_differs:
             self.model_recommendation_box.hide()
-            self.model_recommendation_button.hide()
         else:
-            self._recommended_target_model = target
-            if message is None:
-                message = f"Recommended: {_model_display_name(target)} ({reason})"
-            self.model_recommendation.set_text(message)
+            self.model_recommendation.set_text(
+                f"Suggested for this computer: {recommended_display_name} "
+                f"({_format_size(recommended_size_mb)}, {reason})"
+            )
             self.model_recommendation.show()
-            can_apply = engine == "whisper_cpp" and target in WHISPERCPP_MODEL_INFO
-            self.model_recommendation_button.set_visible(can_apply)
             self.model_recommendation_box.show()
 
         self._update_model_picker_tooltips()
@@ -8858,12 +8835,17 @@ class SettingsDialog(AboutSectionMixin):
                 return
 
             if missing_model is not None:
+                if not self._confirm_model_download(
+                    engine, model_name, int(missing_model["size_mb"])
+                ):
+                    self._drop_staged_model_spec_and_resync()
+                    return
                 if not self.speech_engine.try_begin_download():
                     # The tray is already downloading a model; a second download
                     # would fight it over the engine's progress callback and
                     # configuration. Put the picker back on the saved model.
                     self._show_download_busy_dialog()
-                    self._resync_model_ui_from_config()
+                    self._drop_staged_model_spec_and_resync()
                     return
                 logger.info(f"Model {model_name} needs download, showing progress dialog")
                 download_dialog = _make_download_dialog(
@@ -8880,7 +8862,7 @@ class SettingsDialog(AboutSectionMixin):
                         def check_cancelled():
                             if download_dialog.cancelled:
                                 self.speech_engine.cancel_download()
-                            return not download_dialog.cancelled
+                            return True
 
                         cancel_check_id = GLib.timeout_add(100, check_cancelled)
 
@@ -8896,7 +8878,7 @@ class SettingsDialog(AboutSectionMixin):
                                 # False return must not be read as success: it
                                 # means nothing was saved and the pickers still
                                 # show settings the engine never took.
-                                GLib.idle_add(self._idle_resync_model_ui_from_config)
+                                GLib.idle_add(self._idle_drop_staged_model_spec_and_resync)
                                 GLib.idle_add(
                                     download_dialog.set_complete,
                                     False,
@@ -8912,7 +8894,7 @@ class SettingsDialog(AboutSectionMixin):
                         # The settings were never saved, so the previously working
                         # model is still the configured one; put the pickers back on
                         # it so the UI matches the config and a retry is possible.
-                        GLib.idle_add(self._idle_resync_model_ui_from_config)
+                        GLib.idle_add(self._idle_drop_staged_model_spec_and_resync)
                         if "cancelled" in error_msg.lower():
                             GLib.idle_add(
                                 download_dialog.set_complete,
@@ -8934,7 +8916,7 @@ class SettingsDialog(AboutSectionMixin):
                 download_dialog.destroy()
                 # Whatever ended the modal — cancel, failure, or a path not
                 # covered above — the pickers must not outlive the config.
-                self._resync_engine_ui_if_unapplied()
+                self._drop_staged_model_spec_and_resync()
                 # Repaint the info card too: after a success it still showed the
                 # pre-download render (amber size line, Download action) until
                 # some other change repainted it (#894 follow-up).
@@ -8991,6 +8973,16 @@ class SettingsDialog(AboutSectionMixin):
             self._resync_model_ui_from_config()
         return False
 
+    def _drop_staged_model_spec_and_resync(self) -> None:
+        """Forget a model intent that was not applied and restore saved pickers."""
+        self._staged_model_spec = None
+        self._resync_model_ui_from_config()
+
+    def _idle_drop_staged_model_spec_and_resync(self) -> bool:
+        """Drop an unapplied model intent before resyncing from a worker thread."""
+        self._staged_model_spec = None
+        return self._idle_resync_model_ui_from_config()
+
     def _resync_model_ui_from_config(self):
         """Put the pickers back on the settings that are actually saved.
 
@@ -9018,9 +9010,21 @@ class SettingsDialog(AboutSectionMixin):
                         self._applying_settings = was_applying
             self._populate_model_options()
             saved_language = sr_config.get("language")
-            if saved_language:
-                self._sync_language_options_for_selected_model(saved_language)
+            follow = saved_language == LANGUAGE_FOLLOWS_LAYOUT
+            self._follow_layout_saved = follow
+            resolved_language = (
+                language_for_active_layout(SUPPORTED_LANGUAGES) or "auto"
+                if follow
+                else saved_language
+            )
+            if resolved_language:
+                self._sync_language_options_for_selected_model(resolved_language)
+            with _suppressed(self, "_processing_language_change"):
+                self.follow_layout_switch.set_active(follow and self._follow_layout_supported())
+            self._sync_follow_layout_controls()
+            self._update_language_warning()
             self._update_model_info()
+            self._sync_simple_from_advanced()
         except Exception as e:  # pragma: no cover - UI resync must never mask the original error
             logger.debug(f"Could not resync model pickers: {e}")
 
@@ -9154,6 +9158,15 @@ class SettingsDialog(AboutSectionMixin):
         selected_settings = self.get_selected_settings()
         selected_engine = selected_settings.get("engine")
         selected_model = selected_settings.get("model_size")
+        if selected_engine and selected_model:
+            missing_model = _undownloaded_model_info(self.language, selected_engine, selected_model)
+            if missing_model is not None:
+                self.test_output_revealer.set_reveal_child(True)
+                self.test_buffer.set_text(
+                    f"{_model_display_name(selected_model)} is not downloaded yet. "
+                    "Press Download on the Speech Model page first, or pick a downloaded model."
+                )
+                return
         # Compare to the live engine too: UI can match the file while the
         # in-memory manager is still on another engine/size (sidecar, pending apply).
         live_engine = getattr(self.speech_engine, "engine", None)
@@ -9486,14 +9499,18 @@ For now, the engine has been reverted to VOSK."""
         missing_model = _undownloaded_model_info(self.language, engine, model_name)
 
         if missing_model is not None:
+            if not self._confirm_model_download(engine, model_name, int(missing_model["size_mb"])):
+                self._drop_staged_model_spec_and_resync()
+                return False
             if not self.speech_engine.try_begin_download():
                 # Same guard as in _auto_apply_settings: one download at a time.
                 self._show_download_busy_dialog()
-                self._resync_model_ui_from_config()
+                self._drop_staged_model_spec_and_resync()
                 return False
             download_dialog = _make_download_dialog(
                 self, model_name, missing_model["size_mb"], engine
             )
+            download_outcome = {"applied": False}
 
             def progress_callback(fraction, speed, status):
                 GLib.idle_add(download_dialog.update_progress, fraction, speed, status)
@@ -9505,7 +9522,7 @@ For now, the engine has been reverted to VOSK."""
                     def check_cancelled():
                         if download_dialog.cancelled:
                             self.speech_engine.cancel_download()
-                        return not download_dialog.cancelled
+                        return True
 
                     cancel_check_id = GLib.timeout_add(100, check_cancelled)
 
@@ -9514,9 +9531,10 @@ For now, the engine has been reverted to VOSK."""
                             settings, raise_errors=True, force_reinit=True
                         )
                         if applied:
+                            download_outcome["applied"] = True
                             GLib.idle_add(download_dialog.set_complete, True, "")
                         else:
-                            GLib.idle_add(self._idle_resync_model_ui_from_config)
+                            GLib.idle_add(self._idle_drop_staged_model_spec_and_resync)
                             GLib.idle_add(
                                 download_dialog.set_complete,
                                 False,
@@ -9531,7 +9549,7 @@ For now, the engine has been reverted to VOSK."""
                     error_msg = str(e)
                     # Nothing was saved, so the config still names the previous
                     # engine and model; put the pickers back on them.
-                    GLib.idle_add(self._idle_resync_model_ui_from_config)
+                    GLib.idle_add(self._idle_drop_staged_model_spec_and_resync)
                     if "cancelled" in error_msg.lower():
                         GLib.idle_add(download_dialog.set_complete, False, "Download cancelled")
                     elif engine == "whisper" and "no module named" in error_msg.lower():
@@ -9545,13 +9563,40 @@ For now, the engine has been reverted to VOSK."""
             download_dialog.destroy()
 
             self._populate_model_options()
-            self._resync_engine_ui_if_unapplied()
+            if not download_outcome["applied"]:
+                self._drop_staged_model_spec_and_resync()
             # Same repaint as the auto-apply path: a finished download must not
             # leave the card offering a Download for the model just fetched.
             self._update_model_info()
-            return True
+            return bool(download_outcome["applied"])
 
         return self._apply_settings_internal(settings)
+
+    def _confirm_model_download(self, engine: str, model_name: str, size_mb: int) -> bool:
+        """Ask before downloading a model selected in Settings."""
+        info = _undownloaded_model_info(self.language, engine, model_name) or {}
+        url = _model_download_source_url(engine, model_name, self.language, info)
+        host = urlparse(url).netloc
+        secondary = f"About {_format_size(size_mb)}"
+        if host:
+            secondary += f" from {host}"
+        secondary += ". Nothing is downloaded until you confirm."
+
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text=f"Download {_model_display_name(model_name)}?",
+        )
+        dialog.format_secondary_text(secondary)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Download", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        try:
+            return cast(bool, dialog.run() == Gtk.ResponseType.OK)
+        finally:
+            dialog.destroy()
 
     def _show_download_busy_dialog(self):
         """Tell the user a model download is already running elsewhere."""
