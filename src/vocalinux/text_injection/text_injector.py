@@ -1820,7 +1820,13 @@ class TextInjector:
                         self.environment = DesktopEnvironment.WAYLAND_IBUS
 
     def _should_bypass_ibus(self) -> bool:
-        """True when IBus cannot reach the focused window but xdotool can (#972)."""
+        """True when IBus cannot reach the focused window but xdotool can (#972).
+
+        Only applies when the backend was chosen automatically; a pinned IBus
+        backend is the user's call and is kept.
+        """
+        if self._backend_pin[0] == "ibus":
+            return False
         try:
             return focused_xwayland_client_without_ibus()
         except (OSError, subprocess.SubprocessError, ValueError) as exc:
@@ -2041,7 +2047,7 @@ class TextInjector:
         except UnicodeEncodeError:
             return True
 
-    def _read_clipboard(self) -> Optional[str]:
+    def _read_clipboard(self, prefer_x11: Optional[bool] = None) -> Optional[str]:
         """
         Read clipboard text only.
 
@@ -2051,12 +2057,14 @@ class TextInjector:
 
         On X11 and WAYLAND_XDOTOOL this reads the X11 CLIPBOARD (xclip/xsel),
         matching the selection the xdotool paste wrote. wl-paste is a different
-        clipboard.
+        clipboard. ``prefer_x11`` overrides that choice so a caller can read the
+        clipboard it wrote even after the backend has changed.
         """
-        prefer_x11 = self.environment in (
-            DesktopEnvironment.X11,
-            DesktopEnvironment.WAYLAND_XDOTOOL,
-        )
+        if prefer_x11 is None:
+            prefer_x11 = self.environment in (
+                DesktopEnvironment.X11,
+                DesktopEnvironment.WAYLAND_XDOTOOL,
+            )
         host_is_wayland = (
             self._session_environment == DesktopEnvironment.WAYLAND
             or os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
@@ -2305,7 +2313,7 @@ class TextInjector:
                 if target is None:
                     return
                 # User copied something else during the delay — leave it alone.
-                if self._read_clipboard() != text:
+                if self._read_clipboard(prefer_x11=prefer_x11) != text:
                     logger.debug("Clipboard changed during restore delay; skipping restore")
                     return
                 if target == "":

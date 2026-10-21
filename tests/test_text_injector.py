@@ -3695,6 +3695,7 @@ class TestXWaylandIBusBypass(unittest.TestCase):
         injector.environment = environment
         injector.wayland_tool = None
         injector.last_typed_count = 0
+        injector._backend_pin = ("auto", None)
         injector._ibus_injector = MagicMock()
         injector._ibus_injector.inject_text.return_value = True
         injector._log_current_window_info = MagicMock()  # type: ignore[method-assign]
@@ -3766,3 +3767,57 @@ class TestXWaylandIBusBypass(unittest.TestCase):
             side_effect=OSError("no display"),
         ):
             self.assertFalse(injector._should_bypass_ibus())
+
+    def test_pinned_ibus_is_not_bypassed(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.WAYLAND_IBUS)
+        injector._backend_pin = ("ibus", "text_injection.backend")
+
+        with patch(
+            "vocalinux.text_injection.text_injector.focused_xwayland_client_without_ibus",
+            return_value=True,
+        ) as probe:
+            self.assertFalse(injector._should_bypass_ibus())
+
+        probe.assert_not_called()
+
+    def test_auto_backend_is_bypassed(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.WAYLAND_IBUS)
+
+        with patch(
+            "vocalinux.text_injection.text_injector.focused_xwayland_client_without_ibus",
+            return_value=True,
+        ):
+            self.assertTrue(injector._should_bypass_ibus())
+
+    def test_clipboard_restore_reads_the_x11_clipboard_after_detour(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.WAYLAND_XDOTOOL)
+        injector._clipboard_restore_target = None
+        injector._clipboard_restore_generation = 0
+        reads: list[Any] = []
+        restore_targets: list[Any] = []
+
+        def fake_read(prefer_x11: Any = None) -> str:
+            reads.append(prefer_x11)
+            return "original" if len(reads) == 1 else "hello"
+
+        def capture_thread(target: Any, daemon: bool = False) -> MagicMock:
+            restore_targets.append(target)
+            return MagicMock()
+
+        module = "vocalinux.text_injection.text_injector"
+        with (
+            patch.object(injector, "_read_clipboard", side_effect=fake_read),
+            patch.object(injector, "_x11_clipboard_tools", return_value=["xclip"]),
+            patch.object(injector, "_copy_to_clipboard", return_value=True) as copy,
+            patch.object(injector, "_should_use_terminal_paste", return_value=False),
+            patch.object(injector, "_clipboard_paste_command", return_value=["xdotool"]),
+            patch(f"{module}.subprocess.run"),
+            patch(f"{module}.threading.Thread", side_effect=capture_thread),
+        ):
+            self.assertTrue(injector._inject_via_clipboard_paste("hello"))
+            injector.environment = DesktopEnvironment.WAYLAND_IBUS
+            with patch(f"{module}.time.sleep"):
+                restore_targets[0]()
+
+        self.assertEqual(reads[-1], True)
+        copy.assert_called_with("original", tools=["xclip"])
