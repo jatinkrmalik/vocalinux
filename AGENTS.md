@@ -37,7 +37,7 @@ Rules:
 | GTK | GTK 3 via distro `python3-gi` (PyGObject). Never pip-install it |
 | uv | `>=0.12,<0.14` (`[tool.uv]` in `pyproject.toml`). `uv.lock` is the source of truth; CI runs `uv sync --locked` / `uv run --locked`, which fails on drift |
 | just | https://just.systems or distro package `just` |
-| Format / lint / types | Black + isort (line length 100), flake8 (`E9,F63,F7,F82` only), mypy `src/` (targets 3.11). The three linters live in the `lint` dependency group, not the `dev` extra, so CI can install them without building the project |
+| Format / lint / types | Black + isort (line length 100), flake8 (`E9,F63,F7,F82` only), mypy `src/` (targets 3.11 and runs as a CI lint gate). The tools live in the `lint` dependency group, not the `dev` extra, so CI can install them without building the project |
 | Website | Next.js / TypeScript in `web/` — see `web/AGENTS.md` |
 
 Two virtualenvs, on purpose:
@@ -75,7 +75,7 @@ uv pip install -e ".[dev,vad]"
 ```bash
 just lint          # flake8 (critical) + black --check + isort --check
 just format        # black + isort
-just typecheck     # mypy src/
+just typecheck     # mypy src/ (CI lint gate)
 just test          # pytest -v
 just test-cov      # pytest --cov=src --cov-report=html
 just deps          # sync .venv with dev+vad extras and the lint group
@@ -84,7 +84,7 @@ just lock          # regenerate uv.lock, requirements/*.txt and the Flatpak dep 
 just lock-check    # fail if uv.lock is stale vs pyproject.toml
 just distro-packages       # regenerate install.d/package_map.sh from YAML
 just distro-packages-check # fail if the generated package map is stale
-just flatpak-deps       # regenerate the Flatpak dep manifest from requirements/runtime.txt (needs PyPI)
+just flatpak-deps       # regenerate the Flatpak dep manifest from runtime + [vad] (needs PyPI)
 just flatpak-deps-check # fail if that manifest is behind the export
 just model-checksums  # refresh pinned model digests after adding a model
 just appimage      # build the AppImage in its pinned base image (needs docker)
@@ -134,7 +134,7 @@ Use **uv 0.13.3** for `just lock` and `just export-check`, matching CI. Other ve
 | AppImage build inputs | Base image, tooling, interpreter, shaderc and the Vulkan headers are pinned in `packaging/appimage/tool_checksums.txt`. Build with `just appimage` (docker) — building on the host ships the host's glibc, which is what kept the AppImage off Debian 12 |
 | AppImage boot matrix | `packaging/appimage/boot-test.sh` runs the finished AppImage in distro containers, and the matrix in `unified-pipeline.yml` must keep distros both older and newer than the build image: the old ones prove the glibc floor, the new ones catch a bundle that breaks the host binaries it spawns. A distro added there needs its package recipe in the script — `tests/test_appimage_packaging.py` checks both |
 | Native packages (.deb / .rpm) | Thin packages built by nfpm in the pinned Debian 12 image (`packaging/native/tool_checksums.txt` pins the image and the nfpm releases). Python, GTK and PyGObject come from the distro; only `pywhispercpp` and `pynput` are vendored under `/usr/lib/vocalinux/vendor` (unpackaged on Debian/Fedora). `packaging/native/smoke-test.sh` installs the package per-distro and runs `vocalinux --version` plus an import smoke — `tests/test_native_packaging.py` keeps the deps lists, vendored set and CI matrix consistent offline |
-| Flatpak deps | `packaging/flatpak/python3-dependencies.yaml` is generated from `requirements/runtime.txt` by `scripts/sync_flatpak_deps.py` (`just flatpak-deps`, which `just lock` runs itself). It resolves each artifact by the digest uv already recorded, so the Flatpak downloads the bytes in `uv.lock`. The project installs there with `pip3 install --no-deps`, so nothing inside the build evaluates `pyproject.toml` — `tests/test_flatpak_packaging.py` checks the invariant offline |
+| Flatpak deps | `packaging/flatpak/python3-dependencies.yaml` is generated from `requirements/vad.txt` (runtime dependencies plus the `[vad]` extra) by `scripts/sync_flatpak_deps.py` (`just flatpak-deps`, which `just lock` runs itself). It resolves each artifact by the digest uv already recorded, so the Flatpak downloads the bytes in `uv.lock`; `onnxruntime` is pinned to CPython wheels for each Flatpak architecture and the GNOME 50 Python version. The project installs there with `pip3 install --no-deps`, so nothing inside the build evaluates `pyproject.toml` — `tests/test_flatpak_packaging.py` checks the invariant offline |
 | Speech models | Verified against digests pinned in `src/vocalinux/utils/model_checksums.txt` before install, by both `install.sh` and the runtime downloaders. **Fails closed** — an unpinned model is refused. Regenerate with `just model-checksums` (never by hand); `tests/test_model_checksums.py` fails if it falls behind. whisper.cpp URLs use a pinned Hugging Face commit, never `main` |
 
 Optional extras: `vosk`, `whisper`, `vad`, `dev`.
@@ -143,33 +143,42 @@ Optional extras: `vosk`, `whisper`, `vad`, `dev`.
 
 ```
 src/vocalinux/
-├── main.py, version.py, common_types.py
+├── main.py, version.py, common_types.py, dbus_service.py, post_processor.py
 ├── audio/
+│   ├── capture.py              # PortAudio capture sources and device handling
+│   ├── pipewire.py             # PipeWire system-audio capture
 │   └── playback_ducker.py      # lower default sink while dictating
 ├── single_instance.py          # $XDG_DATA_HOME/vocalinux/instance.lock
 ├── auto_pause_monitor.py       # unload model while configured apps run
 ├── model_keepalive.py          # idle unload
 ├── suspend_handler.py          # logind PrepareForSleep
 ├── custom_dictionary.py         # terms bias + transcript correction file contracts
+├── gateway_embed/               # optional local VocaGateway lifecycle
 ├── speech_recognition/
-│   ├── recognition_manager.py  # whisper.cpp / Whisper / Vosk / remote
+│   ├── recognition_manager.py  # VAD, segmentation, and engine dispatch
+│   ├── engines/                 # engine implementations and availability
 │   ├── command_processor.py    # voice commands
+│   ├── command_phrases.py      # voice command phrases and localized forms
 │   ├── diarization.py          # TinyDiarize per-speaker file transcription (--transcribe-file / tray)
 │   ├── silero_vad.py
 │   └── data/                   # bundled silero_vad.onnx
 ├── text_injection/
-│   ├── text_injector.py        # X11 / clipboard / xdotool
+│   ├── text_injector.py        # DesktopEnvironment backend selection
+│   ├── focused_window.py       # focused application detection
+│   ├── remote_desktop_portal.py # Wayland Remote Desktop Portal support
 │   └── ibus_engine.py          # Wayland IBus injection
 ├── ui/
-│   ├── tray_indicator.py, settings_dialog.py, first_run_dialog.py
+│   ├── tray_indicator.py, settings_dialog.py, settings_about.py
+│   ├── settings_engines.py, first_run_dialog.py, dictation_overlay.py
+│   ├── dictation_pad.py
 │   ├── transcript_dialog.py    # speaker-tagged transcript viewer/export
 │   ├── config_manager.py, action_handler.py, audio_feedback.py
-│   ├── autostart_manager.py, keyboard_shortcuts.py
-│   ├── logging_dialog.py, logging_manager.py
+│   ├── autostart_manager.py, keyboard_shortcuts.py, notifications.py
+│   ├── logging_dialog.py, logging_manager.py, transcription_history.py
 │   └── keyboard_backends/      # pynput (X11), evdev (Wayland)
 ├── utils/
-│   ├── paths.py, resource_manager.py
-│   ├── update_checker.py, update_monitor.py
+│   ├── paths.py, resource_manager.py, host_process.py
+│   ├── update_checker.py, update_monitor.py, gtk_color_scheme.py
 │   ├── pywhispercpp_loader.py  # bundled-lib preloader for source-built installs
 │   └── whispercpp_model_info.py, vosk_model_info.py
 └── resources/                  # SVG icons + WAV cues (also repo resources/)
@@ -184,7 +193,7 @@ names; `install.d/package_map.sh` is generated by `just distro-packages`.
 |---|---|
 | Voice command | `speech_recognition/command_processor.py` |
 | Engine / models | `speech_recognition/recognition_manager.py` |
-| Text injection | `text_injection/text_injector.py`, `ibus_engine.py` |
+| Text injection | `text_injection/text_injector.py`, `focused_window.py`, `remote_desktop_portal.py`, `ibus_engine.py` |
 | Settings | `ui/config_manager.py`, `ui/settings_dialog.py` |
 | Hotkeys | `ui/keyboard_shortcuts.py`, `ui/keyboard_backends/` |
 
