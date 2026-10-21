@@ -2,6 +2,7 @@
 
 import importlib
 import sys
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -385,6 +386,39 @@ def test_auto_detect_shows_up_as_the_other_languages_switch(settings_dialog, dia
     dialog_class._sync_simple_from_advanced(dialog)
 
     dialog.simple_multi_switch.set_active.assert_called_once_with(True)
+
+
+def test_follow_layout_shows_and_disables_the_resolved_simple_language(
+    settings_dialog: Any, dialog_class: Any
+) -> None:
+    dialog = _dialog_stub(language="de")
+    dialog.language_combo.get_active_id.return_value = "de"
+    dialog._get_selected_whispercpp_model.return_value = "small"
+    dialog._get_recommended_whispercpp_model_for_language.return_value = ("small", "reason")
+
+    with patch.object(settings_dialog, "_is_following_layout", return_value=True):
+        dialog_class._sync_simple_from_advanced(dialog)
+
+    dialog.simple_language_combo.set_active_id.assert_called_once_with("de")
+    dialog.simple_language_row.set_sensitive.assert_called_once_with(False)
+    dialog.simple_language_row.set_tooltip_text.assert_called_once_with(
+        "Follows your keyboard layout. Turn off Follow keyboard layout "
+        "in Advanced to pick a language."
+    )
+
+
+def test_follow_layout_priority_change_does_not_write_resolved_language(
+    settings_dialog: Any, dialog_class: Any
+) -> None:
+    dialog = _dialog_stub(language="de", priority=ACCURATE, recommended="small")
+    dialog._get_selected_engine.return_value = "whisper_cpp"
+
+    with patch.object(settings_dialog, "_is_following_layout", return_value=True):
+        dialog_class._apply_simple_choice(dialog)
+
+    dialog._set_combo_active_id_or_first.assert_not_called()
+    assert dialog.language == "de"
+    dialog.model_combo.set_active_id.assert_called_once_with("medium")
 
 
 @pytest.mark.parametrize("stale_second", ["auto", "en-us"])

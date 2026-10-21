@@ -68,6 +68,7 @@ from ..utils.pywhispercpp_loader import (
 from ..utils.system_language import LANGUAGE_FOLLOWS_LAYOUT, language_for_active_layout
 from ..utils.vosk_model_info import SUPPORTED_LANGUAGES, VOSK_MODEL_INFO
 from ..utils.whisper_model_info import (
+    WHISPER_MODEL_SIZES,
     migrate_legacy_checkpoint_names,
     whisper_model_file,
     whisper_model_url,
@@ -605,6 +606,50 @@ class SpeechRecognitionManager:
         else:
             raise ValueError(f"Unsupported speech recognition engine: {self.engine}")
 
+    def _download_selected_model_if_missing(self) -> None:
+        """Fetch a missing target model without disturbing the loaded engine."""
+        if self.engine == "whisper_cpp":
+            valid_models = [
+                name for name in WHISPERCPP_MODEL_INFO if name not in NON_DICTATION_MODELS
+            ]
+            if self.model_size in valid_models and not os.path.exists(
+                get_model_path(self.model_size)
+            ):
+                self._download_whispercpp_model()
+        elif self.engine == "whisper":
+            if self.model_size in WHISPER_MODEL_SIZES:
+                cache_dir, model_file = self._whisper_model_cache_paths()
+                if not os.path.exists(model_file):
+                    self._download_whisper_model(cache_dir)
+        elif self.engine == "faster_whisper":
+            if not faster_whisper.is_model_downloaded(self.model_size):
+                self._download_faster_whisper_model()
+        elif self.engine == "parakeet":
+            if not parakeet.is_model_downloaded(self.model_size):
+                self._download_parakeet_model()
+        elif self.engine == "vosk":
+            self._configure_vosk_model_map()
+            if not os.path.exists(self._get_vosk_model_path()):
+                self._download_vosk_model()
+
+    def _whisper_model_cache_paths(self) -> tuple[str, str]:
+        """Prepare the same Whisper cache and checkpoint path used by init."""
+        whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
+        os.makedirs(whisper_cache_dir, exist_ok=True)
+        migrate_legacy_checkpoint_names(whisper_cache_dir)
+        model_file = os.path.join(whisper_cache_dir, whisper_model_file(self.model_size))
+        return whisper_cache_dir, model_file
+
+    def _configure_vosk_model_map(self) -> None:
+        """Build the VOSK size-to-language model mapping used by init and download."""
+        vosk_language = "en-us" if self.language == "auto" else self.language
+        model_info = cast(dict[str, dict[str, Any]], VOSK_MODEL_INFO)
+        self.vosk_model_map = {
+            "small": model_info["small"]["languages"].get(vosk_language),
+            "medium": model_info["medium"]["languages"].get(vosk_language),
+            "large": model_info["large"]["languages"].get(vosk_language),
+        }
+
     #: Class-level default so a manager built without ``__init__`` still answers
     #: "not following the layout" instead of raising on the dictation path.
     language_preference: str = "auto"
@@ -881,14 +926,7 @@ class SpeechRecognitionManager:
 
     def _init_vosk(self):
         """Initialize the VOSK speech recognition engine."""
-        # VOSK doesn't support auto-detect, so fall back to en-us for "auto"
-        vosk_language = "en-us" if self.language == "auto" else self.language
-
-        self.vosk_model_map = {
-            "small": VOSK_MODEL_INFO["small"]["languages"].get(vosk_language),
-            "medium": VOSK_MODEL_INFO["medium"]["languages"].get(vosk_language),
-            "large": VOSK_MODEL_INFO["large"]["languages"].get(vosk_language),
-        }
+        self._configure_vosk_model_map()
 
         try:
             from vosk import KaldiRecognizer, Model
@@ -1004,23 +1042,16 @@ class SpeechRecognitionManager:
                 import torch
 
             # Validate model size for Whisper
-            valid_whisper_models = ["tiny", "base", "small", "medium", "large"]
-            if self.model_size not in valid_whisper_models:
+            if self.model_size not in WHISPER_MODEL_SIZES:
                 logger.warning(
                     f"Model size '{self.model_size}' not valid for Whisper. "
-                    f"Valid options: {valid_whisper_models}. Using 'base' instead."
+                    f"Valid options: {WHISPER_MODEL_SIZES}. Using 'base' instead."
                 )
                 self.model_size = "base"
 
             # Only this directory counts: load_model() gets it as download_root
             # and looks nowhere else, so a copy in ~/.cache/whisper saves nothing.
-            whisper_cache_dir = os.path.join(MODELS_DIR, "whisper")
-            os.makedirs(whisper_cache_dir, exist_ok=True)
-            # Before asking whether the model is here: an earlier release saved it
-            # under the catalog name, which for "large" is not what load_model
-            # looks for. Without this it refetches 2.9GB and orphans the old file.
-            migrate_legacy_checkpoint_names(whisper_cache_dir)
-            model_file = os.path.join(whisper_cache_dir, whisper_model_file(self.model_size))
+            whisper_cache_dir, model_file = self._whisper_model_cache_paths()
             model_exists = os.path.exists(model_file)
 
             if not model_exists and self._defer_download:
@@ -1137,8 +1168,6 @@ class SpeechRecognitionManager:
     def _download_faster_whisper_model(self) -> None:
         """Download the faster-whisper model files with progress tracking."""
         import requests
-
-        self._download_cancelled = False
 
         model_dir = faster_whisper.get_model_path(self.model_size)
         os.makedirs(model_dir, exist_ok=True)
@@ -1908,8 +1937,6 @@ class SpeechRecognitionManager:
         """Download the Parakeet model files with progress tracking."""
         import requests
 
-        self._download_cancelled = False
-
         model_dir = parakeet.get_model_path(self.model_size)
         os.makedirs(model_dir, exist_ok=True)
         logger.info(f"Downloading Parakeet '{self.model_size}' model to {model_dir}")
@@ -2556,7 +2583,6 @@ class SpeechRecognitionManager:
         """
         import requests
 
-        self._download_cancelled = False
         url = whisper_model_url(self.model_size)
         model_file = os.path.join(cache_dir, whisper_model_file(self.model_size))
         temp_file = model_file + ".tmp"
@@ -2581,8 +2607,6 @@ class SpeechRecognitionManager:
     def _download_whispercpp_model(self, model_name: Optional[str] = None) -> None:
         """Download a whisper.cpp model with progress tracking."""
         import requests
-
-        self._download_cancelled = False
 
         model_name = model_name or self.model_size
         model_info = WHISPERCPP_MODEL_INFO.get(model_name)
@@ -2723,7 +2747,10 @@ class SpeechRecognitionManager:
         Returns:
             True if the claim was taken, False if a download is already running
         """
-        return self._download_claim.acquire(blocking=False)
+        claimed = self._download_claim.acquire(blocking=False)
+        if claimed:
+            self._download_cancelled = False
+        return claimed
 
     def end_download(self):
         """Release the claim taken by try_begin_download()."""
@@ -2732,6 +2759,8 @@ class SpeechRecognitionManager:
         except RuntimeError:
             # Never claimed; nothing to release
             pass
+        else:
+            self._download_cancelled = False
 
     @property
     def download_in_progress(self) -> bool:
@@ -2748,8 +2777,6 @@ class SpeechRecognitionManager:
         import zipfile
 
         import requests
-
-        self._download_cancelled = False
 
         model_name = self.vosk_model_map.get(self.model_size)
         if not model_name:
@@ -4052,10 +4079,28 @@ class SpeechRecognitionManager:
             # When reconfiguring from UI, allow downloads
             old_defer = self._defer_download
             self._defer_download = not force_download
+            if force_download:
+                try:
+                    self._download_selected_model_if_missing()
+                except Exception:
+                    self._restore_reconfigure_state(previous)
+                    if language_changed:
+                        self.command_processor.set_language(self.language)
+                    self._restore_language_after_oneshot()
+                    self._defer_download = old_defer
+                    raise
 
             # Lock model access during reinitialization to prevent race condition
-            # with transcription threads that may be using the model/recognizer
-            with self._model_lock:
+            # with transcription threads that may be using the model/recognizer.
+            # A download worker can be waiting here while Cancel is pressed, so
+            # poll instead of blocking indefinitely on the active transcription.
+            while not self._model_lock.acquire(timeout=0.1):
+                if self._download_claim.locked() and self._download_cancelled:
+                    self._restore_reconfigure_state(previous)
+                    self.command_processor.set_language(self.language)
+                    self._defer_download = old_defer
+                    raise RuntimeError("Download cancelled")
+            try:
                 # Release old resources explicitly if necessary (Python's GC might handle it)
                 self.model = None
                 self.recognizer = None
@@ -4098,8 +4143,9 @@ class SpeechRecognitionManager:
                         )
                         self._update_state(RecognitionState.ERROR)
                     raise
-                finally:
-                    self._defer_download = old_defer
+            finally:
+                self._defer_download = old_defer
+                self._model_lock.release()
         else:
             # If only VOSK params changed, just log it
             logger.info("Applied VAD/silence timeout changes.")

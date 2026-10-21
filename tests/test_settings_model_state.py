@@ -201,6 +201,112 @@ def test_failed_auto_apply_resyncs_the_pickers_with_the_config(settings_dialog, 
     assert dialog._applying_settings is False
 
 
+def test_auto_apply_confirms_before_starting_a_download(
+    settings_dialog: Any, dialog_class: type[Any]
+) -> None:
+    dialog = _dialog_stub()
+    dialog.get_selected_settings.return_value = {
+        "engine": "whisper_cpp",
+        "model_size": "small",
+        "model_variant": "small",
+    }
+    dialog._confirm_model_download = Mock(return_value=False)
+    dialog._drop_staged_model_spec_and_resync = Mock()
+
+    with patch.object(
+        settings_dialog,
+        "_undownloaded_model_info",
+        return_value={"size_mb": 100, "url": "https://example.test/model.bin"},
+    ):
+        dialog_class._auto_apply_settings(dialog, allow_download=True)
+
+    dialog._confirm_model_download.assert_called_once_with("whisper_cpp", "small", 100)
+    dialog.speech_engine.try_begin_download.assert_not_called()
+    dialog._drop_staged_model_spec_and_resync.assert_called_once_with()
+
+
+def test_apply_confirms_before_starting_a_download(
+    settings_dialog: Any, dialog_class: type[Any]
+) -> None:
+    dialog = _dialog_stub()
+    dialog.get_selected_settings.return_value = {
+        "engine": "whisper_cpp",
+        "model_size": "small",
+        "model_variant": "small",
+    }
+    dialog._confirm_model_download = Mock(return_value=False)
+    dialog._drop_staged_model_spec_and_resync = Mock()
+
+    with patch.object(
+        settings_dialog,
+        "_undownloaded_model_info",
+        return_value={"size_mb": 100, "url": "https://example.test/model.bin"},
+    ):
+        assert dialog_class.apply_settings(dialog) is False
+
+    dialog._confirm_model_download.assert_called_once_with("whisper_cpp", "small", 100)
+    dialog.speech_engine.try_begin_download.assert_not_called()
+    dialog._drop_staged_model_spec_and_resync.assert_called_once_with()
+
+
+def test_download_confirmation_includes_catalog_host_and_cancel_default(
+    settings_dialog: Any, dialog_class: type[Any]
+) -> None:
+    gtk = settings_dialog.Gtk
+    gtk.MessageDialog.reset_mock()
+    message_dialog = gtk.MessageDialog.return_value
+    message_dialog.run.return_value = gtk.ResponseType.CANCEL
+
+    with patch.object(
+        settings_dialog,
+        "_undownloaded_model_info",
+        return_value={"url": "https://models.example.test/model.bin"},
+    ):
+        assert dialog_class._confirm_model_download(Mock(), "whisper_cpp", "small", 125) is False
+
+    gtk.MessageDialog.assert_called_once()
+    kwargs = gtk.MessageDialog.call_args.kwargs
+    assert kwargs["message_type"] == gtk.MessageType.QUESTION
+    assert kwargs["text"] == "Download Small?"
+    message_dialog.format_secondary_text.assert_called_once_with(
+        "About 125 MB from models.example.test. Nothing is downloaded until you confirm."
+    )
+    message_dialog.set_default_response.assert_called_once_with(gtk.ResponseType.CANCEL)
+
+
+@pytest.mark.parametrize(
+    ("engine", "model_name", "language", "host"),
+    [
+        ("whisper", "small", "en-us", "openaipublic.azureedge.net"),
+        ("whisper_cpp", "small", "en-us", "huggingface.co"),
+        ("vosk", "small", "en-us", "alphacephei.com"),
+        ("parakeet", "v3-european", "en-us", "huggingface.co"),
+        ("faster_whisper", "tiny", "en-us", "huggingface.co"),
+    ],
+)
+def test_model_download_source_url_covers_each_downloadable_engine(
+    settings_dialog: Any, engine: str, model_name: str, language: str, host: str
+) -> None:
+    url = settings_dialog._model_download_source_url(engine, model_name, language)
+
+    assert settings_dialog.urlparse(url).netloc == host
+
+
+def test_download_confirmation_derives_host_when_catalog_has_no_url(
+    settings_dialog: Any, dialog_class: type[Any]
+) -> None:
+    gtk = settings_dialog.Gtk
+    gtk.MessageDialog.reset_mock()
+    gtk.MessageDialog.return_value.run.return_value = gtk.ResponseType.CANCEL
+
+    with patch.object(settings_dialog, "_undownloaded_model_info", return_value={"size_mb": 125}):
+        assert dialog_class._confirm_model_download(Mock(), "whisper", "small", 125) is False
+
+    gtk.MessageDialog.return_value.format_secondary_text.assert_called_once_with(
+        "About 125 MB from openaipublic.azureedge.net. Nothing is downloaded until you confirm."
+    )
+
+
 def test_already_downloaded_auto_apply_runs_on_a_worker(settings_dialog, dialog_class):
     """A model already on disk must not reconfigure on the GTK main loop."""
     dialog = _dialog_stub()
@@ -430,7 +536,7 @@ def test_download_path_resyncs_when_the_apply_reports_failure(settings_dialog, d
 
     modal = modal_class.return_value
     scheduled = [(func, args) for func, args in idle_calls]
-    assert (dialog._idle_resync_model_ui_from_config, ()) in scheduled
+    assert (dialog._idle_drop_staged_model_spec_and_resync, ()) in scheduled
     assert (modal.set_complete, (True, "")) not in scheduled
     assert any(func is modal.set_complete and args[0] is False for func, args in scheduled)
     dialog._save_selected_settings.assert_not_called()
@@ -456,7 +562,7 @@ def test_download_path_resyncs_when_the_download_is_cancelled(settings_dialog, d
         dialog_class._auto_apply_settings(dialog, allow_download=True)
 
     modal = modal_class.return_value
-    assert (dialog._idle_resync_model_ui_from_config, ()) in idle_calls
+    assert (dialog._idle_drop_staged_model_spec_and_resync, ()) in idle_calls
     assert (modal.set_complete, (False, "Download cancelled")) in idle_calls
 
 
@@ -478,7 +584,7 @@ def test_modal_close_resyncs_an_engine_that_never_applied(settings_dialog, dialo
     ):
         dialog_class._auto_apply_settings(dialog, allow_download=True)
 
-    dialog._resync_engine_ui_if_unapplied.assert_called_once()
+    dialog._drop_staged_model_spec_and_resync.assert_called_once_with()
 
 
 def test_idle_resync_skips_a_destroyed_dialog(dialog_class):
@@ -744,6 +850,7 @@ def _download_setup(dialog: Mock) -> None:
         "language": "auto",
     }
     dialog._apply_settings_internal.return_value = True
+    dialog._confirm_model_download.return_value = True
 
 
 @pytest.mark.parametrize("entry", ["_auto_apply_settings", "apply_settings"])
@@ -772,7 +879,7 @@ def test_settings_refuses_a_download_while_the_tray_holds_the_engine(
     modal_class.assert_not_called()
     dialog._apply_settings_internal.assert_not_called()
     dialog._show_download_busy_dialog.assert_called_once_with()
-    dialog._resync_model_ui_from_config.assert_called_once_with()
+    dialog._drop_staged_model_spec_and_resync.assert_called_once_with()
 
 
 @pytest.mark.parametrize("entry", ["_auto_apply_settings", "apply_settings"])
@@ -793,6 +900,43 @@ def test_settings_releases_the_engine_once_the_download_is_over(
             dialog_class.apply_settings(dialog)
 
     dialog.speech_engine.try_begin_download.assert_called_once_with()
+    dialog.speech_engine.end_download.assert_called_once_with()
+
+
+@pytest.mark.parametrize("entry", ["_auto_apply_settings", "apply_settings"])
+def test_cancel_poll_stays_registered_until_download_worker_removes_it(
+    settings_dialog: Any, dialog_class: type[Any], entry: str
+) -> None:
+    dialog = _dialog_stub()
+    _download_setup(dialog)
+    source_callbacks = []
+    callback_results = []
+    glib = MagicMock()
+
+    def timeout_add(_interval: int, callback: Callable[[], bool]) -> int:
+        source_callbacks.append(callback)
+        callback_results.append(callback())
+        return 74
+
+    glib.timeout_add.side_effect = timeout_add
+
+    with (
+        patch.object(settings_dialog, "_undownloaded_model_info", return_value={"size_mb": 100}),
+        patch.object(settings_dialog, "ModelDownloadDialog") as modal_class,
+        patch.object(settings_dialog, "GLib", glib),
+        patch.object(settings_dialog.threading, "Thread", _InlineThread),
+    ):
+        modal_class.return_value.cancelled = True
+        if entry == "_auto_apply_settings":
+            dialog_class._auto_apply_settings(dialog, allow_download=True)
+        else:
+            dialog_class.apply_settings(dialog)
+
+    dialog.speech_engine.try_begin_download.assert_called_once_with()
+    assert len(source_callbacks) == 1
+    assert callback_results == [True]
+    glib.source_remove.assert_called_once_with(74)
+    dialog.speech_engine.cancel_download.assert_called_once_with()
     dialog.speech_engine.end_download.assert_called_once_with()
 
 
@@ -921,7 +1065,6 @@ def _update_model_info_stub(dialog_class: type[Any]) -> Mock:
     dialog.engine_combo.get_active_text.return_value = "whisper.cpp"
     dialog._get_selected_whispercpp_model.return_value = "small"
     dialog._get_recommended_whispercpp_model_for_language.return_value = ("small", "fits")
-    dialog._downloaded_alternative_for.return_value = None
     return dialog
 
 
@@ -1183,6 +1326,17 @@ def test_whisper_selected_settings_keep_combo_language(dialog_class):
 
     assert settings["engine"] == "whisper"
     assert settings["language"] == "fr"
+
+
+def test_follow_layout_selected_settings_keep_the_layout_sentinel(
+    settings_dialog: Any, dialog_class: type[Any]
+) -> None:
+    dialog = _dialog_for_selected_settings("whisper.cpp", "de")
+
+    with patch.object(settings_dialog, "_is_following_layout", return_value=True):
+        settings = dialog_class.get_selected_settings(dialog)
+
+    assert settings["language"] == settings_dialog.LANGUAGE_FOLLOWS_LAYOUT
 
 
 def test_parakeet_engine_change_forces_language_auto(dialog_class):
@@ -1458,7 +1612,12 @@ def test_speech_manager_reconfigure_to_parakeet_normalizes_language():
             defer_download=True,
         )
         assert manager.language == "en-us"
-        manager.reconfigure(engine="parakeet", model_size="v3-european", language="fr")
+        manager.reconfigure(
+            engine="parakeet",
+            model_size="v3-european",
+            language="fr",
+            force_download=False,
+        )
     assert manager.engine == "parakeet"
     assert manager.language == "auto"
     assert manager.command_processor.language == "auto"

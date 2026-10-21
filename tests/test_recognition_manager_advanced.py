@@ -269,21 +269,21 @@ class TestReconfigure(unittest.TestCase):
         mgr = _make_manager()
         mgr.state = RecognitionState.IDLE
         with patch.object(mgr, "_init_whispercpp"):
-            mgr.reconfigure(model_size="medium")
+            mgr.reconfigure(model_size="medium", force_download=False)
         self.assertEqual(mgr.model_size, "medium")
 
     def test_reconfigure_engine(self):
         mgr = _make_manager()
         mgr.state = RecognitionState.IDLE
         with patch.object(mgr, "_init_vosk"):
-            mgr.reconfigure(engine="vosk")
+            mgr.reconfigure(engine="vosk", force_download=False)
         self.assertEqual(mgr.engine, "vosk")
 
     def test_reconfigure_language_candidates(self) -> None:
         mgr = _make_manager()
         mgr.state = RecognitionState.IDLE
         with patch.object(mgr, "_init_whispercpp"):
-            mgr.reconfigure(whispercpp_language_candidates="en,es")
+            mgr.reconfigure(whispercpp_language_candidates="en,es", force_download=False)
         self.assertEqual(mgr.whispercpp_language_candidates, ["en", "es"])
 
 
@@ -746,6 +746,7 @@ class TestWhispercppModelKwargs(unittest.TestCase):
                 whispercpp_temperature=0.5,
                 whispercpp_no_timestamps=False,
                 whispercpp_initial_prompt="hello",
+                force_download=False,
             )
         self.assertEqual(mgr.whispercpp_temperature, 0.5)
         self.assertFalse(mgr.whispercpp_no_timestamps)
