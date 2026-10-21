@@ -347,6 +347,40 @@ class TestPortalClient:
         assert portal.inject_text("a") is True
         assert [c[1] for c in conn.calls] == ["NotifyKeyboardKeysym"] * 2
 
+    def test_reset_session_closes_old_path_and_allows_session_recreation(
+        self, portal_client: PortalFactory
+    ) -> None:
+        conn = _FakePortalConn(version=2, results=_SESSION_RESULTS)
+        portal = portal_client(conn)
+        assert portal.inject_text("a") is True
+        old_session_path = portal._session_path
+        assert old_session_path is not None
+        first_create = next(call for call in conn.calls if call[1] == "CreateSession")
+        first_token = _request_options(first_create)["session_handle_token"].get_string()
+
+        portal.reset_session()
+
+        assert portal._session_path is None
+        assert conn.closed_sessions == [old_session_path]
+        assert portal._closed is False
+        assert portal.inject_text("b") is True
+
+        creates = [call for call in conn.calls if call[1] == "CreateSession"]
+        second_token = _request_options(creates[1])["session_handle_token"].get_string()
+        assert len(creates) == 2
+        assert first_token != second_token
+        assert portal._closed is False
+
+    def test_reset_session_without_session_is_a_noop(self, portal_client: PortalFactory) -> None:
+        conn = _FakePortalConn()
+        portal = portal_client(conn)
+
+        portal.reset_session()
+
+        assert conn.closed_sessions == []
+        assert portal._session_path is None
+        assert portal._closed is False
+
     def test_requests_use_distinct_tokens_and_subscribe_before_call(
         self, portal_client: PortalFactory
     ) -> None:
@@ -771,6 +805,18 @@ def _bare_injector(**attrs: Any) -> TextInjector:
     return injector
 
 
+def _injector_for_portal_failure(portal: Any) -> TextInjector:
+    """Build a TextInjector with the collaborators used by inject_text()."""
+    injector = _bare_injector(environment=DesktopEnvironment.WAYLAND, wayland_tool="portal")
+    injector._abort_injections = threading.Event()
+    injector._portal = portal
+    injector._log_current_window_info = MagicMock()
+    injector._wait_for_modifiers_released = MagicMock()
+    injector._copy_to_clipboard = MagicMock(return_value=True)
+    injector._show_clipboard_fallback_notification = MagicMock()
+    return injector
+
+
 class TestPortalInjectionPaths:
     """Portal dispatch inside the Wayland injection paths."""
 
@@ -840,7 +886,27 @@ class TestPortalInjectionPaths:
         assert injector._portal is portal
         portal.close.assert_not_called()
         assert portal.inject_text.call_count == 2
+        assert portal.reset_session.call_count == 2
         assert injector._ensure_ydotoold.call_count == 2
+
+    def test_flatpak_keep_branch_resets_portal_session(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        injector = _bare_injector(environment=DesktopEnvironment.WAYLAND, wayland_tool="portal")
+        portal = MagicMock()
+        injector._portal = portal
+        monkeypatch.setattr("shutil.which", lambda _cmd: None)
+
+        with patch.dict(
+            os.environ,
+            {"FLATPAK_ID": "com.vocalinux.Vocalinux"},
+            clear=True,
+        ):
+            assert injector._demote_portal_backend() is False
+
+        assert injector.wayland_tool == "portal"
+        assert injector._portal is portal
+        portal.reset_session.assert_called_once()
 
     def test_flatpak_demotes_to_ydotool_only_when_ydotoold_is_ready(
         self, monkeypatch: pytest.MonkeyPatch
@@ -893,6 +959,62 @@ class TestPortalInjectionPaths:
         assert injector._portal is portal
         portal.close.assert_not_called()
         assert portal.tap_keysym.call_count == 2
+
+    def test_flatpak_keep_portal_copies_only_undelivered_text(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        portal = MagicMock()
+        portal.inject_text.side_effect = RemoteDesktopPortalError("boom", delivered=3)
+        injector = _injector_for_portal_failure(portal)
+        monkeypatch.setattr("shutil.which", lambda _cmd: None)
+
+        with patch.dict(
+            os.environ,
+            {"FLATPAK_ID": "com.vocalinux.Vocalinux"},
+            clear=True,
+        ):
+            assert injector.inject_text("hello world") is False
+
+        assert injector.last_typed_count == 3
+        injector._copy_to_clipboard.assert_called_once_with("lo world")
+        portal.reset_session.assert_called_once()
+
+    def test_flatpak_keep_portal_does_not_copy_when_delivery_count_is_unknown(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        portal = MagicMock()
+        portal.inject_text.side_effect = RemoteDesktopPortalError("boom", delivered=None)
+        injector = _injector_for_portal_failure(portal)
+        monkeypatch.setattr("shutil.which", lambda _cmd: None)
+
+        with patch.dict(
+            os.environ,
+            {"FLATPAK_ID": "com.vocalinux.Vocalinux"},
+            clear=True,
+        ):
+            assert injector.inject_text("hello world") is False
+
+        assert injector.last_typed_count == -1
+        injector._copy_to_clipboard.assert_not_called()
+        portal.reset_session.assert_called_once()
+
+    def test_flatpak_keep_portal_copies_full_text_when_nothing_was_delivered(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        portal = MagicMock()
+        portal.inject_text.side_effect = RemoteDesktopPortalError("boom", delivered=0)
+        injector = _injector_for_portal_failure(portal)
+        monkeypatch.setattr("shutil.which", lambda _cmd: None)
+
+        with patch.dict(
+            os.environ,
+            {"FLATPAK_ID": "com.vocalinux.Vocalinux"},
+            clear=True,
+        ):
+            assert injector.inject_text("hello world") is True
+
+        injector._copy_to_clipboard.assert_called_once_with("hello world")
+        portal.reset_session.assert_called_once()
 
     def test_press_backspace_uses_portal_tap(self) -> None:
         injector = _bare_injector(environment=DesktopEnvironment.WAYLAND, wayland_tool="portal")

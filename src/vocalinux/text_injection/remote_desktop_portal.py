@@ -290,6 +290,17 @@ class RemoteDesktopPortal:
         with self._lock:
             self._submit(lambda: self._shortcut(steps), timeout=_SUBMIT_TIMEOUT_S)
 
+    def reset_session(self) -> None:
+        """Close the current portal session without stopping the client."""
+        with self._lock:
+            session_path = self._session_path
+            self._session_path = None
+            if session_path and self._conn is not None:
+                try:
+                    self._submit(lambda: self._close_session(session_path), timeout=5)
+                except Exception as e:
+                    logger.debug(f"Could not close RemoteDesktop session: {e}")
+
     def close(self) -> None:
         """Close the portal session and stop the worker thread."""
         with self._lock:
