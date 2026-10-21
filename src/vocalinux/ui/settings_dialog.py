@@ -76,8 +76,10 @@ from ..utils.system_language import (  # noqa: E402
     language_for_active_layout,
 )
 from ..utils.update_checker import (  # noqa: E402
+    DEFAULT_CHECK_AUTOMATICALLY,
     DEFAULT_UPDATE_CHANNEL,
     ReleaseInfo,
+    build_channel,
     fetch_latest_release,
     format_release_notes,
     is_trusted_release_url,
@@ -2456,6 +2458,24 @@ class ModelDownloadDialog(Gtk.Dialog):
         self.add_button("OK", Gtk.ResponseType.OK)
 
 
+def _populate_gpu_device_choices(combo: Any, saved_device: Optional[int]) -> None:
+    combo.remove_all()
+    combo.append("-1", "Auto (discrete GPU)")
+
+    from ..utils.whispercpp_model_info import detect_ggml_gpu_devices
+
+    devices = detect_ggml_gpu_devices()
+    if devices is None:
+        devices = detect_vulkan_devices()
+    for device in devices:
+        type_label = device["device_type"].capitalize()
+        label = f"[{device['index']}] {device['name']} ({type_label})"
+        combo.append(str(device["index"]), label)
+
+    if saved_device is None or not combo.set_active_id(str(saved_device)):
+        combo.set_active_id("-1")
+
+
 class SettingsDialog(AboutSectionMixin):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
@@ -2468,12 +2488,13 @@ class SettingsDialog(AboutSectionMixin):
         initial_page: Optional[str] = None,
         pending_update: Optional[ReleaseInfo] = None,
         update_status_callback: Optional[Callable[..., Any]] = None,
+        update_checks_callback: Optional[Callable[[bool], None]] = None,
         overlay_enabled_callback: Optional[Callable[[bool], None]] = None,
         hotkey_listener_update_callback: Optional[Callable[[], None]] = None,
         language_shortcuts_update_callback: Optional[Callable[[], None]] = None,
         history_update_callback: Optional[Callable[[], None]] = None,
         history_clear_callback: Optional[Callable[[], None]] = None,
-    ):
+    ) -> None:
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         # Force window decorations (title-bar close) on all WMs. An in-window
         # Close button also lives in the sidebar footer so the dialog always
@@ -2486,6 +2507,7 @@ class SettingsDialog(AboutSectionMixin):
         self.dictionary_manager = getattr(speech_engine, "dictionary_manager", None)
         self.shortcut_update_callback = shortcut_update_callback
         self.update_status_callback = update_status_callback
+        self.update_checks_callback = update_checks_callback
         self.overlay_enabled_callback = overlay_enabled_callback
         self.hotkey_listener_update_callback = hotkey_listener_update_callback
         self.language_shortcuts_update_callback = language_shortcuts_update_callback
@@ -2852,14 +2874,21 @@ class SettingsDialog(AboutSectionMixin):
         if row is not None:
             self.settings_stack.set_visible_child_name(row.page_name)
 
-    def _on_settings_page_changed(self, stack, pspec):
+    def _on_settings_page_changed(self, stack: Gtk.Stack, pspec: Any) -> None:
         """Persist deferred edits when the visible settings page changes."""
         visible = stack.get_visible_child_name()
         if visible != "advanced":
             self._flush_advanced_prompt_if_dirty()
         if visible == "about" and not self._update_auto_checked:
             self._update_auto_checked = True
-            self._start_update_check()
+            if self.config_manager.get_bool(
+                "updates", "check_automatically", DEFAULT_CHECK_AUTOMATICALLY
+            ):
+                self._start_update_check()
+            else:
+                self.update_status_row.set_subtitle(
+                    "Automatic checks are off. Press Check to look now."
+                )
 
     def _open_web_url(self, url: str) -> None:
         """Open a trusted project URL in the user's default browser."""
@@ -6359,13 +6388,25 @@ class SettingsDialog(AboutSectionMixin):
         channel_id = self.update_channel_combo.get_active_id()
         return normalize_channel(channel_id or DEFAULT_UPDATE_CHANNEL)
 
-    def _on_update_channel_changed(self, widget):
-        """Persist channel choice and refresh the update check."""
+    def _on_update_checks_toggled(self, widget: Gtk.Switch, state: bool) -> bool:
+        """Persist automatic update-check preference and notify the tray."""
+        if _handlers_suppressed(self):
+            return False
+
+        enabled = bool(state)
+        self.config_manager.set("updates", "check_automatically", enabled)
+        self.config_manager.save_settings()
+        if self.update_checks_callback is not None:
+            try:
+                self.update_checks_callback(enabled)
+            except Exception:
+                logger.error("Automatic update checks callback failed", exc_info=True)
+        return False
+
+    def _on_update_channel_changed(self, widget: Gtk.ComboBoxText) -> None:
+        """Refresh the manual update lookup for the selected channel."""
         if _handlers_suppressed(self):
             return
-        channel = self._current_update_channel()
-        self.config_manager.set("updates", "channel", channel)
-        self.config_manager.save_settings()
         self._start_update_check()
 
     def _on_check_updates_clicked(self, widget):
@@ -6413,10 +6454,10 @@ class SettingsDialog(AboutSectionMixin):
 
     def _apply_update_check_result(
         self,
-        release,
+        release: Optional[ReleaseInfo],
         channel: Optional[str] = None,
         generation: Optional[int] = None,
-    ):
+    ) -> bool:
         """Update About-page UI from a release lookup result."""
         if not self._dialog_is_alive():
             return False
@@ -6481,7 +6522,13 @@ class SettingsDialog(AboutSectionMixin):
             self._set_about_update_badge(False)
 
         # Keep the tray menu in sync with an About-page check (no extra notification).
-        if self.update_status_callback is not None:
+        if (
+            channel == build_channel()
+            and self.config_manager.get_bool(
+                "updates", "check_automatically", DEFAULT_CHECK_AUTOMATICALLY
+            )
+            and self.update_status_callback is not None
+        ):
             try:
                 self.update_status_callback(update_available, release if update_available else None)
             except Exception:
@@ -9637,23 +9684,10 @@ For now, the engine has been reverted to VOSK."""
                 error_dialog.destroy()
             return False
 
-    def _populate_gpu_devices(self):
+    def _populate_gpu_devices(self) -> None:
         """Populate the GPU device dropdown with available Vulkan devices."""
-        self.gpu_device_combo.remove_all()
-        self.gpu_device_combo.append("-1", "Auto (discrete GPU)")
-
-        devices = detect_vulkan_devices()
-        for device in devices:
-            type_label = device["device_type"].capitalize()
-            label = f"[{device['index']}] {device['name']} ({type_label})"
-            self.gpu_device_combo.append(str(device["index"]), label)
-
         saved_device = self.config_manager.get("advanced", "whispercpp_gpu_device", None)
-        if saved_device is None:
-            self.gpu_device_combo.set_active_id("-1")
-        else:
-            if not self.gpu_device_combo.set_active_id(str(saved_device)):
-                self.gpu_device_combo.set_active_id("-1")
+        _populate_gpu_device_choices(self.gpu_device_combo, saved_device)
 
     def _populate_audio_devices(self):
         """Populate the audio device dropdown with available input devices."""

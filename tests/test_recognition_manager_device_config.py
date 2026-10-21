@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import unittest
+from typing import Any, Optional
 from unittest import mock
 from unittest.mock import MagicMock, Mock, call, patch
 
@@ -1975,6 +1976,228 @@ class TestWhispercppGpuDeviceSelection(unittest.TestCase):
                                             "context_params"
                                             not in mock_pywhispercpp.Model.call_args.kwargs
                                         )
+
+
+class TestWhispercppGgmlDeviceSelection(unittest.TestCase):
+    """Test manager selection against whisper.cpp's native GPU registry."""
+
+    def setUp(self: "TestWhispercppGgmlDeviceSelection") -> None:
+        verifier = patch.object(
+            SpeechRecognitionManager, "_whispercpp_model_is_verified", return_value=True
+        )
+        verifier.start()
+        self.addCleanup(verifier.stop)
+        self.device_helper = TestWhispercppGpuDeviceSelection()
+
+    def _load_with_ggml_devices(
+        self: "TestWhispercppGgmlDeviceSelection",
+        manager: SpeechRecognitionManager,
+        ggml_devices: list[dict[str, Any]],
+        vulkan_devices: list[dict[str, Any]],
+        actual_backend: str = "vulkan",
+        host_backend: Optional[str] = None,
+    ) -> list[tuple[str, dict[str, Any]]]:
+        import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+        if host_backend is None:
+            host_backend = (
+                whispercpp_info.ComputeBackend.CUDA
+                if actual_backend == "cuda"
+                else whispercpp_info.ComputeBackend.VULKAN
+            )
+        with (
+            patch.object(
+                whispercpp_info,
+                "detect_ggml_gpu_devices",
+                return_value=ggml_devices,
+            ),
+            patch(
+                "vocalinux.speech_recognition.recognition_manager.multiprocessing.cpu_count",
+                return_value=8,
+            ),
+        ):
+            return self.device_helper._init_with_backends(
+                manager,
+                host_backend=host_backend,
+                host_info="Vulkan or CUDA test device",
+                actual_backend=actual_backend,
+                vulkan_devices=vulkan_devices,
+                prefer_index=1,
+            )
+
+    def test_auto_selection_uses_ggml_ordinal_not_vulkaninfo_index(
+        self: "TestWhispercppGgmlDeviceSelection",
+    ) -> None:
+        import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
+        manager.model_size = "tiny"
+        vulkan_devices = [
+            {
+                "index": 0,
+                "name": "Intel(R) HD Graphics 4600 (HSW GT2)",
+                "device_type": "integrated",
+            },
+            {
+                "index": 1,
+                "name": "NVIDIA GeForce GTX 1050",
+                "device_type": "discrete",
+            },
+        ]
+        ggml_devices = [
+            {
+                "index": 0,
+                "name": "NVIDIA GeForce GTX 1050",
+                "backend_name": "Vulkan0",
+                "device_type": "discrete",
+            }
+        ]
+
+        with self.assertLogs(
+            "vocalinux.speech_recognition.recognition_manager", level="INFO"
+        ) as logs:
+            calls = self._load_with_ggml_devices(
+                manager,
+                ggml_devices,
+                vulkan_devices,
+                host_backend=whispercpp_info.ComputeBackend.VULKAN,
+            )
+
+        self.assertEqual(calls[-1][1]["context_params"], {"gpu_device": 0})
+        self.assertEqual(calls[-1][1]["n_threads"], 2)
+        self.assertTrue(any("NVIDIA GeForce GTX 1050" in entry for entry in logs.output))
+
+    def test_stale_explicit_index_falls_back_to_ggml_auto_selection(
+        self: "TestWhispercppGgmlDeviceSelection",
+    ) -> None:
+        import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=1)
+        manager.model_size = "tiny"
+        ggml_devices = [
+            {
+                "index": 0,
+                "name": "NVIDIA GeForce GTX 1050",
+                "backend_name": "Vulkan0",
+                "device_type": "discrete",
+            }
+        ]
+        vulkan_devices = [
+            {"index": 0, "name": "Intel HD Graphics", "device_type": "integrated"},
+            {"index": 1, "name": "NVIDIA GeForce GTX 1050", "device_type": "discrete"},
+        ]
+
+        with self.assertLogs(
+            "vocalinux.speech_recognition.recognition_manager", level="WARNING"
+        ) as logs:
+            calls = self._load_with_ggml_devices(
+                manager,
+                ggml_devices,
+                vulkan_devices,
+                host_backend=whispercpp_info.ComputeBackend.VULKAN,
+            )
+
+        self.assertEqual(calls[-1][1]["context_params"], {"gpu_device": 0})
+        self.assertTrue(any("index 1 is unavailable" in entry for entry in logs.output))
+        self.assertTrue(any("NVIDIA GeForce GTX 1050" in entry for entry in logs.output))
+
+    def test_empty_ggml_registry_uses_cpu_and_lists_skipped_devices(
+        self: "TestWhispercppGgmlDeviceSelection",
+    ) -> None:
+        import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
+        manager.model_size = "tiny"
+        vulkan_devices = [
+            {
+                "index": 0,
+                "name": "Intel(R) HD Graphics 4600 (HSW GT2)",
+                "device_type": "integrated",
+            },
+            {
+                "index": 1,
+                "name": "NVIDIA GeForce GTX 1050",
+                "device_type": "discrete",
+            },
+        ]
+
+        with self.assertLogs(
+            "vocalinux.speech_recognition.recognition_manager", level="INFO"
+        ) as logs:
+            calls = self._load_with_ggml_devices(
+                manager,
+                [],
+                vulkan_devices,
+                host_backend=whispercpp_info.ComputeBackend.VULKAN,
+            )
+
+        self.assertEqual(calls[-1][1]["context_params"], {"use_gpu": False})
+        self.assertEqual(calls[-1][1]["n_threads"], 6)
+        self.assertTrue(any("effective cpu backend" in entry.lower() for entry in logs.output))
+        self.assertTrue(any("Intel(R) HD Graphics 4600" in entry for entry in logs.output))
+        self.assertTrue(any("NVIDIA GeForce GTX 1050" in entry for entry in logs.output))
+
+    def test_positive_thread_override_applies_to_cpu_and_gpu(
+        self: "TestWhispercppGgmlDeviceSelection",
+    ) -> None:
+        manager = _make_manager(
+            engine="whisper_cpp",
+            whispercpp_gpu_device=None,
+            whispercpp_n_threads=3,
+        )
+        manager.model_size = "tiny"
+        vulkan_devices = [
+            {"index": 0, "name": "Intel HD Graphics", "device_type": "integrated"},
+            {"index": 1, "name": "NVIDIA GPU", "device_type": "discrete"},
+        ]
+        ggml_devices = [
+            {
+                "index": 0,
+                "name": "NVIDIA GPU",
+                "backend_name": "Vulkan0",
+                "device_type": "discrete",
+            }
+        ]
+
+        gpu_calls = self._load_with_ggml_devices(manager, ggml_devices, vulkan_devices)
+        self.assertEqual(gpu_calls[-1][1]["n_threads"], 3)
+        self.assertEqual(gpu_calls[-1][1]["context_params"], {"gpu_device": 0})
+
+        cpu_manager = _make_manager(
+            engine="whisper_cpp",
+            whispercpp_gpu_device=None,
+            whispercpp_n_threads=3,
+        )
+        cpu_manager.model_size = "tiny"
+        cpu_calls = self._load_with_ggml_devices(cpu_manager, [], vulkan_devices)
+        self.assertEqual(cpu_calls[-1][1]["n_threads"], 3)
+        self.assertEqual(cpu_calls[-1][1]["context_params"], {"use_gpu": False})
+
+    def test_cuda_runtime_with_empty_ggml_registry_uses_cpu_threads(
+        self: "TestWhispercppGgmlDeviceSelection",
+    ) -> None:
+        import vocalinux.utils.whispercpp_model_info as whispercpp_info
+
+        manager = _make_manager(engine="whisper_cpp", whispercpp_gpu_device=None)
+        manager.model_size = "tiny"
+        vulkan_devices = [
+            {"index": 0, "name": "Intel HD Graphics", "device_type": "integrated"},
+            {"index": 1, "name": "NVIDIA GeForce GTX 1050", "device_type": "discrete"},
+        ]
+        with self.assertLogs(
+            "vocalinux.speech_recognition.recognition_manager", level="INFO"
+        ) as logs:
+            calls = self._load_with_ggml_devices(
+                manager,
+                [],
+                vulkan_devices,
+                actual_backend="cuda",
+                host_backend=whispercpp_info.ComputeBackend.CUDA,
+            )
+
+        self.assertEqual(calls[-1][1]["n_threads"], 6)
+        self.assertEqual(calls[-1][1]["context_params"], {"use_gpu": False})
+        self.assertTrue(any("effective cpu backend" in entry.lower() for entry in logs.output))
 
 
 class TestTranscription(unittest.TestCase):

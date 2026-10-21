@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, Union, cast
 
 if TYPE_CHECKING:
     import numpy as np
@@ -89,6 +89,22 @@ if TYPE_CHECKING:
     from ..custom_dictionary import CustomDictionaryManager
 
 
+class _HeldTranscript(NamedTuple):
+    """A transcript held until its push-to-talk session is released."""
+
+    text: str
+    actions: list[str]
+    started_at: Optional[float]
+
+
+class _ReleaseGate(threading.Event):
+    """Session event that gates delivery while allowing transcription to continue."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.held: list[_HeldTranscript] = []
+
+
 class _AudioSegment(list):
     """A queued audio segment that knows when its capture began.
 
@@ -97,6 +113,7 @@ class _AudioSegment(list):
     ``time.monotonic()`` timestamp of its first captured chunk. That stamp
     is what lets a listener tell speech captured before a point in time
     from speech captured after it, however late the decode finishes.
+    A push-to-talk ``release_gate`` holds transcribed text until the key is released.
     """
 
     def __init__(
@@ -104,6 +121,7 @@ class _AudioSegment(list):
         chunks: list[bytes],
         started_at: Optional[float],
         language: Optional[str] = None,
+        release_gate: Optional[_ReleaseGate] = None,
     ) -> None:
         super().__init__(chunks)
         self.started_at = started_at
@@ -111,6 +129,7 @@ class _AudioSegment(list):
         # outlives its session must not transcribe a stale segment in a newer
         # session's language.
         self.language = language
+        self.release_gate = release_gate
 
 
 def _pywhispercpp_distribution_version() -> Optional[tuple[int, ...]]:
@@ -136,6 +155,26 @@ def _pywhispercpp_distribution_version() -> Optional[tuple[int, ...]]:
         else:
             break
     return tuple(parts) if parts else None
+
+
+def _select_ggml_gpu_device(
+    devices: list[dict[str, Any]], requested_index: Optional[int]
+) -> Optional[dict[str, Any]]:
+    if requested_index is not None and requested_index >= 0:
+        selected = next((device for device in devices if device["index"] == requested_index), None)
+        if selected is not None:
+            return selected
+        logger.warning(
+            "Requested whisper.cpp GPU index %s is unavailable; usable ggml GPU devices: %s. "
+            "Selecting automatically.",
+            requested_index,
+            devices,
+        )
+
+    return next(
+        (device for device in devices if device["device_type"] == "discrete"),
+        devices[0] if devices else None,
+    )
 
 
 def resolve_whisper_language(language: str) -> Optional[str]:
@@ -519,13 +558,23 @@ class SpeechRecognitionManager:
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue: queue.Queue[tuple[_AudioSegment, str]] = queue.Queue(maxsize=32)
+        self._key_release_gate = _ReleaseGate()
+        self._key_release_gate.set()
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
+        # Longest stretch of continuous speech kept in one buffer before it is
+        # queued for transcription. A push-to-talk hold (or a toggle session
+        # that never goes quiet) otherwise grows the buffer until the safety
+        # cap above discards its oldest audio. The effective flush point is
+        # also capped at 75% of that chunk budget, so a device with short
+        # chunks (high capture rate) can never reach the destructive trim
+        # before the segment is flushed.
+        self._max_segment_seconds = 90.0
         self._reconnection_attempts = 0
         self._max_reconnection_attempts = 5
         self._reconnection_delay = 1.0  # Initial delay in seconds
-        self._last_audio_error_time = 0
+        self._last_audio_error_time = 0.0
         self._audio_stream = None
         self._pyaudio_instance = None
         self._capture_sample_rate = 16000  # Default, updated when device is opened
@@ -1546,12 +1595,21 @@ class SpeechRecognitionManager:
         return compatible_kwargs
 
     def _load_model_with_compatible_params(
-        self, model_path: str, model_kwargs: dict, gpu_device: Optional[int] = None
-    ):
+        self,
+        model_path: str,
+        model_kwargs: dict[str, Any],
+        gpu_device: Optional[int] = None,
+        use_gpu: Optional[bool] = None,
+    ) -> Any:
         from pywhispercpp.model import Model
 
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
+        context_params: dict[str, Any] = {}
+        if use_gpu is not None:
+            context_params["use_gpu"] = use_gpu
         if gpu_device is not None and gpu_device >= 0:
+            context_params["gpu_device"] = gpu_device
+        if context_params:
             dist_version = _pywhispercpp_distribution_version()
             too_old_for_context_params = dist_version is not None and dist_version < (1, 5, 0)
             try:
@@ -1571,7 +1629,7 @@ class SpeechRecognitionManager:
                     version_label,
                 )
             elif supports_context_params:
-                compatible_kwargs["context_params"] = {"gpu_device": gpu_device}
+                compatible_kwargs["context_params"] = context_params
             else:
                 logger.warning(
                     "pywhispercpp does not support context_params; "
@@ -1613,62 +1671,118 @@ class SpeechRecognitionManager:
             _prefer_discrete_vulkan_device,
             detect_compute_backend,
             detect_cpu_info,
+            detect_ggml_gpu_devices,
             detect_vulkan_devices,
             get_backend_display_name,
         )
 
         host_backend, host_info = detect_compute_backend()
         actual_gpu_backend = self._detect_pywhispercpp_gpu_backend()
+        ggml_devices = detect_ggml_gpu_devices()
         logger.info("whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
 
         selected_gpu_device = None
+        use_gpu: Optional[bool] = None
         runtime_backend = ComputeBackend.CPU
         runtime_info = detect_cpu_info()
 
         if actual_gpu_backend == "cuda":
-            # pywhispercpp CUDA uses CUDA device ordinals (0 = first NVIDIA GPU).
-            # Vulkan enumeration on hybrid laptops lists iGPU as GPU0 and dGPU as
-            # GPU1; passing that Vulkan index to CUDA selects the CPU fallback.
-            vulkan_gpu_index = self.whispercpp_gpu_device
-            if vulkan_gpu_index is None or vulkan_gpu_index < 0:
-                vulkan_gpu_index = _prefer_discrete_vulkan_device()
-            if vulkan_gpu_index not in (None, 0):
-                logger.info(
-                    "pywhispercpp is CUDA-backed; using CUDA device 0 "
-                    f"(Vulkan GPU index {vulkan_gpu_index} does not map to CUDA ordinals)"
+            if ggml_devices == []:
+                use_gpu = False
+                skipped_devices = [
+                    device["name"]
+                    for device in detect_vulkan_devices()
+                    if device.get("device_type") != "software"
+                ]
+                logger.warning(
+                    "whisper.cpp found no usable ggml GPU device and will use CPU. "
+                    "Vulkan hardware devices skipped by ggml: %s",
+                    ", ".join(skipped_devices) if skipped_devices else "none found",
                 )
             else:
-                logger.info("pywhispercpp is CUDA-backed; using CUDA device 0")
-            selected_gpu_device = 0
-            runtime_backend = ComputeBackend.CUDA
-            runtime_info = host_info if host_backend == ComputeBackend.CUDA else "NVIDIA GPU"
+                # CUDA device ordinals are independent of vulkaninfo indices.
+                vulkan_gpu_index = self.whispercpp_gpu_device
+                if vulkan_gpu_index is None or vulkan_gpu_index < 0:
+                    vulkan_gpu_index = _prefer_discrete_vulkan_device()
+                if vulkan_gpu_index not in (None, 0):
+                    logger.info(
+                        "pywhispercpp is CUDA-backed; using CUDA device 0 "
+                        "(Vulkan GPU index %s does not map to CUDA ordinals)",
+                        vulkan_gpu_index,
+                    )
+                else:
+                    logger.info("pywhispercpp is CUDA-backed; using CUDA device 0")
+                selected_gpu_device = 0
+                runtime_backend = ComputeBackend.CUDA
+                runtime_info = host_info if host_backend == ComputeBackend.CUDA else "NVIDIA GPU"
         elif actual_gpu_backend == "vulkan":
-            gpu_device_index = self.whispercpp_gpu_device
-            if gpu_device_index is None or gpu_device_index < 0:
-                gpu_device_index = _prefer_discrete_vulkan_device()
-
-            devices = detect_vulkan_devices()
-            runtime_backend = ComputeBackend.VULKAN
-            if gpu_device_index is not None:
-                device_name = next(
-                    (d["name"] for d in devices if d["index"] == gpu_device_index),
-                    "unknown",
-                )
-                logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
-                selected_gpu_device = gpu_device_index
-                runtime_info = device_name
-            elif devices:
-                runtime_info = devices[0]["name"]
-                logger.warning(
-                    "pywhispercpp is Vulkan-backed but no preferred GPU was selected. "
-                    "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
-                )
+            if ggml_devices is not None:
+                vulkan_devices = detect_vulkan_devices()
+                if ggml_devices:
+                    selected_device = _select_ggml_gpu_device(
+                        ggml_devices, self.whispercpp_gpu_device
+                    )
+                    ggml_names = {device["name"] for device in ggml_devices}
+                    skipped_devices = [
+                        device["name"]
+                        for device in vulkan_devices
+                        if device.get("device_type") != "software"
+                        and device["name"] not in ggml_names
+                    ]
+                    if skipped_devices:
+                        logger.info(
+                            "Vulkan devices not registered by ggml: %s",
+                            ", ".join(skipped_devices),
+                        )
+                    if selected_device is not None:
+                        runtime_backend = ComputeBackend.VULKAN
+                        selected_gpu_device = selected_device["index"]
+                        runtime_info = selected_device["name"]
+                        logger.info(
+                            "Requesting Vulkan GPU [%s]: %s (%s)",
+                            selected_device["index"],
+                            selected_device["name"],
+                            selected_device["backend_name"],
+                        )
+                else:
+                    use_gpu = False
+                    skipped_devices = [
+                        device["name"]
+                        for device in vulkan_devices
+                        if device.get("device_type") != "software"
+                    ]
+                    logger.warning(
+                        "whisper.cpp found no usable Vulkan device and will use CPU. "
+                        "Vulkan hardware devices skipped by ggml: %s",
+                        ", ".join(skipped_devices) if skipped_devices else "none found",
+                    )
             else:
-                logger.warning(
-                    "pywhispercpp is Vulkan-backed but vulkaninfo found no devices. "
-                    "Install vulkan-tools so Vocalinux can pick a discrete GPU. "
-                    "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
-                )
+                gpu_device_index = self.whispercpp_gpu_device
+                if gpu_device_index is None or gpu_device_index < 0:
+                    gpu_device_index = _prefer_discrete_vulkan_device()
+
+                devices = detect_vulkan_devices()
+                runtime_backend = ComputeBackend.VULKAN
+                if gpu_device_index is not None:
+                    device_name = next(
+                        (d["name"] for d in devices if d["index"] == gpu_device_index),
+                        "unknown",
+                    )
+                    logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
+                    selected_gpu_device = gpu_device_index
+                    runtime_info = device_name
+                elif devices:
+                    runtime_info = devices[0]["name"]
+                    logger.warning(
+                        "pywhispercpp is Vulkan-backed but no preferred GPU was selected. "
+                        "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
+                    )
+                else:
+                    logger.warning(
+                        "pywhispercpp is Vulkan-backed but vulkaninfo found no devices. "
+                        "Install vulkan-tools so Vocalinux can pick a discrete GPU. "
+                        "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
+                    )
         elif host_backend != ComputeBackend.CPU:
             logger.warning(
                 "Host reports %s (%s), but pywhispercpp has no GPU libraries. "
@@ -1680,7 +1794,11 @@ class SpeechRecognitionManager:
                 host_info,
             )
 
-        if actual_gpu_backend in ("vulkan", "cuda") and host_backend != actual_gpu_backend:
+        if (
+            runtime_backend == actual_gpu_backend
+            and actual_gpu_backend in ("vulkan", "cuda")
+            and host_backend != actual_gpu_backend
+        ):
             logger.info(
                 "Host capability label is %s; bundled pywhispercpp libraries are %s. "
                 "Using the bundled %s backend.",
@@ -1690,7 +1808,9 @@ class SpeechRecognitionManager:
             )
 
         logger.info(
-            f"whisper.cpp using {get_backend_display_name(runtime_backend)} backend: {runtime_info}"
+            "whisper.cpp requesting %s backend: %s",
+            get_backend_display_name(runtime_backend),
+            runtime_info,
         )
 
         import psutil
@@ -1709,9 +1829,8 @@ class SpeechRecognitionManager:
         logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
         self.model = None  # Release previous model if re-initializing
 
-        has_gpu_libs = actual_gpu_backend in ("vulkan", "cuda")
-
-        if has_gpu_libs and not (
+        has_gpu_backend = runtime_backend in (ComputeBackend.VULKAN, ComputeBackend.CUDA)
+        if has_gpu_backend and not (
             self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0
         ):
             n_threads = max(1, multiprocessing.cpu_count() // 4)
@@ -1726,18 +1845,25 @@ class SpeechRecognitionManager:
 
         try:
             self.model = self._load_model_with_compatible_params(
-                model_path, model_kwargs, gpu_device=selected_gpu_device
+                model_path, model_kwargs, gpu_device=selected_gpu_device, use_gpu=use_gpu
             )
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
                 model_error, model_path, model_kwargs, ComputeBackend.CPU
             )
+            runtime_info = detect_cpu_info()
 
         effective_threads = self._whispercpp_effective_threads
         if effective_threads is None:
             effective_threads = n_threads
 
         load_duration = time.time() - load_start_time
+        logger.info(
+            "whisper.cpp loaded with effective %s backend: %s (n_threads=%d)",
+            get_backend_display_name(loaded_backend),
+            runtime_info,
+            effective_threads,
+        )
         logger.info(
             f"whisper.cpp configured with n_threads={effective_threads} "
             f"({loaded_backend} backend)"
@@ -3222,6 +3348,7 @@ class SpeechRecognitionManager:
         self.audio_buffer = []
         self._segment_started_at = None
         self._segment_queue = queue.Queue(maxsize=32)
+        self._key_release_gate = _ReleaseGate()
 
         # Start the audio recording thread
         self.audio_thread = threading.Thread(target=self._record_audio)
@@ -3250,6 +3377,7 @@ class SpeechRecognitionManager:
         # sees the dictation as ended. The volume goes back only once the
         # microphone thread has left the device, and before the stop cue.
         self.should_record = False
+        self._key_release_gate.set()
         self._update_state(RecognitionState.PROCESSING)
         self._cancel_pending_playback_duck()
 
@@ -3279,7 +3407,12 @@ class SpeechRecognitionManager:
 
             if self.audio_buffer and self._recording_segment_has_speech:
                 logger.debug(f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks")
-                self._enqueue_audio_segment(self.audio_buffer)
+                self._enqueue_audio_segment(
+                    self.audio_buffer,
+                    release_gate=(
+                        self._key_release_gate if self._recognition_mode == "push_to_talk" else None
+                    ),
+                )
                 self.audio_buffer = []
             elif self.audio_buffer:
                 logger.debug(
@@ -3419,25 +3552,26 @@ class SpeechRecognitionManager:
             # ran or was refused by the guards inside start_recognition.
             self._pending_language_override = None
 
-    def _record_audio(self):
+    def _record_audio(self) -> None:
         """Record audio from the microphone with reconnection logic."""
+        gate = self._key_release_gate
         # Lazy import to avoid circular dependency
         from ..ui.audio_feedback import play_error_sound  # noqa: F401
 
         try:
-            import numpy as np
-        except ImportError as e:
-            logger.error(f"Failed to import required audio libraries: {e}")
-            logger.error("Please install required dependencies: pip install pyaudio numpy")
-            self.should_record = False
-            self.release_playback_duck()
-            play_error_sound()
-            self._buffered_capture_failed = True
-            self._update_state(RecognitionState.ERROR)
-            self._signal_buffered_capture_done()
-            return
+            try:
+                import numpy as np
+            except ImportError as e:
+                logger.error(f"Failed to import required audio libraries: {e}")
+                logger.error("Please install required dependencies: pip install pyaudio numpy")
+                self.should_record = False
+                self.release_playback_duck()
+                play_error_sound()
+                self._buffered_capture_failed = True
+                self._update_state(RecognitionState.ERROR)
+                self._signal_buffered_capture_done()
+                return
 
-        try:
             # PyAudio configuration
             CHUNK = 1024
 
@@ -3499,7 +3633,7 @@ class SpeechRecognitionManager:
             logger.info("Audio recording started")
 
             # Record audio while should_record is True
-            silence_counter = 0
+            silence_counter = 0.0
             speech_detected_in_session = False
             self._recording_segment_has_speech = False
             log_level_interval = 0  # Counter for periodic level logging
@@ -3641,6 +3775,43 @@ class SpeechRecognitionManager:
                                 )
                             speech_detected_in_session = True
                         silence_counter = 0
+
+                    # Continuous speech with no pause (a held push-to-talk
+                    # key, or a toggle session that never goes quiet) keeps
+                    # one segment growing until the safety cap silently drops
+                    # its oldest audio. Queue the segment long before that so
+                    # every word is transcribed in order while recording keeps
+                    # going. Capture chunks are 16 kHz mono, so their duration
+                    # follows from the byte count at any negotiated rate.
+                    # Push-to-talk text is held until the key is released.
+                    chunk_seconds = len(data) / (2 * 16000)
+                    if chunk_seconds > 0 and self._recording_segment_has_speech:
+                        buffered_seconds = len(self.audio_buffer) * chunk_seconds
+                        flush_seconds = min(
+                            self._max_segment_seconds,
+                            self._max_buffer_size * chunk_seconds * 0.75,
+                        )
+                        if buffered_seconds >= flush_seconds and not getattr(
+                            self, "_reload_pending", False
+                        ):
+                            with self._buffer_lock:
+                                segment = self.audio_buffer.copy()
+                                self.audio_buffer = []
+                            self._recording_segment_has_speech = False
+                            silence_counter = 0
+                            logger.info(
+                                "Continuing dictation: queued %.0fs segment "
+                                "(%d chunks) for transcription; push-to-talk text "
+                                "will be held until release",
+                                buffered_seconds,
+                                len(segment),
+                            )
+                            self._enqueue_audio_segment(
+                                segment,
+                                release_gate=(
+                                    gate if self._recognition_mode == "push_to_talk" else None
+                                ),
+                            )
                 except (IOError, OSError) as e:
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
@@ -3714,6 +3885,7 @@ class SpeechRecognitionManager:
             self._buffered_capture_failed = True
             self._update_state(RecognitionState.ERROR)
         finally:
+            gate.set()
             self._signal_buffered_capture_done()
 
     def _process_final_buffer(self):
@@ -3750,6 +3922,48 @@ class SpeechRecognitionManager:
             return None
         return self._transcribe_with_remote_api(audio_buffer, session, language)
 
+    def _deliver_transcript(
+        self,
+        text: str,
+        actions: list[str],
+        started_at: Optional[float],
+    ) -> None:
+        """Deliver a transcribed segment to registered callbacks."""
+        logger.debug(
+            f"processed_text='{text[:50] if text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+        )
+        if text:
+            if started_at is None:
+                started_at = time.monotonic()
+            for segment_callback in self.segment_callbacks:
+                segment_callback(text, started_at)
+            for callback in self.text_callbacks:
+                logger.debug(
+                    f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                )
+                callback(text)
+
+        for action in actions:
+            for callback in self.action_callbacks:
+                callback(action)
+
+    def _release_held_transcripts(
+        self,
+        gate: Optional[_ReleaseGate],
+        force: bool = False,
+    ) -> None:
+        """Deliver queued transcripts once their push-to-talk gate opens."""
+        if gate is None or (not gate.is_set() and not force):
+            return
+
+        while gate.held:
+            transcript = gate.held.pop(0)
+            self._deliver_transcript(
+                transcript.text,
+                transcript.actions,
+                transcript.started_at,
+            )
+
     def _process_audio_buffer(
         self, audio_buffer: list[bytes], language: Optional[str] = None
     ) -> None:
@@ -3785,10 +3999,15 @@ class SpeechRecognitionManager:
             return
         text = transcriber()
         if text is None:
+            gate = getattr(audio_buffer, "release_gate", None)
+            if gate is not None and gate.is_set():
+                self._release_held_transcripts(gate)
             return
 
         # Process text - either with voice commands or pass through directly
         logger.debug(f"_process_audio_buffer got text='{text[:50] if text else '(empty)'}...'")
+        processed_text = ""
+        actions: list[str] = []
         if text:
             # Corrections must precede command parsing: a safe replacement can
             # stop a model mishearing from triggering a destructive action.
@@ -3801,29 +4020,30 @@ class SpeechRecognitionManager:
                 processed_text = text.strip()
                 actions = []
 
-            # Call text callbacks with processed text
-            logger.debug(
-                f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
-            )
-            if processed_text:
-                started_at = getattr(audio_buffer, "started_at", None)
-                if started_at is None:
-                    started_at = time.monotonic()
-                for segment_callback in self.segment_callbacks:
-                    segment_callback(processed_text, started_at)
-                for callback in self.text_callbacks:
-                    logger.debug(
-                        f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+        gate = getattr(audio_buffer, "release_gate", None)
+        if gate is not None and not gate.is_set():
+            if processed_text or actions:
+                gate.held.append(
+                    _HeldTranscript(
+                        processed_text,
+                        actions,
+                        getattr(audio_buffer, "started_at", None),
                     )
-                    callback(processed_text)
+                )
+                logger.info("Holding transcribed text until the push-to-talk key is released")
+                return
+        elif gate is not None:
+            self._release_held_transcripts(gate)
 
-            # Call action callbacks for each action
-            for action in actions:
-                for callback in self.action_callbacks:
-                    callback(action)
+        self._deliver_transcript(
+            processed_text,
+            actions,
+            getattr(audio_buffer, "started_at", None),
+        )
 
-    def _perform_recognition(self):
+    def _perform_recognition(self) -> None:
         """Perform speech recognition in real-time."""
+        gate = self._key_release_gate
         logger.debug("_perform_recognition thread started")
         try:
             while True:
@@ -3833,6 +4053,7 @@ class SpeechRecognitionManager:
                 try:
                     queued = self._segment_queue.get(timeout=0.1)
                 except queue.Empty:
+                    self._release_held_transcripts(gate)
                     # Only exit if we're not recording AND queue is empty
                     if not self.should_record and self._segment_queue.empty():
                         logger.debug(
@@ -3861,6 +4082,7 @@ class SpeechRecognitionManager:
                                 )
                                 if self.should_record:
                                     self._update_state(RecognitionState.PROCESSING)
+                                self._release_held_transcripts(gate)
                                 self._process_audio_buffer(remaining_segment, remaining_language)
                         except queue.Empty:
                             break
@@ -3871,20 +4093,30 @@ class SpeechRecognitionManager:
                 logger.debug(f"Recognition loop - processing segment with {len(segment)} chunks")
                 if self.should_record:
                     self._update_state(RecognitionState.PROCESSING)
+                self._release_held_transcripts(gate)
                 self._process_audio_buffer(segment, segment_language)
                 if self.should_record:
                     self._update_state(RecognitionState.LISTENING)
         finally:
             logger.debug("_perform_recognition thread exiting")
+            self._release_held_transcripts(gate, force=True)
             # Do not force IDLE here. stop_recognition() already does that,
             # and a leftover worker can finish after the user has started
             # again (LISTENING, should_record still false during the start
             # sound). Forcing IDLE would paint the tray idle and make the
             # next Alt+F12 start a second session (#739).
 
-    def _enqueue_audio_segment(self, audio_buffer: list[bytes]):
+    def _enqueue_audio_segment(
+        self,
+        audio_buffer: list[bytes],
+        release_gate: Optional[_ReleaseGate] = None,
+    ) -> None:
         """Queue an audio segment for asynchronous transcription."""
-        segment = _AudioSegment(audio_buffer.copy(), self._segment_started_at)
+        segment = _AudioSegment(
+            audio_buffer.copy(),
+            self._segment_started_at,
+            release_gate=release_gate,
+        )
         if not segment:
             logger.warning("_enqueue_audio_segment called with empty buffer")
             return

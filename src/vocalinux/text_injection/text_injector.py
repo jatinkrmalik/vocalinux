@@ -18,7 +18,11 @@ from typing import List, Optional, Tuple, cast
 
 from ..utils.host_process import host_env
 from ..utils.paths import config_dir
-from .focused_window import is_focused_window_terminal, read_wm_class
+from .focused_window import (
+    focused_xwayland_client_without_ibus,
+    is_focused_window_terminal,
+    read_wm_class,
+)
 from .ibus_engine import (
     IBusTextInjector,
     is_ibus_active_input_method,
@@ -1174,45 +1178,70 @@ class TextInjector:
             logger.warning(f"RemoteDesktop portal shortcut failed: {e}")
             return False, list(steps)
 
-    def _demote_portal_backend(self) -> bool:
-        """Drop the portal for this run and pick the next Wayland tool.
-
-        Mirrors the startup preference: ydotool with a ready daemon, then
-        ydotool alone when wtype is absent, then wtype, then the XWayland
-        fallback. Returns False when nothing else exists, leaving the
-        clipboard fallback to report the failure.
-        """
+    def _close_portal_client(self) -> None:
+        """Close the RemoteDesktop portal client and clear its reference."""
         portal = getattr(self, "_portal", None)
         if portal is not None:
             try:
                 portal.close()
             except Exception as e:
                 logger.debug(f"Could not close RemoteDesktop portal client: {e}")
-            self._portal = None
-        with self._state_lock:
-            self.wayland_tool = None
+        self._portal = None
 
+    def _demote_portal_backend(self) -> bool:
+        """Drop the portal for this run and pick the next Wayland tool.
+
+        Mirrors the startup preference: ydotool with a ready daemon, then
+        ydotool alone when wtype is absent, then wtype, then the XWayland
+        fallback. Returns False when nothing else exists, leaving the
+        clipboard fallback to report the failure. In a Flatpak, keep the
+        portal and reset its session when ydotoold is unavailable so the next
+        attempt can create a fresh session.
+        """
+        flatpak = bool(os.environ.get("FLATPAK_ID"))
         ydotool_available = shutil.which("ydotool") is not None
-        wtype_available = shutil.which("wtype") is not None
-        xdotool_available = shutil.which("xdotool") is not None
-
-        tool = None
-        if ydotool_available and self._ensure_ydotoold():
-            tool = "ydotool"
-        elif ydotool_available and not wtype_available:
-            tool = "ydotool"
-        elif wtype_available:
-            tool = "wtype"
-        elif xdotool_available:
-            with self._state_lock:
-                self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
-            logger.warning("RemoteDesktop portal failed; using xdotool/XWayland fallback")
-            return True
-        else:
+        if flatpak and (not ydotool_available or not self._ensure_ydotoold()):
+            portal = getattr(self, "_portal", None)
+            if portal is not None:
+                try:
+                    portal.reset_session()
+                except Exception as e:
+                    logger.debug(f"Could not reset RemoteDesktop session for retry: {e}")
+            logger.warning(
+                "RemoteDesktop portal failed; keeping it for the next attempt "
+                "(the session will be recreated on the next attempt; no working "
+                "ydotool daemon is available in the Flatpak)"
+            )
             return False
+
+        self._close_portal_client()
+        if not flatpak:
+            with self._state_lock:
+                self.wayland_tool = None
+
+        if flatpak:
+            tool = "ydotool"
+        else:
+            wtype_available = shutil.which("wtype") is not None
+            xdotool_available = shutil.which("xdotool") is not None
+            tool = None
+            if ydotool_available and self._ensure_ydotoold():
+                tool = "ydotool"
+            elif ydotool_available and not wtype_available:
+                tool = "ydotool"
+            elif wtype_available:
+                tool = "wtype"
+            elif xdotool_available:
+                with self._state_lock:
+                    self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                logger.warning("RemoteDesktop portal failed; using xdotool/XWayland fallback")
+                return True
+            else:
+                return False
 
         with self._state_lock:
             self.wayland_tool = tool
+
         logger.warning(f"RemoteDesktop portal failed; falling back to {tool}")
         return True
 
@@ -1651,10 +1680,21 @@ class TextInjector:
         if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
             self._try_recover_from_fallback()
 
+        xwayland_detour = False
         try:
             with self._state_lock:
                 current_env = self.environment
                 ibus_injector = self._ibus_injector
+
+            if current_env == DesktopEnvironment.WAYLAND_IBUS and self._should_bypass_ibus():
+                # The IBus engine would commit into no input context and still
+                # report OK (#972); send this segment through XWayland instead.
+                logger.info("Focused XWayland client has no IBus input method; using xdotool")
+                with self._state_lock:
+                    if self.environment == DesktopEnvironment.WAYLAND_IBUS:
+                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                        xwayland_detour = True
+                    current_env = self.environment
 
             if (
                 current_env == DesktopEnvironment.WAYLAND_IBUS
@@ -1798,6 +1838,25 @@ class TextInjector:
             except ImportError:
                 logger.warning("Could not import audio feedback module")
             return False
+        finally:
+            if xwayland_detour:
+                with self._state_lock:
+                    if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+                        self.environment = DesktopEnvironment.WAYLAND_IBUS
+
+    def _should_bypass_ibus(self) -> bool:
+        """True when IBus cannot reach the focused window but xdotool can (#972).
+
+        Only applies when the backend was chosen automatically; a pinned IBus
+        backend is the user's call and is kept.
+        """
+        if self._backend_pin[0] == "ibus":
+            return False
+        try:
+            return focused_xwayland_client_without_ibus()
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            logger.debug(f"XWayland focus probe failed, keeping IBus: {exc}")
+            return False
 
     def _inject_with_xdotool(self, text: str) -> None:
         """
@@ -1820,12 +1879,17 @@ class TextInjector:
             os.environ.setdefault("DISPLAY", env["DISPLAY"])
             logger.debug(f"Using XWayland with DISPLAY={env['DISPLAY']}")
             self._wait_for_modifiers_released()
-            if self._inject_via_clipboard_paste(text, env=env):
+            if self._clipboard_holds_non_text():
+                logger.info(
+                    "Clipboard holds non-text content; typing instead of pasting to preserve it"
+                )
+            elif self._inject_via_clipboard_paste(text, env=env):
                 return
-            logger.warning(
-                "Clipboard paste failed, falling back to xdotool type "
-                "(character-by-character; text may be scrambled on non-US layouts)"
-            )
+            else:
+                logger.warning(
+                    "Clipboard paste failed, falling back to xdotool type "
+                    "(character-by-character; text may be scrambled on non-US layouts)"
+                )
 
             # Add a small delay to ensure text is injected properly
             time.sleep(0.3)  # Increased delay for better reliability
@@ -2013,7 +2077,7 @@ class TextInjector:
         except UnicodeEncodeError:
             return True
 
-    def _read_clipboard(self) -> Optional[str]:
+    def _read_clipboard(self, prefer_x11: Optional[bool] = None) -> Optional[str]:
         """
         Read clipboard text only.
 
@@ -2023,12 +2087,14 @@ class TextInjector:
 
         On X11 and WAYLAND_XDOTOOL this reads the X11 CLIPBOARD (xclip/xsel),
         matching the selection the xdotool paste wrote. wl-paste is a different
-        clipboard.
+        clipboard. ``prefer_x11`` overrides that choice so a caller can read the
+        clipboard it wrote even after the backend has changed.
         """
-        prefer_x11 = self.environment in (
-            DesktopEnvironment.X11,
-            DesktopEnvironment.WAYLAND_XDOTOOL,
-        )
+        if prefer_x11 is None:
+            prefer_x11 = self.environment in (
+                DesktopEnvironment.X11,
+                DesktopEnvironment.WAYLAND_XDOTOOL,
+            )
         host_is_wayland = (
             self._session_environment == DesktopEnvironment.WAYLAND
             or os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
@@ -2071,8 +2137,12 @@ class TextInjector:
         return "" if saw_empty else None
 
     def _clipboard_holds_non_text(self) -> bool:
-        """Return whether the X11 clipboard has no readable text target."""
-        if self.environment != DesktopEnvironment.X11:
+        """Return whether the X11 clipboard has no readable text target.
+
+        Checked on X11 and WAYLAND_XDOTOOL, the two routes that paste through
+        the X11 clipboard and could not restore an image or file afterwards.
+        """
+        if self.environment not in (DesktopEnvironment.X11, DesktopEnvironment.WAYLAND_XDOTOOL):
             return False
         if not shutil.which("xclip"):
             return self._read_clipboard() is None
@@ -2277,7 +2347,7 @@ class TextInjector:
                 if target is None:
                     return
                 # User copied something else during the delay — leave it alone.
-                if self._read_clipboard() != text:
+                if self._read_clipboard(prefer_x11=prefer_x11) != text:
                     logger.debug("Clipboard changed during restore delay; skipping restore")
                     return
                 if target == "":
@@ -2736,10 +2806,7 @@ class TextInjector:
             portal_ok, remaining_text = self._try_inject_with_portal(text)
             if portal_ok:
                 return
-            if not self._demote_portal_backend():
-                raise RuntimeError(
-                    "RemoteDesktop portal injection failed and no Wayland fallback is available"
-                )
+            demoted = self._demote_portal_backend()
             if remaining_text is None:
                 # The timed-out job never reported its delivered count, so
                 # retyping any part could duplicate what already arrived.
@@ -2749,6 +2816,22 @@ class TextInjector:
             if not remaining_text:
                 return
             typed_prefix = len(text) - len(remaining_text)
+            if not demoted:
+                if typed_prefix:
+                    raise _PartiallyTyped(
+                        typed_prefix,
+                        subprocess.CalledProcessError(
+                            1,
+                            "portal",
+                            stderr=(
+                                "RemoteDesktop portal injection failed and no Wayland fallback "
+                                "is available"
+                            ),
+                        ),
+                    )
+                raise RuntimeError(
+                    "RemoteDesktop portal injection failed and no Wayland fallback is available"
+                )
             if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
                 try:
                     self._inject_with_xdotool(remaining_text)

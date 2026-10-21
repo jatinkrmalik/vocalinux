@@ -49,7 +49,7 @@ from ..speech_recognition.diarization import (
 from ..suspend_handler import SuspendHandler
 from ..utils.host_process import host_env
 from ..utils.resource_manager import ResourceManager
-from ..utils.update_checker import ReleaseInfo
+from ..utils.update_checker import DEFAULT_CHECK_AUTOMATICALLY, ReleaseInfo
 from ..utils.update_monitor import UpdateMonitor
 from ..utils.whispercpp_model_info import TDRZ_MODEL, WHISPERCPP_MODEL_INFO, is_model_downloaded
 from . import notifications
@@ -288,7 +288,7 @@ class TrayIndicator:
 
         # Background GitHub update checks (tray menu + optional notification)
         self._update_monitor = UpdateMonitor(
-            get_channel=self._get_update_channel,
+            get_enabled=self._update_checks_enabled,
             on_result=self._on_update_check_result,
         )
         self._update_monitor.start()
@@ -1343,6 +1343,7 @@ class TrayIndicator:
             update_status_callback=lambda available, release: self._apply_update_status(
                 available, release, notify=False
             ),
+            update_checks_callback=self._on_update_checks_toggled,
             overlay_enabled_callback=self.set_overlay_enabled,
             hotkey_listener_update_callback=self._setup_keyboard_shortcuts,
             language_shortcuts_update_callback=self.refresh_language_shortcuts,
@@ -1364,9 +1365,18 @@ class TrayIndicator:
         if self._settings_dialog is dialog:
             self._settings_dialog = None
 
-    def _get_update_channel(self) -> str:
-        """Return the configured release channel for background update checks."""
-        return self.config_manager.get_str("updates", "channel", "stable")
+    def _update_checks_enabled(self) -> bool:
+        """Return whether background update checks are enabled."""
+        return self.config_manager.get_bool(
+            "updates", "check_automatically", DEFAULT_CHECK_AUTOMATICALLY
+        )
+
+    def _on_update_checks_toggled(self, enabled: bool) -> None:
+        """Update tray state when automatic update checks change."""
+        if not enabled:
+            self._apply_update_status(False, None, notify=False)
+        else:
+            self._update_monitor.check_now()
 
     def _on_update_check_result(self, available: bool, release: Optional[ReleaseInfo]):
         """Handle a background update-check result (already on the GLib main loop)."""
@@ -1403,6 +1413,8 @@ class TrayIndicator:
 
     def _maybe_notify_update(self, release: ReleaseInfo) -> None:
         """Send one desktop notification per new version when notifications are on."""
+        if not self._update_checks_enabled():
+            return
         if not self.config_manager.get_bool("ui", "show_notifications", True):
             return
         if self.config_manager.get_str("updates", "last_notified_version", "") == release.tag_name:

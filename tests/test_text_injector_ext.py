@@ -74,6 +74,7 @@ def _make_injector(env) -> Any:
     obj = cast(Any, TextInjector.__new__(TextInjector))
     obj._ibus_injector = None
     obj.environment = env
+    obj._backend_pin = ("auto", None)
     obj._session_environment = env
     obj._ibus_ready = False
     obj._ibus_init_failed = False
