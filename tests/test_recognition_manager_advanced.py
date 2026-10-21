@@ -792,11 +792,11 @@ class TestPendingTranscription(unittest.TestCase):
             release.set()
             thread.join(timeout=1.0)
 
-    def test_nonempty_segment_queue_is_pending(self) -> None:
+    def test_queued_audio_without_live_worker_is_not_pending(self) -> None:
         manager = _make_manager()
         manager._segment_queue.put(([], "en"))
 
-        self.assertTrue(manager.has_pending_transcription())
+        self.assertFalse(manager.has_pending_transcription())
 
     def test_idle_manager_without_queued_audio_is_not_pending(self) -> None:
         manager = _make_manager()
@@ -821,6 +821,43 @@ class TestPendingTranscription(unittest.TestCase):
         with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
             manager.stop_recognition()
 
+        self.assertFalse(manager.has_pending_transcription())
+
+    def test_orphaned_final_segment_is_not_pending(self) -> None:
+        manager = _make_manager()
+        manager.state = RecognitionState.LISTENING
+        manager.should_record = True
+        started = threading.Event()
+        audio_release = threading.Event()
+
+        def worker() -> None:
+            started.set()
+            manager._perform_recognition()
+
+        def audio_worker() -> None:
+            audio_release.wait(timeout=1.0)
+
+        recognition_thread = threading.Thread(target=worker, daemon=True)
+        manager.recognition_thread = recognition_thread
+        recognition_thread.start()
+        self.assertTrue(started.wait(timeout=1.0))
+
+        audio_thread = threading.Thread(target=audio_worker, daemon=True)
+        manager.audio_thread = audio_thread
+        audio_thread.start()
+        manager.audio_buffer = [b"\x00\x00"] * 8
+        manager._recording_segment_has_speech = True
+
+        try:
+            with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
+                manager.stop_recognition()
+        finally:
+            audio_release.set()
+            audio_thread.join(timeout=1.0)
+            recognition_thread.join(timeout=1.0)
+
+        with manager._segment_queue.mutex:
+            self.assertTrue(any(item is not None for item in manager._segment_queue.queue))
         self.assertFalse(manager.has_pending_transcription())
 
     def test_worker_does_not_count_itself_as_pending(self) -> None:

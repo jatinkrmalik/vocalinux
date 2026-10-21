@@ -99,7 +99,7 @@ class SpeechRecognitionManagerProtocol(Protocol):
         ...
 
     def has_pending_transcription(self) -> bool:
-        """Return True while queued or in-flight audio may still reach text callbacks."""
+        """Return True while the recognition worker may still deliver text to text callbacks."""
         ...
 
     def register_state_callback(self, callback: Callable[[RecognitionState], None]) -> None:
