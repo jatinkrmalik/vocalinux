@@ -2422,6 +2422,24 @@ class ModelDownloadDialog(Gtk.Dialog):
         self.add_button("OK", Gtk.ResponseType.OK)
 
 
+def _populate_gpu_device_choices(combo: Any, saved_device: Optional[int]) -> None:
+    combo.remove_all()
+    combo.append("-1", "Auto (discrete GPU)")
+
+    from ..utils.whispercpp_model_info import detect_ggml_gpu_devices
+
+    devices = detect_ggml_gpu_devices()
+    if devices is None:
+        devices = detect_vulkan_devices()
+    for device in devices:
+        type_label = device["device_type"].capitalize()
+        label = f"[{device['index']}] {device['name']} ({type_label})"
+        combo.append(str(device["index"]), label)
+
+    if saved_device is None or not combo.set_active_id(str(saved_device)):
+        combo.set_active_id("-1")
+
+
 class SettingsDialog(AboutSectionMixin):
     """Modern GTK Dialog for configuring Vocalinux settings."""
 
@@ -9619,23 +9637,10 @@ For now, the engine has been reverted to VOSK."""
                 error_dialog.destroy()
             return False
 
-    def _populate_gpu_devices(self):
+    def _populate_gpu_devices(self) -> None:
         """Populate the GPU device dropdown with available Vulkan devices."""
-        self.gpu_device_combo.remove_all()
-        self.gpu_device_combo.append("-1", "Auto (discrete GPU)")
-
-        devices = detect_vulkan_devices()
-        for device in devices:
-            type_label = device["device_type"].capitalize()
-            label = f"[{device['index']}] {device['name']} ({type_label})"
-            self.gpu_device_combo.append(str(device["index"]), label)
-
         saved_device = self.config_manager.get("advanced", "whispercpp_gpu_device", None)
-        if saved_device is None:
-            self.gpu_device_combo.set_active_id("-1")
-        else:
-            if not self.gpu_device_combo.set_active_id(str(saved_device)):
-                self.gpu_device_combo.set_active_id("-1")
+        _populate_gpu_device_choices(self.gpu_device_combo, saved_device)
 
     def _populate_audio_devices(self):
         """Populate the audio device dropdown with available input devices."""
