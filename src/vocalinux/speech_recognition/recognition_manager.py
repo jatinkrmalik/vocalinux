@@ -3644,6 +3644,7 @@ class SpeechRecognitionManager:
     def _record_audio(self) -> None:
         """Record audio from the microphone with reconnection logic."""
         gate = self._key_release_gate
+        session_cancel = self._session_cancel
         # Lazy import to avoid circular dependency
         from ..ui.audio_feedback import play_error_sound  # noqa: F401
 
@@ -3705,7 +3706,12 @@ class SpeechRecognitionManager:
                 logger.error("This may indicate a problem with the audio device or permissions.")
 
                 # Attempt reconnection
-                if not self._attempt_audio_reconnection(audio):
+                if not self._attempt_audio_reconnection(audio, session_cancel):
+                    if not self._capture_session_current(session_cancel):
+                        logger.info("Audio capture stopped: its session was cancelled or replaced")
+                        if audio is not None:
+                            audio.terminate()
+                        return
                     self.should_record = False
                     self.release_playback_duck()
                     play_error_sound()
@@ -3740,10 +3746,13 @@ class SpeechRecognitionManager:
             if self._silero_vad is not None:
                 self._silero_vad.reset()
 
-            while self.should_record:
+            while self._capture_session_current(session_cancel):
                 try:
                     # Check buffer size and enforce limits (with lock for thread safety)
                     with self._buffer_lock:
+                        # A newer session owns the shared buffer once this one is cancelled.
+                        if session_cancel.is_set() or self._session_cancel is not session_cancel:
+                            break
                         if len(self.audio_buffer) >= self._max_buffer_size:
                             if getattr(self, "_reload_pending", False):
                                 raise RuntimeError("Audio buffer filled while reloading the model")
@@ -3756,6 +3765,8 @@ class SpeechRecognitionManager:
                             logger.info(f"Buffer trimmed by {remove_count} chunks")
 
                         data = source.read_chunk()
+                        if session_cancel.is_set() or self._session_cancel is not session_cancel:
+                            break
 
                         if not self.audio_buffer:
                             # First chunk of a new segment: remember when its
@@ -3902,6 +3913,9 @@ class SpeechRecognitionManager:
                                 ),
                             )
                 except (IOError, OSError) as e:
+                    if not self._capture_session_current(session_cancel):
+                        logger.info("Audio capture stopped: its session was cancelled or replaced")
+                        break
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
 
@@ -3911,13 +3925,18 @@ class SpeechRecognitionManager:
                     ):  # Prevent rapid reconnection attempts
                         self._last_audio_error_time = current_time
 
-                        if self._attempt_audio_reconnection(audio):
+                        if self._attempt_audio_reconnection(audio, session_cancel):
                             logger.info("Audio reconnection successful, continuing recording")
                             # The session source may have been rebuilt (e.g.
                             # the configured device switched between a mic and
                             # a PipeWire sink) — keep reading the new source.
                             source = self._capture_source
                             continue  # Continue recording with the reopened source
+                        elif not self._capture_session_current(session_cancel):
+                            logger.info(
+                                "Audio capture stopped: its session was cancelled or replaced"
+                            )
+                            break
                         else:
                             logger.error("Audio reconnection failed, stopping recording")
                             capture_failed = True
@@ -4566,12 +4585,29 @@ class SpeechRecognitionManager:
         if source.audio is not None:
             self._pyaudio_instance = source.audio
 
-    def _attempt_audio_reconnection(self, audio_instance) -> bool:
+    def _capture_session_current(self, session_cancel: threading.Event) -> bool:
+        """Whether a capture thread's session is still recording and not cancelled.
+
+        A cancel returns to IDLE without joining the capture thread, so a
+        thread still sleeping in reconnection must not touch a newer session.
+        """
+        return (
+            self.should_record
+            and self._session_cancel is session_cancel
+            and not session_cancel.is_set()
+        )
+
+    def _attempt_audio_reconnection(
+        self, audio_instance: Any, session_cancel: Optional[threading.Event] = None
+    ) -> bool:
         """
         Attempt to reconnect to the audio device.
 
         Args:
             audio_instance: The PyAudio instance to use for reconnection
+            session_cancel: The capture thread's session token. When given, a
+                session cancelled or replaced during the backoff gives up
+                without reopening the device.
 
         Returns:
             bool: True if reconnection was successful, False otherwise
@@ -4592,6 +4628,10 @@ class SpeechRecognitionManager:
 
         # Wait before attempting reconnection
         time.sleep(delay)
+
+        if session_cancel is not None and not self._capture_session_current(session_cancel):
+            logger.info("Skipping audio reconnection for a cancelled or replaced session")
+            return False
 
         source = self._capture_source_for_session()
         # The source may not know about the stream it is asked to replace

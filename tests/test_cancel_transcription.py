@@ -619,3 +619,67 @@ def test_uncancelled_release_still_delivers_held_text() -> None:
     manager._release_held_transcripts(gate, cancel=threading.Event())
 
     assert delivered == ["held words"]
+
+
+def test_capture_session_current_tracks_cancel_and_replacement() -> None:
+    manager = _make_manager()
+    manager.should_record = True
+    session = manager._session_cancel
+    assert manager._capture_session_current(session)
+
+    manager._session_cancel = threading.Event()
+    assert not manager._capture_session_current(session)
+
+    manager._session_cancel = session
+    session.set()
+    assert not manager._capture_session_current(session)
+
+
+def test_stale_capture_reconnection_does_not_touch_new_session_device() -> None:
+    manager = _make_manager()
+    manager.should_record = True
+    old_session = manager._session_cancel
+    new_source = MagicMock()
+    manager._capture_source = new_source
+    manager._capture_source_for_session = MagicMock(return_value=new_source)
+
+    def new_session_starts(_delay: float) -> None:
+        old_session.set()
+        manager._session_cancel = threading.Event()
+
+    with patch.object(recognition_module.time, "sleep", side_effect=new_session_starts):
+        assert manager._attempt_audio_reconnection(MagicMock(), old_session) is False
+
+    manager._capture_source_for_session.assert_not_called()
+    new_source.reopen.assert_not_called()
+
+
+def test_cancelled_capture_thread_does_not_write_into_new_session_buffer() -> None:
+    manager = _make_manager()
+    manager._silero_vad = None
+    manager.should_record = True
+    old_session = manager._session_cancel
+    reads = 0
+
+    source = MagicMock()
+    source.requires_pyaudio = False
+    source.sample_rate = 16000
+
+    def read_chunk() -> bytes:
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            old_session.set()
+            manager._session_cancel = threading.Event()
+            manager.audio_buffer = [b"new-session"]
+        return b"\x00\x00" * 1024
+
+    source.read_chunk.side_effect = read_chunk
+    manager._new_capture_source = MagicMock(return_value=source)
+    with patch.object(recognition_module, "play_error_sound", create=True):
+        manager._record_audio()
+
+    assert reads == 1
+    assert manager.audio_buffer == [b"new-session"]
+    assert manager.state is not RecognitionState.ERROR
+    source.close.assert_called_once()
