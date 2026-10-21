@@ -119,6 +119,32 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
         )
         self.assertEqual(gate.held, [])
 
+    def test_empty_transcription_while_held_does_not_flush(self) -> None:
+        """A blank mid-hold result must not release text before the key is up."""
+        manager = _make_manager(engine="vosk")
+        manager._voice_commands_enabled = False
+        delivered: list[str] = []
+        manager.text_callbacks.append(delivered.append)
+        gate = _ReleaseGate()
+
+        with (
+            patch.object(manager, "_transcribe_with_vosk", return_value="hello"),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=_identity),
+        ):
+            manager._process_audio_buffer(_AudioSegment([b"audio"], None, release_gate=gate))
+            self.assertEqual(delivered, [])
+            self.assertEqual(len(gate.held), 1)
+
+            with patch.object(manager, "_transcribe_with_vosk", return_value=""):
+                manager._process_audio_buffer(_AudioSegment([b"blank"], None, release_gate=gate))
+            self.assertEqual(delivered, [])
+            self.assertEqual(len(gate.held), 1)
+
+            gate.set()
+            manager._release_held_transcripts(gate)
+
+        self.assertEqual(delivered, ["hello"])
+
     def test_ungated_and_released_segments_deliver_immediately(self) -> None:
         """Segments without a pending gate never block callback delivery."""
         manager = _make_manager(engine="vosk")
