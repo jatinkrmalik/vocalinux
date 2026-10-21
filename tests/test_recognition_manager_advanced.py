@@ -803,6 +803,26 @@ class TestPendingTranscription(unittest.TestCase):
 
         self.assertFalse(manager.has_pending_transcription())
 
+    def test_stop_recognition_signal_is_not_pending(self) -> None:
+        manager = _make_manager()
+        manager.state = RecognitionState.LISTENING
+        manager.should_record = True
+        started = threading.Event()
+
+        def worker() -> None:
+            started.set()
+            manager._perform_recognition()
+
+        thread = threading.Thread(target=worker, daemon=True)
+        manager.recognition_thread = thread
+        thread.start()
+        self.assertTrue(started.wait(timeout=1.0))
+
+        with patch("vocalinux.speech_recognition.recognition_manager.play_stop_sound"):
+            manager.stop_recognition()
+
+        self.assertFalse(manager.has_pending_transcription())
+
     def test_worker_does_not_count_itself_as_pending(self) -> None:
         manager = _make_manager()
         manager.recognition_thread = threading.current_thread()

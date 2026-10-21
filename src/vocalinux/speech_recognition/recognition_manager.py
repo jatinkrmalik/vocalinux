@@ -3276,7 +3276,8 @@ class SpeechRecognitionManager:
         worker = self.recognition_thread
         if worker is not None and worker is not threading.current_thread() and worker.is_alive():
             return True
-        return not self._segment_queue.empty()
+        with self._segment_queue.mutex:
+            return any(item is not None for item in self._segment_queue.queue)
 
     def _reload_and_recognize(self) -> None:
         """Reload an idle model while the recording thread captures speech."""
