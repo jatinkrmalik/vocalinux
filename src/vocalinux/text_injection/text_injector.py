@@ -1183,36 +1183,54 @@ class TextInjector:
         clipboard fallback to report the failure.
         """
         portal = getattr(self, "_portal", None)
-        if portal is not None:
-            try:
-                portal.close()
-            except Exception as e:
-                logger.debug(f"Could not close RemoteDesktop portal client: {e}")
-            self._portal = None
-        with self._state_lock:
-            self.wayland_tool = None
-
+        flatpak = bool(os.environ.get("FLATPAK_ID"))
         ydotool_available = shutil.which("ydotool") is not None
         wtype_available = shutil.which("wtype") is not None
         xdotool_available = shutil.which("xdotool") is not None
 
-        tool = None
-        if ydotool_available and self._ensure_ydotoold():
+        if flatpak:
+            if not ydotool_available or not self._ensure_ydotoold():
+                logger.warning(
+                    "RemoteDesktop portal failed; keeping it for the next attempt "
+                    "(no working ydotool daemon in the Flatpak)"
+                )
+                return False
             tool = "ydotool"
-        elif ydotool_available and not wtype_available:
-            tool = "ydotool"
-        elif wtype_available:
-            tool = "wtype"
-        elif xdotool_available:
-            with self._state_lock:
-                self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
-            logger.warning("RemoteDesktop portal failed; using xdotool/XWayland fallback")
-            return True
         else:
-            return False
+            if portal is not None:
+                try:
+                    portal.close()
+                except Exception as e:
+                    logger.debug(f"Could not close RemoteDesktop portal client: {e}")
+                self._portal = None
+            with self._state_lock:
+                self.wayland_tool = None
+
+            tool = None
+            if ydotool_available and self._ensure_ydotoold():
+                tool = "ydotool"
+            elif ydotool_available and not wtype_available:
+                tool = "ydotool"
+            elif wtype_available:
+                tool = "wtype"
+            elif xdotool_available:
+                with self._state_lock:
+                    self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                logger.warning("RemoteDesktop portal failed; using xdotool/XWayland fallback")
+                return True
+            else:
+                return False
 
         with self._state_lock:
             self.wayland_tool = tool
+
+        if flatpak:
+            if portal is not None:
+                try:
+                    portal.close()
+                except Exception as e:
+                    logger.debug(f"Could not close RemoteDesktop portal client: {e}")
+                self._portal = None
         logger.warning(f"RemoteDesktop portal failed; falling back to {tool}")
         return True
 
