@@ -29,6 +29,7 @@ _LAYOUT_TO_LANGUAGE = {
     "gb": "en-us",
     "cz": "cs",
     "se": "sv",
+    "si": "sl",
     "dk": "da",
     "gr": "el",
     "ua": "uk",

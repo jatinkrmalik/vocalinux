@@ -16,6 +16,7 @@ import sys
 import textwrap
 import time
 import unittest
+from typing import Optional
 from unittest.mock import MagicMock, Mock, call, patch
 
 # Mock GTK before importing anything that might use it
@@ -1340,7 +1341,7 @@ class TestAboutPage(unittest.TestCase):
         cls.source += cls.about_source
         cls.about = cls.about_source.split("def _build_about_section")[1].split("\n    def ")[0]
 
-    def test_three_groups_keep_updater(self):
+    def test_three_groups_keep_updater(self) -> None:
         self.assertIn('title="Vocalinux"', self.about)
         self.assertIn('title="Part of VocaHQ"', self.about)
         self.assertIn('title="Talk to us"', self.about)
@@ -1348,6 +1349,7 @@ class TestAboutPage(unittest.TestCase):
         self.assertIn("What's New", self.about)
         self.assertIn("_on_check_updates_clicked", self.about)
         self.assertIn("self.update_channel_combo", self.about)
+        self.assertIn("self.update_checks_switch", self.about)
 
     def test_product_status_and_honest_network_copy(self):
         self.assertIn("Available now on Linux (X11 and Wayland)", self.about)
@@ -1594,6 +1596,68 @@ class TestAboutPage(unittest.TestCase):
         self.assertIn("_FAMILY_ICON_PX", self.source)
 
 
+class TestUpdatePreferences(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        source_dir = os.path.join(os.path.dirname(__file__), "..", "src", "vocalinux", "ui")
+        with open(os.path.join(source_dir, "settings_dialog.py"), encoding="utf-8") as source_file:
+            cls.settings_source = source_file.read()
+        with open(os.path.join(source_dir, "settings_about.py"), encoding="utf-8") as source_file:
+            cls.about_source = source_file.read()
+
+    @classmethod
+    def _method_source(cls, source: str, name: str) -> str:
+        start = source.index(f"    def {name}(")
+        end = source.find("\n    def ", start + 1)
+        return source[start:end] if end != -1 else source[start:]
+
+    def test_update_checks_toggle_persists_and_calls_callback(self) -> None:
+        method = self._method_source(self.settings_source, "_on_update_checks_toggled")
+
+        self.assertIn('self.config_manager.set("updates", "check_automatically", enabled)', method)
+        self.assertIn("self.config_manager.save_settings()", method)
+        self.assertIn("self.update_checks_callback(enabled)", method)
+        self.assertIn(
+            'logger.error("Automatic update checks callback failed", exc_info=True)', method
+        )
+
+    def test_channel_change_runs_manual_lookup_without_persisting(self) -> None:
+        method = self._method_source(self.settings_source, "_on_update_channel_changed")
+
+        self.assertIn("self._start_update_check()", method)
+        self.assertNotIn('self.config_manager.set("updates", "channel"', method)
+        self.assertNotIn("self.config_manager.save_settings()", method)
+
+    def test_manual_about_check_syncs_tray_only_for_enabled_build_channel(self) -> None:
+        method = self._method_source(self.settings_source, "_apply_update_check_result")
+        tray_sync = method.split("# Keep the tray menu in sync", 1)[1]
+        guard = tray_sync.split("):", 1)[0]
+
+        self.assertIn("channel == build_channel()", guard)
+        self.assertIn('"check_automatically", DEFAULT_CHECK_AUTOMATICALLY', guard)
+        self.assertIn("self.update_status_callback(update_available", tray_sync)
+
+    def test_about_auto_check_is_skipped_when_disabled(self) -> None:
+        method = self._method_source(self.settings_source, "_on_settings_page_changed")
+
+        self.assertIn('"check_automatically", DEFAULT_CHECK_AUTOMATICALLY', method)
+        self.assertIn("self._start_update_check()", method)
+        self.assertIn("Automatic checks are off. Press Check to look now.", method)
+
+    def test_update_switch_loads_state_before_connecting(self) -> None:
+        switch_start = self.about_source.index("self.update_checks_switch = Gtk.Switch()")
+        active_position = self.about_source.index(
+            "self.update_checks_switch.set_active(", switch_start
+        )
+        connect_position = self.about_source.index(
+            'self.update_checks_switch.connect("state-set", on_update_checks_toggled)',
+            switch_start,
+        )
+
+        self.assertLess(active_position, connect_position)
+        self.assertIn('"check_automatically", DEFAULT_CHECK_AUTOMATICALLY', self.about_source)
+
+
 class TestAboutInk(unittest.TestCase):
     """Ink for About marks follows light vs dark surfaces."""
 
@@ -1730,6 +1794,83 @@ class TestSettingsControlColumn(unittest.TestCase):
     def test_model_card_has_no_legend(self):
         self.assertNotIn("✓ Downloaded    ↓ Will download    ★ Recommended", self.source)
         self.assertNotIn("Tip: <b>", self.source)
+
+
+def _gpu_settings_dialog(saved_device: Optional[int]) -> MagicMock:
+    dialog = MagicMock()
+    dialog.config_manager.get.return_value = saved_device
+    dialog.gpu_device_combo.set_active_id.return_value = True
+    return dialog
+
+
+def test_gpu_dropdown_uses_ggml_indices_and_labels() -> None:
+    from vocalinux.ui import settings_dialog
+    from vocalinux.utils import whispercpp_model_info
+
+    dialog = _gpu_settings_dialog(None)
+    ggml_devices = [
+        {
+            "index": 0,
+            "name": "NVIDIA GeForce GTX 1050",
+            "backend_name": "Vulkan0",
+            "device_type": "discrete",
+        },
+        {
+            "index": 1,
+            "name": "Intel Arc",
+            "backend_name": "Vulkan1",
+            "device_type": "integrated",
+        },
+    ]
+    with patch.object(whispercpp_model_info, "detect_ggml_gpu_devices", return_value=ggml_devices):
+        settings_dialog._populate_gpu_device_choices(dialog.gpu_device_combo, None)
+
+    dialog.gpu_device_combo.append.assert_any_call("0", "[0] NVIDIA GeForce GTX 1050 (Discrete)")
+    dialog.gpu_device_combo.append.assert_any_call("1", "[1] Intel Arc (Integrated)")
+
+
+def test_gpu_dropdown_falls_back_to_vulkaninfo_when_ggml_probe_is_unavailable() -> None:
+    from vocalinux.ui import settings_dialog
+    from vocalinux.utils import whispercpp_model_info
+
+    dialog = _gpu_settings_dialog(None)
+    vulkan_devices = [
+        {"index": 1, "name": "NVIDIA GPU", "device_type": "discrete"},
+    ]
+    with (
+        patch.object(whispercpp_model_info, "detect_ggml_gpu_devices", return_value=None),
+        patch.object(settings_dialog, "detect_vulkan_devices", return_value=vulkan_devices),
+    ):
+        settings_dialog._populate_gpu_device_choices(dialog.gpu_device_combo, None)
+
+    dialog.gpu_device_combo.append.assert_any_call("1", "[1] NVIDIA GPU (Discrete)")
+
+
+def test_gpu_dropdown_selects_auto_for_stale_saved_index() -> None:
+    from vocalinux.ui import settings_dialog
+    from vocalinux.utils import whispercpp_model_info
+
+    dialog = _gpu_settings_dialog(9)
+
+    def _set_active_id(device_id: str) -> bool:
+        return device_id in {"-1", "0"}
+
+    dialog.gpu_device_combo.set_active_id.side_effect = _set_active_id
+    ggml_devices = [
+        {
+            "index": 0,
+            "name": "NVIDIA GPU",
+            "backend_name": "Vulkan0",
+            "device_type": "discrete",
+        }
+    ]
+    with patch.object(whispercpp_model_info, "detect_ggml_gpu_devices", return_value=ggml_devices):
+        settings_dialog._populate_gpu_device_choices(dialog.gpu_device_combo, 9)
+
+    assert dialog.gpu_device_combo.set_active_id.call_args_list[-2:] == [
+        call("9"),
+        call("-1"),
+    ]
 
 
 if __name__ == "__main__":

@@ -320,7 +320,7 @@ class TestBufferManagement(unittest.TestCase):
             with patch("vocalinux.ui.audio_feedback.play_stop_sound"):
                 manager.stop_recognition()
 
-                enqueue_mock.assert_called_once_with([b"small"])
+                enqueue_mock.assert_called_once_with([b"small"], release_gate=None)
                 assert manager.audio_buffer == []
 
     def test_stop_recognition_large_buffer_trim(self):

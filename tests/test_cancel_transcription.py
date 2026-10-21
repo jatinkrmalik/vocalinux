@@ -11,6 +11,7 @@ from vocalinux.common_types import RecognitionState
 from vocalinux.speech_recognition.recognition_manager import (
     SpeechRecognitionManager,
     _AudioSegment,
+    _ReleaseGate,
 )
 
 
@@ -568,3 +569,53 @@ def test_fast_worker_still_returns_to_idle_from_stop() -> None:
     assert manager.state is RecognitionState.IDLE
     assert manager._worker_exited is not None
     assert manager._worker_exited.is_set()
+
+
+def test_cancel_drops_push_to_talk_text_held_until_release() -> None:
+    manager = _make_manager()
+    manager._voice_commands_enabled = False
+    delivered: list[str] = []
+    manager.register_text_callback(delivered.append)
+    cancel_event = threading.Event()
+    gate = _ReleaseGate()
+    segment = _AudioSegment([b"audio"], None, cancel_event=cancel_event, release_gate=gate)
+    manager._transcribe_with_whispercpp = MagicMock(return_value="held words")
+
+    manager._process_audio_buffer(segment)
+    assert len(gate.held) == 1
+
+    cancel_event.set()
+    gate.set()
+    manager._release_held_transcripts(gate, force=True, cancel=cancel_event)
+
+    assert not gate.held
+    assert not delivered
+
+
+def test_cancelled_worker_exit_does_not_force_release_held_text() -> None:
+    manager = _make_manager()
+    delivered: list[str] = []
+    manager.register_text_callback(delivered.append)
+    manager.should_record = False
+    gate = _ReleaseGate()
+    manager._key_release_gate = gate
+    manager._session_cancel.set()
+    gate.held.append(recognition_module._HeldTranscript("held words", [], None))
+
+    manager._perform_recognition()
+
+    assert not gate.held
+    assert not delivered
+
+
+def test_uncancelled_release_still_delivers_held_text() -> None:
+    manager = _make_manager()
+    delivered: list[str] = []
+    manager.register_text_callback(delivered.append)
+    gate = _ReleaseGate()
+    gate.held.append(recognition_module._HeldTranscript("held words", [], None))
+    gate.set()
+
+    manager._release_held_transcripts(gate, cancel=threading.Event())
+
+    assert delivered == ["held words"]
