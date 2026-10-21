@@ -46,10 +46,13 @@ The manifest ships the default `whisper_cpp` engine only. VOSK is omitted becaus
 the PyPI package is wheel-only (no sdist), so a Flathub-ready VOSK build would
 need to compile VOSK and its native deps from source.
 
-Global keyboard shortcuts use **evdev** (`/dev/input`).
+Global keyboard shortcuts use **evdev** (`/dev/input`) on Wayland and
+XWayland. On native X11, they use the X11 **pynput** listener through
+`--socket=x11`. GNOME X11 prefers evdev and falls back to pynput when
+`/dev/input` cannot be read.
 Text injection prefers the **RemoteDesktop portal**
-(`org.freedesktop.portal.RemoteDesktop` `NotifyKeyboardKeysym` — keysyms, so
-non-US layouts survive) and falls back to **wl-copy** + **ydotool Ctrl+V**
+(`org.freedesktop.portal.RemoteDesktop` `NotifyKeyboardKeysym` sends keysyms,
+so non-US layouts work) and falls back to **wl-copy** + **ydotool Ctrl+V**
 (instant paste into native Wayland apps) when the portal is unavailable.
 Character-by-character `ydotool type` is only a fallback. `xdotool` remains
 for pure X11/XWayland clients.
@@ -57,6 +60,33 @@ for pure X11/XWayland clients.
 Permissions: `--socket=wayland` (clipboard), `--socket=x11` (xdotool fallback),
 `--device=all` (evdev hotkeys + uinput for the ydotool fallback; Flatpak has
 no narrower uinput flag).
+
+## Running without device access
+
+To disable device access while keeping GPU support for Vulkan whisper.cpp, run:
+
+```bash
+flatpak override --user --nodevice=all --device=dri com.vocalinux.Vocalinux
+```
+
+On native X11, hotkeys still work through the X11 listener. On Wayland, the
+built-in hotkey needs `/dev/input`: grant `--device=input` on Flatpak 1.15.6 or
+newer, or `--device=all` on older versions. If `/dev/input` is unavailable,
+enable **Settings → Shortcuts → External Activation (Desktop Shortcut)** and
+bind a desktop shortcut to:
+
+```bash
+gdbus call --session --dest com.vocalinux.Vocalinux --object-path /com/vocalinux/Vocalinux --method com.vocalinux.Vocalinux.Toggle
+```
+
+Use toggle mode for this shortcut. A desktop shortcut only sends a key press,
+so it cannot support push-to-talk. Running
+`flatpak run com.vocalinux.Vocalinux --toggle` also works, but starts a sandbox
+on each press. The host `gdbus` command is immediate and does not start another
+sandbox.
+
+Without `/dev/uinput`, the ydotool injection fallback is unavailable. The
+RemoteDesktop portal and xdotool fallbacks remain available.
 
 ## Local Build
 
@@ -146,7 +176,7 @@ Release `.flatpak` assets are the supported paths.
 
 - Runtime / SDK: `org.gnome.Platform//50`, `org.gnome.Sdk//50`
 - Mic: `--socket=pulseaudio` · GPU: `--device=dri` · models: `--share=network`
-- Input: `--device=all` (evdev hotkeys + ydotool/`uinput` fallback)
+- Input: `--device=all` for evdev hotkeys on Wayland/XWayland and the ydotool/`uinput` fallback; native X11 hotkeys use pynput through `--socket=x11`
 - Injection: RemoteDesktop portal first; packaged `wl-copy`, `ydotool`/`ydotoold`, plus `xdotool`/`xsel` fallback
 - Display: `--socket=wayland` (clipboard) and `--socket=x11` (xdotool fallback)
 - IBus: `--talk-name=org.freedesktop.IBus`
