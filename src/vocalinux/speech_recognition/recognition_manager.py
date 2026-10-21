@@ -4583,6 +4583,13 @@ class SpeechRecognitionManager:
         Also used after auto-pause / idle keep-alive to reload the model.
         """
         self._cancel_reload_recording()
+        if getattr(self, "_prefetching_model", False) is True:
+            # reconfigure() is fetching the next model and will load it itself;
+            # initializing here would start a second transfer of the same files.
+            logger.info("Skipping engine reinit: a speech model download is in progress")
+            self._auto_paused = False
+            self._idle_unloaded = False
+            return
         logger.info("Reinitializing speech engine after system resume")
 
         if self.state != RecognitionState.IDLE:

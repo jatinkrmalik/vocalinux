@@ -302,6 +302,20 @@ class TestDownloadFunctions(unittest.TestCase):
 
         prefetch.assert_not_called()
 
+    def test_resume_skips_engine_reinit_while_model_is_prefetching(self) -> None:
+        manager = self._create_manager(engine="whisper")
+        manager.engine = "whisper_cpp"
+        manager._prefetching_model = True
+        manager._auto_paused = True
+        manager._idle_unloaded = True
+
+        with patch.object(manager, "_init_whispercpp") as init_whispercpp:
+            manager.reinitialize_after_resume()
+
+        init_whispercpp.assert_not_called()
+        self.assertFalse(manager._auto_paused)
+        self.assertFalse(manager._idle_unloaded)
+
     def test_start_recognition_refuses_while_a_model_is_prefetching(self) -> None:
         manager = self._create_manager()
         manager.engine = "whisper_cpp"
