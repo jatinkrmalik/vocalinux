@@ -130,13 +130,19 @@ vocalinux --start    # start voice typing
 vocalinux --stop     # stop voice typing
 ```
 
-Then bind a compositor shortcut to `vocalinux --toggle`. On KDE Plasma:
+Then bind a compositor shortcut to `vocalinux --toggle` on a native install.
+For Flatpak, bind the `gdbus` command in
+[Running without device access](../packaging/flatpak/README.md#running-without-device-access)
+instead, because `vocalinux --toggle` is not on the host PATH. A desktop
+shortcut only sends the key press, so it can toggle dictation but cannot
+support push-to-talk because it never sees the release. On KDE Plasma:
 
 1. Open **System Settings -> Keyboard -> Shortcuts -> Add New -> Command or Script**
    (older Plasma: **System Settings -> Shortcuts -> Custom Shortcuts -> Edit ->
    New -> Global Shortcut -> Command/URL**).
 
-2. Bind a key combination of your choice to the command `vocalinux --toggle`.
+2. Bind a key combination of your choice to the command `vocalinux --toggle`
+   for a native install. For Flatpak, use the D-Bus command linked above.
 
 Now your chosen key combination toggles dictation, handled by the compositor
 rather than by Vocalinux reading the keyboard directly. This works the same way
