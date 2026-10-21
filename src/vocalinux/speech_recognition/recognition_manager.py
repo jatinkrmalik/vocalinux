@@ -156,6 +156,26 @@ def _pywhispercpp_distribution_version() -> Optional[tuple[int, ...]]:
     return tuple(parts) if parts else None
 
 
+def _select_ggml_gpu_device(
+    devices: list[dict[str, Any]], requested_index: Optional[int]
+) -> Optional[dict[str, Any]]:
+    if requested_index is not None and requested_index >= 0:
+        selected = next((device for device in devices if device["index"] == requested_index), None)
+        if selected is not None:
+            return selected
+        logger.warning(
+            "Requested whisper.cpp GPU index %s is unavailable; usable ggml GPU devices: %s. "
+            "Selecting automatically.",
+            requested_index,
+            devices,
+        )
+
+    return next(
+        (device for device in devices if device["device_type"] == "discrete"),
+        devices[0] if devices else None,
+    )
+
+
 def resolve_whisper_language(language: str) -> Optional[str]:
     """Map a catalog language id to a Whisper / whisper.cpp language code.
 
@@ -1544,12 +1564,21 @@ class SpeechRecognitionManager:
         return compatible_kwargs
 
     def _load_model_with_compatible_params(
-        self, model_path: str, model_kwargs: dict, gpu_device: Optional[int] = None
-    ):
+        self,
+        model_path: str,
+        model_kwargs: dict[str, Any],
+        gpu_device: Optional[int] = None,
+        use_gpu: Optional[bool] = None,
+    ) -> Any:
         from pywhispercpp.model import Model
 
         compatible_kwargs = self._filter_whispercpp_model_kwargs(model_kwargs)
+        context_params: dict[str, Any] = {}
+        if use_gpu is not None:
+            context_params["use_gpu"] = use_gpu
         if gpu_device is not None and gpu_device >= 0:
+            context_params["gpu_device"] = gpu_device
+        if context_params:
             dist_version = _pywhispercpp_distribution_version()
             too_old_for_context_params = dist_version is not None and dist_version < (1, 5, 0)
             try:
@@ -1569,7 +1598,7 @@ class SpeechRecognitionManager:
                     version_label,
                 )
             elif supports_context_params:
-                compatible_kwargs["context_params"] = {"gpu_device": gpu_device}
+                compatible_kwargs["context_params"] = context_params
             else:
                 logger.warning(
                     "pywhispercpp does not support context_params; "
@@ -1611,62 +1640,118 @@ class SpeechRecognitionManager:
             _prefer_discrete_vulkan_device,
             detect_compute_backend,
             detect_cpu_info,
+            detect_ggml_gpu_devices,
             detect_vulkan_devices,
             get_backend_display_name,
         )
 
         host_backend, host_info = detect_compute_backend()
         actual_gpu_backend = self._detect_pywhispercpp_gpu_backend()
+        ggml_devices = detect_ggml_gpu_devices()
         logger.info("whisper.cpp backend selection priority: Vulkan -> CUDA -> CPU")
 
         selected_gpu_device = None
+        use_gpu: Optional[bool] = None
         runtime_backend = ComputeBackend.CPU
         runtime_info = detect_cpu_info()
 
         if actual_gpu_backend == "cuda":
-            # pywhispercpp CUDA uses CUDA device ordinals (0 = first NVIDIA GPU).
-            # Vulkan enumeration on hybrid laptops lists iGPU as GPU0 and dGPU as
-            # GPU1; passing that Vulkan index to CUDA selects the CPU fallback.
-            vulkan_gpu_index = self.whispercpp_gpu_device
-            if vulkan_gpu_index is None or vulkan_gpu_index < 0:
-                vulkan_gpu_index = _prefer_discrete_vulkan_device()
-            if vulkan_gpu_index not in (None, 0):
-                logger.info(
-                    "pywhispercpp is CUDA-backed; using CUDA device 0 "
-                    f"(Vulkan GPU index {vulkan_gpu_index} does not map to CUDA ordinals)"
+            if ggml_devices == []:
+                use_gpu = False
+                skipped_devices = [
+                    device["name"]
+                    for device in detect_vulkan_devices()
+                    if device.get("device_type") != "software"
+                ]
+                logger.warning(
+                    "whisper.cpp found no usable ggml GPU device and will use CPU. "
+                    "Vulkan hardware devices skipped by ggml: %s",
+                    ", ".join(skipped_devices) if skipped_devices else "none found",
                 )
             else:
-                logger.info("pywhispercpp is CUDA-backed; using CUDA device 0")
-            selected_gpu_device = 0
-            runtime_backend = ComputeBackend.CUDA
-            runtime_info = host_info if host_backend == ComputeBackend.CUDA else "NVIDIA GPU"
+                # CUDA device ordinals are independent of vulkaninfo indices.
+                vulkan_gpu_index = self.whispercpp_gpu_device
+                if vulkan_gpu_index is None or vulkan_gpu_index < 0:
+                    vulkan_gpu_index = _prefer_discrete_vulkan_device()
+                if vulkan_gpu_index not in (None, 0):
+                    logger.info(
+                        "pywhispercpp is CUDA-backed; using CUDA device 0 "
+                        "(Vulkan GPU index %s does not map to CUDA ordinals)",
+                        vulkan_gpu_index,
+                    )
+                else:
+                    logger.info("pywhispercpp is CUDA-backed; using CUDA device 0")
+                selected_gpu_device = 0
+                runtime_backend = ComputeBackend.CUDA
+                runtime_info = host_info if host_backend == ComputeBackend.CUDA else "NVIDIA GPU"
         elif actual_gpu_backend == "vulkan":
-            gpu_device_index = self.whispercpp_gpu_device
-            if gpu_device_index is None or gpu_device_index < 0:
-                gpu_device_index = _prefer_discrete_vulkan_device()
-
-            devices = detect_vulkan_devices()
-            runtime_backend = ComputeBackend.VULKAN
-            if gpu_device_index is not None:
-                device_name = next(
-                    (d["name"] for d in devices if d["index"] == gpu_device_index),
-                    "unknown",
-                )
-                logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
-                selected_gpu_device = gpu_device_index
-                runtime_info = device_name
-            elif devices:
-                runtime_info = devices[0]["name"]
-                logger.warning(
-                    "pywhispercpp is Vulkan-backed but no preferred GPU was selected. "
-                    "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
-                )
+            if ggml_devices is not None:
+                vulkan_devices = detect_vulkan_devices()
+                if ggml_devices:
+                    selected_device = _select_ggml_gpu_device(
+                        ggml_devices, self.whispercpp_gpu_device
+                    )
+                    ggml_names = {device["name"] for device in ggml_devices}
+                    skipped_devices = [
+                        device["name"]
+                        for device in vulkan_devices
+                        if device.get("device_type") != "software"
+                        and device["name"] not in ggml_names
+                    ]
+                    if skipped_devices:
+                        logger.info(
+                            "Vulkan devices not registered by ggml: %s",
+                            ", ".join(skipped_devices),
+                        )
+                    if selected_device is not None:
+                        runtime_backend = ComputeBackend.VULKAN
+                        selected_gpu_device = selected_device["index"]
+                        runtime_info = selected_device["name"]
+                        logger.info(
+                            "Requesting Vulkan GPU [%s]: %s (%s)",
+                            selected_device["index"],
+                            selected_device["name"],
+                            selected_device["backend_name"],
+                        )
+                else:
+                    use_gpu = False
+                    skipped_devices = [
+                        device["name"]
+                        for device in vulkan_devices
+                        if device.get("device_type") != "software"
+                    ]
+                    logger.warning(
+                        "whisper.cpp found no usable Vulkan device and will use CPU. "
+                        "Vulkan hardware devices skipped by ggml: %s",
+                        ", ".join(skipped_devices) if skipped_devices else "none found",
+                    )
             else:
-                logger.warning(
-                    "pywhispercpp is Vulkan-backed but vulkaninfo found no devices. "
-                    "Install vulkan-tools so Vocalinux can pick a discrete GPU. "
-                    "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
-                )
+                gpu_device_index = self.whispercpp_gpu_device
+                if gpu_device_index is None or gpu_device_index < 0:
+                    gpu_device_index = _prefer_discrete_vulkan_device()
+
+                devices = detect_vulkan_devices()
+                runtime_backend = ComputeBackend.VULKAN
+                if gpu_device_index is not None:
+                    device_name = next(
+                        (d["name"] for d in devices if d["index"] == gpu_device_index),
+                        "unknown",
+                    )
+                    logger.info(f"Using Vulkan GPU [{gpu_device_index}]: {device_name}")
+                    selected_gpu_device = gpu_device_index
+                    runtime_info = device_name
+                elif devices:
+                    runtime_info = devices[0]["name"]
+                    logger.warning(
+                        "pywhispercpp is Vulkan-backed but no preferred GPU was selected. "
+                        "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
+                    )
+                else:
+                    logger.warning(
+                        "pywhispercpp is Vulkan-backed but vulkaninfo found no devices. "
+                        "Install vulkan-tools so Vocalinux can pick a discrete GPU. "
+                        "whisper.cpp will default to GPU 0, which may be an iGPU on hybrid laptops."
+                    )
         elif host_backend != ComputeBackend.CPU:
             logger.warning(
                 "Host reports %s (%s), but pywhispercpp has no GPU libraries. "
@@ -1678,7 +1763,11 @@ class SpeechRecognitionManager:
                 host_info,
             )
 
-        if actual_gpu_backend in ("vulkan", "cuda") and host_backend != actual_gpu_backend:
+        if (
+            runtime_backend == actual_gpu_backend
+            and actual_gpu_backend in ("vulkan", "cuda")
+            and host_backend != actual_gpu_backend
+        ):
             logger.info(
                 "Host capability label is %s; bundled pywhispercpp libraries are %s. "
                 "Using the bundled %s backend.",
@@ -1688,7 +1777,9 @@ class SpeechRecognitionManager:
             )
 
         logger.info(
-            f"whisper.cpp using {get_backend_display_name(runtime_backend)} backend: {runtime_info}"
+            "whisper.cpp requesting %s backend: %s",
+            get_backend_display_name(runtime_backend),
+            runtime_info,
         )
 
         import psutil
@@ -1707,9 +1798,8 @@ class SpeechRecognitionManager:
         logger.info(f"Loading whisper.cpp '{self.model_size}' model...")
         self.model = None  # Release previous model if re-initializing
 
-        has_gpu_libs = actual_gpu_backend in ("vulkan", "cuda")
-
-        if has_gpu_libs and not (
+        has_gpu_backend = runtime_backend in (ComputeBackend.VULKAN, ComputeBackend.CUDA)
+        if has_gpu_backend and not (
             self.whispercpp_n_threads is not None and self.whispercpp_n_threads > 0
         ):
             n_threads = max(1, multiprocessing.cpu_count() // 4)
@@ -1724,18 +1814,25 @@ class SpeechRecognitionManager:
 
         try:
             self.model = self._load_model_with_compatible_params(
-                model_path, model_kwargs, gpu_device=selected_gpu_device
+                model_path, model_kwargs, gpu_device=selected_gpu_device, use_gpu=use_gpu
             )
         except RuntimeError as model_error:
             loaded_backend = self._handle_gpu_fallback(
                 model_error, model_path, model_kwargs, ComputeBackend.CPU
             )
+            runtime_info = detect_cpu_info()
 
         effective_threads = self._whispercpp_effective_threads
         if effective_threads is None:
             effective_threads = n_threads
 
         load_duration = time.time() - load_start_time
+        logger.info(
+            "whisper.cpp loaded with effective %s backend: %s (n_threads=%d)",
+            get_backend_display_name(loaded_backend),
+            runtime_info,
+            effective_threads,
+        )
         logger.info(
             f"whisper.cpp configured with n_threads={effective_threads} "
             f"({loaded_backend} backend)"
