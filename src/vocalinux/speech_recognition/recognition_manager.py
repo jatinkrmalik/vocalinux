@@ -4586,9 +4586,10 @@ class SpeechRecognitionManager:
         if getattr(self, "_prefetching_model", False) is True:
             # reconfigure() is fetching the next model and will load it itself;
             # initializing here would start a second transfer of the same files.
+            # Leave a lazy reload pending in case that download is cancelled.
             logger.info("Skipping engine reinit: a speech model download is in progress")
             self._auto_paused = False
-            self._idle_unloaded = False
+            self._idle_unloaded = not self.model_ready
             return
         logger.info("Reinitializing speech engine after system resume")
 

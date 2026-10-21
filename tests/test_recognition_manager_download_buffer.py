@@ -316,6 +316,22 @@ class TestDownloadFunctions(unittest.TestCase):
         self.assertFalse(manager._auto_paused)
         self.assertFalse(manager._idle_unloaded)
 
+    def test_lazy_reload_follows_a_cancelled_prefetch_after_resume(self) -> None:
+        manager = self._create_manager(engine="whisper")
+        manager.engine = "whisper_cpp"
+        manager.model = None
+        manager._model_initialized = False
+        manager._prefetching_model = True
+        manager._auto_paused = True
+
+        manager.reinitialize_after_resume()
+        manager._prefetching_model = False
+
+        with patch.object(manager, "_init_whispercpp") as init_whispercpp:
+            manager.ensure_model_loaded()
+
+        init_whispercpp.assert_called_once()
+
     def test_start_recognition_refuses_while_a_model_is_prefetching(self) -> None:
         manager = self._create_manager()
         manager.engine = "whisper_cpp"
