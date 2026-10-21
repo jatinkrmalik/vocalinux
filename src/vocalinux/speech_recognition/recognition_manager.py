@@ -3271,6 +3271,13 @@ class SpeechRecognitionManager:
         self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
 
+    def has_pending_transcription(self) -> bool:
+        """Return True while queued or in-flight audio may still reach text_callbacks."""
+        worker = self.recognition_thread
+        if worker is not None and worker is not threading.current_thread() and worker.is_alive():
+            return True
+        return not self._segment_queue.empty()
+
     def _reload_and_recognize(self) -> None:
         """Reload an idle model while the recording thread captures speech."""
         try:

@@ -2439,7 +2439,8 @@ class SettingsDialog(AboutSectionMixin):
         language_shortcuts_update_callback: Optional[Callable[[], None]] = None,
         history_update_callback: Optional[Callable[[], None]] = None,
         history_clear_callback: Optional[Callable[[], None]] = None,
-    ):
+        dictation_pad_open_callback: Optional[Callable[[], None]] = None,
+    ) -> None:
         super().__init__(title="Vocalinux Settings", transient_for=parent, flags=0)
         # Force window decorations (title-bar close) on all WMs. An in-window
         # Close button also lives in the sidebar footer so the dialog always
@@ -2457,6 +2458,7 @@ class SettingsDialog(AboutSectionMixin):
         self.language_shortcuts_update_callback = language_shortcuts_update_callback
         self.history_update_callback = history_update_callback
         self.history_clear_callback = history_clear_callback
+        self.dictation_pad_open_callback = dictation_pad_open_callback
         # Per-language shortcut rows (#805): a dict of row widgets per binding,
         # populated by _build_language_shortcuts_section.
         self._language_shortcut_rows: list[dict] = []
@@ -4284,6 +4286,29 @@ class SettingsDialog(AboutSectionMixin):
         logger.info(f"Dictate to pad {'enabled' if enabled else 'disabled'}")
         return False
 
+    def _add_dictation_pad_open_row(self, group: PreferencesGroup) -> None:
+        """Add the optional Dictation Pad launcher row."""
+        self.dictation_pad_open_button: Optional[Gtk.Button] = None
+        if self.dictation_pad_open_callback is None:
+            return
+        button = Gtk.Button(label="Open")
+        button.connect("clicked", self._on_dictation_pad_open_clicked)
+        group.add_row(
+            PreferenceRow(
+                title="Open Dictation Pad",
+                subtitle="Show the Dictation Pad window",
+                widget=button,
+                keywords=("pad", "window", "open"),
+            )
+        )
+        self.dictation_pad_open_button = button
+
+    def _on_dictation_pad_open_clicked(self, _button: Gtk.Button) -> None:
+        """Open the Dictation Pad when its optional launcher is available."""
+        callback = self.dictation_pad_open_callback
+        if callback is not None:
+            callback()
+
     def _on_auto_capitalize_toggled(self, widget, state):
         """Handle toggle of the auto-capitalize switch."""
         if _handlers_suppressed(self):
@@ -4860,16 +4885,16 @@ class SettingsDialog(AboutSectionMixin):
 
         self.dictation_pad_switch = _add_switch_row(
             output_group,
-            title="Dictation Pad",
-            subtitle="Capture dictation in an in-app text box instead of other apps",
+            title="Dictate into Dictation Pad",
+            subtitle="Send dictation to the Dictation Pad window instead of other apps",
             keywords=("wayland", "pad", "fallback", "text box"),
             tooltip=(
-                "Type dictation into Vocalinux's own Dictation Pad window instead "
-                "of injecting it into other apps. The pad opens from the tray menu; "
-                "copy text out of it by hand. Useful on Wayland, where injecting "
+                "Send dictation to the Dictation Pad instead of injecting it into "
+                "other apps. Copy text out by hand. Useful on Wayland, where injecting "
                 "keystrokes into other windows is restricted."
             ),
         )
+        self._add_dictation_pad_open_row(output_group)
 
         self.append_trailing_space_switch = _add_switch_row(
             output_group,
@@ -9195,21 +9220,26 @@ class SettingsDialog(AboutSectionMixin):
         time.sleep(delay)
         GLib.idle_add(self._finalize_test)
 
-    def _finalize_test(self):
+    def _test_engine_busy(self) -> bool:
+        """Return whether recognition can still deliver text to the test callback."""
+        state = getattr(self.speech_engine, "state", RecognitionState.IDLE)
+        has_pending_transcription = getattr(self.speech_engine, "has_pending_transcription", None)
+        return (
+            state in (RecognitionState.LISTENING, RecognitionState.PROCESSING)
+            or getattr(self.speech_engine, "_buffered_reload_session", False)
+            or (callable(has_pending_transcription) and has_pending_transcription() is True)
+        )
+
+    def _finalize_test(self) -> bool:
         """Finalize the test state and UI updates."""
         if not self._test_active:
             return False
 
         self.speech_engine.stop_recognition()
 
-        # Buffered reload's stop_recognition() returns while PROCESSING; the
-        # worker may still deliver the test utterance via current text_callbacks.
-        # Keep the test callbacks installed (and block auto-apply / re-test)
-        # until recognition reaches IDLE so we never restore the live injector
-        # early. Use GLib polling — never join the worker on the GTK thread.
-        state = getattr(self.speech_engine, "state", RecognitionState.IDLE)
-        buffered = getattr(self.speech_engine, "_buffered_reload_session", False)
-        if state in (RecognitionState.LISTENING, RecognitionState.PROCESSING) or buffered:
+        # Keep test callbacks installed until no worker can deliver the test
+        # utterance. Use GLib polling rather than joining on the GTK thread.
+        if self._test_engine_busy():
             self.test_button.set_sensitive(False)
             self.test_button.set_label("Processing…")
             self.update_recognition_progress("Processing")
@@ -9218,8 +9248,7 @@ class SettingsDialog(AboutSectionMixin):
             GLib.timeout_add(100, self._wait_for_idle_then_restore_callbacks)
             return False
 
-        # Non-buffered stop already joined to IDLE; brief settle for any
-        # GLib.idle_add text delivery still in flight.
+        # Briefly settle for any GLib.idle_add text delivery already in flight.
         GLib.timeout_add(500, self._restore_callbacks_and_check_result)
 
         self._test_active = False
@@ -9233,12 +9262,12 @@ class SettingsDialog(AboutSectionMixin):
     def _wait_for_idle_then_restore_callbacks(self) -> bool:
         """Poll until recognition is idle, then restore callbacks / check result.
 
-        Returns True so GLib.timeout_add keeps scheduling while the buffered
-        reload worker is still PROCESSING.
+        Returns True so GLib.timeout_add keeps scheduling while recognition
+        may still deliver text.
 
         On the ~3 minute timeout, never restore live injector callbacks while a
-        buffered reload worker may still deliver text (privacy-adjacent Test
-        Dictation inject-into-app race). Prefer cancelling via
+        recognition worker may still deliver text (privacy-adjacent Test
+        Dictation inject-into-app race). Prefer cancelling a buffered reload via
         ``_cancel_reload_recording`` (off the GTK thread — it joins) and only
         then restoring. If cancel is unavailable or fails, keep polling with
         test callbacks and ``_test_active`` so live injectors are not restored
@@ -9250,13 +9279,7 @@ class SettingsDialog(AboutSectionMixin):
             self.test_button.set_label("Test Dictation")
             return False
 
-        state = getattr(self.speech_engine, "state", RecognitionState.IDLE)
-        still_busy = state in (
-            RecognitionState.LISTENING,
-            RecognitionState.PROCESSING,
-        ) or getattr(self.speech_engine, "_buffered_reload_session", False)
-
-        if still_busy:
+        if self._test_engine_busy():
             self._test_idle_wait_ticks = getattr(self, "_test_idle_wait_ticks", 0) + 1
             # ~3 minutes at 100ms — generous for cold large-model reload.
             if self._test_idle_wait_ticks < 1800:
@@ -9273,7 +9296,8 @@ class SettingsDialog(AboutSectionMixin):
     def _on_test_idle_wait_timeout(self) -> bool:
         """Handle idle-wait timeout without restoring live injectors early."""
         cancel = getattr(self.speech_engine, "_cancel_reload_recording", None)
-        if callable(cancel):
+        buffered_reload = getattr(self.speech_engine, "_buffered_reload_session", False) is True
+        if buffered_reload and callable(cancel):
             logger.warning(
                 "Test Dictation: timed out waiting for recognition IDLE; "
                 "cancelling buffered reload before restoring callbacks"
@@ -9289,8 +9313,8 @@ class SettingsDialog(AboutSectionMixin):
             return False
 
         logger.error(
-            "Test Dictation: timed out waiting for recognition IDLE with no "
-            "cancel API; keeping test callbacks until IDLE"
+            "Test Dictation: timed out waiting for recognition IDLE with no safe "
+            "buffered cancel; keeping test callbacks until idle"
         )
         self._keep_waiting_after_timeout(
             "(Timed out waiting for recognition to finish. "
@@ -9325,7 +9349,10 @@ class SettingsDialog(AboutSectionMixin):
         return False
 
     def _finish_test_after_buffered_cancel(self) -> bool:
-        """Restore live callbacks only after cancel has discarded the session."""
+        """Resume waiting if recognition can still deliver text after cancellation."""
+        if self._test_engine_busy():
+            GLib.timeout_add(100, self._wait_for_idle_then_restore_callbacks)
+            return False
         return self._finish_test_restore_ui()
 
     def _keep_waiting_after_timeout(self, message: str) -> None:

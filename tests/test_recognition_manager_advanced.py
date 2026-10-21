@@ -772,5 +772,43 @@ class TestVoiceCommandsProperty(unittest.TestCase):
         self.assertFalse(mgr._resolve_voice_commands_enabled())
 
 
+class TestPendingTranscription(unittest.TestCase):
+    def test_live_non_current_worker_is_pending(self) -> None:
+        manager = _make_manager()
+        started = threading.Event()
+        release = threading.Event()
+
+        def worker() -> None:
+            started.set()
+            release.wait(timeout=2.0)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        try:
+            self.assertTrue(started.wait(timeout=1.0))
+            manager.recognition_thread = thread
+            self.assertTrue(manager.has_pending_transcription())
+        finally:
+            release.set()
+            thread.join(timeout=1.0)
+
+    def test_nonempty_segment_queue_is_pending(self) -> None:
+        manager = _make_manager()
+        manager._segment_queue.put(([], "en"))
+
+        self.assertTrue(manager.has_pending_transcription())
+
+    def test_idle_manager_without_queued_audio_is_not_pending(self) -> None:
+        manager = _make_manager()
+
+        self.assertFalse(manager.has_pending_transcription())
+
+    def test_worker_does_not_count_itself_as_pending(self) -> None:
+        manager = _make_manager()
+        manager.recognition_thread = threading.current_thread()
+
+        self.assertFalse(manager.has_pending_transcription())
+
+
 if __name__ == "__main__":
     unittest.main()
