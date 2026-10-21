@@ -1254,9 +1254,22 @@ class TestSettingsNavigation(unittest.TestCase):
         footer_body = self.source_code.split("def _build_sidebar_footer")[1].split("\n    def ")[0]
         box_pack = footer_body.index("footer.pack_start(self.test_output_revealer")
         status_pack = footer_body.index("footer.pack_start(status_row")
-        button_pack = footer_body.index("footer.pack_start(self.test_button")
+        button_pack = footer_body.index("footer.pack_start(test_button_row")
+        test_button = footer_body.index("test_button_row.pack_start(self.test_button")
+        cancel_button = footer_body.index("test_button_row.pack_start(self.test_cancel_button")
         self.assertLess(box_pack, status_pack)
         self.assertLess(status_pack, button_pack)
+        self.assertLess(test_button, cancel_button)
+
+    def test_test_dictation_stop_runs_off_gtk_thread(self) -> None:
+        """Finalization keeps the Cancel button usable while recognition stops."""
+        finalize_body = self.source_code.split("def _finalize_test")[1].split("\n    def ")[0]
+        self.assertIn("def stop_test", finalize_body)
+        self.assertIn('name="vocalinux-test-dictation-stop"', finalize_body)
+        self.assertIn(
+            "GLib.timeout_add(100, self._wait_for_idle_then_restore_callbacks)",
+            finalize_body,
+        )
 
     def test_test_dictation_scrolled_window_has_no_shadow(self) -> None:
         """GTK3 ScrolledWindow default shadow is a left stripe on GNOME/Wayland (#847)."""

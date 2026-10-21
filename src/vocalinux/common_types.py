@@ -94,6 +94,14 @@ class SpeechRecognitionManagerProtocol(Protocol):
         """Start recognition in ``language`` for this utterance only (#805)."""
         ...
 
+    def is_transcribing(self) -> bool:
+        """Whether a stopped dictation session is still being transcribed."""
+        ...
+
+    def cancel_transcription(self) -> bool:
+        """Cancel the active dictation session and discard its result."""
+        ...
+
     def stop_recognition(self) -> None:
         """Stop the speech recognition process."""
         ...

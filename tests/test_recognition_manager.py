@@ -214,6 +214,7 @@ class TestSpeechRecognition(unittest.TestCase):
         # Stop recognition
         manager.audio_thread = self.threadInstance
         manager.recognition_thread = self.threadInstance
+        manager._worker_exited.set()
         manager.stop_recognition()
 
         # Verify stopped state
