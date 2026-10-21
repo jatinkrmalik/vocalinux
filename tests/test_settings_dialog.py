@@ -1327,7 +1327,7 @@ class TestAboutPage(unittest.TestCase):
         cls.source += cls.about_source
         cls.about = cls.about_source.split("def _build_about_section")[1].split("\n    def ")[0]
 
-    def test_three_groups_keep_updater(self):
+    def test_three_groups_keep_updater(self) -> None:
         self.assertIn('title="Vocalinux"', self.about)
         self.assertIn('title="Part of VocaHQ"', self.about)
         self.assertIn('title="Talk to us"', self.about)
@@ -1335,6 +1335,7 @@ class TestAboutPage(unittest.TestCase):
         self.assertIn("What's New", self.about)
         self.assertIn("_on_check_updates_clicked", self.about)
         self.assertIn("self.update_channel_combo", self.about)
+        self.assertIn("self.update_checks_switch", self.about)
 
     def test_product_status_and_honest_network_copy(self):
         self.assertIn("Available now on Linux (X11 and Wayland)", self.about)
@@ -1579,6 +1580,68 @@ class TestAboutPage(unittest.TestCase):
         self.assertIn("def _about_surface_is_dark(", self.source)
         self.assertIn('replace("currentColor", ink)', self.source)
         self.assertIn("_FAMILY_ICON_PX", self.source)
+
+
+class TestUpdatePreferences(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        source_dir = os.path.join(os.path.dirname(__file__), "..", "src", "vocalinux", "ui")
+        with open(os.path.join(source_dir, "settings_dialog.py"), encoding="utf-8") as source_file:
+            cls.settings_source = source_file.read()
+        with open(os.path.join(source_dir, "settings_about.py"), encoding="utf-8") as source_file:
+            cls.about_source = source_file.read()
+
+    @classmethod
+    def _method_source(cls, source: str, name: str) -> str:
+        start = source.index(f"    def {name}(")
+        end = source.find("\n    def ", start + 1)
+        return source[start:end] if end != -1 else source[start:]
+
+    def test_update_checks_toggle_persists_and_calls_callback(self) -> None:
+        method = self._method_source(self.settings_source, "_on_update_checks_toggled")
+
+        self.assertIn('self.config_manager.set("updates", "check_automatically", enabled)', method)
+        self.assertIn("self.config_manager.save_settings()", method)
+        self.assertIn("self.update_checks_callback(enabled)", method)
+        self.assertIn(
+            'logger.error("Automatic update checks callback failed", exc_info=True)', method
+        )
+
+    def test_channel_change_runs_manual_lookup_without_persisting(self) -> None:
+        method = self._method_source(self.settings_source, "_on_update_channel_changed")
+
+        self.assertIn("self._start_update_check()", method)
+        self.assertNotIn('self.config_manager.set("updates", "channel"', method)
+        self.assertNotIn("self.config_manager.save_settings()", method)
+
+    def test_manual_about_check_syncs_tray_only_for_enabled_build_channel(self) -> None:
+        method = self._method_source(self.settings_source, "_apply_update_check_result")
+        tray_sync = method.split("# Keep the tray menu in sync", 1)[1]
+        guard = tray_sync.split("):", 1)[0]
+
+        self.assertIn("channel == build_channel()", guard)
+        self.assertIn('"check_automatically", DEFAULT_CHECK_AUTOMATICALLY', guard)
+        self.assertIn("self.update_status_callback(update_available", tray_sync)
+
+    def test_about_auto_check_is_skipped_when_disabled(self) -> None:
+        method = self._method_source(self.settings_source, "_on_settings_page_changed")
+
+        self.assertIn('"check_automatically", DEFAULT_CHECK_AUTOMATICALLY', method)
+        self.assertIn("self._start_update_check()", method)
+        self.assertIn("Automatic checks are off. Press Check to look now.", method)
+
+    def test_update_switch_loads_state_before_connecting(self) -> None:
+        switch_start = self.about_source.index("self.update_checks_switch = Gtk.Switch()")
+        active_position = self.about_source.index(
+            "self.update_checks_switch.set_active(", switch_start
+        )
+        connect_position = self.about_source.index(
+            'self.update_checks_switch.connect("state-set", on_update_checks_toggled)',
+            switch_start,
+        )
+
+        self.assertLess(active_position, connect_position)
+        self.assertIn('"check_automatically", DEFAULT_CHECK_AUTOMATICALLY', self.about_source)
 
 
 class TestAboutInk(unittest.TestCase):
