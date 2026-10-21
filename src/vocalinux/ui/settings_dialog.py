@@ -2465,6 +2465,8 @@ class SettingsDialog(AboutSectionMixin):
             None
         )
         self._test_active = False
+        self._test_token = 0
+        self._test_cancelled = False
         self._test_result = ""
         self._initializing = True  # Flag to prevent auto-apply during initialization
         self._populating_models = False  # Flag to prevent model change handler during population
@@ -5839,12 +5841,22 @@ class SettingsDialog(AboutSectionMixin):
         self.recognition_audio_level = self.audio_level_bar
         footer.pack_start(self.audio_level_bar, False, False, 0)
 
+        test_button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
         self.test_button = Gtk.Button(label="Test Dictation")
         self.test_button.set_tooltip_text(
             "Record 3 seconds of speech and show the transcription here"
         )
         self.test_button.connect("clicked", self._on_test_clicked)
-        footer.pack_start(self.test_button, False, False, 0)
+        test_button_row.pack_start(self.test_button, False, False, 0)
+
+        self.test_cancel_button = Gtk.Button(label="Cancel")
+        self.test_cancel_button.set_tooltip_text("Stop the test and discard its result")
+        self.test_cancel_button.connect("clicked", self._on_test_cancel_clicked)
+        self.test_cancel_button.set_no_show_all(True)
+        self.test_cancel_button.hide()
+        test_button_row.pack_start(self.test_cancel_button, False, False, 0)
+        footer.pack_start(test_button_row, False, False, 0)
 
         # One shared status line (audio test results and recognition info)
         self.progress_info_label = Gtk.Label(label="", use_markup=True, xalign=0)
@@ -9090,7 +9102,7 @@ class SettingsDialog(AboutSectionMixin):
 
         return settings
 
-    def _on_test_clicked(self, widget):
+    def _on_test_clicked(self, widget: Any) -> None:
         """Handle click on the test button."""
         if self._test_active:
             logger.warning("Test already in progress.")
@@ -9164,9 +9176,13 @@ class SettingsDialog(AboutSectionMixin):
             return
 
         self._test_active = True
+        self._test_token += 1
+        self._test_cancelled = False
         self._test_timeout_cancel_attempted = False
         self.test_button.set_sensitive(False)
         self.test_button.set_label("Testing… Speak Now!")
+        self.test_cancel_button.set_sensitive(True)
+        self.test_cancel_button.show()
         self.test_output_revealer.set_reveal_child(True)
         self.test_buffer.set_text("")
         self._test_result = ""
@@ -9174,13 +9190,54 @@ class SettingsDialog(AboutSectionMixin):
 
         # Enough room for one utterance plus the configured silence window.
         delay = float(selected_settings.get("silence_timeout", 1.2)) + 2.0
-        threading.Thread(target=self._stop_test_after_delay, args=(delay,)).start()
+        threading.Thread(target=self._stop_test_after_delay, args=(delay, self._test_token)).start()
 
-    def _test_text_callback(self, text: str):
+    def _on_test_cancel_clicked(self, widget: Any) -> None:
+        """Cancel the test and discard any text already captured."""
+        if not self._test_active or self._test_cancelled:
+            return
+
+        self._test_cancelled = True
+        self.test_button.set_sensitive(False)
+        self.test_cancel_button.set_sensitive(False)
+        self.test_button.set_label("Cancelling…")
+
+        def cancel_test() -> None:
+            try:
+                self.speech_engine.cancel_transcription()
+            except (AttributeError, OSError, RuntimeError, TypeError):
+                logger.exception("Test Dictation cancellation failed")
+            GLib.idle_add(self._finish_test_after_user_cancel)
+
+        threading.Thread(
+            target=cancel_test,
+            daemon=True,
+            name="vocalinux-test-dictation-cancel",
+        ).start()
+
+    def _finish_test_after_user_cancel(self) -> bool:
+        """Restore test UI and callbacks without checking for captured speech."""
+        self._test_active = False
+        self._test_timeout_cancel_attempted = False
+        self.test_button.set_sensitive(True)
+        self.test_button.set_label("Test Dictation")
+        self.test_cancel_button.hide()
+        self.test_cancel_button.set_sensitive(True)
+        self.update_recognition_progress("Idle")
+        if hasattr(self, "_saved_text_callbacks"):
+            self.speech_engine.set_text_callbacks(self._saved_text_callbacks)
+            del self._saved_text_callbacks
+        self.speech_engine.test_capture_ceiling = time.monotonic()
+        self.test_buffer.set_text("(Test cancelled)")
+        return False
+
+    def _test_text_callback(self, text: str) -> None:
         """Callback specifically for the test recognition."""
         GLib.idle_add(self._append_test_result, text)
 
-    def _append_test_result(self, text: str):
+    def _append_test_result(self, text: str) -> bool:
+        if getattr(self, "_test_cancelled", False) is True:
+            return False
         current_text = self.test_buffer.get_text(
             self.test_buffer.get_start_iter(), self.test_buffer.get_end_iter(), False
         )
@@ -9190,14 +9247,18 @@ class SettingsDialog(AboutSectionMixin):
         self.test_textview.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
         return False
 
-    def _stop_test_after_delay(self, delay: float):
+    def _stop_test_after_delay(self, delay: float, token: Optional[int] = None) -> None:
         """Stops the recognition test after a specified delay."""
         time.sleep(delay)
-        GLib.idle_add(self._finalize_test)
+        GLib.idle_add(self._finalize_test, token)
 
-    def _finalize_test(self):
+    def _finalize_test(self, token: Optional[int] = None) -> bool:
         """Finalize the test state and UI updates."""
-        if not self._test_active:
+        if (token is not None and token != getattr(self, "_test_token", 0)) or not getattr(
+            self, "_test_active", False
+        ):
+            return False
+        if getattr(self, "_test_cancelled", False):
             return False
 
         self.speech_engine.stop_recognition()
@@ -9225,6 +9286,7 @@ class SettingsDialog(AboutSectionMixin):
         self._test_active = False
         self.test_button.set_sensitive(True)
         self.test_button.set_label("Test Dictation")
+        self.test_cancel_button.hide()
 
         self.update_recognition_progress("Idle")
 
@@ -9248,6 +9310,7 @@ class SettingsDialog(AboutSectionMixin):
             self._test_active = False
             self.test_button.set_sensitive(True)
             self.test_button.set_label("Test Dictation")
+            self.test_cancel_button.hide()
             return False
 
         state = getattr(self.speech_engine, "state", RecognitionState.IDLE)
@@ -9343,6 +9406,8 @@ class SettingsDialog(AboutSectionMixin):
         self._test_timeout_cancel_attempted = False
         self.test_button.set_sensitive(True)
         self.test_button.set_label("Test Dictation")
+        self.test_cancel_button.hide()
+        self.test_cancel_button.set_sensitive(True)
         self.update_recognition_progress("Idle")
         return self._restore_callbacks_and_check_result()
 

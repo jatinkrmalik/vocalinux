@@ -103,6 +103,7 @@ class _AudioSegment(list):
         chunks: list[bytes],
         started_at: Optional[float],
         language: Optional[str] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> None:
         super().__init__(chunks)
         self.started_at = started_at
@@ -110,6 +111,7 @@ class _AudioSegment(list):
         # outlives its session must not transcribe a stale segment in a newer
         # session's language.
         self.language = language
+        self.cancel_event = cancel_event
 
 
 def _pywhispercpp_distribution_version() -> Optional[tuple[int, ...]]:
@@ -198,6 +200,20 @@ def resolve_language_preference(language: str) -> str:
 
 
 logger = logging.getLogger(__name__)
+
+_WHISPERCPP_ABORT_CALLBACK_SUPPORT: dict[type, bool] = {}
+
+
+def _supports_whispercpp_abort_callback(model_class: type) -> bool:
+    """Return whether a whisper.cpp model class accepts abort_callback."""
+    if model_class not in _WHISPERCPP_ABORT_CALLBACK_SUPPORT:
+        try:
+            _WHISPERCPP_ABORT_CALLBACK_SUPPORT[model_class] = (
+                "abort_callback" in inspect.signature(getattr(model_class, "transcribe")).parameters
+            )
+        except (TypeError, ValueError):
+            _WHISPERCPP_ABORT_CALLBACK_SUPPORT[model_class] = False
+    return _WHISPERCPP_ABORT_CALLBACK_SUPPORT[model_class]
 
 
 def _filter_non_speech(text: str) -> str:
@@ -508,6 +524,7 @@ class SpeechRecognitionManager:
 
         # Recording control flags
         self.should_record = False
+        self._session_cancel = threading.Event()
         self._recognition_mode = "toggle"  # "toggle" or "push_to_talk"
         self.audio_buffer: list[bytes] = []
         # Monotonic time the current buffer's first chunk was captured,
@@ -1781,6 +1798,11 @@ class SpeechRecognitionManager:
         """
         import time
 
+        cancel_event = getattr(audio_buffer, "cancel_event", None)
+        if cancel_event is not None and cancel_event.is_set():
+            logger.debug("Skipping whisper.cpp transcription for a cancelled session")
+            return ""
+
         try:
             import numpy as np
 
@@ -1811,6 +1833,10 @@ class SpeechRecognitionManager:
                 # Check if model is still valid
                 if self.model is None:
                     logger.warning("Model is None during transcription, returning empty result")
+                    return ""
+
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.debug("Skipping whisper.cpp language detection for a cancelled session")
                     return ""
 
                 if lang is None and self.whispercpp_language_candidates:
@@ -1862,10 +1888,14 @@ class SpeechRecognitionManager:
                 # Transcribe with whisper.cpp
                 # pywhispercpp expects audio as numpy array
                 transcribe_start = time.time()
-                transcribe_kwargs = {"language": lang}
+                transcribe_kwargs: dict[str, Any] = {"language": lang}
                 # pywhispercpp reuses native parameter state.  Passing an empty
                 # value explicitly clears a prompt that was active last segment.
                 transcribe_kwargs["initial_prompt"] = self._get_whispercpp_prompt() or ""
+                if cancel_event is not None and _supports_whispercpp_abort_callback(
+                    type(self.model)
+                ):
+                    transcribe_kwargs["abort_callback"] = cancel_event.is_set
                 segments = self.model.transcribe(audio_float, **transcribe_kwargs)
                 transcribe_duration = time.time() - transcribe_start
 
@@ -3172,6 +3202,8 @@ class SpeechRecognitionManager:
         self._session_language = self.language
 
         logger.info("Starting speech recognition")
+        with self._buffer_lock:
+            self._session_cancel = threading.Event()
         self._update_state(RecognitionState.LISTENING)
 
         # Play the start sound
@@ -3198,13 +3230,54 @@ class SpeechRecognitionManager:
         self._arm_playback_duck()
         return True
 
-    def stop_recognition(self):
+    def is_transcribing(self) -> bool:
+        """True while a stopped session's audio is still being transcribed."""
+        return self.state == RecognitionState.PROCESSING and not self.should_record
+
+    def cancel_transcription(self) -> bool:
+        """Abort the current dictation session and discard its text.
+
+        Returns True if something was cancelled.
+        """
+        if self.state not in (RecognitionState.LISTENING, RecognitionState.PROCESSING):
+            return False
+
+        cancel = self._session_cancel
+        if cancel.is_set():
+            return False
+
+        logger.info("Cancelling transcription")
+        cancel.set()
+        segment_queue = self._segment_queue
+        buffered = getattr(self, "_buffered_reload_session", False)
+        if buffered:
+            self._cancel_buffered_session.set()
+
+        while True:
+            try:
+                segment_queue.get_nowait()
+            except queue.Empty:
+                break
+
+        self._signal_recognition_stop()
+
+        if self.should_record:
+            self.stop_recognition()
+        elif not buffered:
+            self._recognition_mode = "toggle"
+            self._update_state(RecognitionState.IDLE)
+        return True
+
+    def stop_recognition(self) -> None:
         """Stop the speech recognition process."""
         if self.state == RecognitionState.IDLE:
             return
 
         if getattr(self, "_buffered_reload_session", False) and not self.should_record:
             return
+        session_cancel = self._session_cancel
+        audio_thread = self.audio_thread
+        recognition_thread = self.recognition_thread
         logger.info("Stopping speech recognition")
 
         # Mark recording over before touching the duck so a concurrent arm
@@ -3217,8 +3290,8 @@ class SpeechRecognitionManager:
         # Wait for audio thread to finish recording and enqueue any pending audio
         # This is critical to prevent race condition where recognition thread exits
         # before the final audio segment is enqueued
-        if self.audio_thread and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=2.0)
+        if audio_thread and audio_thread.is_alive():
+            audio_thread.join(timeout=2.0)
 
         self.release_playback_duck()
 
@@ -3226,29 +3299,46 @@ class SpeechRecognitionManager:
         # Kept before buffer processing so the cue still feels immediate.
         play_stop_sound()
 
-        # Trim only a small tail to avoid the stop sound without clipping the user's final word.
-        with self._buffer_lock:
-            stop_sound_guard_chunks = self._get_stop_sound_guard_chunks()
-            if stop_sound_guard_chunks > 0 and len(self.audio_buffer) > stop_sound_guard_chunks:
-                discarded_chunks = self.audio_buffer[-stop_sound_guard_chunks:]
-                self.audio_buffer = self.audio_buffer[:-stop_sound_guard_chunks]
-                logger.debug(
-                    "Discarded %s audio chunks (~%sms) to avoid transcribing feedback sound",
-                    len(discarded_chunks),
-                    self.stop_sound_guard_ms,
-                )
+        if self._session_cancel is session_cancel:
+            # Trim only a small tail to avoid the stop sound without clipping the user's final word.
+            with self._buffer_lock:
+                if self._session_cancel is not session_cancel:
+                    return
+                if session_cancel.is_set():
+                    if self.audio_buffer:
+                        logger.debug("Dropping final audio buffer from a cancelled session")
+                    self.audio_buffer = []
+                    self._recording_segment_has_speech = False
+                else:
+                    stop_sound_guard_chunks = self._get_stop_sound_guard_chunks()
+                    if (
+                        stop_sound_guard_chunks > 0
+                        and len(self.audio_buffer) > stop_sound_guard_chunks
+                    ):
+                        discarded_chunks = self.audio_buffer[-stop_sound_guard_chunks:]
+                        self.audio_buffer = self.audio_buffer[:-stop_sound_guard_chunks]
+                        logger.debug(
+                            "Discarded %s audio chunks (~%sms) to avoid transcribing feedback sound",
+                            len(discarded_chunks),
+                            self.stop_sound_guard_ms,
+                        )
 
-            if self.audio_buffer and self._recording_segment_has_speech:
-                logger.debug(f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks")
-                self._enqueue_audio_segment(self.audio_buffer)
-                self.audio_buffer = []
-            elif self.audio_buffer:
-                logger.debug(
-                    "Dropping final audio buffer with no detected speech "
-                    f"({len(self.audio_buffer)} chunks)"
-                )
-                self.audio_buffer = []
-            self._recording_segment_has_speech = False
+                    if self.audio_buffer and self._recording_segment_has_speech:
+                        logger.debug(
+                            f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks"
+                        )
+                        self._enqueue_audio_segment(self.audio_buffer)
+                        self.audio_buffer = []
+                    elif self.audio_buffer:
+                        logger.debug(
+                            "Dropping final audio buffer with no detected speech "
+                            f"({len(self.audio_buffer)} chunks)"
+                        )
+                        self.audio_buffer = []
+                    self._recording_segment_has_speech = False
+
+        if self._session_cancel is not session_cancel:
+            return
 
         if getattr(self, "_buffered_reload_session", False):
             # Keep the session busy until its queued audio has been transcribed.
@@ -3259,15 +3349,19 @@ class SpeechRecognitionManager:
             return
 
         # Wake up recognition thread so it can drain queued segments and stop
-        self._signal_recognition_stop()
+        if not session_cancel.is_set():
+            self._signal_recognition_stop()
 
-        if self.recognition_thread and self.recognition_thread.is_alive():
-            self.recognition_thread.join(timeout=5.0)  # Increased timeout for transcription
-        self._signal_recognition_stop()
+        if recognition_thread and recognition_thread.is_alive():
+            recognition_thread.join(timeout=5.0)  # Increased timeout for transcription
+        if not session_cancel.is_set():
+            self._signal_recognition_stop()
 
-        if self.recognition_thread and self.recognition_thread.is_alive():
-            self.recognition_thread.join(timeout=1.0)
+        if recognition_thread and recognition_thread.is_alive():
+            recognition_thread.join(timeout=1.0)
 
+        if self._session_cancel is not session_cancel:
+            return
         self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
 
@@ -3720,6 +3814,10 @@ class SpeechRecognitionManager:
         it was queued (#805); None falls back to the segment's own stamp and
         then to the live session language.
         """
+        cancel_event = getattr(audio_buffer, "cancel_event", None)
+        if cancel_event is not None and cancel_event.is_set():
+            logger.debug("Skipping audio processing for a cancelled session")
+            return
         if not audio_buffer:
             return
         if language is None:
@@ -3745,6 +3843,9 @@ class SpeechRecognitionManager:
             logger.error(f"Unknown engine: {self.engine}")
             return
         text = transcriber()
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Discarding transcription from a cancelled session")
+            return
         if text is None:
             return
 
@@ -3783,25 +3884,38 @@ class SpeechRecognitionManager:
                 for callback in self.action_callbacks:
                     callback(action)
 
-    def _perform_recognition(self):
+    def _perform_recognition(self) -> None:
         """Perform speech recognition in real-time."""
         logger.debug("_perform_recognition thread started")
+        cancel = self._session_cancel
+        segment_queue = self._segment_queue
         try:
             while True:
+                if cancel.is_set():
+                    logger.debug("Recognition loop exiting for a cancelled session")
+                    break
                 logger.debug(
-                    f"Recognition loop - should_record={self.should_record}, queue_empty={self._segment_queue.empty()}"
+                    f"Recognition loop - should_record={self.should_record}, queue_empty={segment_queue.empty()}"
                 )
                 try:
-                    queued = self._segment_queue.get(timeout=0.1)
+                    queued = segment_queue.get(timeout=0.1)
+                    if cancel.is_set():
+                        logger.debug("Recognition loop discarded an item for a cancelled session")
+                        break
                 except queue.Empty:
                     # Only exit if we're not recording AND queue is empty
-                    if not self.should_record and self._segment_queue.empty():
+                    if not self.should_record and segment_queue.empty():
                         logger.debug(
                             "Recognition loop - not recording and queue empty, checking for final items..."
                         )
                         # Give a brief moment for any final items to be enqueued
                         try:
-                            queued = self._segment_queue.get(timeout=0.5)
+                            queued = segment_queue.get(timeout=0.5)
+                            if cancel.is_set():
+                                logger.debug(
+                                    "Recognition loop discarded an item for a cancelled session"
+                                )
+                                break
                         except queue.Empty:
                             logger.debug("Recognition loop - no more items, exiting")
                             break
@@ -3812,9 +3926,17 @@ class SpeechRecognitionManager:
                 if queued is None:
                     logger.debug("Recognition loop - got None signal, draining remaining items...")
                     # Drain any remaining items before exiting
-                    while not self._segment_queue.empty():
+                    while not segment_queue.empty():
+                        if cancel.is_set():
+                            logger.debug("Recognition loop drain stopped for a cancelled session")
+                            break
                         try:
-                            remaining = self._segment_queue.get_nowait()
+                            remaining = segment_queue.get_nowait()
+                            if cancel.is_set():
+                                logger.debug(
+                                    "Recognition loop discarded a drained item for a cancelled session"
+                                )
+                                break
                             if remaining is not None:
                                 remaining_segment, remaining_language = remaining
                                 logger.debug(
@@ -3833,7 +3955,7 @@ class SpeechRecognitionManager:
                 if self.should_record:
                     self._update_state(RecognitionState.PROCESSING)
                 self._process_audio_buffer(segment, segment_language)
-                if self.should_record:
+                if self.should_record and self._session_cancel is cancel:
                     self._update_state(RecognitionState.LISTENING)
         finally:
             logger.debug("_perform_recognition thread exiting")
@@ -3843,9 +3965,13 @@ class SpeechRecognitionManager:
             # sound). Forcing IDLE would paint the tray idle and make the
             # next Alt+F12 start a second session (#739).
 
-    def _enqueue_audio_segment(self, audio_buffer: list[bytes]):
+    def _enqueue_audio_segment(self, audio_buffer: list[bytes]) -> None:
         """Queue an audio segment for asynchronous transcription."""
-        segment = _AudioSegment(audio_buffer.copy(), self._segment_started_at)
+        segment = _AudioSegment(
+            audio_buffer.copy(),
+            self._segment_started_at,
+            cancel_event=self._session_cancel,
+        )
         if not segment:
             logger.warning("_enqueue_audio_segment called with empty buffer")
             return

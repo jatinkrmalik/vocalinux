@@ -178,6 +178,7 @@ def _manager_stub(
     manager._pending_language_override = None
     manager._oneshot_language_restore = None
     manager._segment_started_at = None
+    manager._session_cancel = threading.Event()
     return manager
 
 

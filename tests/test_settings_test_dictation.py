@@ -68,8 +68,11 @@ def _dialog_for_test(
 ) -> Mock:
     dialog = Mock()
     dialog._test_active = False
+    dialog._test_token = 0
+    dialog._test_cancelled = False
     dialog._applying_settings = False
     dialog.test_button = Mock()
+    dialog.test_cancel_button = Mock()
     dialog.test_output_revealer = Mock()
     dialog.test_buffer = _text_buffer()
     dialog.test_textview = Mock()
@@ -153,10 +156,55 @@ def test_test_dictation_started_arms_listen_timer() -> None:
         SettingsDialog._on_test_clicked(dialog, None)
 
     thread_cls.assert_called_once()
-    assert thread_cls.call_args.kwargs["args"] == (4.0,)
+    assert thread_cls.call_args.kwargs["args"] == (4.0, 1)
     assert dialog._test_active is True
+    assert dialog._test_cancelled is False
     dialog.test_button.set_label.assert_called_with("Testing… Speak Now!")
+    dialog.test_cancel_button.show.assert_called_once()
     dialog.apply_settings.assert_not_called()
+
+
+def test_test_dictation_cancel_runs_off_thread_and_restores_callbacks() -> None:
+    dialog = _dialog_for_test(start_return=True)
+    with patch.object(settings_dialog.threading, "Thread"):
+        SettingsDialog._on_test_clicked(dialog, None)
+    live_callbacks = dialog.speech_engine.get_text_callbacks.return_value
+    dialog.speech_engine.cancel_transcription.side_effect = RuntimeError("cancel failed")
+
+    with patch.object(settings_dialog.threading, "Thread") as thread_cls:
+        SettingsDialog._on_test_cancel_clicked(dialog, None)
+
+    assert dialog._test_cancelled is True
+    dialog.test_button.set_sensitive.assert_called_with(False)
+    dialog.test_cancel_button.set_sensitive.assert_called_with(False)
+    dialog.test_button.set_label.assert_called_with("Cancelling…")
+    thread_cls.assert_called_once()
+    assert thread_cls.call_args.kwargs["daemon"] is True
+    assert thread_cls.call_args.kwargs["name"] == "vocalinux-test-dictation-cancel"
+
+    with patch.object(settings_dialog, "GLib") as glib:
+        thread_cls.call_args.kwargs["target"]()
+        glib.idle_add.assert_called_once_with(dialog._finish_test_after_user_cancel)
+        result = SettingsDialog._finish_test_after_user_cancel(dialog)
+        assert result is False
+        glib.timeout_add.assert_not_called()
+
+    dialog.speech_engine.cancel_transcription.assert_called_once()
+    dialog.speech_engine.set_text_callbacks.assert_called_with(live_callbacks)
+    assert dialog.speech_engine.test_capture_ceiling is not None
+    assert dialog.test_buffer._text == "(Test cancelled)"
+    assert dialog._test_active is False
+    dialog.test_cancel_button.hide.assert_called()
+    dialog.update_recognition_progress.assert_called_with("Idle")
+
+
+def test_cancelled_test_ignores_a_queued_text_callback() -> None:
+    dialog = Mock()
+    dialog._test_cancelled = True
+    dialog.test_buffer = _text_buffer()
+
+    assert SettingsDialog._append_test_result(dialog, "late result") is False
+    assert dialog.test_buffer._text == ""
 
 
 def test_test_dictation_reconfigures_when_live_engine_differs_from_ui() -> None:
@@ -222,9 +270,12 @@ def _dialog_for_finalize(
     """Minimal dialog wired for _finalize_test / idle-wait helpers."""
     dialog = Mock()
     dialog._test_active = True
+    dialog._test_token = 2
+    dialog._test_cancelled = False
     dialog._test_idle_wait_ticks = 0
     dialog._test_timeout_cancel_attempted = False
     dialog.test_button = Mock()
+    dialog.test_cancel_button = Mock()
     dialog.test_buffer = _text_buffer()
     dialog.update_recognition_progress = Mock()
     dialog._saved_text_callbacks = (
@@ -247,6 +298,9 @@ def _dialog_for_finalize(
     )
     dialog._keep_waiting_after_timeout = SettingsDialog._keep_waiting_after_timeout.__get__(dialog)
     dialog._finish_test_restore_ui = SettingsDialog._finish_test_restore_ui.__get__(dialog)
+    dialog._finish_test_after_user_cancel = SettingsDialog._finish_test_after_user_cancel.__get__(
+        dialog
+    )
     dialog._check_test_result = Mock(return_value=False)
 
     if has_cancel:
@@ -268,6 +322,15 @@ def _dialog_for_finalize(
     engine.set_text_callbacks = Mock()
     dialog.speech_engine = engine
     return dialog
+
+
+def test_stale_finalize_token_does_not_stop_new_test() -> None:
+    dialog = _dialog_for_finalize(state=RecognitionState.LISTENING)
+
+    assert SettingsDialog._finalize_test(dialog, token=1) is False
+
+    dialog.speech_engine.stop_recognition.assert_not_called()
+    assert dialog._test_active is True
 
 
 def test_finalize_test_buffered_reload_waits_for_idle_before_restore() -> None:
@@ -329,6 +392,7 @@ def test_finalize_test_idle_path_uses_settle_delay() -> None:
     dialog.speech_engine.stop_recognition.assert_called_once()
     assert dialog._test_active is False
     dialog.test_button.set_label.assert_called_with("Test Dictation")
+    dialog.test_cancel_button.hide.assert_called_once()
     glib.timeout_add.assert_called_once_with(500, dialog._restore_callbacks_and_check_result)
     # Live callbacks still saved until the settle timeout fires.
     assert hasattr(dialog, "_saved_text_callbacks")

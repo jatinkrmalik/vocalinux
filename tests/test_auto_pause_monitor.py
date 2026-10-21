@@ -7,6 +7,7 @@ callbacks — not a parallel reimplementation of the match logic.
 
 import os
 import sys
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -457,6 +458,8 @@ class TestUnloadModelAndAutoPauseBlock(unittest.TestCase):
         mgr._model_lock = MagicMock()
         mgr._model_lock.__enter__ = MagicMock(return_value=None)
         mgr._model_lock.__exit__ = MagicMock(return_value=False)
+        mgr._buffer_lock = threading.Lock()
+        mgr._session_cancel = threading.Event()
         mgr._http_session = None
         mgr._faster_whisper_engine = None
         mgr._reconnection_attempts = 0
