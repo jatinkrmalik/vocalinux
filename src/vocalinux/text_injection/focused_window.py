@@ -253,6 +253,73 @@ def _focused_window_x11() -> Optional[FocusedWindow]:
     )
 
 
+def _read_process_environ(pid: str) -> Optional[dict[str, str]]:
+    """Return ``/proc/<pid>/environ`` as a dict, or None when it cannot be read."""
+    if not pid.isdigit():
+        return None
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as handle:
+            raw = handle.read()
+    except OSError:
+        return None
+    environ: dict[str, str] = {}
+    for entry in raw.split(b"\0"):
+        key, sep, value = entry.partition(b"=")
+        if sep:
+            environ[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
+    return environ
+
+
+def environ_uses_ibus_im(environ: dict[str, str]) -> bool:
+    """True when an environment selects IBus as the GTK, Qt or XIM input method."""
+    gtk_im = environ.get("GTK_IM_MODULE", "").lower()
+    qt_im = environ.get("QT_IM_MODULE", "").lower()
+    xmodifiers = environ.get("XMODIFIERS", "").lower()
+    return "ibus" in gtk_im or "ibus" in qt_im or "@im=ibus" in xmodifiers
+
+
+def focused_xwayland_client_without_ibus() -> bool:
+    """True when a Wayland session has an XWayland client focused that IBus cannot reach.
+
+    An X11 client only talks to IBus through an input method module that it
+    loads at startup from GTK_IM_MODULE, QT_IM_MODULE or XMODIFIERS. Without
+    one, IBus has no input context for it: the Vocalinux engine still commits
+    and reports success, and the text goes nowhere (#972). The client's own
+    environment is read because it can differ from the one Vocalinux runs in.
+
+    While a native Wayland client holds focus, XWayland's active window is
+    unset or a placeholder with no pid and no WM_CLASS, so this returns False.
+    A real client whose environment cannot be read counts as not connected,
+    since xdotool reaches every XWayland client and IBus does not.
+    """
+    if not os.environ.get("WAYLAND_DISPLAY") or not os.environ.get("DISPLAY"):
+        return False
+    if not shutil.which("xdotool"):
+        return False
+    env = _x11_probe_env()
+    window_id = _run_text(["xdotool", "getactivewindow"], env)
+    if not window_id:
+        return False
+    pid = _run_text(["xdotool", "getwindowpid", window_id], env)
+    if not pid.isdigit():
+        if not read_wm_class(window_id, env):
+            return False
+        logger.debug("Focused XWayland window %s has no pid; assuming no IBus", window_id)
+        return True
+    environ = _read_process_environ(pid)
+    if environ is None:
+        logger.debug("Cannot read the environment of XWayland pid %s; assuming no IBus", pid)
+        return True
+    if environ_uses_ibus_im(environ):
+        return False
+    logger.debug(
+        "Focused XWayland client %s (pid %s) has no IBus input method module",
+        _process_name_for_pid(pid) or window_id,
+        pid,
+    )
+    return True
+
+
 def _first_string(payload: dict[str, Any], *keys: str) -> str:
     """Return the first non-empty string value for the given keys."""
     for key in keys:

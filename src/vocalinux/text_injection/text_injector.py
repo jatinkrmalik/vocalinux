@@ -18,7 +18,11 @@ from typing import List, Optional, Tuple, cast
 
 from ..utils.host_process import host_env
 from ..utils.paths import config_dir
-from .focused_window import is_focused_window_terminal, read_wm_class
+from .focused_window import (
+    focused_xwayland_client_without_ibus,
+    is_focused_window_terminal,
+    read_wm_class,
+)
 from .ibus_engine import (
     IBusTextInjector,
     is_ibus_active_input_method,
@@ -1651,10 +1655,21 @@ class TextInjector:
         if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
             self._try_recover_from_fallback()
 
+        xwayland_detour = False
         try:
             with self._state_lock:
                 current_env = self.environment
                 ibus_injector = self._ibus_injector
+
+            if current_env == DesktopEnvironment.WAYLAND_IBUS and self._should_bypass_ibus():
+                # The IBus engine would commit into no input context and still
+                # report OK (#972); send this segment through XWayland instead.
+                logger.info("Focused XWayland client has no IBus input method; using xdotool")
+                with self._state_lock:
+                    if self.environment == DesktopEnvironment.WAYLAND_IBUS:
+                        self.environment = DesktopEnvironment.WAYLAND_XDOTOOL
+                        xwayland_detour = True
+                    current_env = self.environment
 
             if (
                 current_env == DesktopEnvironment.WAYLAND_IBUS
@@ -1797,6 +1812,19 @@ class TextInjector:
                 play_error_sound()
             except ImportError:
                 logger.warning("Could not import audio feedback module")
+            return False
+        finally:
+            if xwayland_detour:
+                with self._state_lock:
+                    if self.environment == DesktopEnvironment.WAYLAND_XDOTOOL:
+                        self.environment = DesktopEnvironment.WAYLAND_IBUS
+
+    def _should_bypass_ibus(self) -> bool:
+        """True when IBus cannot reach the focused window but xdotool can (#972)."""
+        try:
+            return focused_xwayland_client_without_ibus()
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            logger.debug(f"XWayland focus probe failed, keeping IBus: {exc}")
             return False
 
     def _inject_with_xdotool(self, text: str) -> None:

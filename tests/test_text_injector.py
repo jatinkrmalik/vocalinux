@@ -3683,3 +3683,86 @@ class TestKdeSkipsInactiveIbus(unittest.TestCase):
             injector._ibus_init_thread.join(timeout=5)
         mock_ibus_class.assert_called_once()
         self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+
+
+class TestXWaylandIBusBypass(unittest.TestCase):
+    """XWayland clients without an IBus IM module get xdotool instead (#972)."""
+
+    def _make_injector(self, environment: DesktopEnvironment) -> TextInjector:
+        injector = TextInjector.__new__(TextInjector)
+        injector._state_lock = threading.Lock()
+        injector._abort_injections = threading.Event()
+        injector.environment = environment
+        injector.wayland_tool = None
+        injector.last_typed_count = 0
+        injector._ibus_injector = MagicMock()
+        injector._ibus_injector.inject_text.return_value = True
+        injector._log_current_window_info = MagicMock()  # type: ignore[method-assign]
+        injector._should_copy_to_clipboard = MagicMock(  # type: ignore[method-assign]
+            return_value=False
+        )
+        return injector
+
+    def test_unconnected_xwayland_client_uses_xdotool(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.WAYLAND_IBUS)
+        seen: list[DesktopEnvironment] = []
+
+        def fake_xdotool(text: str) -> None:
+            seen.append(injector.environment)
+
+        with (
+            patch.object(injector, "_should_bypass_ibus", return_value=True),
+            patch.object(injector, "_inject_with_xdotool", side_effect=fake_xdotool) as xdo,
+        ):
+            self.assertTrue(injector.inject_text("hello"))
+
+        xdo.assert_called_once_with("hello")
+        injector._ibus_injector.inject_text.assert_not_called()
+        self.assertEqual(seen, [DesktopEnvironment.WAYLAND_XDOTOOL])
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+        self.assertEqual(injector.last_typed_count, 5)
+
+    def test_ibus_connected_client_keeps_ibus(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.WAYLAND_IBUS)
+
+        with (
+            patch.object(injector, "_should_bypass_ibus", return_value=False),
+            patch.object(injector, "_inject_with_xdotool") as xdo,
+        ):
+            self.assertTrue(injector.inject_text("hello"))
+
+        injector._ibus_injector.inject_text.assert_called_once_with("hello")
+        xdo.assert_not_called()
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+
+    def test_environment_restored_when_xdotool_fails(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.WAYLAND_IBUS)
+        error = subprocess.CalledProcessError(1, ["xdotool"])
+
+        with (
+            patch.object(injector, "_should_bypass_ibus", return_value=True),
+            patch.object(injector, "_inject_with_xdotool", side_effect=error),
+            patch.object(injector, "_copy_to_clipboard", return_value=False),
+            patch("vocalinux.ui.audio_feedback.play_error_sound"),
+        ):
+            self.assertFalse(injector.inject_text("hello"))
+
+        self.assertEqual(injector.environment, DesktopEnvironment.WAYLAND_IBUS)
+
+    def test_x11_ibus_is_not_probed(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.X11_IBUS)
+
+        with patch.object(injector, "_should_bypass_ibus") as probe:
+            self.assertTrue(injector.inject_text("hello"))
+
+        probe.assert_not_called()
+        injector._ibus_injector.inject_text.assert_called_once_with("hello")
+
+    def test_probe_error_keeps_ibus(self) -> None:
+        injector = self._make_injector(DesktopEnvironment.WAYLAND_IBUS)
+
+        with patch(
+            "vocalinux.text_injection.text_injector.focused_xwayland_client_without_ibus",
+            side_effect=OSError("no display"),
+        ):
+            self.assertFalse(injector._should_bypass_ibus())
