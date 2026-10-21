@@ -421,6 +421,36 @@ def test_follow_layout_priority_change_does_not_write_resolved_language(
     dialog.model_combo.set_active_id.assert_called_once_with("medium")
 
 
+def test_follow_layout_priority_change_keeps_multilingual_variant_and_mode(
+    settings_dialog: Any, dialog_class: Any
+) -> None:
+    dialog = _dialog_stub(language="en-us", priority=FASTEST, recommended="small")
+    dialog._follow_layout_active = True
+    dialog.follow_layout_switch.get_active.return_value = True
+    dialog._follow_layout_supported.return_value = True
+    selected_variant: dict[str, Any] = {"id": None}
+    dialog.model_variant_combo.set_active_id.side_effect = lambda variant: selected_variant.update(
+        id=variant
+    )
+    dialog._get_selected_whispercpp_model.side_effect = lambda: selected_variant["id"] or "small"
+    dialog._is_selected_whispercpp_model_english_only.side_effect = lambda: (
+        settings_dialog.is_english_only_whispercpp_model(
+            dialog._get_selected_whispercpp_model()
+        )
+    )
+
+    dialog_class._apply_simple_choice(dialog)
+    dialog_class._sync_follow_layout_controls(dialog)
+
+    assert selected_variant["id"] == "base"
+    dialog.model_variant_combo.set_active_id.assert_called_once_with("base")
+    dialog._on_disk_stand_in.assert_called_once_with(
+        "base", "base", settings_dialog.LANGUAGE_FOLLOWS_LAYOUT
+    )
+    assert dialog.follow_layout_switch.get_active() is True
+    assert dialog._follow_layout_active is True
+
+
 @pytest.mark.parametrize("stale_second", ["auto", "en-us"])
 def test_pinned_advanced_language_plus_stale_stored_second_does_not_replace_the_pin(
     settings_dialog, dialog_class, stale_second

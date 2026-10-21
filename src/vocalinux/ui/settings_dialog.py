@@ -1213,6 +1213,11 @@ class SearchablePicker(Gtk.Box):
         self._active_id = None
         self._label.set_text("")
 
+    def clear_active(self, text: str = "") -> None:
+        """Clear the selected id and show an optional readout."""
+        self._active_id = None
+        self._label.set_text(text)
+
     def get_model(self) -> list:
         """The ComboBoxText-shaped store: [display text, id] per row."""
         return self.base_model
@@ -8310,7 +8315,8 @@ class SettingsDialog(AboutSectionMixin):
             # Neither simple question can say "follow the layout", so show the
             # resolved language as a disabled readout without changing the mode.
             with _suppressed(self, "_simple_syncing"):
-                self.simple_language_combo.set_active_id(language)
+                if not self.simple_language_combo.set_active_id(language):
+                    self.simple_language_combo.clear_active("Detected each time")
                 self.simple_language_row.set_sensitive(False)
                 self.simple_language_row.set_tooltip_text(
                     "Follows your keyboard layout. Turn off Follow keyboard layout "
@@ -8416,8 +8422,13 @@ class SettingsDialog(AboutSectionMixin):
 
         recommended, _ = self._get_recommended_whispercpp_model_for_language()
         size = size_for_priority(get_whispercpp_model_size(recommended), priority)
-        variant = _default_whispercpp_variant_for_size(size, language) or size
-        variant = self._on_disk_stand_in(variant, size, language)
+        variant_language = (
+            cast(str, _language_for_whispercpp_variant(self))
+            if _is_following_layout(self)
+            else language
+        )
+        variant = _default_whispercpp_variant_for_size(size, variant_language) or size
+        variant = self._on_disk_stand_in(variant, size, variant_language)
 
         self.model_combo.set_active_id(size)
         self._populate_whispercpp_variant_options(size, variant)

@@ -224,6 +224,7 @@ class TestDownloadFunctions(unittest.TestCase):
         assert manager.language == "en-us"
         assert manager._defer_download is True
         assert manager._model_lock.locked() is False
+        assert manager._prefetching_model is False
         download.assert_called_once_with()
         init_selected.assert_not_called()
         manager.command_processor.set_language.assert_any_call("fr")
@@ -240,6 +241,8 @@ class TestDownloadFunctions(unittest.TestCase):
             return available["model"]
 
         def download_model() -> None:
+            assert manager._prefetching_model is True
+            assert manager.start_recognition() is False
             available["model"] = True
 
         with (
@@ -262,6 +265,8 @@ class TestDownloadFunctions(unittest.TestCase):
             patch.object(
                 manager, "_init_selected_engine", wraps=manager._init_selected_engine
             ) as init,
+            patch.object(recognition_manager_module, "play_error_sound") as error_sound,
+            patch.object(recognition_manager_module, "_show_notification") as notification,
         ):
             manager.reconfigure(
                 engine="whisper_cpp",
@@ -273,6 +278,13 @@ class TestDownloadFunctions(unittest.TestCase):
         download.assert_called_once_with()
         init.assert_called_once_with()
         assert manager.model is loaded_model
+        assert manager._prefetching_model is False
+        error_sound.assert_called_once_with()
+        notification.assert_called_once_with(
+            "Speech model downloading",
+            "Dictation will be available when the new model has finished downloading.",
+            "dialog-information",
+        )
 
     def test_reconfigure_without_download_permission_skips_prefetch(self) -> None:
         manager = self._create_manager()
@@ -289,6 +301,33 @@ class TestDownloadFunctions(unittest.TestCase):
             )
 
         prefetch.assert_not_called()
+
+    def test_start_recognition_refuses_while_a_model_is_prefetching(self) -> None:
+        manager = self._create_manager()
+        manager.engine = "whisper_cpp"
+        manager._prefetching_model = True
+        uninitialized_manager = object.__new__(SpeechRecognitionManager)
+        assert uninitialized_manager._prefetching_model is False
+
+        with (
+            patch.object(recognition_manager_module, "play_error_sound") as error_sound,
+            patch.object(recognition_manager_module, "_show_notification") as notification,
+        ):
+            assert manager.start_recognition() is False
+            manager.language = "pl"
+            with patch.object(
+                manager, "start_recognition", wraps=manager.start_recognition
+            ) as start:
+                assert manager.start_recognition_with_language("pl") is False
+
+        start.assert_called_once_with(mode="toggle")
+        assert error_sound.call_count == 2
+        notification.assert_called_with(
+            "Speech model downloading",
+            "Dictation will be available when the new model has finished downloading.",
+            "dialog-information",
+        )
+        assert notification.call_count == 2
 
     def test_download_vosk_model_with_progress(self):
         """Test VOSK model download with progress tracking."""

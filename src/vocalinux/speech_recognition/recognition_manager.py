@@ -442,6 +442,7 @@ class SpeechRecognitionManager:
         # Set by the UI layer to offer the download when a model is missing
         self._model_missing_handler: Optional[Callable[[str], bool]] = None
         self._download_cancelled = False
+        self._prefetching_model = False
         # Held by whichever UI is downloading a model. The tray and the settings
         # dialog both download in the background, and there is only one progress
         # callback and one engine configuration between them.
@@ -653,6 +654,7 @@ class SpeechRecognitionManager:
     #: Class-level default so a manager built without ``__init__`` still answers
     #: "not following the layout" instead of raising on the dictation path.
     language_preference: str = "auto"
+    _prefetching_model: bool = False
 
     #: Same for the one-shot override state (#805): __new__-built stubs in tests
     #: must not raise on the dictation path either.
@@ -3133,6 +3135,16 @@ class SpeechRecognitionManager:
             logger.warning(f"Cannot start recognition in current state: {self.state}")
             return False
 
+        if getattr(self, "_prefetching_model", False) is True:
+            logger.warning("Cannot start recognition while a speech model is downloading")
+            play_error_sound()
+            _show_notification(
+                "Speech model downloading",
+                "Dictation will be available when the new model has finished downloading.",
+                "dialog-information",
+            )
+            return False
+
         if self._auto_paused:
             logger.warning(
                 "Cannot start recognition: auto-paused while a configured app/game is running"
@@ -4081,7 +4093,11 @@ class SpeechRecognitionManager:
             self._defer_download = not force_download
             if force_download:
                 try:
-                    self._download_selected_model_if_missing()
+                    self._prefetching_model = True
+                    try:
+                        self._download_selected_model_if_missing()
+                    finally:
+                        self._prefetching_model = False
                 except Exception:
                     self._restore_reconfigure_state(previous)
                     if language_changed:
