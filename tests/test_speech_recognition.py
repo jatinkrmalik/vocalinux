@@ -548,7 +548,7 @@ class TestSpeechRecognition(unittest.TestCase):
 
         # Default values
         self.assertEqual(manager.vad_sensitivity, 3)
-        self.assertEqual(manager.silence_timeout, 2.0)
+        self.assertEqual(manager.silence_timeout, 1.2)
 
         # Configure with valid values
         manager.reconfigure(vad_sensitivity=4, silence_timeout=1.5)
