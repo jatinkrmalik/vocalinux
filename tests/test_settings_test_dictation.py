@@ -118,17 +118,42 @@ def test_test_dictation_missing_model_skips_listen_timer() -> None:
 
     thread_cls.assert_not_called()
     assert dialog._test_active is False
-    assert "Speech Model page" in dialog.test_buffer._text
+    assert (
+        dialog.test_buffer._text
+        == "Tiny is not downloaded yet. Press Download on the Speech Model page first, "
+        "or pick a downloaded model."
+    )
     assert "No speech detected" not in dialog.test_buffer._text
-    dialog.speech_engine.set_text_callbacks.assert_any_call([])
+    dialog.apply_settings.assert_not_called()
     dialog.test_button.set_label.assert_not_called()
     dialog.test_output_revealer.set_reveal_child.assert_called_with(True)
+
+
+def test_cancelled_settings_apply_does_not_start_test_dictation() -> None:
+    dialog = _dialog_for_test(start_return=True)
+    dialog.get_selected_settings.return_value["model_size"] = "small"
+    dialog.apply_settings.return_value = False
+
+    with (
+        patch.object(settings_dialog, "_undownloaded_model_info", return_value=None),
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
+        SettingsDialog._on_test_clicked(dialog, None)
+
+    dialog.apply_settings.assert_called_once()
+    dialog.speech_engine.start_recognition.assert_not_called()
+    thread_cls.assert_not_called()
+    assert dialog._test_active is False
+    assert dialog.test_buffer._text == "Failed to apply settings. Please try again."
 
 
 def test_test_dictation_auto_paused_message() -> None:
     dialog = _dialog_for_test(start_return=False, is_auto_paused=True)
 
-    with patch.object(settings_dialog.threading, "Thread") as thread_cls:
+    with (
+        patch.object(settings_dialog, "_undownloaded_model_info", return_value=None),
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
         SettingsDialog._on_test_clicked(dialog, None)
 
     thread_cls.assert_not_called()
@@ -139,7 +164,10 @@ def test_test_dictation_auto_paused_message() -> None:
 def test_test_dictation_start_failure_generic_message() -> None:
     dialog = _dialog_for_test(start_return=False, model_ready=True, is_auto_paused=False)
 
-    with patch.object(settings_dialog.threading, "Thread") as thread_cls:
+    with (
+        patch.object(settings_dialog, "_undownloaded_model_info", return_value=None),
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
         SettingsDialog._on_test_clicked(dialog, None)
 
     thread_cls.assert_not_called()
@@ -149,7 +177,10 @@ def test_test_dictation_start_failure_generic_message() -> None:
 def test_test_dictation_started_arms_listen_timer() -> None:
     dialog = _dialog_for_test(start_return=True)
 
-    with patch.object(settings_dialog.threading, "Thread") as thread_cls:
+    with (
+        patch.object(settings_dialog, "_undownloaded_model_info", return_value=None),
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
         SettingsDialog._on_test_clicked(dialog, None)
 
     thread_cls.assert_called_once()
@@ -174,7 +205,10 @@ def test_test_dictation_reconfigures_when_live_engine_differs_from_ui() -> None:
 
     dialog.apply_settings.side_effect = _apply_and_sync
 
-    with patch.object(settings_dialog.threading, "Thread") as thread_cls:
+    with (
+        patch.object(settings_dialog, "_undownloaded_model_info", return_value=None),
+        patch.object(settings_dialog.threading, "Thread") as thread_cls,
+    ):
         SettingsDialog._on_test_clicked(dialog, None)
 
     dialog.apply_settings.assert_called_once()
