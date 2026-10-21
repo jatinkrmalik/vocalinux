@@ -67,8 +67,8 @@ def _make_manager(engine="whisper_cpp", **kw):
 
 
 class TestPushToTalkReleaseGate(unittest.TestCase):
-    def test_gated_segment_waits_before_delivering_callbacks(self) -> None:
-        """Text, segment, and action callbacks wait for the release gate."""
+    def test_gated_segment_holds_text_without_blocking_the_worker(self) -> None:
+        """A gated segment returns immediately and delivers only after release."""
         manager = _make_manager(engine="vosk")
         manager._voice_commands_enabled = True
         gate = threading.Event()
@@ -99,19 +99,46 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
         ):
             worker = threading.Thread(target=manager._process_audio_buffer, args=(segment,))
             worker.start()
-            try:
-                worker.join(timeout=0.1)
-                self.assertTrue(worker.is_alive())
-                self.assertEqual(delivered, [])
-            finally:
-                gate.set()
-                worker.join(timeout=2)
+            worker.join(timeout=2.0)
 
-        self.assertFalse(worker.is_alive())
+        self.assertFalse(worker.is_alive(), "the worker must not block on the release gate")
+        self.assertEqual(delivered, [])
+        self.assertEqual(len(manager._held_text), 1)
+
+        gate.set()
+        manager._flush_held_text()
+
         self.assertEqual(
             delivered,
             [("segment", "hello"), ("text", "hello"), ("action", "action")],
         )
+        self.assertEqual(manager._held_text, [])
+
+    def test_empty_transcription_while_held_does_not_flush(self) -> None:
+        """A blank mid-hold result must not release text before the key is up."""
+        manager = _make_manager(engine="vosk")
+        manager._voice_commands_enabled = False
+        delivered: list[str] = []
+        manager.text_callbacks.append(delivered.append)
+        gate = threading.Event()
+
+        with (
+            patch.object(manager, "_transcribe_with_vosk", return_value="hello"),
+            patch.object(manager, "_apply_dictionary_corrections", side_effect=lambda text: text),
+        ):
+            manager._process_audio_buffer(_AudioSegment([b"audio"], None, release_gate=gate))
+            self.assertEqual(delivered, [])
+            self.assertEqual(len(manager._held_text), 1)
+
+            with patch.object(manager, "_transcribe_with_vosk", return_value=""):
+                manager._process_audio_buffer(_AudioSegment([b"blank"], None, release_gate=gate))
+            self.assertEqual(delivered, [])
+            self.assertEqual(len(manager._held_text), 1)
+
+            gate.set()
+            manager._flush_held_text()
+
+        self.assertEqual(delivered, ["hello"])
 
     def test_ungated_and_released_segments_deliver_immediately(self) -> None:
         """Segments without a pending gate never block callback delivery."""
@@ -132,26 +159,31 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
         self.assertEqual(delivered, ["hello", "hello"])
 
     def test_gated_segments_preserve_queue_delivery_order(self) -> None:
-        """Later queued segments wait behind a mid-hold segment until release."""
+        """Every queued segment is transcribed before release, then delivered in order."""
         manager = _make_manager(engine="vosk")
         manager._voice_commands_enabled = False
         manager.should_record = True
         manager._segment_queue = queue.Queue()
         gate = threading.Event()
         first_transcribed = threading.Event()
+        all_transcribed = threading.Event()
+        transcribed: list[str] = []
         delivered: list[str] = []
         manager.text_callbacks.append(delivered.append)
 
         first = _AudioSegment([b"first"], None, release_gate=gate)
         second = _AudioSegment([b"second"], None, release_gate=gate)
-        final = _AudioSegment([b"final"], None)
+        final = _AudioSegment([b"final"], None, release_gate=gate)
         for segment in (first, second, final):
             manager._segment_queue.put((segment, "en-us"))
 
         def transcribe(audio_buffer: list[bytes]) -> str:
             text = audio_buffer[0].decode()
+            transcribed.append(text)
             if text == "first":
                 first_transcribed.set()
+            if len(transcribed) == 3:
+                all_transcribed.set()
             return text
 
         with (
@@ -162,8 +194,10 @@ class TestPushToTalkReleaseGate(unittest.TestCase):
             worker.start()
             try:
                 self.assertTrue(first_transcribed.wait(timeout=2))
-                worker.join(timeout=0.1)
-                self.assertTrue(worker.is_alive())
+                self.assertTrue(
+                    all_transcribed.wait(timeout=2),
+                    "the worker blocked on the release gate before transcribing every segment",
+                )
                 self.assertEqual(delivered, [])
             finally:
                 gate.set()

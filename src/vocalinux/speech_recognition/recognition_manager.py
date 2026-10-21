@@ -522,6 +522,11 @@ class SpeechRecognitionManager:
         self._segment_queue: queue.Queue[tuple[_AudioSegment, str]] = queue.Queue(maxsize=32)
         self._key_release_gate = threading.Event()
         self._key_release_gate.set()
+        # Text transcribed before the push-to-talk key is released is held
+        # here instead of blocking the recognition worker, so later segments
+        # keep being transcribed and the 32-slot queue cannot back up.
+        self._held_text: list[tuple[str, list[Any], float]] = []
+        self._held_text_lock = threading.Lock()
 
         # Reliability improvements - Issue #92
         self._max_buffer_size = 5000  # Maximum number of audio chunks in buffer
@@ -3255,7 +3260,15 @@ class SpeechRecognitionManager:
 
             if self.audio_buffer and self._recording_segment_has_speech:
                 logger.debug(f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks")
-                self._enqueue_audio_segment(self.audio_buffer)
+                # Carry the session gate so this tail (which may be processed
+                # after the key is already up) flushes held text ahead of
+                # itself instead of overtaking it.
+                if self._recognition_mode == "push_to_talk":
+                    self._enqueue_audio_segment(
+                        self.audio_buffer, release_gate=self._key_release_gate
+                    )
+                else:
+                    self._enqueue_audio_segment(self.audio_buffer)
                 self.audio_buffer = []
             elif self.audio_buffer:
                 logger.debug(
@@ -3283,6 +3296,7 @@ class SpeechRecognitionManager:
         if self.recognition_thread and self.recognition_thread.is_alive():
             self.recognition_thread.join(timeout=1.0)
 
+        self._flush_held_text()
         self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
 
@@ -3816,31 +3830,55 @@ class SpeechRecognitionManager:
                 processed_text = text.strip()
                 actions = []
 
+            started_at = getattr(audio_buffer, "started_at", None)
+            if started_at is None:
+                started_at = time.monotonic()
+
             gate = getattr(audio_buffer, "release_gate", None)
-            if (processed_text or actions) and gate is not None and not gate.is_set():
+            if gate is not None and not gate.is_set() and (processed_text or actions):
+                # Hold the result, not the worker: later segments must keep
+                # being transcribed so the 32-slot queue cannot back up and
+                # start dropping speech during a long push-to-talk hold.
+                with self._held_text_lock:
+                    self._held_text.append((processed_text, actions, started_at))
                 logger.info("Holding transcribed text until the push-to-talk key is released")
-                gate.wait()
+                return
 
-            # Call text callbacks with processed text
-            logger.debug(
-                f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
-            )
-            if processed_text:
-                started_at = getattr(audio_buffer, "started_at", None)
-                if started_at is None:
-                    started_at = time.monotonic()
-                for segment_callback in self.segment_callbacks:
-                    segment_callback(processed_text, started_at)
-                for callback in self.text_callbacks:
-                    logger.debug(
-                        f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
-                    )
-                    callback(processed_text)
+            # The key is already released: deliver anything held first so the
+            # transcript keeps capture order. An unset gate must not flush.
+            if gate is not None and gate.is_set():
+                self._flush_held_text()
+            self._deliver_text(processed_text, actions, started_at)
 
-            # Call action callbacks for each action
-            for action in actions:
-                for callback in self.action_callbacks:
-                    callback(action)
+    def _deliver_text(self, processed_text: str, actions: list[Any], started_at: float) -> None:
+        """Invoke the text and action callbacks for one transcribed segment."""
+        # Call text callbacks with processed text
+        logger.debug(
+            f"processed_text='{processed_text[:50] if processed_text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+        )
+        if processed_text:
+            for segment_callback in self.segment_callbacks:
+                segment_callback(processed_text, started_at)
+            for callback in self.text_callbacks:
+                logger.debug(
+                    f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                )
+                callback(processed_text)
+
+        # Call action callbacks for each action
+        for action in actions:
+            for callback in self.action_callbacks:
+                callback(action)
+
+    def _flush_held_text(self) -> None:
+        """Deliver transcriptions held back while push-to-talk was active."""
+        with self._held_text_lock:
+            held = self._held_text
+            self._held_text = []
+        if held:
+            logger.debug(f"Releasing {len(held)} held transcription segment(s)")
+        for processed_text, actions, started_at in held:
+            self._deliver_text(processed_text, actions, started_at)
 
     def _perform_recognition(self):
         """Perform speech recognition in real-time."""
@@ -3895,6 +3933,7 @@ class SpeechRecognitionManager:
                 if self.should_record:
                     self._update_state(RecognitionState.LISTENING)
         finally:
+            self._flush_held_text()
             logger.debug("_perform_recognition thread exiting")
             # Do not force IDLE here. stop_recognition() already does that,
             # and a leftover worker can finish after the user has started
@@ -3959,7 +3998,7 @@ class SpeechRecognitionManager:
             try:
                 queued = self._segment_queue.get_nowait()
             except queue.Empty:
-                return
+                break
             if queued is None:
                 continue
             # Queue items are (segment, language) tuples stamped at enqueue
@@ -3970,6 +4009,7 @@ class SpeechRecognitionManager:
                 self._process_audio_buffer(segment, segment_language)
             except (ChecksumError, ImportError, OSError, RuntimeError, ValueError):
                 logger.exception("Failed to transcribe a leftover buffered segment")
+        self._flush_held_text()
 
     def reconfigure(
         self,
