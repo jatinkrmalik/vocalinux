@@ -106,6 +106,10 @@ class SpeechRecognitionManagerProtocol(Protocol):
         """Stop the speech recognition process."""
         ...
 
+    def has_pending_transcription(self) -> bool:
+        """Return True while the recognition worker may still deliver text to text callbacks."""
+        ...
+
     def register_state_callback(self, callback: Callable[[RecognitionState], None]) -> None:
         """Register a callback for state changes."""
         ...

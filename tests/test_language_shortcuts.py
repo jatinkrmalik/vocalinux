@@ -666,7 +666,7 @@ def test_failed_reconfigure_settles_the_pending_oneshot_restore() -> None:
     manager._init_selected_engine = MagicMock(side_effect=[RuntimeError("boom"), None])
 
     with pytest.raises(RuntimeError):
-        manager.reconfigure(language="fr", model_size="tiny")
+        manager.reconfigure(language="fr", model_size="tiny", force_download=False)
 
     assert manager.language == "en-us"
     assert manager._oneshot_language_restore is None
