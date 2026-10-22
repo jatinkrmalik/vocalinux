@@ -10,6 +10,7 @@ Reproducibility is checked for the same Python/platform/toolchain, not across OS
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import os
 import shutil
@@ -17,6 +18,8 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,8 +167,47 @@ def prepare_outputs(output: Path, diagnostics: Path) -> None:
     diagnostics.mkdir(parents=True, exist_ok=True)
 
 
+@contextmanager
+def checkout_lock() -> Iterator[None]:
+    """Reject overlapping builds in this checkout before touching their outputs."""
+    # Keep the inode after releasing the lock: unlinking it could let another
+    # process lock a new inode while a contender still holds the original one.
+    with (ROOT / ".reproducible-wheel.lock").open("a") as stream:
+        try:
+            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError(
+                "another reproducible-wheel build is active in this checkout"
+            ) from error
+        try:
+            yield
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def stage_distributions(artifacts: tuple[Path, ...], output: Path) -> None:
+    """Copy outside dist/, then atomically publish each complete archive."""
+    output.mkdir(parents=True, exist_ok=True)
+    # A sibling stays on the output filesystem for atomic renames. If killed
+    # during copying, only an ignored temporary directory can contain partials.
+    with tempfile.TemporaryDirectory(
+        prefix=".reproducible-wheel-stage-", dir=output.parent
+    ) as temporary:
+        staging = Path(temporary)
+        for artifact in artifacts:
+            shutil.copy2(artifact, staging / artifact.name)
+        for artifact in artifacts:
+            (staging / artifact.name).replace(output / artifact.name)
+
+
 def build(python: str, output: Path, diagnostics: Path) -> None:
     """Build twice and expose the canonical wheel/sdist only after verification."""
+    with checkout_lock():
+        _build(python, output, diagnostics)
+
+
+def _build(python: str, output: Path, diagnostics: Path) -> None:
+    """Run the gate while holding the checkout lock through final staging."""
     prepare_outputs(output, diagnostics)
     # Always derive the timestamp from this commit, not an inherited shell value.
     epoch = subprocess.check_output(
@@ -265,9 +307,7 @@ def build(python: str, output: Path, diagnostics: Path) -> None:
             one_file(diagnostics / "independent", "*.whl"),
             diagnostics / "comparison.txt",
         )
-        output.mkdir(parents=True, exist_ok=True)
-        for artifact in (canonical, one_file(diagnostics / "canonical", "*.tar.gz")):
-            shutil.copy2(artifact, output / artifact.name)
+        stage_distributions((canonical, one_file(diagnostics / "canonical", "*.tar.gz")), output)
 
 
 def main() -> int:

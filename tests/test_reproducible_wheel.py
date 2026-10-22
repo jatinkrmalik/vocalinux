@@ -68,14 +68,17 @@ def test_snapshot_uses_working_source_without_ignored_build_state(
     source = tmp_path / "repo"
     source.mkdir()
     subprocess.run(["git", "init", "-q", str(source)], check=True)
-    (source / ".gitignore").write_text("build/\n*.egg-info/\n.venv/\n")
+    (source / ".gitignore").write_text(
+        "build/\n*.egg-info/\n.venv/\n.reproducible-wheel-stage-*/\n.reproducible-wheel.lock\n"
+    )
     (source / "tracked.py").write_text("old")
     (source / "deleted.py").write_text("deleted")
     subprocess.run(["git", "add", "."], cwd=source, check=True)
     (source / "tracked.py").write_text("working-tree edit")
     (source / "deleted.py").unlink()
     (source / "new.py").write_text("new file")
-    for name in ("build", "stale.egg-info", ".venv"):
+    (source / ".reproducible-wheel.lock").touch()
+    for name in ("build", "stale.egg-info", ".venv", ".reproducible-wheel-stage-interrupted"):
         (source / name).mkdir()
         (source / name / "stale").write_text("must not be copied")
     target = tmp_path / "snapshot"
@@ -270,3 +273,103 @@ def test_interrupted_cleanup_can_be_retried(
     assert not list(output.iterdir())
     assert not list(diagnostics.iterdir())
     assert unrelated.read_text() == "keep"
+
+
+@pytest.mark.parametrize("operation", ["copy", "rename"])
+@pytest.mark.parametrize("interrupt_after", [1, 2])
+def test_interrupted_staging_can_be_retried(
+    gate: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    interrupt_after: int,
+) -> None:
+    """An interrupted copy must never expose partial bytes as a release archive."""
+    output = tmp_path / "dist"
+    diagnostics = tmp_path / "diagnostics"
+    artifacts = tuple(
+        wheel(diagnostics / "canonical" / name) for name in ("package.whl", "package.tar.gz")
+    )
+    copy = gate.shutil.copy2
+    replace = Path.replace
+    calls = 0
+
+    def interrupted_copy(source: Path, target: Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == interrupt_after:
+            target.write_bytes(b"partial archive")
+            raise KeyboardInterrupt("simulated interruption")
+        copy(source, target)
+
+    def interrupted_rename(source: Path, target: Path) -> Path:
+        nonlocal calls
+        result = replace(source, target)
+        calls += 1
+        if calls == interrupt_after:
+            raise KeyboardInterrupt("simulated interruption")
+        return result
+
+    with monkeypatch.context() as patch:
+        if operation == "copy":
+            patch.setattr(gate.shutil, "copy2", interrupted_copy)
+        else:
+            patch.setattr(Path, "replace", interrupted_rename)
+        with pytest.raises(KeyboardInterrupt, match="simulated interruption"):
+            gate.stage_distributions(artifacts, output)
+    for staged in output.iterdir():
+        assert staged.read_bytes() == (diagnostics / "canonical" / staged.name).read_bytes()
+    assert not list(tmp_path.glob(".reproducible-wheel-stage-*"))
+    # Exercise the next run's ownership validation, then build/stage again.
+    gate.prepare_outputs(output, diagnostics)
+    for artifact in artifacts:
+        wheel(artifact)
+    gate.stage_distributions(artifacts, output)
+    assert {path.name for path in output.iterdir()} == {path.name for path in artifacts}
+
+
+def test_competing_process_does_not_touch_outputs(
+    gate: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The public build entry point must hold its lock before cleanup starts."""
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+    output = tmp_path / "dist"
+    diagnostics = tmp_path / "diagnostics"
+    staged = wheel(output / "package.whl")
+    canonical = wheel(diagnostics / "canonical/package.whl")
+    log = diagnostics / "inputs.log"
+    log.write_text("active build")
+    competitor = (
+        "import importlib.util, pathlib, sys; "
+        "spec = importlib.util.spec_from_file_location('gate', sys.argv[1]); "
+        "gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate); "
+        "gate.ROOT = pathlib.Path(sys.argv[2]); "
+        "gate.build(sys.executable, gate.ROOT / 'dist', gate.ROOT / 'diagnostics')"
+    )
+    with gate.checkout_lock():
+        result = subprocess.run(
+            [sys.executable, "-c", competitor, str(SCRIPT), str(tmp_path)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        assert result.returncode != 0
+        assert "another reproducible-wheel build is active" in result.stderr
+        assert staged.exists() and canonical.exists()
+        assert log.read_text() == "active build"
+    # Reusing the persistent lock file must work after its owner exits.
+    with gate.checkout_lock():
+        pass
+
+
+def test_build_failure_releases_checkout_lock(
+    gate: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+    output = tmp_path / "dist"
+    output.mkdir()
+    (output / "user-file").write_text("keep")
+    with pytest.raises(RuntimeError, match="unrecognized or modified output"):
+        gate.build(sys.executable, output, tmp_path / "diagnostics")
+    with gate.checkout_lock():
+        pass

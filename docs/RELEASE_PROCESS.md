@@ -124,6 +124,10 @@ builds are retained in `build/reproducible-wheel/`; CI uploads that directory on
 Refresh the toolchain through `just lock`, not by editing its export by hand.
 Cleanup removes staged copies before their canonical originals, so an interrupted
 cleanup can safely be retried.
+The gate holds a checkout lock from before cleanup through final staging; a second
+active run fails without changing the first run's outputs. Archives are copied to
+an ignored temporary sibling of `dist/` and then atomically renamed into place,
+so interrupted staging leaves only complete archives in `dist/` and can be retried.
 
 ## Detailed Release Steps
 
