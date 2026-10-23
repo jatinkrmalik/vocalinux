@@ -1,6 +1,7 @@
 """Tests for offering the recommended model when dictation finds none."""
 
 import importlib
+import json
 import sys
 import threading
 from unittest.mock import MagicMock, Mock, patch
@@ -67,6 +68,9 @@ def _tray_stub():
     tray._model_download_active = False
     tray.config_manager.get_str.return_value = "en-us"
     tray.speech_engine.model_ready = True
+    tray.speech_engine.engine = "whisper_cpp"
+    tray.speech_engine.model_size = "small.en"
+    tray.speech_engine.is_auto_paused = False
     return tray
 
 
@@ -208,6 +212,7 @@ class _RestartGatedEngine:
         self.model_size = model_size
         self.language = language
         self.model_ready = False
+        self.is_auto_paused = False
         self.reinits = 0
         self.state = None
 
@@ -416,9 +421,23 @@ def _reconfigure_manager():
     manager._model_request_lock = threading.Lock()
     manager._model_request = object()
     manager._auto_resume_pending = False
+    manager._reconfigure_request = None
+    manager._download_claim = threading.Lock()
+    manager._download_cancelled = False
+    manager.recognition_thread = None
+    manager._recognition_workers = []
+    for name in (
+        "_settings_reconfigure_context",
+        "_reconfigure_needs_restart",
+        "_finish_recognition_before_reconfigure",
+        "_apply_reconfigure",
+        "_check_reconfigure_cancelled",
+    ):
+        setattr(manager, name, getattr(manager_class, name).__get__(manager, manager_class))
     manager._new_model_request = lambda **kwargs: manager_class._new_model_request(
         manager, **kwargs
     )
+    manager._hot_reconfigure_settings = manager_class._hot_reconfigure_settings
     # reconfigure() dispatches through _init_selected_engine(); bind the real
     # method so force_reinit still reaches _init_whispercpp on this mock.
     manager._init_selected_engine = lambda: manager_class._init_selected_engine(manager)
@@ -465,6 +484,247 @@ def test_an_unchanged_reconfigure_still_does_nothing_by_default():
     )
 
     manager._init_whispercpp.assert_not_called()
+
+
+@pytest.fixture
+def download_manager(monkeypatch):
+    from vocalinux.speech_recognition import recognition_manager as rm
+
+    monkeypatch.setattr(rm, "load_silero_vad", lambda: None)
+    monkeypatch.setattr(rm.SpeechRecognitionManager, "_init_whispercpp", lambda self: None)
+    manager = rm.SpeechRecognitionManager(engine="whisper_cpp", model_size="tiny", language="en-us")
+    manager.model = ("whisper_cpp", "tiny")
+    manager._model_initialized = True
+
+    def initialize():
+        manager.model = (manager.engine, manager.model_size)
+        manager._model_initialized = True
+
+    monkeypatch.setattr(manager, "_init_selected_engine", initialize)
+    monkeypatch.setattr(manager, "_init_whispercpp", initialize)
+    return manager
+
+
+@pytest.fixture
+def download_config(monkeypatch, tmp_path):
+    from vocalinux.ui import config_manager
+
+    monkeypatch.setattr(config_manager, "CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(config_manager, "CONFIG_FILE", str(tmp_path / "config.json"))
+    config = config_manager.ConfigManager()
+    config.update_speech_recognition_settings(
+        {"engine": "whisper_cpp", "model_size": "tiny", "language": "en-us"}
+    )
+    assert config.save_config()
+    return config
+
+
+def test_tray_download_during_auto_pause_saves_the_model_for_resume(
+    monkeypatch, tray_indicator, recommendation, download_manager, download_config, tmp_path
+):
+    """A completed transfer stays accepted when a game unloads its target model."""
+    manager = download_manager
+    downloading, finish_download = threading.Event(), threading.Event()
+    downloaded = []
+
+    def download():
+        downloading.set()
+        assert finish_download.wait(3)
+        downloaded.append(manager.model_size)
+
+    monkeypatch.setattr(manager, "_download_selected_model_if_missing", download)
+    notifications = Mock()
+    monkeypatch.setattr(tray_indicator, "notifications", notifications)
+    monkeypatch.setattr(tray_indicator, "_idle_once", lambda func, *args: func(*args))
+    tray = Mock(speech_engine=manager, config_manager=download_config)
+    tray._model_download_active = True
+    tray._model_keepalive = None
+    tray._system_suspended = False
+    assert manager.try_begin_download()
+    worker = threading.Thread(
+        target=tray_indicator.TrayIndicator._run_recommended_model_download,
+        args=(tray, "whisper_cpp", recommendation, object()),
+    )
+    worker.start()
+    try:
+        assert downloading.wait(1)
+        tray_indicator.TrayIndicator._on_auto_pause(tray)
+        assert manager.is_auto_paused
+        assert manager.model is None
+    finally:
+        finish_download.set()
+        worker.join(2)
+    assert not worker.is_alive()
+    assert downloaded == [recommendation.model_id]
+    assert not manager.model_ready
+    assert not manager.download_in_progress
+    assert tray._model_download_active is False
+    title, body, _icon = notifications.notify.call_args.args
+    assert title == "Speech model downloaded"
+    assert "resumes" in body
+    assert "Press" not in body
+    with (tmp_path / "config.json").open() as handle:
+        saved = json.load(handle)["speech_recognition"]
+    assert saved["model_size"] == recommendation.model_id
+
+    tray_indicator.TrayIndicator._on_auto_resume(tray)
+    assert not manager.is_auto_paused
+    assert manager.model == (saved["engine"], saved["model_size"])
+    assert manager.model_ready
+
+
+@pytest.mark.parametrize("failure", ["download", "initialize"])
+def test_paused_download_or_initializer_exception_still_fails_without_saving(
+    monkeypatch,
+    tray_indicator,
+    recommendation,
+    download_manager,
+    download_config,
+    tmp_path,
+    failure,
+):
+    """Being paused must never turn a real transfer/load failure into success."""
+    manager = download_manager
+    manager.unload_model(reason="auto_pause")
+
+    def initialize():
+        if manager.model_size == recommendation.model_id:
+            raise RuntimeError("model load failed")
+        manager.model = (manager.engine, manager.model_size)
+        manager._model_initialized = True
+
+    if failure == "download":
+        download = Mock(side_effect=OSError("network failed"))
+    else:
+        download = Mock()
+        monkeypatch.setattr(manager, "_init_selected_engine", initialize)
+    monkeypatch.setattr(manager, "_download_selected_model_if_missing", download)
+    notifications = Mock()
+    monkeypatch.setattr(tray_indicator, "notifications", notifications)
+    monkeypatch.setattr(tray_indicator, "_idle_once", lambda func, *args: func(*args))
+    tray = Mock(speech_engine=manager, config_manager=download_config)
+    tray._model_download_active = True
+    assert manager.try_begin_download()
+    tray_indicator.TrayIndicator._run_recommended_model_download(
+        tray, "whisper_cpp", recommendation, object()
+    )
+    assert notifications.notify.call_args.args[0] == "Model download failed"
+    assert manager.model_size == "tiny"
+    with (tmp_path / "config.json").open() as handle:
+        assert json.load(handle)["speech_recognition"]["model_size"] == "tiny"
+    assert not manager.download_in_progress
+    assert tray._model_download_active is False
+    assert manager._download_progress_callback is None
+
+
+def test_paused_resident_model_is_reported_as_waiting_for_resume(
+    tray_indicator, tray, recommendation
+):
+    """A pending unload can leave resident weights while dictation is blocked."""
+    tray.speech_engine.is_auto_paused = True
+    with (
+        patch.object(tray_indicator, "notifications") as notifications,
+        patch.object(tray_indicator, "_idle_once", side_effect=lambda func, *args: func(*args)),
+    ):
+        tray_indicator.TrayIndicator._run_recommended_model_download(
+            tray, "whisper_cpp", recommendation, object()
+        )
+    assert notifications.notify.call_args.args[0] == "Speech model downloaded"
+    assert "resumes" in notifications.notify.call_args.args[1]
+    tray.config_manager.save_config.assert_called_once_with()
+
+
+@pytest.mark.parametrize("paused", [False, True])
+@pytest.mark.parametrize("changed", [{"engine": "vosk"}, {"model_size": "medium"}])
+def test_superseded_download_target_is_not_saved_even_with_a_ready_model(
+    tray_indicator, tray, recommendation, changed, paused
+):
+    """Readiness alone must not save a downloaded choice over a newer selection."""
+    tray.speech_engine.is_auto_paused = paused
+
+    def supersede(**kwargs):
+        for name, value in changed.items():
+            setattr(tray.speech_engine, name, value)
+
+    tray.speech_engine.reconfigure.side_effect = supersede
+    with (
+        patch.object(tray_indicator, "notifications") as notifications,
+        patch.object(tray_indicator, "_idle_once", side_effect=lambda func, *args: func(*args)),
+    ):
+        tray_indicator.TrayIndicator._run_recommended_model_download(
+            tray, "whisper_cpp", recommendation, object()
+        )
+    tray.config_manager.set_model_size_for_engine.assert_not_called()
+    tray.config_manager.save_config.assert_not_called()
+    assert notifications.notify.call_args.args[0] == "Model download failed"
+
+
+def test_download_save_finishes_before_a_new_settings_model_apply(
+    monkeypatch, settings_dialog, tray_indicator, recommendation, download_manager, download_config
+):
+    """Settings cannot overtake the tray between its model apply and config save."""
+    manager = download_manager
+    save_entered, finish_save, settings_started, settings_done = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+    monkeypatch.setattr(manager, "_download_selected_model_if_missing", lambda: None)
+    save = download_config.save_config
+
+    def tray_save():
+        if threading.current_thread() is worker:
+            save_entered.set()
+            assert finish_save.wait(3)
+        return save()
+
+    monkeypatch.setattr(download_config, "save_config", tray_save)
+    monkeypatch.setattr(tray_indicator, "notifications", Mock())
+    monkeypatch.setattr(tray_indicator, "_idle_once", lambda func, *args: func(*args))
+    tray = Mock(speech_engine=manager, config_manager=download_config)
+    dialog = Mock(speech_engine=manager, config_manager=download_config)
+    dialog._save_selected_settings = settings_dialog.SettingsDialog._save_selected_settings.__get__(
+        dialog
+    )
+    errors = []
+
+    def apply_settings():
+        settings_started.set()
+        try:
+            assert settings_dialog.SettingsDialog._apply_settings_internal(
+                dialog,
+                {"engine": "whisper_cpp", "model_size": "medium"},
+                raise_errors=True,
+            )
+        except Exception as error:
+            errors.append(error)
+        finally:
+            settings_done.set()
+
+    worker = threading.Thread(
+        target=tray_indicator.TrayIndicator._run_recommended_model_download,
+        args=(tray, "whisper_cpp", recommendation, object()),
+    )
+    settings_worker = threading.Thread(target=apply_settings)
+    assert manager.try_begin_download()
+    worker.start()
+    try:
+        assert save_entered.wait(1)
+        settings_worker.start()
+        assert settings_started.wait(1)
+        assert not settings_done.wait(0.1)
+        assert manager.model_size == recommendation.model_id
+    finally:
+        finish_save.set()
+        worker.join(2)
+        if settings_worker.ident is not None:
+            settings_worker.join(2)
+    assert not worker.is_alive()
+    assert not settings_worker.is_alive()
+    assert errors == []
+    assert manager.model_size == "medium"
+    assert download_config.get("speech_recognition", "model_size") == "medium"
 
 
 class TestOneDownloadAtATime:

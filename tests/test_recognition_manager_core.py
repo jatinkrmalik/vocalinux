@@ -507,6 +507,7 @@ class TestStartStopRecognition(unittest.TestCase):
         self.threadInstance.join.side_effect = lambda timeout=None: setattr(
             self.threadInstance.is_alive, "return_value", False
         )
+        manager._worker_exited.set()
 
         manager.stop_recognition()
 
@@ -590,6 +591,7 @@ class TestPushToTalkMode(unittest.TestCase):
 
         manager.audio_thread = self.threadInstance
         manager.recognition_thread = self.threadInstance
+        manager._worker_exited.set()
         manager.stop_recognition()
         self.assertEqual(manager._recognition_mode, "toggle")
 

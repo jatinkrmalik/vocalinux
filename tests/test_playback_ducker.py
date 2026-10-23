@@ -730,6 +730,8 @@ def test_recognition_hook_schedules_after_start_and_restores_before_stop_cue(
         thread_cls.return_value = MagicMock()
         thread_cls.return_value.is_alive.return_value = False
         assert manager.start_recognition() is True
+        assert manager._worker_exited is not None
+        manager._worker_exited.set()
         manager.stop_recognition()
 
     start_at = timeline.index("start_sound")

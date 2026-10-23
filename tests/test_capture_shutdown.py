@@ -25,6 +25,7 @@ def manager(monkeypatch: pytest.MonkeyPatch) -> Generator[rm.SpeechRecognitionMa
     """Use real threads, mocked engines and short, independently adjustable budgets."""
     monkeypatch.setattr(rm.SpeechRecognitionManager, "_init_vosk", lambda self: None)
     monkeypatch.setattr(rm, "load_silero_vad", lambda: None)
+    monkeypatch.setattr(rm.SpeechRecognitionManager, "_download_selected_model_if_missing", Mock())
     monkeypatch.setitem(sys.modules, "numpy", sys._vocalinux_real_numpy)
     for name in ("play_start_sound", "play_stop_sound", "play_error_sound"):
         monkeypatch.setattr(rm, name, Mock())
@@ -208,7 +209,11 @@ def test_reload_callers_report_timeout_before_engine_handoff(
     manager._model_initialized = False
     original_model = manager.model
     original_timeout = manager.silence_timeout
-    settings = {"silence_timeout": 1.25} if operation == "reconfigure" else {}
+    settings = (
+        {"silence_timeout": 1.25, "audio_device_name": "Configured microphone"}
+        if operation == "reconfigure"
+        else {}
+    )
     if operation == "unload_model":
         settings = {"reason": "manual"}
     loading = threading.Event()
@@ -604,10 +609,12 @@ def test_lifecycle_operation_supersedes_deferred_auto_pause_work(
         if operation == "reconfigure":
             flow.resume_started.clear()
 
+    if operation == "reconfigure" and pending == "unload":
+        flow.unload_started.clear()
     started = time.monotonic()
     with pytest.raises(TimeoutError, match="still loading"):
         if operation == "reconfigure":
-            manager.reconfigure(silence_timeout=1.25)
+            manager.reconfigure(silence_timeout=1.25, audio_device_name="Configured microphone")
         elif operation == "system_resume":
             manager.reinitialize_after_resume()
         else:
@@ -617,6 +624,9 @@ def test_lifecycle_operation_supersedes_deferred_auto_pause_work(
     if operation == "reconfigure" and pending == "resume":
         assert flow.resume_started.wait(1)
         assert len(flow.resume_threads) == 2
+    if operation == "reconfigure" and pending == "unload":
+        assert flow.unload_started.wait(1)
+        assert len(flow.unload_threads) == 2
     flow.finish_reload()
     loaded_model = manager.model
     flow.release_resume.set()
@@ -632,6 +642,13 @@ def test_lifecycle_operation_supersedes_deferred_auto_pause_work(
         assert not manager.is_auto_paused
         return
     flow.reinit.assert_not_called()
+    if operation == "reconfigure" and pending == "unload":
+        flow.backend.cleanup.assert_called_once_with()
+        flow.http_session.close.assert_called_once_with()
+        assert flow.cleanup_during_reload == [False]
+        assert manager.model is None
+        assert manager.is_auto_paused
+        return
     flow.backend.cleanup.assert_not_called()
     flow.http_session.close.assert_not_called()
     assert manager.model is loaded_model
@@ -801,7 +818,9 @@ def test_new_lifecycle_request_supersedes_wake_recovery(
                 manager.unload_model(reason="manual")
             elif operation in ("reconfigure", "reconfigure_model"):
                 manager.reconfigure(
-                    silence_timeout=1.25, force_reinit=operation == "reconfigure_model"
+                    silence_timeout=1.25,
+                    audio_device_name="Configured microphone",
+                    force_reinit=operation == "reconfigure_model",
                 )
             else:
                 manager.reinitialize_after_resume()
@@ -1004,6 +1023,7 @@ def test_failed_reconfigure_retains_deferred_resume(
                 engine="whisper" if restart else None,
                 model_size="small" if restart else None,
                 silence_timeout=1.25,
+                audio_device_name="Configured microphone",
             )
         assert time.monotonic() - started < 0.5
         assert flow.resume_started.wait(1)
@@ -1054,7 +1074,9 @@ def test_new_request_supersedes_failed_reconfigure_recovery(
     assert flow.resume_started.wait(1)
     flow.resume_started.clear()
     with pytest.raises(TimeoutError, match="still loading"):
-        manager.reconfigure(silence_timeout=1.25, force_reinit=restart)
+        manager.reconfigure(
+            silence_timeout=1.25, audio_device_name="Configured microphone", force_reinit=restart
+        )
     assert flow.resume_started.wait(1)
     assert len(flow.resume_threads) == 2
 
@@ -1117,10 +1139,18 @@ def test_successful_reconfigure_takes_over_deferred_resume(
     monkeypatch.setattr(manager, "_init_vosk", initialize)
     monkeypatch.setattr(manager, "_init_selected_engine", initialize)
     reconfigure = threading.Thread(
-        target=manager.reconfigure, kwargs={"silence_timeout": 1.25, "force_reinit": restart}
+        target=manager.reconfigure,
+        kwargs={
+            "silence_timeout": 1.25,
+            "audio_device_name": "Configured microphone",
+            "force_reinit": restart,
+        },
     )
     try:
         reconfigure.start()
+        if not restart:
+            assert flow.resume_started.wait(1)
+            flow.release_resume.set()
         assert initializing.wait(1)
         if new_pause:
             flow.unload_started.clear()
@@ -1353,6 +1383,8 @@ def test_late_recognizer_keeps_its_queue_and_cannot_change_next_session(
     old_session = manager._session
     try:
         manager.stop_recognition()
+        assert manager.is_transcribing()
+        assert manager.cancel_transcription()
         monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
         assert manager.start_recognition()
         assert manager._session is not old_session
@@ -1397,6 +1429,8 @@ def test_stale_recognizer_cannot_deliver_text_after_slow_corrections(
     old_worker = manager.recognition_thread
     try:
         manager.stop_recognition()
+        assert manager.is_transcribing()
+        assert manager.cancel_transcription()
         monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
         assert manager.start_recognition()
     finally:
@@ -1546,3 +1580,439 @@ def test_reentrant_restart_cannot_be_overwritten_by_original_start(
     assert captured_sessions == [manager._session]
     assert manager.should_record
     assert manager.state == RecognitionState.LISTENING
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+@pytest.mark.parametrize("superseded", [False, True])
+def test_wake_after_pause_during_prefetch_keeps_current_model_request(
+    manager: rm.SpeechRecognitionManager,
+    monkeypatch: pytest.MonkeyPatch,
+    cancelled: bool,
+    superseded: bool,
+) -> None:
+    """Wake waits for Settings rollback/download; a newer pause still wins."""
+    downloading = threading.Event()
+    release_download = threading.Event()
+    resuming = threading.Event()
+    resumed = threading.Event()
+    resume_workers: list[threading.Thread] = []
+    errors: list[Exception] = []
+    initialized: list[tuple[str, str]] = []
+    selected_model = object()
+    previous_engine, previous_size = manager.engine, manager.model_size
+    resume_after_reconfigure = manager._resume_after_reconfigure
+
+    def prefetch() -> None:
+        downloading.set()
+        assert release_download.wait(3)
+        if cancelled:
+            raise RuntimeError("Download cancelled")
+
+    def initialize() -> None:
+        initialized.append((manager.engine, manager.model_size))
+        manager.model = selected_model
+        manager._model_initialized = True
+
+    def reconfigure() -> None:
+        try:
+            manager.reconfigure(engine="whisper_cpp", model_size="medium", force_download=True)
+        except Exception as error:
+            errors.append(error)
+
+    def resume(done: threading.Event, request: object) -> None:
+        resume_workers.append(threading.current_thread())
+        resuming.set()
+        try:
+            resume_after_reconfigure(done, request)
+        finally:
+            resumed.set()
+
+    monkeypatch.setattr(manager, "_download_selected_model_if_missing", prefetch)
+    monkeypatch.setattr(manager, "_init_selected_engine", initialize)
+    monkeypatch.setattr(manager, "_init_whispercpp", initialize)
+    monkeypatch.setattr(manager, "_init_vosk", initialize)
+    monkeypatch.setattr(manager, "_resume_after_reconfigure", resume)
+    settings_worker = threading.Thread(target=reconfigure)
+    settings_worker.start()
+    try:
+        assert downloading.wait(1)
+        manager.unload_model(reason="auto_pause")
+        assert manager.is_auto_paused
+        manager.reinitialize_after_resume(auto_resume=True)
+        assert resuming.wait(1)
+        assert initialized == []
+        if superseded:
+            manager.unload_model(reason="auto_pause")
+        release_download.set()
+        settings_worker.join(2)
+        assert resumed.wait(2)
+    finally:
+        release_download.set()
+        settings_worker.join(2)
+        for worker in resume_workers:
+            worker.join(2)
+            assert not worker.is_alive()
+    assert not settings_worker.is_alive()
+    assert [str(error) for error in errors] == (["Download cancelled"] if cancelled else [])
+    assert manager.is_auto_paused is superseded
+    if superseded:
+        assert initialized == []
+        assert manager.model is None
+    else:
+        assert initialized == [
+            (previous_engine, previous_size) if cancelled else ("whisper_cpp", "medium")
+        ]
+        assert manager.model is selected_model
+        assert manager.model_ready
+
+
+@pytest.mark.parametrize("prefetch", [False, True])
+def test_cancelled_settings_and_wake_cannot_mix_engine_and_model(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch, prefetch: bool
+) -> None:
+    """A wake cannot load one engine while Settings rolls back to another."""
+    settings_waiting = threading.Event()
+    release_settings = threading.Event()
+    initializing = threading.Event()
+    release_initializer = threading.Event()
+    settings_finished = threading.Event()
+    wake_workers: list[threading.Thread] = []
+    errors: list[Exception] = []
+    real_lock = threading.Lock()
+    real_lock.acquire()
+    gate_settings = True
+    settings_worker: threading.Thread
+    manager.model = (manager.engine, manager.model_size)
+    resume_after_reload = manager._resume_after_reload
+
+    class ModelLock:
+        def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+            nonlocal gate_settings
+            if threading.current_thread() is settings_worker and gate_settings:
+                gate_settings = False
+                settings_waiting.set()
+                assert release_settings.wait(3)
+            if timeout < 0:
+                return real_lock.acquire(blocking=blocking)
+            return real_lock.acquire(blocking=blocking, timeout=timeout)
+
+        def release(self) -> None:
+            real_lock.release()
+
+    def initialize() -> None:
+        loaded_for = (manager.engine, manager.model_size)
+        initializing.set()
+        assert release_initializer.wait(3)
+        manager.model = loaded_for
+        manager._model_initialized = True
+
+    def reconfigure() -> None:
+        try:
+            manager.reconfigure(engine="whisper_cpp", model_size="medium", force_download=prefetch)
+        except Exception as error:
+            errors.append(error)
+        finally:
+            settings_finished.set()
+
+    def wake(worker: threading.Thread | None, request: object) -> None:
+        wake_workers.append(threading.current_thread())
+        resume_after_reload(worker, request)
+
+    monkeypatch.setattr(manager, "_model_lock", ModelLock())
+    monkeypatch.setattr(manager, "_init_selected_engine", initialize)
+    monkeypatch.setattr(manager, "_init_whispercpp", initialize)
+    monkeypatch.setattr(manager, "_init_vosk", initialize)
+    monkeypatch.setattr(manager, "_resume_after_reload", wake)
+    assert manager.try_begin_download()
+    settings_worker = threading.Thread(target=reconfigure)
+    settings_worker.start()
+    try:
+        assert settings_waiting.wait(1)
+        manager.reinitialize_after_resume(auto_resume=True)
+        manager.cancel_download()
+        real_lock.release()
+        # If wake owns a separate initializer, let it enter before rollback.
+        # A correctly serialized wake stays pending until Settings settles.
+        initializing.wait(0.2)
+        release_settings.set()
+        settings_finished.wait(0.3)
+    finally:
+        release_settings.set()
+        release_initializer.set()
+        settings_worker.join(2)
+        for worker in wake_workers:
+            worker.join(2)
+            assert not worker.is_alive()
+        manager.end_download()
+    assert not settings_worker.is_alive()
+    assert [str(error) for error in errors] == ["Download cancelled"]
+    assert manager.model == (manager.engine, manager.model_size)
+    assert manager.model_ready
+
+
+@pytest.mark.parametrize("prefetch", [False, True])
+def test_settings_model_handoff_blocks_new_dictation_until_complete(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch, prefetch: bool
+) -> None:
+    """A new engine name cannot dispatch audio through the previous model."""
+    waiting = threading.Event()
+    errors: list[Exception] = []
+    old_model = manager.model
+    old_engine = manager.engine
+    selected_model = object()
+    original_wait = manager._wait_for_model_settings_handoff
+
+    def wait_for_handoff() -> None:
+        waiting.set()
+        original_wait()
+
+    def initialize() -> None:
+        manager.model = selected_model
+        manager._model_initialized = True
+
+    def apply() -> None:
+        try:
+            manager.reconfigure(engine="whisper_cpp", model_size="medium", force_download=prefetch)
+        except Exception as error:
+            errors.append(error)
+
+    monkeypatch.setattr(manager, "_wait_for_model_settings_handoff", wait_for_handoff)
+    monkeypatch.setattr(manager, "_init_selected_engine", initialize)
+    monkeypatch.setattr(manager, "_record_audio", lambda: None)
+    monkeypatch.setattr(manager, "_perform_recognition", lambda: None)
+    manager._model_lock.acquire()
+    settings = threading.Thread(target=apply)
+    settings.start()
+    try:
+        assert waiting.wait(1)
+        assert manager.engine == old_engine
+        assert manager.model is old_model
+        assert manager.state is RecognitionState.IDLE
+        assert not manager.start_recognition()
+        rm._show_notification.assert_called_with(
+            "Speech settings are changing",
+            "Dictation will be available when the settings have finished applying.",
+            "dialog-information",
+        )
+    finally:
+        manager._model_lock.release()
+        settings.join(2)
+    assert not settings.is_alive()
+    assert errors == []
+    assert manager.engine == "whisper_cpp"
+    assert manager.model is selected_model
+    assert manager.start_recognition()
+    manager.stop_recognition()
+
+
+@pytest.mark.parametrize("settings_during_reload", [False, True])
+def test_settings_preserves_active_game_unload_obligation(
+    manager: rm.SpeechRecognitionManager,
+    auto_pause_flow: _AutoPauseFlow,
+    settings_during_reload: bool,
+) -> None:
+    """Hot Settings leave the original game unload and buffered worker intact."""
+    flow = auto_pause_flow
+    flow.poll(True)
+    assert flow.unload_started.wait(1)
+    if not settings_during_reload:
+        flow.finish_reload()
+    request = manager._model_request
+    worker = manager.recognition_thread
+    manager.reconfigure(silence_timeout=1.25)
+    assert manager.silence_timeout == 1.25
+    assert manager._model_request is request
+    assert manager.recognition_thread is worker
+    assert len(flow.unload_threads) == 1
+    if settings_during_reload:
+        flow.finish_reload()
+    flow.release_unload.set()
+    flow.join(flow.unload_threads)
+    assert manager.model is None
+    assert manager.is_auto_paused
+    assert flow.monitor.paused
+    flow.backend.cleanup.assert_called_once_with()
+    flow.http_session.close.assert_called_once_with()
+    assert flow.cleanup_during_reload == [False]
+
+
+@pytest.mark.parametrize("new_pause", [False, True])
+def test_fast_settings_defers_inherited_resume_without_blocking_caller(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch, new_pause: bool
+) -> None:
+    """The GTK voice-command toggle stays responsive behind a native initializer."""
+    manager._auto_paused = True
+    manager._auto_resume_pending = True
+    manager.model = None
+    manager._model_initialized = False
+    returned = threading.Event()
+    recovery_started = threading.Event()
+    workers: list[threading.Thread] = []
+    errors: list[Exception] = []
+    initialized = Mock()
+    resumed_model = object()
+    original_resume = manager._resume_after_reload
+    original_unload = manager._unload_after_reload
+
+    def initialize() -> None:
+        initialized()
+        manager.model = resumed_model
+        manager._model_initialized = True
+
+    def resume(worker: threading.Thread | None, request: object) -> None:
+        workers.append(threading.current_thread())
+        recovery_started.set()
+        original_resume(worker, request)
+
+    def unload(worker: threading.Thread | None, request: object) -> None:
+        workers.append(threading.current_thread())
+        original_unload(worker, request)
+
+    def toggle() -> None:
+        try:
+            manager.reconfigure(voice_commands_enabled=False, force_download=False)
+        except Exception as error:
+            errors.append(error)
+        finally:
+            returned.set()
+
+    monkeypatch.setattr(manager, "_init_vosk", initialize)
+    monkeypatch.setattr(manager, "_resume_after_reload", resume)
+    monkeypatch.setattr(manager, "_unload_after_reload", unload)
+    manager._model_lock.acquire()
+    manager.reinitialize_after_resume(auto_resume=True)
+    assert recovery_started.wait(1)
+    request = manager._model_request
+    caller = threading.Thread(target=toggle)
+    caller.start()
+    try:
+        assert returned.wait(0.5)
+        assert manager._model_request is request
+        assert len(workers) == 1
+        assert manager._voice_commands_preference is False
+        assert manager.is_auto_paused
+        if new_pause:
+            manager.unload_model(reason="auto_pause")
+    finally:
+        manager._model_lock.release()
+        caller.join(2)
+        for worker in workers:
+            worker.join(2)
+            assert not worker.is_alive()
+    assert not caller.is_alive()
+    assert errors == []
+    if new_pause:
+        initialized.assert_not_called()
+        assert manager.model is None
+        assert manager.is_auto_paused
+    else:
+        initialized.assert_called_once_with()
+        assert manager.model is resumed_model
+        assert manager.model_ready
+        assert not manager.is_auto_paused
+
+
+@pytest.mark.parametrize("failure", ["prefetch", "cancel", "initialize"])
+def test_rejected_settings_preserves_active_pause_after_rollback(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Every rejected Settings path retains the configured game's unload request."""
+    manager._auto_paused = True
+    old_model = manager.model
+    unload_started = threading.Event()
+    workers: list[threading.Thread] = []
+    original_unload = manager._unload_after_reload
+
+    def unload(worker: threading.Thread | None, request: object) -> None:
+        workers.append(threading.current_thread())
+        unload_started.set()
+        original_unload(worker, request)
+
+    def initialize() -> None:
+        if manager.engine == "whisper_cpp":
+            raise RuntimeError("initialization rejected")
+        manager.model = old_model
+        manager._model_initialized = True
+
+    monkeypatch.setattr(manager, "_unload_after_reload", unload)
+    monkeypatch.setattr(manager, "_init_selected_engine", initialize)
+    if failure == "prefetch":
+        monkeypatch.setattr(
+            manager,
+            "_download_selected_model_if_missing",
+            Mock(side_effect=RuntimeError("prefetch rejected")),
+        )
+    elif failure == "cancel":
+        assert manager.try_begin_download()
+        manager.cancel_download()
+    try:
+        with pytest.raises(RuntimeError):
+            manager.reconfigure(
+                engine="whisper_cpp", model_size="medium", force_download=failure == "prefetch"
+            )
+        assert unload_started.wait(1)
+    finally:
+        for worker in workers:
+            worker.join(2)
+            assert not worker.is_alive()
+        if failure == "cancel":
+            manager.end_download()
+    assert manager.engine == "vosk"
+    assert manager.model is None
+    assert manager.is_auto_paused
+    assert not manager._auto_resume_pending
+
+
+def test_fast_settings_defers_even_uncontended_slow_resume(
+    manager: rm.SpeechRecognitionManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A free lock must not move a slow native reload onto the GTK caller."""
+    manager._auto_paused = True
+    manager._auto_resume_pending = True
+    manager.model = None
+    manager._model_initialized = False
+    loading = threading.Event()
+    release = threading.Event()
+    returned = threading.Event()
+    errors: list[Exception] = []
+    resumed_model = object()
+
+    def initialize() -> None:
+        loading.set()
+        assert release.wait(3)
+        manager.model = resumed_model
+        manager._model_initialized = True
+
+    def toggle() -> None:
+        try:
+            manager.reconfigure(voice_commands_enabled=False, force_download=False)
+        except Exception as error:
+            errors.append(error)
+        finally:
+            returned.set()
+
+    monkeypatch.setattr(manager, "_init_vosk", initialize)
+    resuming = threading.Thread(
+        target=manager.reinitialize_after_resume, kwargs={"auto_resume": True}
+    )
+    caller = threading.Thread(target=toggle)
+    resuming.start()
+    try:
+        assert loading.wait(1)
+        request = manager._model_request
+        caller.start()
+        assert returned.wait(0.5)
+        assert not release.is_set()
+        assert manager.is_auto_paused
+        assert manager._model_request is request
+    finally:
+        release.set()
+        resuming.join(2)
+        if caller.ident is not None:
+            caller.join(2)
+    assert not resuming.is_alive()
+    assert not caller.is_alive()
+    assert errors == []
+    assert manager.model is resumed_model
+    assert manager.model_ready
+    assert not manager.is_auto_paused

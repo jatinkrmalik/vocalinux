@@ -158,6 +158,14 @@ flatpak run com.vocalinux.Vocalinux
 
 Whisper.cpp + Vulkan. It is **not on Flathub** (submission [flathub#9368](https://github.com/flathub/flathub/pull/9368) closed 2026-07-23 on policy grounds). Details: [packaging/flatpak/README.md](../packaging/flatpak/README.md).
 
+On native X11, hotkeys work without device access (GNOME X11 is the exception:
+its X server hides physical keys from the X11 listener, so it also needs
+`/dev/input`). On Wayland, the built-in hotkey needs `/dev/input` (`--device=input` on Flatpak 1.15.6 or newer, or
+`--device=all` on older versions); otherwise enable External Activation and
+bind a desktop shortcut to the D-Bus `Toggle` command in
+[Running without device access](../packaging/flatpak/README.md#running-without-device-access).
+Desktop shortcuts only toggle dictation, so they cannot support push-to-talk.
+
 ## Snap (Ubuntu Snap Store)
 
 Listing: [snapcraft.io/vocalinux](https://snapcraft.io/vocalinux) (issue [#48](https://github.com/VocaHQ/vocalinux/issues/48)). Recipe: `snap/snapcraft.yaml`. Tagged `v*` releases attach `vocalinux_<version>_amd64.snap` to the GitHub Release and try Snap Store `edge` and `candidate` when credentials are set. `stable` is promoted from `candidate` after QA.

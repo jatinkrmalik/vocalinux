@@ -104,7 +104,7 @@ class TestMainModule(unittest.TestCase):
 
         self.assertEqual(LANGUAGE_CHOICES, tuple(SUPPORTED_LANGUAGES.keys()))
         # Spot-check newly exposed languages (issue #565 and catalog expansion).
-        for lang in ["auto", "en-us", "hu", "ja", "ko", "ar", "nl", "pl", "uk"]:
+        for lang in ["auto", "en-us", "hu", "ja", "ko", "ar", "nl", "pl", "sl", "uk"]:
             self.assertIn(lang, LANGUAGE_CHOICES)
             with patch("sys.argv", ["vocalinux", "--language", lang]):
                 args = parse_arguments()
@@ -234,7 +234,7 @@ class TestMainModule(unittest.TestCase):
                 model_size="medium",
                 language="en-us",
                 vad_sensitivity=3,
-                silence_timeout=2.0,
+                silence_timeout=1.2,
                 stop_sound_guard_ms=200,
                 buffer_during_reload=True,
                 voice_commands_enabled=None,
