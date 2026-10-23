@@ -34,7 +34,9 @@ When Vocalinux injects through the clipboard (the usual Wayland / ydotool path),
 
 On non-US layouts such as German Neo, that chord uses the key that types **v** on the active layout (not physical KEY_V). Nested terminal panels inside an IDE are often invisible to window-class detection. If paste lands as a literal `^V` or does nothing, open **Settings → Dictation → Clipboard Paste Shortcut** and choose **Ctrl+Shift+V**.
 
-The clipboard copy behind that paste is temporary: your previous clipboard comes back right after. When the copy goes through `wl-copy` 2.2 or newer, it is also marked sensitive (`wl-copy --sensitive`), and clipboard managers that honor that hint, such as Klipper or cliphist, keep it out of their history. Older `wl-copy` builds and the XWayland path (`xclip`/`xsel`) have no such hint, so there the dictated text can still show up in history. With **Settings → Dictation → Copy to Clipboard** on, the dictated text is an ordinary copy and stays in history.
+On X11, **Paste long dictations** opts in to clipboard-pasting dictations of 30 or more characters instead of typing them key by key. It is off by default. Vocalinux restores the previous clipboard contents after pasting unless **Copy to Clipboard** is enabled. If the clipboard contains an image or other non-text content, Vocalinux types the dictation and leaves that content alone.
+
+The clipboard copy behind these pastes is temporary: your previous clipboard comes back right after. When the copy goes through `wl-copy` 2.2 or newer, it is also marked sensitive (`wl-copy --sensitive`), and clipboard managers that honor that hint, such as Klipper or cliphist, keep it out of their history. Older `wl-copy` builds and X11 or XWayland pastes (`xclip`/`xsel`) have no such hint, so there the dictated text can still show up in history. With **Settings → Dictation → Copy to Clipboard** on, the dictated text is an ordinary copy and stays in history.
 
 **Other audio.** Settings → Audio → Other audio can lower speakers and headphones while the microphone is open, then put that volume back. It stays off until you turn it on. Level while dictating is a percent of the current volume (0 is silent). Quitting mid-dictation puts the volume back; if the app crashes first, the next launch does.
 
@@ -130,13 +132,19 @@ vocalinux --start    # start voice typing
 vocalinux --stop     # stop voice typing
 ```
 
-Then bind a compositor shortcut to `vocalinux --toggle`. On KDE Plasma:
+Then bind a compositor shortcut to `vocalinux --toggle` on a native install.
+For Flatpak, bind the `gdbus` command in
+[Running without device access](../packaging/flatpak/README.md#running-without-device-access)
+instead, because `vocalinux --toggle` is not on the host PATH. A desktop
+shortcut only sends the key press, so it can toggle dictation but cannot
+support push-to-talk because it never sees the release. On KDE Plasma:
 
 1. Open **System Settings -> Keyboard -> Shortcuts -> Add New -> Command or Script**
    (older Plasma: **System Settings -> Shortcuts -> Custom Shortcuts -> Edit ->
    New -> Global Shortcut -> Command/URL**).
 
-2. Bind a key combination of your choice to the command `vocalinux --toggle`.
+2. Bind a key combination of your choice to the command `vocalinux --toggle`
+   for a native install. For Flatpak, use the D-Bus command linked above.
 
 Now your chosen key combination toggles dictation, handled by the compositor
 rather than by Vocalinux reading the keyboard directly. This works the same way
