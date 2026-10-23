@@ -894,12 +894,16 @@ class TestSensitivePasteCopy(unittest.TestCase):
 
     def _run_paste(self, obj: Any, copy_to_clipboard: bool) -> list:
         copy_kwargs: list = []
+        restored = threading.Event()
+
+        def fake_copy(t: str, **kw: Any) -> bool:
+            copy_kwargs.append((t, kw))
+            if t == "original":
+                restored.set()
+            return True
+
         with patch.object(obj, "_read_clipboard", side_effect=["original", "injected text"]):
-            with patch.object(
-                obj,
-                "_copy_to_clipboard",
-                side_effect=lambda t, **kw: copy_kwargs.append((t, kw)) or True,
-            ):
+            with patch.object(obj, "_copy_to_clipboard", side_effect=fake_copy):
                 with patch.object(
                     obj, "_ydotool_ctrl_v_command", return_value=["ydotool", "key", "ctrl+v"]
                 ):
@@ -911,7 +915,10 @@ class TestSensitivePasteCopy(unittest.TestCase):
                             return_value=MagicMock(returncode=0),
                         ):
                             self.assertTrue(obj._inject_via_clipboard_paste("injected text"))
-                            time.sleep(0.5)  # let the restore thread finish
+                            if not copy_to_clipboard:
+                                # The restore runs on a background thread; wait for it
+                                # while the patches are still active.
+                                self.assertTrue(restored.wait(timeout=5), "never restored")
         return copy_kwargs
 
     def test_paste_copy_is_sensitive_and_restore_is_not(self) -> None:
