@@ -321,6 +321,10 @@ class TextInjector:
     # one (readers go through getattr because __new__ tests skip __init__).
     wayland_tool: Optional[str]
 
+    # Whether wl-copy accepts --sensitive; None until first probed. A class
+    # default rather than __init__ state so __new__-built test injectors work.
+    _wl_copy_sensitive_supported: Optional[bool] = None
+
     @staticmethod
     def _accepted_backends_help() -> str:
         """The accepted pin values, for user-facing "expected ..." messages."""
@@ -1316,9 +1320,8 @@ class TextInjector:
         The flag arrived in wl-clipboard 2.2; older builds reject it and the copy
         fails. Probe ``wl-copy --help`` once and cache the answer.
         """
-        cached = getattr(self, "_wl_copy_sensitive_supported", None)
-        if cached is not None:
-            return cached
+        if self._wl_copy_sensitive_supported is not None:
+            return self._wl_copy_sensitive_supported
 
         supported = False
         try:
