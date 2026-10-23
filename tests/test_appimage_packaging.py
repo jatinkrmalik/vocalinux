@@ -142,6 +142,21 @@ def test_appimage_build_smokes_gi_without_host_typelibs():
     assert "unshare --user --mount" in text
 
 
+def test_appimage_build_checks_gi_after_linuxdeploy() -> None:
+    """The GTK plugin must not silently remove gi or the path AppRun imports it from."""
+    text = BUILD_SH.read_text(encoding="utf-8")
+    deploy = text.index('"$TOOLDIR/linuxdeploy" --appdir')
+    check = text.index("== Checking bundled PyGObject after linuxdeploy ==", deploy)
+    smoke = text.index('smoke_gi_imports "$APPDIR"', check)
+    between = text[check:smoke]
+
+    assert 'GI_SITE="$APPDIR/usr/lib/python${PY_VER}/site-packages"' in between
+    assert '"$GI_SITE/gi/__init__.py"' in between
+    assert 'ln -sfn "python${PY_VER}" "$APPDIR/usr/lib/python3"' in between
+    assert "'import gi; print(" in between
+    assert "sys.path:" in text, "isolated GI failures should report where Python looked"
+
+
 def test_appimage_build_rebuilds_pywhispercpp_with_vulkan():
     text = BUILD_SH.read_text()
     assert "GGML_VULKAN=1" in text

@@ -34,7 +34,7 @@ Rules:
 | Piece | Current |
 |---|---|
 | Python | `>=3.11` (`requires-python` in `pyproject.toml`; CI: 3.11–3.14). Floor, classifiers, CI matrix and `install.sh` must agree — `tests/test_python_version_policy.py` |
-| GTK | GTK 3 via distro `python3-gi` (PyGObject). Never pip-install it |
+| GTK | Runtime `venv/` uses distro `python3-gi` (PyGObject), never pip-install it; uv builds the locked PyGObject in the separate dev `.venv/` on supported distros |
 | uv | `>=0.12,<0.14` (`[tool.uv]` in `pyproject.toml`). `uv.lock` is the source of truth; CI runs `uv sync --locked` / `uv run --locked`, which fails on drift |
 | just | https://just.systems or distro package `just` |
 | Format / lint / types | Black + isort (line length 100), flake8 (`E9,F63,F7,F82` only), mypy `src/` (targets 3.11 and runs as a CI lint gate). The tools live in the `lint` dependency group, not the `dev` extra, so CI can install them without building the project |
@@ -42,7 +42,7 @@ Rules:
 
 Two virtualenvs, on purpose:
 
-- **`.venv/`** — uv's, for dev tooling. `just deps` syncs it; every other Python `just` recipe uses `uv run --no-sync` so it does not prune extras that `just deps-all` installed. No activation needed.
+- **`.venv/`** — uv's, for dev tooling. `just deps` checks native headers before syncing it (on Fedora 40+, install `glib2-devel`, `cairo-gobject-devel`, `gobject-introspection-devel`, `libffi-devel` and the PortAudio headers); every other Python `just` recipe uses `uv run --no-sync` so it does not prune extras that `just deps-all` installed. No activation needed.
 - **`venv/`** — what `install.sh` builds for the app itself, from the *system* Python so distro `gi` is importable.
 
 Never run `install.sh` from an activated `.venv`: it drops an inherited `VIRTUAL_ENV` from `PATH` and picks `$SYSTEM_PYTHON` (default `/usr/bin/python3`) precisely because a venv built from uv's interpreter cannot see distro PyGObject.
@@ -120,7 +120,7 @@ Use **uv 0.13.3** for `just lock` and `just export-check`, matching CI. Other ve
 
 | Constraint | Rule |
 |---|---|
-| PyGObject | Distro `python3-gi` only, via `--system-site-packages`. Pip install fails on Ubuntu 24.04 (`girepository-2.0`). uv-managed interpreters do not see distro `gi` unless the venv is created that way |
+| PyGObject | The runtime installer uses distro `python3-gi` via `--system-site-packages`; do not pip-install it into `venv/`. The dev `.venv/` instead builds the locked version with uv when glib 2.80+ and native headers are available. uv-managed interpreters do not see distro `gi` unless the venv is created with `--system-site-packages` |
 | `[vosk]` extra | Wheel-only on PyPI (no sdist). Never part of a source-buildable lock. `install.sh --engine=vosk` installs it |
 | Whisper CPU torch | `requirements/whisper.txt` is compiled from `requirements/whisper.in`. Pin `torch` to a `+cpu` local version — PyPI CUDA wheels win resolution regardless of index order. OpenAI Whisper does not use `torchaudio`, and the CPU index can lag torch |
 | pywhispercpp | Pinned in `install.sh` as `PYWHISPERCPP_VERSION` (keep in sync with `uv.lock`) |

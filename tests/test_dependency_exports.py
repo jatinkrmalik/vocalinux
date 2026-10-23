@@ -39,6 +39,27 @@ def _pyproject() -> dict[str, Any]:
         return tomllib.load(handle)
 
 
+def test_ci_uv_pin_is_supported_and_consistent() -> None:
+    """All CI jobs must use one supported uv to reproduce the committed exports."""
+    required = _pyproject()["tool"]["uv"]["required-version"]
+    bounds = re.fullmatch(r">=(\d+\.\d+),<(\d+\.\d+)", required)
+    assert bounds, f"unexpected uv required-version: {required!r}"
+
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    steps = re.findall(r"- name: Set up uv\n(.*?)(?=\n\s+- name:|\Z)", workflow, re.DOTALL)
+    assert steps and len(steps) == workflow.count("uses: astral-sh/setup-uv@")
+    pins = []
+    for step in steps:
+        pin = re.search(r'^\s+version: "(\d+\.\d+\.\d+)"$', step, re.MULTILINE)
+        assert pin, "setup-uv in CI must explicitly pin the export generation version"
+        pins.append(pin.group(1))
+    assert len(set(pins)) == 1, "uv versions in CI disagree; exports are byte-for-byte checked"
+
+    minimum, maximum = (tuple(map(int, bound.split("."))) for bound in bounds.groups())
+    minor = tuple(map(int, pins[0].split(".")[:2]))
+    assert minimum <= minor < maximum
+
+
 def _requirement_names(specs: list[str]) -> list[str]:
     """Distribution names out of PEP 508 specifiers, lowercased."""
     return [re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip().lower() for spec in specs]
