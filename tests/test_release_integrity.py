@@ -93,7 +93,8 @@ def test_only_verified_canonical_distributions_are_published():
     assert "python -m build" not in _without_comments(_text())
     assert "pip install" not in _without_comments(block.split("      - name: Create Release")[0])
     assert "pip install" not in _without_comments(_jobs()["publish-pypi"])
-    assert "version: '0.12.23'" in block
+    # Exact uv versions are checked across both workflows in test_dependency_exports.py.
+    assert "astral-sh/setup-uv@" in block
     assert "dist/*.whl" in block and "dist/*.tar.gz" in block
     assert "path: build/reproducible-wheel/" in block
 
@@ -104,7 +105,7 @@ def test_pr_ci_runs_the_same_reproducibility_gate():
     block = ci.split("\n  reproducible-wheel:\n", 1)[1].split("\n  python-lint:", 1)[0]
     assert "python scripts/build_reproducible_wheel.py" in block
     assert "python-version: '3.11'" in block
-    assert "version: '0.12.23'" in block
+    assert "astral-sh/setup-uv@" in block
     assert not re.search(r"^    if:", block, re.M)
 
 

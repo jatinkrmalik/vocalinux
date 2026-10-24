@@ -16,11 +16,16 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 JUSTFILE = REPO_ROOT / "justfile"
 INSTALLER = REPO_ROOT / "install.sh"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "unified-pipeline.yml"
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
+UV_EXPORT_VERSION = "0.13.3"
 REQUIREMENTS = REPO_ROOT / "requirements"
 DEV_EXPORT = REQUIREMENTS / "dev.txt"
 
@@ -39,25 +44,72 @@ def _pyproject() -> dict[str, Any]:
         return tomllib.load(handle)
 
 
-def test_ci_uv_pin_is_supported_and_consistent() -> None:
-    """All CI jobs must use one supported uv to reproduce the committed exports."""
+def _assert_workflow_uv_pins(text: str) -> None:
+    """Check action inputs, not display names or YAML quoting conventions."""
+    jobs = yaml.safe_load(text)["jobs"]
+    checked = []
+    for name, job in jobs.items():
+        for step in job.get("steps", []):
+            if not step.get("uses", "").startswith("astral-sh/setup-uv@"):
+                continue
+            pin = step.get("with", {}).get("version")
+            assert pin == UV_EXPORT_VERSION, (
+                f"{name}: setup-uv must pin the export generation version "
+                f"{UV_EXPORT_VERSION}, got {pin!r}"
+            )
+            checked.append(name)
+    assert checked, "no setup-uv steps checked"
+
+
+@pytest.mark.parametrize("workflow", [WORKFLOW, RELEASE_WORKFLOW], ids=lambda path: path.name)
+def test_ci_uv_pin_is_supported_and_consistent(workflow: Path) -> None:
+    """PR and release jobs must reproduce exports with the same supported uv."""
     required = _pyproject()["tool"]["uv"]["required-version"]
     bounds = re.fullmatch(r">=(\d+\.\d+),<(\d+\.\d+)", required)
     assert bounds, f"unexpected uv required-version: {required!r}"
 
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    steps = re.findall(r"- name: Set up uv\n(.*?)(?=\n\s+- name:|\Z)", workflow, re.DOTALL)
-    assert steps and len(steps) == workflow.count("uses: astral-sh/setup-uv@")
-    pins = []
-    for step in steps:
-        pin = re.search(r'^\s+version: "(\d+\.\d+\.\d+)"$', step, re.MULTILINE)
-        assert pin, "setup-uv in CI must explicitly pin the export generation version"
-        pins.append(pin.group(1))
-    assert len(set(pins)) == 1, "uv versions in CI disagree; exports are byte-for-byte checked"
-
     minimum, maximum = (tuple(map(int, bound.split("."))) for bound in bounds.groups())
-    minor = tuple(map(int, pins[0].split(".")[:2]))
+    minor = tuple(map(int, UV_EXPORT_VERSION.split(".")[:2]))
     assert minimum <= minor < maximum
+    _assert_workflow_uv_pins(workflow.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("name", ["Set up uv", "Set up pinned uv", "Install build tooling", None])
+def test_uv_pin_check_does_not_depend_on_step_name(name: str | None) -> None:
+    step = {"uses": "astral-sh/setup-uv@commit", "with": {"version": UV_EXPORT_VERSION}}
+    if name is not None:
+        step["name"] = name
+    workflow = {"jobs": {"build": {"steps": [step]}, "reusable": {"uses": "./other.yml"}}}
+    _assert_workflow_uv_pins(yaml.safe_dump(workflow))
+
+
+@pytest.mark.parametrize("pin", ["0.12.23", "0.13.2", "latest", None])
+def test_uv_pin_check_rejects_wrong_or_missing_pin_in_any_job(pin: str | None) -> None:
+    workflow = {
+        "jobs": {
+            "lint": {
+                "steps": [
+                    {"uses": "astral-sh/setup-uv@commit", "with": {"version": UV_EXPORT_VERSION}}
+                ]
+            },
+            "wheel": {
+                "steps": [
+                    {
+                        "name": "Set up pinned uv",
+                        "uses": "astral-sh/setup-uv@commit",
+                        "with": {"version": pin} if pin is not None else {},
+                    }
+                ]
+            },
+        }
+    }
+    with pytest.raises(AssertionError, match="wheel: setup-uv must pin"):
+        _assert_workflow_uv_pins(yaml.safe_dump(workflow))
+
+
+def test_uv_pin_check_requires_at_least_one_setup_step() -> None:
+    with pytest.raises(AssertionError, match="no setup-uv steps checked"):
+        _assert_workflow_uv_pins("jobs:\n  build:\n    steps:\n      - run: uv --version\n")
 
 
 def _requirement_names(specs: list[str]) -> list[str]:
