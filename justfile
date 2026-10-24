@@ -5,8 +5,9 @@
 #
 # Two environments, deliberately separate:
 #   .venv/  dev tooling, built by uv from .python-version (3.13). `just deps`
-#           pip-builds PyGObject from the lock and needs libgirepository-2.0-dev
-#           (Ubuntu 24.04+). Debian 12 cannot build 3.56; use `just install-dev`.
+#           builds PyGObject from the lock and needs libgirepository-2.0-dev
+#           (Ubuntu 24.04+) or glib2-devel (Fedora 40+), plus cairo-gobject
+#           headers on Fedora. Debian 12 cannot build 3.56; use `just install-dev`.
 #   venv/   what `just install` creates, always from the system Python so the
 #           distro PyGObject package is importable.
 #           install.sh ignores an activated .venv and rebuilds
@@ -27,13 +28,23 @@ DEV_EXTRAS := "--extra dev --extra vad --group lint"
 default:
     @just --list
 
+# Fail before `uv sync` when the headers pyaudio, pycairo and PyGObject need are
+# absent. Without this, the first error is a C compiler traceback from inside a
+# dependency build, which reads as a uv problem rather than a distro package.
+# PyGObject/pycairo checks apply only on Linux, matching the dependency marker.
+# An existing .venv/ with the platform's native packages skips the header check.
+[no-exit-message]
+[private]
+_check_build_deps:
+    @python3 scripts/check_build_deps.py
+
 # Create .venv/ and keep it matching the lock. --inexact is what makes this safe
 # to run ahead of every recipe: a plain `uv sync` removes extraneous packages, so
 # it would uninstall whatever `just deps-all` installed — the very thing the
 # --no-sync flags below exist to prevent. `version` skips this; it reads one
 # string out of version.py and needs a bare interpreter, not a sync.
 [private]
-_tooling:
+_tooling: _check_build_deps
     uv sync --inexact {{DEV_EXTRAS}}
 
 # Install Vocalinux
@@ -45,11 +56,11 @@ install-dev:
     ./install.sh --dev
 
 # Install development dependencies into .venv/ (dev + vad extras)
-deps:
+deps: _check_build_deps
     uv sync {{DEV_EXTRAS}}
 
 # Install every optional extra — whisper/vosk engines and docs (CUDA torch, multi-GB)
-deps-all:
+deps-all: _check_build_deps
     uv sync --all-extras --group lint
 
 # Run test suite
