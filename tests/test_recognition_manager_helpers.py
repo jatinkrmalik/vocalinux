@@ -257,6 +257,7 @@ class TestTestAudioInput(unittest.TestCase):
 
         mock_stream = MagicMock()
         mock_pa_inst.open.return_value = mock_stream
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00\xf4" * 1024
 
         mock_np = MagicMock()
@@ -294,6 +295,7 @@ class TestTestAudioInput(unittest.TestCase):
 
         mock_stream = MagicMock()
         mock_pa_inst.open.return_value = mock_stream
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00" * 2048
 
         mock_np = MagicMock()

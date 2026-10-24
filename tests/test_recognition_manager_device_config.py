@@ -129,6 +129,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
             manager.should_record = False
             return b"\x00" * 2048
 
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.side_effect = _read_once
 
         mock_audio = MagicMock()
@@ -177,6 +178,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
             manager.should_record = False
             return b"\x00" * 2048
 
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.side_effect = _read_once
         mock_audio = MagicMock()
         mock_audio.get_device_count.return_value = 1
@@ -218,6 +220,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
     def test_test_audio_input_system_default_fallback_open_omits_device_index(self):
         """Fallback mic-test open for System Default must omit input_device_index."""
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00\x01" * 1024
         mock_audio = MagicMock()
         mock_audio.open.return_value = mock_stream
@@ -502,6 +505,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
         from vocalinux.speech_recognition.recognition_manager import test_audio_input
 
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00\x01" * 1024
         mock_audio = MagicMock()
         mock_audio.open.return_value = mock_stream
@@ -534,6 +538,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
         from vocalinux.speech_recognition.recognition_manager import test_audio_input
 
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00\x01" * 1024
         mock_audio = MagicMock()
         mock_audio.open.return_value = mock_stream
@@ -564,6 +569,7 @@ class TestAudioDeviceDetection(unittest.TestCase):
     def test_test_audio_input_negotiation_fallback_open(self):
         """When negotiation returns no stream, mic test falls back to a plain open."""
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00\x01" * 1024
         mock_audio = MagicMock()
         mock_audio.open.return_value = mock_stream
@@ -957,6 +963,7 @@ class TestRecordAudioNegotiationFallback(unittest.TestCase):
             manager.should_record = False
             return b"\x00" * 2048
 
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.side_effect = _read_once
 
         mock_audio = MagicMock()

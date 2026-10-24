@@ -168,12 +168,15 @@ def _manager_stub(
     """A manager carrying only the fields the one-shot path touches."""
     from vocalinux.speech_recognition.recognition_manager import (
         SpeechRecognitionManager,
+        _CaptureSession,
         _ReleaseGate,
     )
 
     manager = SpeechRecognitionManager.__new__(SpeechRecognitionManager)
     manager.engine = engine
     manager.model_size = model_size
+    manager.model = None
+    manager._model_initialized = False
     manager.language = language
     manager.language_preference = language_preference
     manager.state = RecognitionState.IDLE
@@ -183,7 +186,10 @@ def _manager_stub(
     manager._pending_language_override = None
     manager._oneshot_language_restore = None
     manager._segment_started_at = None
+    manager._session = _CaptureSession()
     manager._session_cancel = threading.Event()
+    manager._download_claim = threading.Lock()
+    manager._download_cancelled = False
     manager._key_release_gate = _ReleaseGate()
     manager._key_release_gate.set()
     return manager

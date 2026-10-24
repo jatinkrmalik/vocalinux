@@ -18,6 +18,8 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, Union, cast
 
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
 
 from ..audio.capture import (  # noqa: F401  (re-exported for compatibility)
     _STICKY_LOCK_MIN_MEAN_SQUARE,
+    CaptureStalledError,
     PortAudioCaptureSource,
     _alsa_handler,
     _downmix_to_mono,
@@ -87,6 +90,41 @@ from .silero_vad import SILERO_CHUNK_SIZE, load_silero_vad
 
 if TYPE_CHECKING:
     from ..custom_dictionary import CustomDictionaryManager
+
+
+# Shutdown budgets are separate so tests can shorten waits without sleeping.
+_CAPTURE_JOIN_SECONDS = 2.0
+_RECOGNITION_JOIN_SECONDS = 5.0
+_RECOGNITION_FINAL_JOIN_SECONDS = 1.0
+_FINAL_BUFFER_SECONDS = 1.0
+_STOP_WAIT_SECONDS = 9.0
+
+
+class _CaptureSession:
+    """Cancellation and handoff state that must never be reused by a later recording."""
+
+    def __init__(self) -> None:
+        self.cancel = threading.Event()
+        self.capture_finished = threading.Event()
+        self.stop_complete = threading.Event()
+        self.stop_owner: Optional[threading.Thread] = None
+        self.stopping = False
+        self.stall_recovery_attempted = False
+        self.stall_error: Optional[OSError] = None
+        self.device_name = "System Default"
+        self.segments: queue.Queue = queue.Queue(maxsize=32)
+        # A dispatched callback can outlive the bounded recognition join.
+        # A new session must not start until that callback has returned.
+        self.dispatching = 0
+
+
+class _ReconfigureOutcome:
+    """Whether a completed Settings change still needs an inherited model reload."""
+
+    def __init__(self) -> None:
+        # A rejected change may reuse the restored ready model. A successful
+        # change without an engine restart must still finish inherited resume.
+        self.reload_for_resume = False
 
 
 class _HeldTranscript(NamedTuple):
@@ -506,6 +544,10 @@ class SpeechRecognitionManager:
         self._model_missing_handler: Optional[Callable[[str], bool]] = None
         self._download_cancelled = False
         self._prefetching_model = False
+        self._reconfigure_request: Optional[object] = None
+        self._reconfigure_hot_settings: dict[str, Any] = {}
+        self._reconfigure_done = threading.Event()
+        self._reconfigure_done.set()
         # Held by whichever UI is downloading a model. The tray and the settings
         # dialog both download in the background, and there is only one progress
         # callback and one engine configuration between them.
@@ -516,8 +558,14 @@ class SpeechRecognitionManager:
         self._download_openers: set[threading.Thread] = set()
         self._defer_download = defer_download
         self._model_initialized = False
-        # True while auto-pause has unloaded the model for a configured app/game
+        # True while a configured app/game blocks dictation, including pending unloads
         self._auto_paused = False
+        # Request publication must never wait for a native model load. Resource
+        # changes are serialized separately by _model_lock.
+        self._model_request_lock = threading.Lock()
+        self._model_request: Optional[object] = None
+        # Distinguish a recovery obligation from a configured app's active pause.
+        self._auto_resume_pending = False
         # True while idle keep-alive has unloaded the model (dictation may lazy-reload)
         self._idle_unloaded = False
         self.buffer_during_reload = bool(kwargs.get("buffer_during_reload", False))
@@ -580,6 +628,10 @@ class SpeechRecognitionManager:
         # propagated onto each enqueued _AudioSegment.
         self._segment_started_at: Optional[float] = None
         self._recording_segment_has_speech = False
+        self._lifecycle_lock = threading.RLock()
+        self._worker_session = threading.local()
+        self._session = _CaptureSession()
+        self._capture_finished = self._session.capture_finished
         self._buffer_lock = threading.Lock()  # Thread safety for audio_buffer
         self._model_lock = threading.Lock()  # Thread safety for model/recognizer access
         self._segment_queue: queue.Queue[tuple[_AudioSegment, str]] = queue.Queue(maxsize=32)
@@ -599,7 +651,7 @@ class SpeechRecognitionManager:
         self._reconnection_attempts = 0
         self._max_reconnection_attempts = 5
         self._reconnection_delay = 1.0  # Initial delay in seconds
-        self._last_audio_error_time = 0.0
+        self._last_audio_error_time: float = 0.0
         self._audio_stream = None
         self._pyaudio_instance = None
         self._capture_sample_rate = 16000  # Default, updated when device is opened
@@ -1052,7 +1104,7 @@ class SpeechRecognitionManager:
 
         except ImportError:
             logger.error("Failed to import VOSK. Please install it with 'pip install vosk'")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     @staticmethod
@@ -1163,11 +1215,11 @@ class SpeechRecognitionManager:
         except ImportError as e:
             logger.error(f"Failed to import required libraries for Whisper: {e}")
             logger.error("Please install with: pip install openai-whisper torch")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
         except (RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize Whisper engine: {e}")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     def _transcribe_with_whisper(
@@ -1366,7 +1418,7 @@ class SpeechRecognitionManager:
         except ImportError as e:
             logger.error(f"Failed to import faster-whisper engine: {e}")
             logger.error("Please install with: pip install faster-whisper")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
         try:
@@ -1422,7 +1474,7 @@ class SpeechRecognitionManager:
             logger.info("faster-whisper engine initialized successfully.")
         except (ImportError, RuntimeError, OSError, ValueError, ChecksumError) as e:
             logger.error(f"Failed to initialize faster-whisper engine: {e}", exc_info=True)
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     def _transcribe_with_faster_whisper(
@@ -1517,11 +1569,11 @@ class SpeechRecognitionManager:
             logger.error(f"Failed to import pywhispercpp: {e}")
             logger.error(f"Python path: {sys.path}")
             logger.error("Please install with: pip install pywhispercpp")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
         except (FileNotFoundError, RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize whisper.cpp engine: {e}", exc_info=True)
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     @staticmethod
@@ -2299,11 +2351,11 @@ class SpeechRecognitionManager:
         except ImportError as e:
             logger.error(f"Failed to import sherpa-onnx: {e}")
             logger.error("Please install it with 'pip install sherpa-onnx'")
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
         except (ChecksumError, FileNotFoundError, RuntimeError, OSError) as e:
             logger.error(f"Failed to initialize Parakeet engine: {e}", exc_info=True)
-            self.state = RecognitionState.ERROR
+            self._set_engine_error()
             raise
 
     def _transcribe_with_parakeet(self, audio_buffer: list[bytes]) -> str:
@@ -3166,19 +3218,30 @@ class SpeechRecognitionManager:
         """Get the last recorded audio level (0-100)."""
         return self._last_audio_level
 
-    def _update_state(self, new_state: RecognitionState):
+    def _update_state(
+        self, new_state: RecognitionState, *, model_request: Optional[object] = None
+    ) -> None:
         """
         Update the recognition state and notify callbacks.
 
         Args:
             new_state: The new recognition state
+            model_request: Ignore publication if this model request was superseded.
         """
-        self.state = new_state
-        if new_state in (RecognitionState.IDLE, RecognitionState.ERROR):
-            # A per-language shortcut's override lasts for exactly one
-            # dictation (#805); restore the configured language here so every
-            # exit path — normal stop, error, quit — unwinds it.
-            self._restore_language_after_oneshot()
+        # Serialize the ownership check and state write with a new start.
+        # Lightweight __new__-built consumers have no lifecycle lock.
+        with getattr(self, "_lifecycle_lock", nullcontext()):
+            if not self._owns_session():
+                return
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if not self._owns_model_request(model_request):
+                    return
+                self.state = new_state
+            if new_state in (RecognitionState.IDLE, RecognitionState.ERROR):
+                # A per-language shortcut's override lasts for exactly one
+                # dictation (#805); restore the configured language here so every
+                # exit path — normal stop, error, quit — unwinds it.
+                self._restore_language_after_oneshot()
         for callback in self.state_callbacks:
             callback(new_state)
 
@@ -3280,13 +3343,63 @@ class SpeechRecognitionManager:
         microphone is still open. Failures are logged and never raised.
         """
         with self._playback_duck_lock:
+            if not self._owns_session():
+                return
             self._cancel_pending_playback_duck()
             try:
                 self._playback_duck.restore()
             except Exception:
                 logger.error("Could not restore playback volume", exc_info=True)
 
+    def _owns_session(self) -> bool:
+        """Whether this worker still belongs to the manager's current recording."""
+        context = getattr(self, "_worker_session", None)
+        return context is None or getattr(context, "session", self._session) is self._session
+
+    def _run_session_worker(self, session: _CaptureSession, target: Callable[[], None]) -> None:
+        """Bind a worker to its original session even if it starts running late."""
+        previous = getattr(self._worker_session, "session", None)
+        self._worker_session.session = session
+        try:
+            if self._owns_session():
+                target()
+        finally:
+            if previous is None:
+                del self._worker_session.session
+            else:
+                self._worker_session.session = previous
+
     def start_recognition(self, mode: str = "toggle") -> bool:
+        """Start a recording, serializing it with stop election and other starts."""
+        with self._lifecycle_lock:
+            # A native open/close can outlive the capture join. Do not reuse its
+            # device or VAD until its owning thread has finished teardown.
+            if self.audio_thread and self.audio_thread.is_alive():
+                logger.warning("Cannot start recognition while capture is still stopping")
+                return False
+            if (
+                self._session.stop_owner is not None
+                and not self._session.stop_complete.is_set()
+                and not (self._session_cancel.is_set() and self._session.capture_finished.is_set())
+            ):
+                return False
+            if self._session.dispatching:
+                logger.warning("Cannot start recognition while a previous callback is finishing")
+                return False
+            # An explicit start may be requested by an IDLE callback running
+            # on the old stopper/worker. Own the new start independently, then
+            # restore the old context so its remaining work stays stale.
+            context = getattr(self, "_worker_session", None)
+            if context is None or not hasattr(context, "session"):
+                return self._start_recognition(mode)
+            previous_session = context.session
+            del context.session
+            try:
+                return self._start_recognition(mode)
+            finally:
+                context.session = previous_session
+
+    def _start_recognition(self, mode: str = "toggle") -> bool:
         """Start the speech recognition process.
 
         Returns:
@@ -3305,6 +3418,16 @@ class SpeechRecognitionManager:
             _show_notification(
                 "Speech model downloading",
                 "Dictation will be available when the new model has finished downloading.",
+                "dialog-information",
+            )
+            return False
+
+        if getattr(self, "_reconfigure_request", None) is not None:
+            logger.warning("Cannot start recognition while speech settings are changing")
+            play_error_sound()
+            _show_notification(
+                "Speech settings are changing",
+                "Dictation will be available when the settings have finished applying.",
                 "dialog-information",
             )
             return False
@@ -3352,10 +3475,13 @@ class SpeechRecognitionManager:
                     )
                 return False
 
+        session = _CaptureSession()
+        self._session = session
+        self._capture_finished = session.capture_finished
         self._buffered_reload_session = reload_in_background
         self._reload_pending = reload_in_background
+        self._buffered_capture_failed = False
         if reload_in_background:
-            self._buffered_capture_failed = False
             self._capture_finished.clear()
             self._cancel_buffered_session.clear()
 
@@ -3366,7 +3492,7 @@ class SpeechRecognitionManager:
         # A per-language shortcut's override runs after the layout refresh so
         # the explicit key press still wins over follow-mode resolution, and
         # so its capability check sees the model the refresh will serve (#805).
-        if not self._apply_pending_language_override():
+        if not self._apply_pending_language_override() or self._session is not session:
             return False
 
         # Bind this session's language for the transcription workers: they can
@@ -3374,32 +3500,54 @@ class SpeechRecognitionManager:
         # rewrite the language of a segment still in the queue (#805).
         self._session_language = self.language
 
-        logger.info("Starting speech recognition")
-        with self._buffer_lock:
+        if not self._buffer_lock.acquire(timeout=_FINAL_BUFFER_SECONDS):
+            logger.error("Cannot start recognition while the previous buffer is locked")
+            self._buffered_reload_session = False
+            self._reload_pending = False
+            self._restore_language_after_oneshot()
+            return False
+        try:
+            self.audio_buffer = []
+            self._segment_started_at = None
+            self._recording_segment_has_speech = False
             self._session_cancel = threading.Event()
             self._worker_exited = threading.Event()
             self._idle_on_worker_exit = None
+            self._key_release_gate = _ReleaseGate()
+        finally:
+            self._buffer_lock.release()
+        self._segment_queue = session.segments
+
+        logger.info("Starting speech recognition")
         self._update_state(RecognitionState.LISTENING)
-
-        # Play the start sound
-        play_start_sound()
-
-        # Set recording flag
+        if self._session is not session:
+            return False
+        if not session.cancel.is_set():
+            play_start_sound()
+        if self._session is not session:
+            return False
+        if session.cancel.is_set():
+            # A state callback or start-cue hook may synchronously request stop
+            # before either worker exists to complete a buffered reload.
+            self._buffered_reload_session = False
+            self._reload_pending = False
+            self._update_state(RecognitionState.IDLE)
+            return False
         self.should_record = True
         self._recognition_mode = mode
-        self.audio_buffer = []
-        self._segment_started_at = None
-        self._segment_queue = queue.Queue(maxsize=32)
-        self._key_release_gate = _ReleaseGate()
 
         # Start the audio recording thread
-        self.audio_thread = threading.Thread(target=self._record_audio)
+        self.audio_thread = threading.Thread(
+            target=self._run_session_worker, args=(session, self._record_audio)
+        )
         self.audio_thread.daemon = True
         self.audio_thread.start()
 
         # Start the recognition thread
         target = self._reload_and_recognize if reload_in_background else self._perform_recognition
-        self.recognition_thread = threading.Thread(target=target)
+        self.recognition_thread = threading.Thread(
+            target=self._run_session_worker, args=(session, target)
+        )
         self.recognition_thread.daemon = True
         self._track_recognition_worker(self.recognition_thread)
         self.recognition_thread.start()
@@ -3416,24 +3564,22 @@ class SpeechRecognitionManager:
 
         Returns True if something was cancelled.
         """
-        if self.state not in (RecognitionState.LISTENING, RecognitionState.PROCESSING):
-            return False
-
-        cancel = self._session_cancel
-        with self._buffer_lock:
+        with self._lifecycle_lock:
             if (
-                self._session_cancel is not cancel
+                not self._owns_session()
                 or self.state not in (RecognitionState.LISTENING, RecognitionState.PROCESSING)
-                or cancel.is_set()
+                or self._session_cancel.is_set()
             ):
                 return False
+            session = self._session
+            cancel = self._session_cancel
+            segment_queue = self._segment_queue
+            buffered = getattr(self, "_buffered_reload_session", False)
             logger.info("Cancelling transcription")
             cancel.set()
             self._idle_on_worker_exit = None
-        segment_queue = self._segment_queue
-        buffered = getattr(self, "_buffered_reload_session", False)
-        if buffered:
-            self._cancel_buffered_session.set()
+            if buffered:
+                self._cancel_buffered_session.set()
 
         while True:
             try:
@@ -3441,137 +3587,146 @@ class SpeechRecognitionManager:
             except queue.Empty:
                 break
 
-        self._signal_recognition_stop()
+        self._signal_recognition_stop(segment_queue)
 
-        if self.should_record:
-            self.stop_recognition()
-        elif not buffered:
-            self._recognition_mode = "toggle"
-            self._update_state(RecognitionState.IDLE)
+        def finish_cancel() -> None:
+            with self._lifecycle_lock:
+                if self._session is not session or self._session_cancel is not cancel:
+                    return
+                recording = self.should_record
+                if not recording and not buffered:
+                    self._recognition_mode = "toggle"
+            if recording:
+                self.stop_recognition()
+            elif not buffered:
+                self._update_state(RecognitionState.IDLE)
+
+        self._run_session_worker(session, finish_cancel)
         return True
 
     def stop_recognition(self) -> None:
-        """Stop the speech recognition process."""
-        if self.state == RecognitionState.IDLE:
+        """Stop once per session; all waits on capture and handoff are bounded."""
+        current = threading.current_thread()
+        with self._lifecycle_lock:
+            if not self._owns_session():
+                return
+            session = self._session
+            if session.stop_owner is not None:
+                # A worker cannot wait for a stopper that may be joining it.
+                wait = current not in (
+                    session.stop_owner,
+                    self.audio_thread,
+                    self.recognition_thread,
+                )
+            elif self.state == RecognitionState.IDLE:
+                return
+            else:
+                session.stop_owner = current
+                wait = False
+                self.should_record = False
+                session.cancel.set()
+            owner = session.stop_owner is current
+        if not owner:
+            if wait and not session.stop_complete.wait(_STOP_WAIT_SECONDS):
+                logger.warning("Timed out waiting for capture shutdown")
             return
+        # Reentrant callbacks on the stop owner must not execute the handoff twice.
+        if session.stopping:
+            return
+        session.stopping = True
+        try:
+            self._run_session_worker(session, lambda: self._stop_session(session))
+        finally:
+            session.capture_finished.set()
+            session.stop_complete.set()
 
-        if getattr(self, "_buffered_reload_session", False) and not self.should_record:
-            return
-        session_cancel = self._session_cancel
-        audio_thread = self.audio_thread
-        recognition_thread = self.recognition_thread
-        worker_exited = getattr(self, "_worker_exited", None)
+    def _stop_session(self, session: _CaptureSession) -> None:
+        """Perform the elected stop's final-segment handoff before waking recognition."""
+        with self._lifecycle_lock:
+            if not self._owns_session() or self._session is not session:
+                return
+            session_cancel = self._session_cancel
+            worker_exited = self._worker_exited
+            segment_queue = self._segment_queue
+            self._key_release_gate.set()
         logger.info("Stopping speech recognition")
-
-        # Mark recording over before touching the duck so a concurrent arm
-        # sees the dictation as ended. The volume goes back only once the
-        # microphone thread has left the device, and before the stop cue.
-        self.should_record = False
-        self._key_release_gate.set()
         self._update_state(RecognitionState.PROCESSING)
         self._cancel_pending_playback_duck()
-
-        # Wait for audio thread to finish recording and enqueue any pending audio
-        # This is critical to prevent race condition where recognition thread exits
-        # before the final audio segment is enqueued
-        if audio_thread and audio_thread.is_alive():
-            audio_thread.join(timeout=2.0)
+        current = threading.current_thread()
+        audio_thread = self.audio_thread
+        recognition_thread = self.recognition_thread
+        if audio_thread and audio_thread is not current and audio_thread.is_alive():
+            audio_thread.join(timeout=_CAPTURE_JOIN_SECONDS)
 
         self.release_playback_duck()
+        # Capture failure has its own cue, after device teardown.
+        if not self._buffered_capture_failed:
+            if not audio_thread or not audio_thread.is_alive():
+                play_stop_sound()
+            else:
+                logger.warning("Capture is still alive; suppressing stop cue")
 
-        # Play stop sound now that the audio thread is done and cannot capture it.
-        # Kept before buffer processing so the cue still feels immediate.
-        play_stop_sound()
+        if self._buffer_lock.acquire(timeout=_FINAL_BUFFER_SECONDS):
+            try:
+                stop_sound_guard_chunks = self._get_stop_sound_guard_chunks()
+                if stop_sound_guard_chunks > 0 and len(self.audio_buffer) > stop_sound_guard_chunks:
+                    self.audio_buffer = self.audio_buffer[:-stop_sound_guard_chunks]
+                if (
+                    not session_cancel.is_set()
+                    and self.audio_buffer
+                    and self._recording_segment_has_speech
+                ):
+                    self._enqueue_audio_segment(
+                        self.audio_buffer,
+                        release_gate=(
+                            self._key_release_gate
+                            if self._recognition_mode == "push_to_talk"
+                            else None
+                        ),
+                    )
+                self.audio_buffer = []
+                self._recording_segment_has_speech = False
+                self._segment_started_at = None
+            finally:
+                self._buffer_lock.release()
+        else:
+            # Cancellation prevents the capture worker from publishing this
+            # segment later. A new start resets it only after capture exits.
+            logger.error("Timed out acquiring final audio buffer; dropping final segment")
 
-        if self._session_cancel is session_cancel:
-            # Trim only a small tail to avoid the stop sound without clipping the user's final word.
-            with self._buffer_lock:
-                if self._session_cancel is not session_cancel:
-                    return
-                if session_cancel.is_set():
-                    if self.audio_buffer:
-                        logger.debug("Dropping final audio buffer from a cancelled session")
-                    self.audio_buffer = []
-                    self._recording_segment_has_speech = False
-                else:
-                    stop_sound_guard_chunks = self._get_stop_sound_guard_chunks()
-                    if (
-                        stop_sound_guard_chunks > 0
-                        and len(self.audio_buffer) > stop_sound_guard_chunks
-                    ):
-                        discarded_chunks = self.audio_buffer[-stop_sound_guard_chunks:]
-                        self.audio_buffer = self.audio_buffer[:-stop_sound_guard_chunks]
-                        logger.debug(
-                            "Discarded %s audio chunks (~%sms) to avoid transcribing feedback sound",
-                            len(discarded_chunks),
-                            self.stop_sound_guard_ms,
-                        )
-
-                    if self.audio_buffer and self._recording_segment_has_speech:
-                        logger.debug(
-                            f"Enqueuing final speech buffer with {len(self.audio_buffer)} chunks"
-                        )
-                        self._enqueue_audio_segment(
-                            self.audio_buffer,
-                            release_gate=(
-                                self._key_release_gate
-                                if self._recognition_mode == "push_to_talk"
-                                else None
-                            ),
-                        )
-                        self.audio_buffer = []
-                    elif self.audio_buffer:
-                        logger.debug(
-                            "Dropping final audio buffer with no detected speech "
-                            f"({len(self.audio_buffer)} chunks)"
-                        )
-                        self.audio_buffer = []
-                    self._recording_segment_has_speech = False
-
-        if self._session_cancel is not session_cancel:
-            return
-
+        self._signal_recognition_stop(segment_queue)
+        session.capture_finished.set()
         if getattr(self, "_buffered_reload_session", False):
-            # Keep the session busy until its queued audio has been transcribed.
-            # In particular, key release must not wait for a cold model load.
-            self._update_state(RecognitionState.PROCESSING)
-            self._signal_recognition_stop()
-            self._capture_finished.set()
+            # The reload worker owns completion; releasing a key must not wait
+            # for a cold model load or let the next start reuse its engine.
             return
-
-        # Wake up recognition thread so it can drain queued segments and stop
-        if not session_cancel.is_set():
-            self._signal_recognition_stop()
-
-        if recognition_thread and recognition_thread.is_alive():
-            recognition_thread.join(timeout=self._STOP_WORKER_JOIN_TIMEOUT_S)
-        if not session_cancel.is_set():
-            self._signal_recognition_stop()
-
-        if recognition_thread and recognition_thread.is_alive():
-            recognition_thread.join(timeout=self._STOP_WORKER_FINAL_JOIN_TIMEOUT_S)
-
-        with self._buffer_lock:
-            if self._session_cancel is not session_cancel:
+        if recognition_thread and recognition_thread is not current:
+            if recognition_thread.is_alive():
+                recognition_thread.join(
+                    timeout=min(_RECOGNITION_JOIN_SECONDS, self._STOP_WORKER_JOIN_TIMEOUT_S)
+                )
+            self._signal_recognition_stop(segment_queue)
+            if recognition_thread.is_alive():
+                recognition_thread.join(
+                    timeout=min(
+                        _RECOGNITION_FINAL_JOIN_SECONDS, self._STOP_WORKER_FINAL_JOIN_TIMEOUT_S
+                    )
+                )
+        with self._lifecycle_lock:
+            if not self._owns_session() or self._session_cancel is not session_cancel:
                 return
             worker_still_running = (
                 recognition_thread is not None
+                and recognition_thread.is_alive()
                 and worker_exited is not None
                 and not worker_exited.is_set()
                 and not session_cancel.is_set()
             )
             if worker_still_running:
                 self._idle_on_worker_exit = session_cancel
-            else:
-                self._recognition_mode = "toggle"
-        if worker_still_running:
-            logger.info(
-                "Transcription still running after stop; staying in PROCESSING until it finishes "
-                "or is cancelled"
-            )
-            return
-        if self._session_cancel is not session_cancel:
-            return
+                logger.info("Transcription still running after stop; staying in PROCESSING")
+                return
+            self._recognition_mode = "toggle"
         self._update_state(RecognitionState.IDLE)
 
     def _track_recognition_worker(self, worker: threading.Thread) -> None:
@@ -3613,50 +3768,74 @@ class SpeechRecognitionManager:
             if not self._cancel_buffered_session.is_set():
                 self._perform_recognition()
         except (ChecksumError, ImportError, OSError, RuntimeError, ValueError):
-            logger.exception("Failed to reload model or transcribe buffered speech")
-            play_error_sound()
-            _show_notification(
-                "Dictation Failed",
-                "Could not reload the speech model or transcribe the recording. Please try again.",
-                "dialog-warning",
-            )
+            if not self._buffered_capture_failed:
+                logger.exception("Failed to reload model or transcribe buffered speech")
+                play_error_sound()
+                _show_notification(
+                    "Dictation Failed",
+                    "Could not reload the speech model or transcribe the recording. Please try again.",
+                    "dialog-warning",
+                )
         finally:
             self._reload_pending = False
-            if self.should_record:
+            if self.should_record and not self._buffered_capture_failed:
                 self.stop_recognition()
-            # stop_recognition owns the final buffer. Do not finish or allow a
-            # new session until key release has completed that handoff.
-            self._capture_finished.wait()
-            # The worker can exit during the bounded audio-thread join in
-            # stop_recognition, leaving the released key's final buffer — and
-            # any stragglers it never consumed — queued behind the stop
-            # sentinel. Transcribe what is still here before replacing the
-            # queue so the tail of the recording is not silently dropped.
-            # A failed capture or an explicit cancel still discards it.
-            if (
-                self.model_ready
-                and not self._buffered_capture_failed
-                and not self._cancel_buffered_session.is_set()
-            ):
-                self._transcribe_queued_segments()
-            with self._buffer_lock:
+            self._finish_buffered_session()
+
+    def _finish_buffered_session(self) -> None:
+        """Complete a reload recording only after the stopper's final handoff."""
+        # stop_recognition owns the final buffer. Do not finish or allow a
+        # new session until key release has completed that handoff.
+        if not self._capture_finished.wait(_STOP_WAIT_SECONDS):
+            logger.error("Timed out waiting for buffered capture handoff")
+            return
+        # The worker can exit during the bounded audio-thread join in
+        # stop_recognition, leaving the released key's final buffer — and
+        # any stragglers it never consumed — queued behind the stop
+        # sentinel. Transcribe what is still here before replacing the
+        # queue so the tail of the recording is not silently dropped.
+        # A failed capture or an explicit cancel still discards it.
+        if (
+            self.model_ready
+            and not self._buffered_capture_failed
+            and not self._cancel_buffered_session.is_set()
+        ):
+            self._transcribe_queued_segments()
+        if self._buffer_lock.acquire(timeout=_FINAL_BUFFER_SECONDS):
+            try:
                 self.audio_buffer = []
-            self._segment_queue = queue.Queue(maxsize=32)
-            self._recognition_mode = "toggle"
-            self._buffered_reload_session = False
-            # The notification above reports the failed attempt. Return to IDLE
-            # so a release that happened during reload cannot strand the manager
-            # in ERROR and block every later dictation attempt.
-            self._update_state(RecognitionState.IDLE)
+                self._recording_segment_has_speech = False
+                self._segment_started_at = None
+            finally:
+                self._buffer_lock.release()
+        else:
+            logger.error("Timed out clearing buffered capture; dropping final segment")
+        self._segment_queue = queue.Queue(maxsize=32)
+        self._recognition_mode = "toggle"
+        self._buffered_reload_session = False
+        # The notification above reports the failed attempt. Return to IDLE
+        # so a release that happened during reload cannot strand the manager
+        # in ERROR and block every later dictation attempt.
+        self._update_state(RecognitionState.IDLE)
 
     def _cancel_reload_recording(self) -> None:
-        """Discard a buffered session before changing or releasing its engine."""
+        """Cancel buffered speech or raise before an unsafe engine handoff."""
         if not getattr(self, "_buffered_reload_session", False):
             return
         self._cancel_buffered_session.set()
         self.stop_recognition()
-        if self.recognition_thread and self.recognition_thread is not threading.current_thread():
-            self.recognition_thread.join()
+        worker = self.recognition_thread
+        if worker and worker.is_alive():
+            if worker is threading.current_thread():
+                raise RuntimeError("Cannot change the speech engine from its active reload worker")
+            worker.join(timeout=_RECOGNITION_JOIN_SECONDS)
+            if worker.is_alive():
+                worker.join(timeout=_RECOGNITION_FINAL_JOIN_SECONDS)
+            if worker.is_alive():
+                raise TimeoutError(
+                    "The speech model is still loading. Please try changing settings again "
+                    "after it finishes."
+                )
 
     def _signal_buffered_capture_done(self) -> None:
         """Release the reload worker once a failed capture can no longer hand off.
@@ -3709,22 +3888,38 @@ class SpeechRecognitionManager:
         """Record audio from the microphone with reconnection logic."""
         gate = self._key_release_gate
         session_cancel = self._session_cancel
-        # Lazy import to avoid circular dependency
-        from ..ui.audio_feedback import play_error_sound  # noqa: F401
+        session = self._session
+        source = None
+        audio = None
+        failure: Optional[Exception] = None
+
+        def recording() -> bool:
+            return (
+                self._owns_session()
+                and not session.cancel.is_set()
+                and self._capture_session_current(session_cancel)
+            )
+
+        def recover(error: OSError) -> bool:
+            if not recording():
+                return False
+            if session.stall_error is None:
+                session.device_name = self._capture_device_name(source)
+            if isinstance(error, CaptureStalledError):
+                session.stall_error = session.stall_error or error
+            if session.stall_error is not None:
+                if session.stall_recovery_attempted:
+                    return False
+                session.stall_recovery_attempted = True
+            recovered = self._attempt_audio_reconnection(audio, should_continue=recording)
+            validation_error = getattr(self._capture_source, "last_error", None)
+            if isinstance(validation_error, CaptureStalledError):
+                session.stall_error = session.stall_error or validation_error
+                session.stall_recovery_attempted = True
+            return recovered and recording()
 
         try:
-            try:
-                import numpy as np
-            except ImportError as e:
-                logger.error(f"Failed to import required audio libraries: {e}")
-                logger.error("Please install required dependencies: pip install pyaudio numpy")
-                self.should_record = False
-                self.release_playback_duck()
-                play_error_sound()
-                self._buffered_capture_failed = True
-                self._update_state(RecognitionState.ERROR)
-                self._signal_buffered_capture_done()
-                return
+            import numpy as np
 
             # PyAudio configuration
             CHUNK = 1024
@@ -3738,21 +3933,14 @@ class SpeechRecognitionManager:
             source = self._new_capture_source()
             audio = None
             if getattr(source, "requires_pyaudio", True):
-                try:
-                    import pyaudio
-                except ImportError as e:
-                    logger.error(f"Failed to import required audio libraries: {e}")
-                    logger.error("Please install required dependencies: pip install pyaudio numpy")
-                    self.should_record = False
-                    self.release_playback_duck()
-                    play_error_sound()
-                    self._buffered_capture_failed = True
-                    self._update_state(RecognitionState.ERROR)
-                    self._signal_buffered_capture_done()
-                    return
+                import pyaudio
+
                 self._pyaudio_instance = pyaudio.PyAudio()
                 audio = self._pyaudio_instance
+                source.audio = audio
             self._capture_source = source
+            if not recording():
+                return
             # The attempt count belongs to this session — a previous thread
             # may still be finishing and must not leave its retries here.
             # _last_audio_error_time stays: it also throttles a device that
@@ -3769,35 +3957,32 @@ class SpeechRecognitionManager:
                 logger.error(f"Failed to open audio stream: {e}")
                 logger.error("This may indicate a problem with the audio device or permissions.")
 
-                # Attempt reconnection
-                if not self._attempt_audio_reconnection(audio, session_cancel):
-                    if not self._capture_session_current(session_cancel):
-                        logger.info("Audio capture stopped: its session was cancelled or replaced")
-                        if audio is not None:
-                            audio.terminate()
-                        return
-                    self.should_record = False
-                    self.release_playback_duck()
-                    play_error_sound()
-                    if audio is not None:
-                        audio.terminate()
-                    self._buffered_capture_failed = True
-                    self._update_state(RecognitionState.ERROR)
+                if not recording():
                     return
+                if not recover(e):
+                    failure = e
+                    return
+                source = self._capture_source
+                assert source is not None
+                audio = source.audio
             else:
                 RATE = source.sample_rate
 
+            if not recording():
+                return
+            if session.stall_error is None:
+                session.device_name = self._capture_device_name(source)
             self._sync_capture_state()
 
             logger.info("Audio recording started")
 
             # Record audio while should_record is True
-            silence_counter = 0.0
+            silence_counter: float = 0.0
             speech_detected_in_session = False
-            self._recording_segment_has_speech = False
+            with self._buffer_lock:
+                self._recording_segment_has_speech = False
             log_level_interval = 0  # Counter for periodic level logging
             max_level_seen = 0.0
-            capture_failed = False
             # Accumulator for 512-sample Silero chunks.  When the capture rate
             # is higher than 16 kHz (e.g. 48 kHz), resampling produces fewer
             # than 1024 samples per read (~341 at 48 kHz), so the buffer may
@@ -3807,15 +3992,19 @@ class SpeechRecognitionManager:
             silero_chunk_buf = np.array([], dtype=np.int16)
 
             # Reset Silero VAD state for this recording session
-            if self._silero_vad is not None:
-                self._silero_vad.reset()
+            with self._buffer_lock:
+                if self._silero_vad is not None:
+                    self._silero_vad.reset()
 
-            while self._capture_session_current(session_cancel):
+            while recording():
                 try:
-                    # Check buffer size and enforce limits (with lock for thread safety)
+                    data = source.read_chunk(should_continue=recording)
+                    if data is None or not recording():
+                        break
+                    # Buffer and VAD decisions form one atomic chunk publication.
+                    # No capture-source call may execute while this lock is held.
                     with self._buffer_lock:
-                        # A newer session owns the shared buffer once this one is cancelled.
-                        if session_cancel.is_set() or self._session_cancel is not session_cancel:
+                        if not recording():
                             break
                         if len(self.audio_buffer) >= self._max_buffer_size:
                             if getattr(self, "_reload_pending", False):
@@ -3828,10 +4017,6 @@ class SpeechRecognitionManager:
                             self.audio_buffer = self.audio_buffer[remove_count:]
                             logger.info(f"Buffer trimmed by {remove_count} chunks")
 
-                        data = source.read_chunk()
-                        if session_cancel.is_set() or self._session_cancel is not session_cancel:
-                            break
-
                         if not self.audio_buffer:
                             # First chunk of a new segment: remember when its
                             # capture began. A mid-session history clear
@@ -3840,16 +4025,135 @@ class SpeechRecognitionManager:
                             self._segment_started_at = time.monotonic()
                         self.audio_buffer.append(data)
 
-                    # Voice Activity Detection (VAD)
-                    audio_data = np.frombuffer(data, dtype=np.int16)
-                    volume = np.abs(audio_data).mean()
+                        # Voice Activity Detection (VAD)
+                        audio_data = np.frombuffer(data, dtype=np.int16)
+                        volume = np.abs(audio_data).mean()
 
-                    # Track max level and notify callbacks
-                    # Normalize to 0-100 scale (16-bit audio max is ~32768)
-                    normalized_level = min(100.0, (volume / 327.68))
-                    self._last_audio_level = normalized_level
-                    max_level_seen = max(max_level_seen, normalized_level)
+                        # Track max level and notify callbacks
+                        # Normalize to 0-100 scale (16-bit audio max is ~32768)
+                        normalized_level = min(100.0, (volume / 327.68))
+                        self._last_audio_level = normalized_level
+                        max_level_seen = max(max_level_seen, normalized_level)
 
+                        # Log audio levels periodically for debugging
+                        log_level_interval += 1
+                        if log_level_interval >= 50:  # Every ~3 seconds at 16kHz/1024 chunks
+                            logger.debug(
+                                f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%, buffer_size={len(self.audio_buffer)}"
+                            )
+                            log_level_interval = 0
+
+                        # Determine if current chunk contains speech
+                        is_speech = False
+                        if self._silero_vad is not None:
+                            # Silero VAD: accumulate samples into 512-sample chunks
+                            speech_prob = 0.0
+                            chunk_processed = False
+                            silero_chunk_buf = np.concatenate([silero_chunk_buf, audio_data])
+                            while len(silero_chunk_buf) >= SILERO_CHUNK_SIZE:
+                                chunk_512 = silero_chunk_buf[:SILERO_CHUNK_SIZE]
+                                silero_chunk_buf = silero_chunk_buf[SILERO_CHUNK_SIZE:]
+                                speech_prob = max(speech_prob, self._silero_vad.process(chunk_512))
+                                chunk_processed = True
+
+                            # Map vad_sensitivity (1-5) to threshold:
+                            # 1 (least sensitive) -> 0.8, 5 (most sensitive) -> 0.3
+                            try:
+                                vad_sens = int(self.vad_sensitivity)
+                                vad_sens = max(1, min(5, vad_sens))
+                            except ValueError:
+                                vad_sens = 3
+                            silero_threshold = 0.8 - (vad_sens - 1) * 0.125
+
+                            # Skip speech decision until at least one full chunk
+                            # has been processed to avoid false silence detection
+                            if chunk_processed:
+                                is_speech = speech_prob >= silero_threshold
+                        else:
+                            # Amplitude fallback when Silero is unavailable
+                            try:
+                                vad_sens = int(self.vad_sensitivity)
+                                threshold = 500 / max(1, min(5, vad_sens))
+                            except ValueError:
+                                logger.warning(
+                                    f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
+                                )
+                                threshold = 500 / 3
+                            is_speech = volume >= threshold
+
+                        if not recording():
+                            break
+                        if not is_speech:  # Silence
+                            silence_counter += CHUNK / RATE  # Convert chunks to seconds
+                            if silence_counter > self.silence_timeout:
+                                if len(self.audio_buffer) > 0:
+                                    if not self._recording_segment_has_speech:
+                                        logger.debug(
+                                            "Silence detected with no speech, dropping audio buffer"
+                                        )
+                                        self.audio_buffer = []
+                                    elif self._recognition_mode == "push_to_talk" or getattr(
+                                        self, "_reload_pending", False
+                                    ):
+                                        logger.debug(
+                                            "Keeping speech until key release or model reload completes"
+                                        )
+                                    else:
+                                        logger.debug("Silence detected, queueing audio segment")
+                                        self._enqueue_audio_segment(self.audio_buffer)
+                                        self.audio_buffer = []
+                                        self._recording_segment_has_speech = False
+                                silence_counter = 0
+                        else:  # Speech
+                            self._recording_segment_has_speech = True
+                            if not speech_detected_in_session:
+                                if self._silero_vad is not None:
+                                    logger.debug(
+                                        f"Speech detected (silero_prob={speech_prob:.2f}, "
+                                        f"threshold={silero_threshold:.3f})"
+                                    )
+                                else:
+                                    logger.debug(
+                                        f"Speech detected (level={normalized_level:.1f}%, "
+                                        f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
+                                    )
+                                speech_detected_in_session = True
+                            silence_counter = 0
+                        # Continuous speech with no pause (a held push-to-talk
+                        # key, or a toggle session that never goes quiet) keeps
+                        # one segment growing until the safety cap silently drops
+                        # its oldest audio. Queue the segment long before that so
+                        # every word is transcribed in order while recording keeps
+                        # going. Capture chunks are 16 kHz mono, so their duration
+                        # follows from the byte count at any negotiated rate.
+                        # Push-to-talk text is held until the key is released.
+                        chunk_seconds = len(data) / (2 * 16000)
+                        if chunk_seconds > 0 and self._recording_segment_has_speech:
+                            buffered_seconds = len(self.audio_buffer) * chunk_seconds
+                            flush_seconds = min(
+                                self._max_segment_seconds,
+                                self._max_buffer_size * chunk_seconds * 0.75,
+                            )
+                            if buffered_seconds >= flush_seconds and not getattr(
+                                self, "_reload_pending", False
+                            ):
+                                segment = self.audio_buffer.copy()
+                                self.audio_buffer = []
+                                self._recording_segment_has_speech = False
+                                silence_counter = 0
+                                logger.info(
+                                    "Continuing dictation: queued %.0fs segment "
+                                    "(%d chunks) for transcription; push-to-talk text "
+                                    "will be held until release",
+                                    buffered_seconds,
+                                    len(segment),
+                                )
+                                self._enqueue_audio_segment(
+                                    segment,
+                                    release_gate=(
+                                        gate if self._recognition_mode == "push_to_talk" else None
+                                    ),
+                                )
                     # Notify audio level callbacks
                     for callback in self._audio_level_callbacks:
                         try:
@@ -3857,129 +4161,10 @@ class SpeechRecognitionManager:
                         except Exception as e:
                             logger.debug(f"Audio level callback error: {e}")
 
-                    # Log audio levels periodically for debugging
-                    log_level_interval += 1
-                    if log_level_interval >= 50:  # Every ~3 seconds at 16kHz/1024 chunks
-                        logger.debug(
-                            f"Audio level: current={normalized_level:.1f}%, max_seen={max_level_seen:.1f}%, buffer_size={len(self.audio_buffer)}"
-                        )
-                        log_level_interval = 0
-
-                    # Determine if current chunk contains speech
-                    is_speech = False
-                    if self._silero_vad is not None:
-                        # Silero VAD: accumulate samples into 512-sample chunks
-                        speech_prob = 0.0
-                        chunk_processed = False
-                        silero_chunk_buf = np.concatenate([silero_chunk_buf, audio_data])
-                        while len(silero_chunk_buf) >= SILERO_CHUNK_SIZE:
-                            chunk_512 = silero_chunk_buf[:SILERO_CHUNK_SIZE]
-                            silero_chunk_buf = silero_chunk_buf[SILERO_CHUNK_SIZE:]
-                            speech_prob = max(speech_prob, self._silero_vad.process(chunk_512))
-                            chunk_processed = True
-
-                        # Map vad_sensitivity (1-5) to threshold:
-                        # 1 (least sensitive) -> 0.8, 5 (most sensitive) -> 0.3
-                        try:
-                            vad_sens = int(self.vad_sensitivity)
-                            vad_sens = max(1, min(5, vad_sens))
-                        except ValueError:
-                            vad_sens = 3
-                        silero_threshold = 0.8 - (vad_sens - 1) * 0.125
-
-                        # Skip speech decision until at least one full chunk
-                        # has been processed to avoid false silence detection
-                        if chunk_processed:
-                            is_speech = speech_prob >= silero_threshold
-                    else:
-                        # Amplitude fallback when Silero is unavailable
-                        try:
-                            vad_sens = int(self.vad_sensitivity)
-                            threshold = 500 / max(1, min(5, vad_sens))
-                        except ValueError:
-                            logger.warning(
-                                f"Invalid VAD sensitivity value: {self.vad_sensitivity}. Using default 3."
-                            )
-                            threshold = 500 / 3
-                        is_speech = volume >= threshold
-
-                    if not is_speech:  # Silence
-                        silence_counter += CHUNK / RATE  # Convert chunks to seconds
-                        if silence_counter > self.silence_timeout:
-                            if len(self.audio_buffer) > 0:
-                                if not self._recording_segment_has_speech:
-                                    logger.debug(
-                                        "Silence detected with no speech, dropping audio buffer"
-                                    )
-                                    self.audio_buffer = []
-                                elif self._recognition_mode == "push_to_talk" or getattr(
-                                    self, "_reload_pending", False
-                                ):
-                                    logger.debug(
-                                        "Keeping speech until key release or model reload completes"
-                                    )
-                                else:
-                                    logger.debug("Silence detected, queueing audio segment")
-                                    self._enqueue_audio_segment(self.audio_buffer)
-                                    self.audio_buffer = []
-                                    self._recording_segment_has_speech = False
-                            silence_counter = 0
-                    else:  # Speech
-                        self._recording_segment_has_speech = True
-                        if not speech_detected_in_session:
-                            if self._silero_vad is not None:
-                                logger.debug(
-                                    f"Speech detected (silero_prob={speech_prob:.2f}, "
-                                    f"threshold={silero_threshold:.3f})"
-                                )
-                            else:
-                                logger.debug(
-                                    f"Speech detected (level={normalized_level:.1f}%, "
-                                    f"threshold={500 / max(1, min(5, int(self.vad_sensitivity))):.0f})"
-                                )
-                            speech_detected_in_session = True
-                        silence_counter = 0
-
-                    # Continuous speech with no pause (a held push-to-talk
-                    # key, or a toggle session that never goes quiet) keeps
-                    # one segment growing until the safety cap silently drops
-                    # its oldest audio. Queue the segment long before that so
-                    # every word is transcribed in order while recording keeps
-                    # going. Capture chunks are 16 kHz mono, so their duration
-                    # follows from the byte count at any negotiated rate.
-                    # Push-to-talk text is held until the key is released.
-                    chunk_seconds = len(data) / (2 * 16000)
-                    if chunk_seconds > 0 and self._recording_segment_has_speech:
-                        buffered_seconds = len(self.audio_buffer) * chunk_seconds
-                        flush_seconds = min(
-                            self._max_segment_seconds,
-                            self._max_buffer_size * chunk_seconds * 0.75,
-                        )
-                        if buffered_seconds >= flush_seconds and not getattr(
-                            self, "_reload_pending", False
-                        ):
-                            with self._buffer_lock:
-                                segment = self.audio_buffer.copy()
-                                self.audio_buffer = []
-                            self._recording_segment_has_speech = False
-                            silence_counter = 0
-                            logger.info(
-                                "Continuing dictation: queued %.0fs segment "
-                                "(%d chunks) for transcription; push-to-talk text "
-                                "will be held until release",
-                                buffered_seconds,
-                                len(segment),
-                            )
-                            self._enqueue_audio_segment(
-                                segment,
-                                release_gate=(
-                                    gate if self._recognition_mode == "push_to_talk" else None
-                                ),
-                            )
                 except (IOError, OSError) as e:
-                    if not self._capture_session_current(session_cancel):
-                        logger.info("Audio capture stopped: its session was cancelled or replaced")
+                    if not recording():
                         break
+                    failure = e
                     current_time = time.time()
                     logger.error(f"Audio device error: {e}")
 
@@ -3989,12 +4174,15 @@ class SpeechRecognitionManager:
                     ):  # Prevent rapid reconnection attempts
                         self._last_audio_error_time = current_time
 
-                        if self._attempt_audio_reconnection(audio, session_cancel):
+                        if recover(e):
+                            failure = None
                             logger.info("Audio reconnection successful, continuing recording")
                             # The session source may have been rebuilt (e.g.
                             # the configured device switched between a mic and
                             # a PipeWire sink) — keep reading the new source.
                             source = self._capture_source
+                            assert source is not None
+                            audio = source.audio
                             continue  # Continue recording with the reopened source
                         elif not self._capture_session_current(session_cancel):
                             logger.info(
@@ -4003,41 +4191,16 @@ class SpeechRecognitionManager:
                             break
                         else:
                             logger.error("Audio reconnection failed, stopping recording")
-                            capture_failed = True
                             break
                     else:
                         logger.warning(
                             "Audio error occurred too soon after last error, stopping recording"
                         )
-                        capture_failed = True
                         break
                 except Exception as e:
                     logger.error(f"Unexpected error reading audio data: {e}")
-                    capture_failed = True
+                    failure = e
                     break
-
-            # A dead microphone must not leave other audio lowered, or the
-            # session stuck in LISTENING, until the user happens to stop.
-            if capture_failed:
-                self.should_record = False
-                self.release_playback_duck()
-                play_error_sound()
-                self._buffered_capture_failed = True
-                self._update_state(RecognitionState.ERROR)
-
-            # Clean up
-            source.close()
-
-            # Reset audio stream reference and reconnection state. A session
-            # started after a stop-timeout may already own these fields, so
-            # only clear the ones still bound to this capture.
-            if self._capture_source is source:
-                self._audio_stream = None
-                self._pyaudio_instance = None
-                self._capture_downmix_channel = None
-                self._reconnection_attempts = 0
-                self._last_audio_error_time = 0
-                self._capture_source = None
 
             # Log summary
             if not speech_detected_in_session and max_level_seen < 5:
@@ -4050,17 +4213,82 @@ class SpeechRecognitionManager:
             logger.info("Audio recording stopped")
 
         except Exception as e:
+            failure = e
             logger.error(f"Error in audio recording: {e}")
-            self.should_record = False
-            self.release_playback_duck()
-            play_error_sound()
-            self._buffered_capture_failed = True
-            self._update_state(RecognitionState.ERROR)
         finally:
             gate.set()
-            self._signal_buffered_capture_done()
+            if failure is not None and recording():
+                self._buffered_capture_failed = True
+            try:
+                # Reconnection may have rebuilt the source even on failure.
+                source = self._capture_source or source
+                if source is not None:
+                    source.close()
+            except (OSError, RuntimeError) as e:
+                failure = failure or e
+                logger.error("Failed to close audio capture: %s", e)
+            finally:
+                # close() owns the PyAudio instance as well as the stream.
+                # Only clear manager fields still bound to this source.
+                if self._capture_source is source:
+                    self._audio_stream = None
+                    self._pyaudio_instance = None
+                    self._capture_downmix_channel = None
+                    self._reconnection_attempts = 0
+                    self._last_audio_error_time = 0.0
+                    self._capture_source = None
 
-    def _process_final_buffer(self):
+                if failure is not None and recording():
+                    self._report_capture_failure(session, failure)
+                self._signal_buffered_capture_done()
+
+    def _capture_device_name(self, source: object) -> str:
+        """Describe the resolved capture device before recovery can replace it."""
+        name = getattr(source, "resolved_device_name", None)
+        if isinstance(name, str) and name:
+            return name
+        node = getattr(source, "source", None)
+        name = getattr(node, "display_name", None)
+        if isinstance(name, str) and name:
+            return name
+        name = getattr(source, "device_name", None)
+        if isinstance(name, str) and name:
+            return name
+        info = _get_device_info_safe(
+            getattr(source, "audio", None), getattr(source, "device_index", None)
+        )
+        name = info.get("name")
+        return name if isinstance(name, str) and name else "System Default"
+
+    def _report_capture_failure(self, session: _CaptureSession, error: Exception) -> None:
+        """Report once after owner-thread teardown, then complete the failed session."""
+        with self._lifecycle_lock:
+            if not self._owns_session() or session.cancel.is_set():
+                return
+            self.should_record = False
+            self._buffered_capture_failed = True
+            self.release_playback_duck()
+            self._update_state(RecognitionState.ERROR)
+        play_error_sound()
+        if isinstance(error, CaptureStalledError):
+            session.stall_error = session.stall_error or error
+        if session.stall_error is not None:
+            logger.error("Microphone '%s' stalled: %s", session.device_name, session.stall_error)
+            _show_notification(
+                "Microphone Stalled",
+                f"{session.device_name} stopped delivering audio. "
+                "Open Settings to test or select another microphone, then try dictation again.",
+                "dialog-warning",
+            )
+        else:
+            logger.error("Audio capture failed for '%s': %s", session.device_name, error)
+        self.stop_recognition()
+        if self._buffered_reload_session and (
+            self.recognition_thread is None or not self.recognition_thread.is_alive()
+        ):
+            self._finish_buffered_session()
+
+    def _process_final_buffer(self) -> None:
         """Process the final audio buffer after silence is detected."""
         with self._buffer_lock:
             if not self.audio_buffer:
@@ -4068,6 +4296,8 @@ class SpeechRecognitionManager:
 
             audio_buffer = self.audio_buffer.copy()
             self.audio_buffer = []
+            self._recording_segment_has_speech = False
+            self._segment_started_at = None
 
         self._process_audio_buffer(audio_buffer)
 
@@ -4101,23 +4331,35 @@ class SpeechRecognitionManager:
         started_at: Optional[float],
     ) -> None:
         """Deliver a transcribed segment to registered callbacks."""
-        logger.debug(
-            f"processed_text='{text[:50] if text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
-        )
-        if text:
-            if started_at is None:
-                started_at = time.monotonic()
-            for segment_callback in self.segment_callbacks:
-                segment_callback(text, started_at)
-            for callback in self.text_callbacks:
-                logger.debug(
-                    f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
-                )
-                callback(text)
+        lifecycle_lock = getattr(self, "_lifecycle_lock", nullcontext())
+        with lifecycle_lock:
+            if not self._owns_session():
+                return
+            session = getattr(self, "_session", None)
+            if session is not None:
+                session.dispatching += 1
+        try:
+            logger.debug(
+                f"processed_text='{text[:50] if text else '(empty)'}...', callbacks={len(self.text_callbacks)}"
+            )
+            if text:
+                if started_at is None:
+                    started_at = time.monotonic()
+                for segment_callback in self.segment_callbacks:
+                    segment_callback(text, started_at)
+                for callback in self.text_callbacks:
+                    logger.debug(
+                        f"invoking text callback: {callback.__name__ if hasattr(callback, '__name__') else callback}"
+                    )
+                    callback(text)
 
-        for action in actions:
-            for callback in self.action_callbacks:
-                callback(action)
+            for action in actions:
+                for callback in self.action_callbacks:
+                    callback(action)
+        finally:
+            if session is not None:
+                with lifecycle_lock:
+                    session.dispatching -= 1
 
     def _release_held_transcripts(
         self,
@@ -4163,7 +4405,7 @@ class SpeechRecognitionManager:
         if cancel_event is not None and cancel_event.is_set():
             logger.debug("Skipping audio processing for a cancelled session")
             return
-        if not audio_buffer:
+        if not audio_buffer or not self._owns_session():
             return
         if language is None:
             language = getattr(audio_buffer, "language", None)
@@ -4197,6 +4439,8 @@ class SpeechRecognitionManager:
                 self._release_held_transcripts(gate, cancel=cancel_event)
             return
 
+        if not self._owns_session():
+            return
         # Process text - either with voice commands or pass through directly
         logger.debug(f"_process_audio_buffer got text='{text[:50] if text else '(empty)'}...'")
         processed_text = ""
@@ -4245,8 +4489,9 @@ class SpeechRecognitionManager:
         cancel = self._session_cancel
         segment_queue = self._segment_queue
         worker_exited = getattr(self, "_worker_exited", None)
+        session = self._session
         try:
-            while True:
+            while self._owns_session():
                 if cancel.is_set():
                     logger.debug("Recognition loop exiting for a cancelled session")
                     break
@@ -4262,6 +4507,10 @@ class SpeechRecognitionManager:
                     self._release_held_transcripts(gate, cancel=cancel)
                     # Only exit if we're not recording AND queue is empty
                     if not self.should_record and segment_queue.empty():
+                        if session.cancel.is_set() and not session.capture_finished.is_set():
+                            # The stopper may still be joining capture or taking
+                            # the final buffer. It owns the last enqueue.
+                            continue
                         logger.debug(
                             "Recognition loop - not recording and queue empty, checking for final items..."
                         )
@@ -4280,10 +4529,12 @@ class SpeechRecognitionManager:
                         logger.debug("Recognition loop - queue timeout, continuing")
                         continue
 
+                if not self._owns_session():
+                    break
                 if queued is None:
                     logger.debug("Recognition loop - got None signal, draining remaining items...")
                     # Drain any remaining items before exiting
-                    while not segment_queue.empty():
+                    while self._owns_session() and not segment_queue.empty():
                         if cancel.is_set():
                             logger.debug("Recognition loop drain stopped for a cancelled session")
                             break
@@ -4320,19 +4571,25 @@ class SpeechRecognitionManager:
             logger.debug("_perform_recognition thread exiting")
             self._release_held_transcripts(gate, force=True, cancel=cancel)
             hand_off = False
-            if worker_exited is not None:
-                with self._buffer_lock:
+            # Stop elects the late-worker handoff under this same lock. Using
+            # the buffer lock here could miss its publication and strand
+            # PROCESSING after the worker has already exited.
+            with getattr(self, "_lifecycle_lock", nullcontext()):
+                if worker_exited is not None:
                     worker_exited.set()
                     hand_off = self._idle_on_worker_exit is cancel
                     if hand_off:
                         self._idle_on_worker_exit = None
-            if (
-                hand_off
-                and self._session_cancel is cancel
-                and not cancel.is_set()
-                and not self.should_record
-            ):
-                self._recognition_mode = "toggle"
+                hand_off = (
+                    hand_off
+                    and self._owns_session()
+                    and self._session_cancel is cancel
+                    and not cancel.is_set()
+                    and not self.should_record
+                )
+                if hand_off:
+                    self._recognition_mode = "toggle"
+            if hand_off:
                 self._update_state(RecognitionState.IDLE)
 
     def _enqueue_audio_segment(
@@ -4370,14 +4627,15 @@ class SpeechRecognitionManager:
             except queue.Empty:
                 logger.warning("Could not recover queue space for transcription segment")
 
-    def _signal_recognition_stop(self):
-        """Signal recognition thread to wake up and stop cleanly."""
+    def _signal_recognition_stop(self, segment_queue: Optional[queue.Queue] = None) -> None:
+        """Signal the selected session's queue without targeting a later recording."""
+        segments: queue.Queue = self._segment_queue if segment_queue is None else segment_queue
         try:
-            self._segment_queue.put_nowait(None)
+            segments.put_nowait(None)
         except queue.Full:
             try:
-                self._segment_queue.get_nowait()
-                self._segment_queue.put_nowait(None)
+                segments.get_nowait()
+                segments.put_nowait(None)
             except queue.Empty:
                 logger.debug("Recognition queue emptied before stop signal")
 
@@ -4440,8 +4698,232 @@ class SpeechRecognitionManager:
             f"audio_device={audio_device_index}, audio_device_name={audio_device_name}"
         )
 
-        self._cancel_reload_recording()
+        hot_settings = self._hot_reconfigure_settings(
+            engine,
+            model_size,
+            language,
+            vad_sensitivity,
+            silence_timeout,
+            audio_device_index,
+            audio_device_name,
+            force_reinit,
+            **kwargs,
+        )
+        if hot_settings is not None:
+            self._update_hot_settings(hot_settings)
+            return
+        with self._settings_reconfigure_context() as (request, outcome):
+            resolved_language = (
+                resolve_language_preference(language) if language is not None else None
+            )
+            restart_needed = self._reconfigure_needs_restart(
+                engine, model_size, resolved_language, force_reinit, **kwargs
+            )
+            self._cancel_reload_recording()
+            if restart_needed:
+                self._finish_recognition_before_reconfigure()
+                self._wait_for_model_settings_handoff()
+            restarted = self._apply_reconfigure(
+                request,
+                engine=engine,
+                model_size=model_size,
+                language=language,
+                vad_sensitivity=vad_sensitivity,
+                silence_timeout=silence_timeout,
+                audio_device_index=audio_device_index,
+                audio_device_name=audio_device_name,
+                force_download=force_download,
+                force_reinit=force_reinit,
+                resolved_language=resolved_language,
+                **kwargs,
+            )
+            outcome.reload_for_resume = not restarted
 
+    @staticmethod
+    def _hot_reconfigure_settings(
+        engine: Optional[str],
+        model_size: Optional[str],
+        language: Optional[str],
+        vad_sensitivity: Optional[int],
+        silence_timeout: Optional[float],
+        audio_device_index: Optional[int],
+        audio_device_name: Optional[str],
+        force_reinit: bool,
+        **kwargs: Any,
+    ) -> Optional[dict[str, Any]]:
+        """Validate the settings that can follow an in-flight model change."""
+        if (
+            force_reinit
+            or any(
+                value is not None
+                for value in (engine, model_size, language, audio_device_index, audio_device_name)
+            )
+            or kwargs.keys() - {"voice_commands_enabled", "stop_sound_guard_ms"}
+        ):
+            return None
+        return SpeechRecognitionManager._validated_hot_settings(
+            vad_sensitivity, silence_timeout, **kwargs
+        )
+
+    @staticmethod
+    def _validated_hot_settings(
+        vad_sensitivity: Optional[int], silence_timeout: Optional[float], **kwargs: Any
+    ) -> dict[str, Any]:
+        """Normalize hot values before accepting them into a transaction."""
+        settings = dict(kwargs)
+        if vad_sensitivity is not None:
+            settings["vad_sensitivity"] = max(1, min(5, int(vad_sensitivity)))
+        if silence_timeout is not None:
+            settings["silence_timeout"] = max(0.5, min(5.0, float(silence_timeout)))
+        return settings
+
+    def update_live_settings(
+        self, *, vad_sensitivity: Optional[int] = None, silence_timeout: Optional[float] = None
+    ) -> None:
+        """Apply VAD controls without stopping capture or superseding model work."""
+        settings = self._validated_hot_settings(vad_sensitivity, silence_timeout)
+        self._update_hot_settings(settings)
+
+    def _update_hot_settings(self, settings: dict[str, Any]) -> None:
+        """Accept live controls without waiting for native load or capture ownership."""
+        # A synchronous idle reload owns the lifecycle lock for its whole
+        # native initializer. Hot GTK controls must not wait for that work or
+        # replace the model request that already owns pause/resume recovery.
+        with getattr(self, "_model_request_lock", nullcontext()):
+            if getattr(self, "_reconfigure_request", None) is not None:
+                self._reconfigure_hot_settings.update(settings)
+            else:
+                self._apply_hot_reconfigure(settings)
+
+    def _apply_hot_reconfigure(self, settings: dict[str, Any]) -> None:
+        """Apply accepted hot values after the model transaction and any rollback."""
+        for name, value in settings.items():
+            if name == "voice_commands_enabled":
+                self._voice_commands_preference = value
+            else:
+                setattr(self, name, value)
+        self._voice_commands_enabled = self._resolve_voice_commands_enabled()
+
+    def _reconfigure_needs_restart(
+        self,
+        engine: Optional[str],
+        model_size: Optional[str],
+        resolved_language: Optional[str],
+        force_reinit: bool,
+        **kwargs: Any,
+    ) -> bool:
+        """Decide whether the requested settings replace model resources, without publishing them."""
+        selected_engine = self.engine if engine is None else engine
+        selected_model = self.model_size if model_size is None else model_size
+        selected_language = self.language if resolved_language is None else resolved_language
+        can_relanguage = selected_engine in self._PER_UTTERANCE_LANGUAGE_ENGINES and (
+            selected_engine == "remote_api" or not is_english_only_model(selected_model)
+        )
+        return (
+            force_reinit
+            or selected_engine != self.engine
+            or selected_model != self.model_size
+            or (selected_language != self.language and not can_relanguage)
+            or normalize_language_for_engine(selected_engine, selected_language)
+            != selected_language
+            or any(
+                name in kwargs
+                for name in self._RECONFIGURE_STATE_ATTRS
+                if name.startswith("whispercpp_")
+            )
+            or (
+                selected_engine == "remote_api"
+                and "remote_api_url" in kwargs
+                and kwargs["remote_api_url"] != self.remote_api_url
+            )
+        )
+
+    def _finish_recognition_before_reconfigure(self) -> None:
+        """Drain old speech before new dispatch settings can be observed by its worker."""
+        if self.state != RecognitionState.IDLE:
+            self.stop_recognition()
+        with getattr(self, "_recognition_workers_lock", nullcontext()):
+            workers = list(getattr(self, "_recognition_workers", []))
+        worker = getattr(self, "recognition_thread", None)
+        if worker is not None:
+            workers.append(worker)
+        if any(worker.is_alive() for worker in workers):
+            raise TimeoutError(
+                "The previous transcription is still finishing. Please try changing "
+                "settings again after it finishes."
+            )
+
+    def _wait_for_model_settings_handoff(self) -> None:
+        """Let an earlier initializer finish before publishing its replacement settings."""
+        # A superseded resume may already be inside an initializer, which can
+        # normalize model_size and still reads the live load-time settings.
+        # The Settings marker prevents new initializers from entering after
+        # this barrier; release the resource lock before network prefetch.
+        # Cancel here precedes our snapshot and must not restore any fields
+        # that the previous initializer is still allowed to finish writing.
+        while True:
+            if self._download_claim.locked() and self._download_cancelled:
+                raise RuntimeError("Download cancelled")
+            if self._model_lock.acquire(timeout=0.1):
+                break
+        try:
+            if self._download_claim.locked() and self._download_cancelled:
+                raise RuntimeError("Download cancelled")
+        finally:
+            self._model_lock.release()
+
+    @contextmanager
+    def _settings_reconfigure_context(self) -> Iterator[tuple[object, _ReconfigureOutcome]]:
+        """Transfer model obligations only after Settings has stopped mutating state."""
+        done = threading.Event()
+        outcome = _ReconfigureOutcome()
+        with getattr(self, "_lifecycle_lock", nullcontext()):
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if getattr(self, "_reconfigure_request", None) is not None:
+                    raise RuntimeError(
+                        "Speech settings are already changing. Please wait for the "
+                        "current change to finish before applying another model or language."
+                    )
+            request = self._new_model_request(inherit_resume=True)
+            assert request is not None
+            worker = getattr(self, "recognition_thread", None)
+            with getattr(self, "_model_request_lock", nullcontext()):
+                self._reconfigure_request = request
+                self._reconfigure_hot_settings = {}
+                self._reconfigure_done = done
+        try:
+            yield request, outcome
+        finally:
+            # Clear the active marker before settling. A wake before this
+            # point attaches to this request; a later wake gets a fresh token
+            # and supersedes any cleanup/reload dispatched here.
+            with getattr(self, "_lifecycle_lock", nullcontext()):
+                with getattr(self, "_model_request_lock", nullcontext()):
+                    if self._reconfigure_request is request:
+                        self._apply_hot_reconfigure(self._reconfigure_hot_settings)
+                        self._reconfigure_hot_settings = {}
+                        if self._model_request is request and self.model_ready:
+                            self._idle_unloaded = False
+                        self._reconfigure_request = None
+                    done.set()
+            self._settle_reconfigure_lifecycle(request, worker, outcome.reload_for_resume)
+
+    def _apply_reconfigure(
+        self,
+        request: object,
+        engine: Optional[str],
+        model_size: Optional[str],
+        language: Optional[str],
+        vad_sensitivity: Optional[int],
+        silence_timeout: Optional[float],
+        audio_device_index: Optional[int],
+        audio_device_name: Optional[str],
+        force_download: bool,
+        force_reinit: bool,
+        resolved_language: Optional[str] = None,
+        **kwargs: Any,
+    ) -> bool:
+        """Apply Settings and return whether the selected engine was reinitialized."""
         whispercpp_attrs = tuple(
             name for name in self._RECONFIGURE_STATE_ATTRS if name.startswith("whispercpp_")
         )
@@ -4469,7 +4951,11 @@ class SpeechRecognitionManager:
             # Settings hands over the preference, which may be the sentinel. Keep
             # it so the follow mode survives, and resolve what the engine gets.
             self.language_preference = language
-            resolved = resolve_language_preference(language)
+            resolved = (
+                resolved_language
+                if resolved_language is not None
+                else resolve_language_preference(language)
+            )
             if resolved != self.language:
                 self.language = resolved
                 language_changed = True
@@ -4554,12 +5040,9 @@ class SpeechRecognitionManager:
             old_defer = self._defer_download
             self._defer_download = not force_download
             if force_download:
+                self._prefetching_model = True
                 try:
-                    self._prefetching_model = True
-                    try:
-                        self._download_selected_model_if_missing()
-                    finally:
-                        self._prefetching_model = False
+                    self._download_selected_model_if_missing()
                 except Exception:
                     self._restore_reconfigure_state(previous)
                     if language_changed:
@@ -4567,66 +5050,122 @@ class SpeechRecognitionManager:
                     self._restore_language_after_oneshot()
                     self._defer_download = old_defer
                     raise
+                finally:
+                    with getattr(self, "_model_request_lock", nullcontext()):
+                        if self._reconfigure_request is request:
+                            self._prefetching_model = False
 
             # Lock model access during reinitialization to prevent race condition
             # with transcription threads that may be using the model/recognizer.
             # A download worker can be waiting here while Cancel is pressed, so
             # poll instead of blocking indefinitely on the active transcription.
-            while not self._model_lock.acquire(timeout=0.1):
-                if self._download_claim.locked() and self._download_cancelled:
-                    self._restore_reconfigure_state(previous)
-                    self.command_processor.set_language(self.language)
-                    self._defer_download = old_defer
-                    raise RuntimeError("Download cancelled")
+            while True:
+                self._check_reconfigure_cancelled(previous, request, old_defer)
+                if self._model_lock.acquire(timeout=0.1):
+                    break
             try:
-                # Release old resources explicitly if necessary (Python's GC might handle it)
-                self.model = None
-                self.recognizer = None
-                if self._faster_whisper_engine is not None:
-                    self._faster_whisper_engine.cleanup()
-                    self._faster_whisper_engine = None
-                if old_engine == "remote_api" and self.engine != "remote_api":
-                    if self._http_session is not None:
-                        self._http_session.close()
-                    self._http_session = None
-                try:
-                    self._init_selected_engine()
-                    logger.info("Speech engine re-initialized successfully.")
-                except Exception as e:
-                    logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
-                    # Settings reverts the pickers to the saved engine on failure.
-                    # Restore every mutated live field, then reload that engine
-                    # so dictation is not left on the failed backend in ERROR
-                    # with unsaved VAD/device/API knobs while the UI shows the
-                    # previous configuration.
-                    self._restore_reconfigure_state(previous)
-                    # The snapshot can revive a one-shot language restore
-                    # whose dictation was already stopped above; settle it
-                    # now so the shortcut language does not leak into the
-                    # next ordinary dictation (#805).
-                    self._restore_language_after_oneshot()
-                    self._defer_download = True
+                self._check_reconfigure_cancelled(previous, request, old_defer)
+                with self._model_request_context(request):
+                    with getattr(self, "_model_request_lock", nullcontext()):
+                        if self._model_request is not request:
+                            return False
+                    # Release old resources explicitly if necessary (Python's GC might handle it)
+                    self.model = None
+                    self.recognizer = None
+                    if self._faster_whisper_engine is not None:
+                        self._faster_whisper_engine.cleanup()
+                        self._faster_whisper_engine = None
+                    if old_engine == "remote_api" and self.engine != "remote_api":
+                        if self._http_session is not None:
+                            self._http_session.close()
+                        self._http_session = None
                     try:
+                        with getattr(self, "_model_request_lock", nullcontext()):
+                            if self._model_request is not request:
+                                return False
                         self._init_selected_engine()
-                        if self.state == RecognitionState.ERROR:
-                            self._update_state(RecognitionState.IDLE)
-                        logger.info(
-                            "Restored previous speech engine %s after failed reconfigure",
-                            self.engine,
-                        )
-                    except Exception:
-                        logger.error(
-                            "Failed to restore previous speech engine after reconfigure",
-                            exc_info=True,
-                        )
-                        self._update_state(RecognitionState.ERROR)
-                    raise
+                        logger.info("Speech engine re-initialized successfully.")
+                    except Exception as e:
+                        logger.error(f"Failed to re-initialize speech engine: {e}", exc_info=True)
+                        # Settings reverts the pickers to the saved engine on failure.
+                        # Restore every mutated live field, then reload that engine
+                        # so dictation is not left on the failed backend in ERROR
+                        # with unsaved VAD/device/API knobs while the UI shows the
+                        # previous configuration.
+                        self._restore_reconfigure_state(previous)
+                        # The snapshot can revive a one-shot language restore
+                        # whose dictation was already stopped above; settle it
+                        # now so the shortcut language does not leak into the
+                        # next ordinary dictation (#805).
+                        self._restore_language_after_oneshot()
+                        self._defer_download = True
+                        try:
+                            self._init_selected_engine()
+                            if self.state == RecognitionState.ERROR:
+                                self._update_state(RecognitionState.IDLE)
+                            logger.info(
+                                "Restored previous speech engine %s after failed reconfigure",
+                                self.engine,
+                            )
+                        except Exception:
+                            logger.error(
+                                "Failed to restore previous speech engine after reconfigure",
+                                exc_info=True,
+                            )
+                            self._update_state(RecognitionState.ERROR)
+                        raise
             finally:
                 self._defer_download = old_defer
                 self._model_lock.release()
         else:
             # If only VOSK params changed, just log it
             logger.info("Applied VAD/silence timeout changes.")
+
+        return restart_needed
+
+    def _check_reconfigure_cancelled(
+        self, previous: dict[str, object], request: object, old_defer: bool
+    ) -> None:
+        """Honor Cancel before engine mutation, even when the lock becomes free."""
+        if self._download_claim.locked() and self._download_cancelled:
+            self._restore_reconfigure_state(previous)
+            self.command_processor.set_language(self.language)
+            self._defer_download = old_defer
+            raise RuntimeError("Download cancelled")
+
+    def _settle_reconfigure_lifecycle(
+        self,
+        request: object,
+        worker: Optional[threading.Thread],
+        reload_for_resume: bool,
+    ) -> None:
+        """Keep an active pause or pending wake when Settings supersedes its owner."""
+        with getattr(self, "_model_request_lock", nullcontext()):
+            if self._model_request is not request:
+                return
+            resume_pending = self._auto_resume_pending
+            pause_pending = getattr(self, "_auto_paused", False) is True and not resume_pending
+        if pause_pending:
+            # A native loader may still own resources even after Settings was
+            # rejected. Retain the unload obligation without blocking GTK.
+            threading.Thread(
+                target=self._unload_after_reload, args=(worker, request), daemon=True
+            ).start()
+            return
+        if not resume_pending:
+            return
+        if reload_for_resume or (worker is not None and worker.is_alive()):
+            # Even a free model lock does not make native initialization fast.
+            # Cheap Settings callbacks (notably voice commands) run on GTK.
+            threading.Thread(
+                target=self._resume_after_reload, args=(worker, request), daemon=True
+            ).start()
+        elif self.model_ready:
+            self._finish_model_resume(request)
+        elif not self._reinitialize_model(request, blocking=False):
+            threading.Thread(
+                target=self._resume_after_reload, args=(worker, request), daemon=True
+            ).start()
 
     def _new_capture_source(self) -> Union[PortAudioCaptureSource, PipeWireCaptureSource]:
         """Build the capture source matching the configured device."""
@@ -4653,6 +5192,10 @@ class SpeechRecognitionManager:
         )
         source = getattr(self, "_capture_source", None)
         if source is None or isinstance(source, PipeWireCaptureSource) != want_pipewire:
+            if source is not None:
+                source.close()
+                self._audio_stream = None
+                self._pyaudio_instance = None
             source = self._new_capture_source()
             self._capture_source = source
         else:
@@ -4685,7 +5228,10 @@ class SpeechRecognitionManager:
         )
 
     def _attempt_audio_reconnection(
-        self, audio_instance: Any, session_cancel: Optional[threading.Event] = None
+        self,
+        audio_instance: Any,
+        session_cancel: Optional[threading.Event] = None,
+        should_continue: Optional[Callable[[], bool]] = None,
     ) -> bool:
         """
         Attempt to reconnect to the audio device.
@@ -4695,10 +5241,23 @@ class SpeechRecognitionManager:
             session_cancel: The capture thread's session token. When given, a
                 session cancelled or replaced during the backoff gives up
                 without reopening the device.
+            should_continue: Optional session predicate; False cancels recovery.
 
         Returns:
             bool: True if reconnection was successful, False otherwise
         """
+        session = self._session
+
+        def continuing() -> bool:
+            return (
+                self._owns_session()
+                and not session.cancel.is_set()
+                and (session_cancel is None or self._capture_session_current(session_cancel))
+                and (should_continue is None or should_continue())
+            )
+
+        if not continuing():
+            return False
         self._reconnection_attempts += 1
 
         if self._reconnection_attempts > self._max_reconnection_attempts:
@@ -4714,17 +5273,21 @@ class SpeechRecognitionManager:
         )
 
         # Wait before attempting reconnection
-        time.sleep(delay)
+        if session.cancel.wait(delay) or not continuing():
+            return False
 
         if session_cancel is not None and not self._capture_session_current(session_cancel):
             logger.info("Skipping audio reconnection for a cancelled or replaced session")
             return False
 
+        previous_source = self._capture_source
         source = self._capture_source_for_session()
         # The source may not know about the stream it is asked to replace
         # (e.g. when tests drive this method directly).
         source.stream = getattr(self, "_audio_stream", None)
         audio = audio_instance
+        if previous_source is not None and source is not previous_source:
+            audio = None  # The old source terminated its own PortAudio instance.
         if getattr(source, "requires_pyaudio", True) and audio is None:
             # A session that started on a PipeWire sink never built a PyAudio
             # instance; a PortAudio source still needs one to reopen.
@@ -4735,10 +5298,15 @@ class SpeechRecognitionManager:
 
                     audio = pyaudio.PyAudio()
                     self._pyaudio_instance = audio
+                    source.audio = audio
                 except (ImportError, OSError, AttributeError) as e:
                     logger.error(f"Failed to initialize PyAudio for reconnection: {e}")
                     return False
-        ok = source.reopen(audio)
+        if not continuing():
+            return False
+        ok = source.reopen(audio, should_continue=continuing)
+        if not continuing():
+            return False
         self._sync_capture_state()
         return ok
 
@@ -4753,16 +5321,67 @@ class SpeechRecognitionManager:
                   lazy-reload via :meth:`ensure_model_loaded`.
                 - ``"manual"`` / other: unload only without setting pause/idle flags.
         """
-        self._cancel_reload_recording()
-        logger.info("Unloading speech model (reason=%s)", reason)
+        # Serialize the guard and worker snapshot with recognition starts;
+        # release the lifecycle lock before cancellation joins the worker.
+        with self._lifecycle_lock:
+            request = self._new_model_request(auto_pause=reason == "auto_pause")
+            reload_worker = self.recognition_thread
+
+        try:
+            self._cancel_reload_recording()
+        except TimeoutError:
+            if reason != "auto_pause":
+                raise
+            # The monitor will not retry while the app is still running. Keep
+            # dictation blocked and release resources only after this worker exits.
+            threading.Thread(
+                target=self._unload_after_reload,
+                args=(reload_worker, request),
+                daemon=True,
+            ).start()
+            return
 
         if self.state != RecognitionState.IDLE:
             logger.info("Stopping active recognition before model unload")
             self.stop_recognition()
 
-        with self._model_lock:
-            self.model = None
-            self.recognizer = None
+        if not self._unload_model_resources(reason, request, blocking=reason != "auto_pause"):
+            # A deferred resume may already be initializing under _model_lock.
+            # The new pause takes effect immediately without waiting for it.
+            threading.Thread(
+                target=self._unload_after_reload,
+                args=(reload_worker, request),
+                daemon=True,
+            ).start()
+
+    def _unload_after_reload(self, worker: Optional[threading.Thread], request: object) -> None:
+        """Finish a timed-out auto-pause away from the monitor/GTK callback."""
+        if worker is not None:
+            worker.join()
+        self._unload_model_resources("auto_pause", request)
+
+    def _unload_model_resources(self, reason: str, request: object, blocking: bool = True) -> bool:
+        """Release resources after reload cancellation has completed."""
+        if not self._model_lock.acquire(blocking=blocking):
+            return False
+        try:
+            # Check after taking the resource lock: a newer resume may have
+            # replaced the model while this cleanup was waiting for it.
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if self._model_request is not request:
+                    return True
+                old_model, old_recognizer = self.model, self.recognizer
+                self.model = None
+                self.recognizer = None
+                self._model_initialized = False
+                if reason == "idle_keepalive" and not self._auto_paused:
+                    # Publish lazy recovery with the missing resources. Cleanup
+                    # may outlive a newer hot Settings request.
+                    self._idle_unloaded = True
+            # Last-reference drops can run native destructors. Keep them out of
+            # the request lock so a newer pause can publish its guard promptly.
+            del old_model, old_recognizer
+            logger.info("Unloading speech model (reason=%s)", reason)
             if self._faster_whisper_engine is not None:
                 self._faster_whisper_engine.cleanup()
                 self._faster_whisper_engine = None
@@ -4772,19 +5391,8 @@ class SpeechRecognitionManager:
                 except Exception:
                     logger.debug("Error closing HTTP session during unload", exc_info=True)
                 self._http_session = None
-            self._model_initialized = False
-
-        if reason == "auto_pause":
-            self._auto_paused = True
-            self._idle_unloaded = False
-            logger.info("Speech model unloaded; dictation blocked until auto-pause clears")
-        elif reason == "idle_keepalive":
-            # Auto-pause owns lifecycle if both could apply
-            if not self._auto_paused:
-                self._idle_unloaded = True
-            logger.info("Speech model unloaded after idle keep-alive timeout")
-        else:
-            logger.info("Speech model unloaded")
+        finally:
+            self._model_lock.release()
 
         try:
             import gc
@@ -4792,10 +5400,69 @@ class SpeechRecognitionManager:
             gc.collect()
         except Exception:
             pass
+        return True
+
+    def _new_model_request(
+        self,
+        auto_pause: bool = False,
+        auto_resume: bool = False,
+        inherit_resume: bool = False,
+        expected_request: Optional[object] = None,
+    ) -> Optional[object]:
+        """Invalidate older work, or reject a superseded delayed request.
+
+        Never wait for model resources or workers while publishing ownership.
+        """
+        with getattr(self, "_model_request_lock", nullcontext()):
+            if expected_request is not None and self._model_request is not expected_request:
+                return None
+            request = object()
+            self._model_request = request
+            self._auto_resume_pending = auto_resume or (
+                inherit_resume and getattr(self, "_auto_resume_pending", False)
+            )
+            if auto_pause or auto_resume:
+                self._auto_paused = True
+                self._idle_unloaded = False
+            return request
+
+    @contextmanager
+    def _model_request_context(self, request: object) -> Iterator[None]:
+        """Bind initializer state writes to the request owning this thread."""
+        context = getattr(self, "_worker_session", None)
+        if context is None:
+            self._worker_session = context = threading.local()
+        previous = getattr(context, "model_request", None)
+        context.model_request = request
+        try:
+            yield
+        finally:
+            context.model_request = previous
+
+    def _owns_model_request(self, request: Optional[object] = None) -> bool:
+        """Check request ownership while the caller holds the request lock."""
+        if request is None:
+            request = getattr(getattr(self, "_worker_session", None), "model_request", None)
+        return request is None or self._model_request is request
+
+    def _set_engine_error(self) -> None:
+        """Publish an initializer error only while its request is current."""
+        with getattr(self, "_model_request_lock", nullcontext()):
+            if self._owns_model_request():
+                self.state = RecognitionState.ERROR
+
+    def cancel_pending_auto_pause(self) -> None:
+        """Invalidate deferred pause/resume work before another lifecycle operation."""
+        self._new_model_request()
+
+    def prepare_auto_resume(self) -> object:
+        """Reserve automatic recovery and return its token for a delayed callback."""
+        with getattr(self, "_lifecycle_lock", nullcontext()):
+            return self._new_model_request(auto_resume=True)
 
     @property
     def is_auto_paused(self) -> bool:
-        """True when the model was unloaded for auto-pause and not yet reloaded."""
+        """True while auto-pause blocks dictation, even if unload is still pending."""
         return bool(self._auto_paused)
 
     @property
@@ -4824,7 +5491,9 @@ class SpeechRecognitionManager:
 
         return self.model_ready
 
-    def reinitialize_after_resume(self):
+    def reinitialize_after_resume(
+        self, *, auto_resume: bool = False, expected_request: Optional[object] = None
+    ) -> None:
         """Reinitialize the speech engine after system resume from suspend.
 
         Stops any active recognition, releases stale model resources,
@@ -4832,8 +5501,49 @@ class SpeechRecognitionManager:
         are in a clean state for new dictation.
 
         Also used after auto-pause / idle keep-alive to reload the model.
+        Auto-resume completes in the background if the old reload is still
+        running; other callers retain the explicit cancellation timeout.
+        Delayed callers may pass ``expected_request`` to yield to newer work.
         """
-        self._cancel_reload_recording()
+        with getattr(self, "_lifecycle_lock", nullcontext()):
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if expected_request is not None and self._model_request is not expected_request:
+                    return
+                settings_request = getattr(self, "_reconfigure_request", None)
+                settings_done = self._reconfigure_done if settings_request is not None else None
+                if settings_done is not None and self._model_request is settings_request:
+                    # Settings still owns initialization or rollback, including
+                    # time spent waiting for the engine after prefetch ends.
+                    self._auto_resume_pending = self._auto_resume_pending or auto_resume
+                    self._auto_paused = self._auto_resume_pending
+                    self._idle_unloaded = not self._auto_resume_pending and not self.model_ready
+                    return
+            request = self._new_model_request(
+                auto_resume=auto_resume, expected_request=expected_request
+            )
+            if request is None:
+                return
+            reload_worker = getattr(self, "recognition_thread", None)
+        if settings_done is not None:
+            # A pause superseded Settings before this wake. Wait for its whole
+            # operation, so rollback cannot race this request's initialization.
+            threading.Thread(
+                target=self._resume_after_reconfigure,
+                args=(settings_done, request),
+                daemon=True,
+            ).start()
+            return
+        try:
+            self._cancel_reload_recording()
+        except TimeoutError:
+            if not auto_resume:
+                raise
+            threading.Thread(
+                target=self._resume_after_reload,
+                args=(reload_worker, request),
+                daemon=True,
+            ).start()
+            return
         if getattr(self, "_prefetching_model", False) is True:
             # reconfigure() is fetching the next model and will load it itself;
             # initializing here would start a second transfer of the same files.
@@ -4848,42 +5558,94 @@ class SpeechRecognitionManager:
             logger.info("Stopping active recognition before resume reinit")
             self.stop_recognition()
 
-        with self._model_lock:
-            self.model = None
-            self.recognizer = None
+        if not self._reinitialize_model(request, blocking=not auto_resume):
+            threading.Thread(
+                target=self._resume_after_reload,
+                args=(reload_worker, request),
+                daemon=True,
+            ).start()
+
+    def _resume_after_reconfigure(self, done: threading.Event, request: object) -> None:
+        """Defer a superseding wake until Settings and any rollback have settled."""
+        done.wait()
+        self._resume_after_reload(None, request)
+
+    def _resume_after_reload(self, worker: Optional[threading.Thread], request: object) -> None:
+        """Complete only the current auto-resume, outside GTK and lifecycle locks."""
+        if worker is not None:
+            worker.join()
+        try:
+            self._reinitialize_model(request)
+        except Exception:
+            logger.error("Failed to complete deferred auto-resume", exc_info=True)
+
+    def _reinitialize_model(self, request: object, blocking: bool = True) -> bool:
+        """Serialize resource changes, then publish readiness only for this request."""
+        if not self._model_lock.acquire(blocking=blocking):
+            return False
+        failed = False
+        try:
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if self._model_request is not request:
+                    return True
+                old_model, old_recognizer = self.model, self.recognizer
+                self.model = None
+                self.recognizer = None
+                self._model_initialized = False
+            del old_model, old_recognizer
             if self._faster_whisper_engine is not None:
                 self._faster_whisper_engine.cleanup()
                 self._faster_whisper_engine = None
             if self._http_session is not None:
                 self._http_session.close()
             self._http_session = None
-            self._model_initialized = False
 
             try:
-                if self.engine == "vosk":
-                    self._init_vosk()
-                elif self.engine == "whisper":
-                    self._init_whisper()
-                elif self.engine == "whisper_cpp":
-                    self._init_whispercpp()
-                elif self.engine == "parakeet":
-                    self._init_parakeet()
-                elif self.engine == "faster_whisper":
-                    self._init_faster_whisper()
-                elif self.engine == "remote_api":
-                    self._init_remote_api()
-                else:
-                    logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
-                    return
-
-                self._auto_paused = False
-                self._idle_unloaded = False
-                logger.info("Speech engine reinitialized after resume")
+                # Destruction/cleanup above may have outlasted a newer pause.
+                with getattr(self, "_model_request_lock", nullcontext()):
+                    if self._model_request is not request:
+                        return True
+                with self._model_request_context(request):
+                    if self.engine == "vosk":
+                        self._init_vosk()
+                    elif self.engine == "whisper":
+                        self._init_whisper()
+                    elif self.engine == "whisper_cpp":
+                        self._init_whispercpp()
+                    elif self.engine == "parakeet":
+                        self._init_parakeet()
+                    elif self.engine == "faster_whisper":
+                        self._init_faster_whisper()
+                    elif self.engine == "remote_api":
+                        self._init_remote_api()
+                    else:
+                        logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
+                        return True
             except Exception:
                 logger.error("Failed to reinitialize speech engine after resume", exc_info=True)
-                self._update_state(RecognitionState.ERROR)
+                failed = True
+        finally:
+            self._model_lock.release()
+        if failed:
+            self._update_state(RecognitionState.ERROR, model_request=request)
+            with getattr(self, "_model_request_lock", nullcontext()):
+                if self._model_request is request:
+                    self._reconnection_attempts = 0
+        else:
+            self._finish_model_resume(request)
+        return True
 
-        self._reconnection_attempts = 0
+    def _finish_model_resume(self, request: object) -> None:
+        """Publish usable dictation only for the current successful recovery."""
+        if self.state == RecognitionState.ERROR:
+            self._update_state(RecognitionState.IDLE, model_request=request)
+        with getattr(self, "_model_request_lock", nullcontext()):
+            if self._model_request is request:
+                self._auto_paused = False
+                self._idle_unloaded = False
+                self._auto_resume_pending = False
+                self._reconnection_attempts = 0
+                logger.info("Speech engine reinitialized after resume")
 
     def set_buffer_limit(self, max_chunks: int):
         """

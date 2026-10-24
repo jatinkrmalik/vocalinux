@@ -1283,6 +1283,7 @@ class TestAudioReconnection:
         mock_pyaudio_mod = MagicMock()
         mock_pyaudio_mod.paInt16 = 8
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00" * 1024
         mock_audio_instance = MagicMock()
         mock_audio_instance.open.return_value = mock_stream
@@ -1301,6 +1302,7 @@ class TestAudioReconnection:
         mock_pyaudio_mod = MagicMock()
         mock_pyaudio_mod.paInt16 = 8
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00" * 1024
         mock_audio_instance = MagicMock()
         mock_audio_instance.get_default_input_device_info.return_value = {"index": 0}
@@ -1341,6 +1343,7 @@ class TestAudioReconnection:
         mock_pyaudio_mod.paInt16 = 8
         mock_audio_instance = MagicMock()
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
 
         with (
             patch.dict("sys.modules", {"pyaudio": mock_pyaudio_mod}),
@@ -1398,17 +1401,19 @@ class TestAudioReconnection:
         mock_pyaudio_mod = MagicMock()
         mock_pyaudio_mod.paInt16 = 8
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00" * 1024
         mock_audio_instance = MagicMock()
         mock_audio_instance.open.return_value = mock_stream
 
         sleep_durations = []
 
-        def track_sleep(duration):
+        def track_wait(duration):
             sleep_durations.append(duration)
+            return False
 
         with patch.dict("sys.modules", {"pyaudio": mock_pyaudio_mod}):
-            with patch("time.sleep", side_effect=track_sleep):
+            with patch.object(manager._session.cancel, "wait", side_effect=track_wait):
                 manager._reconnection_attempts = 0
                 manager._attempt_audio_reconnection(mock_audio_instance)
                 first_delay = sleep_durations[-1]
@@ -1427,6 +1432,7 @@ class TestAudioReconnection:
         mock_pyaudio_mod = MagicMock()
         mock_pyaudio_mod.paInt16 = 8
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00" * 1024
         mock_audio_instance = MagicMock()
         mock_audio_instance.open.return_value = mock_stream
@@ -1452,6 +1458,7 @@ class TestAudioReconnection:
         mock_pyaudio_mod = MagicMock()
         mock_pyaudio_mod.paInt16 = 8
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b""
         mock_audio_instance = MagicMock()
         mock_audio_instance.open.return_value = mock_stream

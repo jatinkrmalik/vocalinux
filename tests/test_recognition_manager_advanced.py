@@ -560,7 +560,12 @@ class TestStartStopRecognition(unittest.TestCase):
         mgr.audio_thread = MagicMock()
         mgr.audio_thread.is_alive.return_value = True
         events = []
-        mgr.audio_thread.join.side_effect = lambda timeout=None: events.append("join")
+
+        def capture_exited(timeout: float | None = None) -> None:
+            events.append("join")
+            mgr.audio_thread.is_alive.return_value = False
+
+        mgr.audio_thread.join.side_effect = capture_exited
 
         with patch(
             "vocalinux.speech_recognition.recognition_manager.play_stop_sound",
@@ -1241,10 +1246,11 @@ class TestPendingTranscription(unittest.TestCase):
 
         self.assertFalse(manager.has_pending_transcription())
 
-    def test_orphaned_final_segment_is_not_pending(self) -> None:
+    def test_final_segment_is_handed_off_before_worker_exits(self) -> None:
         manager = _make_manager()
         manager.state = RecognitionState.LISTENING
         manager.should_record = True
+        manager._process_audio_buffer = MagicMock()
         started = threading.Event()
         audio_release = threading.Event()
 
@@ -1275,7 +1281,8 @@ class TestPendingTranscription(unittest.TestCase):
             recognition_thread.join(timeout=1.0)
 
         with manager._segment_queue.mutex:
-            self.assertTrue(any(item is not None for item in manager._segment_queue.queue))
+            self.assertFalse(any(item is not None for item in manager._segment_queue.queue))
+        manager._process_audio_buffer.assert_called_once()
         self.assertFalse(manager.has_pending_transcription())
 
     def test_worker_does_not_count_itself_as_pending(self) -> None:

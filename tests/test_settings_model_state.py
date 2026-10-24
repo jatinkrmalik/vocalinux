@@ -1070,7 +1070,7 @@ def test_a_picker_change_only_stages_a_missing_model(
     # a buffered recording and reload the model on whispercpp_* keys.
     dialog._apply_settings_internal.assert_not_called()
     dialog.speech_engine.reconfigure.assert_not_called()
-    assert dialog.speech_engine.vad_sensitivity == 2
+    dialog.speech_engine.update_live_settings.assert_called_once_with(vad_sensitivity=2)
     dialog._save_selected_settings.assert_called_once_with({"vad_sensitivity": 2})
     assert dialog._staged_model_spec == {
         "engine": "whisper_cpp",

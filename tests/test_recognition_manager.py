@@ -214,6 +214,10 @@ class TestSpeechRecognition(unittest.TestCase):
         # Stop recognition
         manager.audio_thread = self.threadInstance
         manager.recognition_thread = self.threadInstance
+        self.threadInstance.is_alive.return_value = True
+        self.threadInstance.join.side_effect = lambda *_args, **_kwargs: setattr(
+            self.threadInstance.is_alive, "return_value", False
+        )
         manager._worker_exited.set()
         manager.stop_recognition()
 
@@ -879,6 +883,7 @@ class TestModuleLevelFunctions(unittest.TestCase):
 
         # Create mock for PyAudio
         mock_stream = MagicMock()
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"\x00" * 2048
 
         mock_pyaudio_instance = MagicMock()

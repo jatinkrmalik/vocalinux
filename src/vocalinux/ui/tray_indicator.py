@@ -61,7 +61,13 @@ from .keyboard_backends import (
     shortcut_gestures_collide,
 )
 from .keyboard_shortcuts import KeyboardShortcutManager
-from .settings_dialog import ModelDownloadDialog, SettingsDialog, recommended_model_for_engine
+from .settings_dialog import (
+    ModelDownloadDialog,
+    SettingsDialog,
+    _apply_settings_lock,
+    _live_settings_lock,
+    recommended_model_for_engine,
+)
 from .transcription_history import DEFAULT_MAX_ITEMS, TranscriptionHistory
 
 logger = logging.getLogger(__name__)
@@ -266,6 +272,7 @@ class TrayIndicator:
         # Initialize the indicator (in the GTK main thread)
         GLib.idle_add(self._init_indicator)
 
+        self._system_suspended = False
         self._suspend_handler = SuspendHandler(
             on_suspend=self._on_system_suspend,
             on_resume=self._on_system_resume,
@@ -973,34 +980,60 @@ class TrayIndicator:
             )
 
         try:
-            self.speech_engine.set_download_progress_callback(on_progress)
-            self.speech_engine.reconfigure(
-                engine=engine,
-                model_size=recommendation.model_id,
-                force_download=True,
-                # reconfigure() only re-initializes when engine, model or
-                # language change, and force_download is read during that
-                # re-init. The recommendation is often what is already
-                # configured (first run is whisper_cpp + tiny, and tiny is what
-                # a CPU-only machine is recommended), so without this the call
-                # is a no-op that downloads nothing.
-                force_reinit=True,
-            )
-            if not self.speech_engine.model_ready:
-                raise RuntimeError("the engine did not load the model after downloading it")
+            # The worker shares Settings' ordering across reconfigure and save:
+            # another model apply must not overtake this download's receipt.
+            with _apply_settings_lock:
+                self.speech_engine.set_download_progress_callback(on_progress)
+                try:
+                    self.speech_engine.reconfigure(
+                        engine=engine,
+                        model_size=recommendation.model_id,
+                        force_download=True,
+                        # A first-run recommendation often matches the current
+                        # selection; force re-init so it still fetches the model.
+                        force_reinit=True,
+                    )
+                    if (
+                        getattr(self.speech_engine, "engine", None) != engine
+                        or getattr(self.speech_engine, "model_size", None)
+                        != recommendation.model_id
+                    ):
+                        raise RuntimeError(
+                            "another speech model was selected before this download completed"
+                        )
+                    paused = getattr(self.speech_engine, "is_auto_paused", False) is True
+                    if not self.speech_engine.model_ready and not paused:
+                        raise RuntimeError("the engine did not load the model after downloading it")
 
-            # Persist only now: the model is on disk and the engine loaded it.
-            self.config_manager.set_model_size_for_engine(engine, recommendation.model_id)
-            self.config_manager.save_config()
-
-            shortcut = self.config_manager.get_str(
-                "shortcuts", "toggle_recognition", DEFAULT_SHORTCUT
-            )
+                    # Auto-pause can unload the verified model before this worker
+                    # returns. Keep the accepted selection for its deferred resume.
+                    with _live_settings_lock:
+                        self.config_manager.set_model_size_for_engine(
+                            engine, recommendation.model_id
+                        )
+                        self.config_manager.save_config()
+                    if paused:
+                        title = "Speech model downloaded"
+                        body = (
+                            f"{recommendation.display_name} is installed. "
+                            "Dictation will be available when Vocalinux resumes."
+                        )
+                    else:
+                        shortcut = self.config_manager.get_str(
+                            "shortcuts", "toggle_recognition", DEFAULT_SHORTCUT
+                        )
+                        title = "Speech model ready"
+                        body = (
+                            f"{recommendation.display_name} is installed. "
+                            f"Press {shortcut} to dictate."
+                        )
+                finally:
+                    self.speech_engine.set_download_progress_callback(None)
             _idle_once(notifications.close, progress)
             _idle_once(
                 notifications.notify,
-                "Speech model ready",
-                f"{recommendation.display_name} is installed. Press {shortcut} to dictate.",
+                title,
+                body,
                 "emblem-ok",
             )
         except Exception as e:
@@ -1014,7 +1047,6 @@ class TrayIndicator:
                 "dialog-error",
             )
         finally:
-            self.speech_engine.set_download_progress_callback(None)
             self.speech_engine.end_download()
             self._model_download_active = False
 
@@ -1636,21 +1668,34 @@ class TrayIndicator:
             if self.speech_engine.state != RecognitionState.IDLE:
                 self.speech_engine.stop_recognition()
 
-    def _on_auto_resume(self):
+    def _on_auto_resume(self) -> None:
         """Reload speech model after configured games/apps have exited."""
+        if getattr(self, "_system_suspended", False):
+            # Wake will recover even if the monitor does not transition again.
+            return
         logger.info("Auto-pause cleared — reloading speech model")
         reinit = getattr(self.speech_engine, "reinitialize_after_resume", None)
         if callable(reinit):
             try:
-                reinit()
+                reinit(auto_resume=True)
             except Exception:
                 logger.error("Failed to reload speech engine after auto-pause", exc_info=True)
         keepalive = getattr(self, "_model_keepalive", None)
         if keepalive is not None:
             keepalive.bump()
 
-    def _on_system_suspend(self):
+    def _on_system_suspend(self) -> None:
         """Stop active recognition before the system goes to sleep."""
+        self._system_suspended = True
+        monitor = getattr(self, "_auto_pause_monitor", None)
+        if getattr(monitor, "paused", False) is True:
+            # Replace pending initialization with a current unload obligation;
+            # invalidating it alone would lose cleanup until the game exits.
+            self._on_auto_pause()
+            return
+        cancel_pending = getattr(self.speech_engine, "cancel_pending_auto_pause", None)
+        if callable(cancel_pending):
+            cancel_pending()
         keepalive = getattr(self, "_model_keepalive", None)
         if keepalive is not None:
             keepalive.cancel()
@@ -1658,7 +1703,7 @@ class TrayIndicator:
             logger.info("System suspending — stopping active recognition")
             self.speech_engine.stop_recognition()
 
-    def _on_system_resume(self):
+    def _on_system_resume(self) -> None:
         """Reinitialize subsystems after the system wakes up.
 
         Speech engine reinitializes after 2s (audio hardware recovers fast).
@@ -1668,12 +1713,21 @@ class TrayIndicator:
         If auto-pause still has a configured app running, skip speech reinit —
         the auto-pause monitor owns model lifecycle until that app exits.
         """
+        self._system_suspended = False
         logger.info("System resumed — scheduling reinit")
-        # Use `is True` so duck-typed mocks without a real bool flag still reinit.
-        if getattr(self.speech_engine, "is_auto_paused", False) is True:
+        # The manager also stays guarded during deferred auto-resume. If sleep
+        # cancelled that work after the game exited, wake must finish recovery.
+        monitor = getattr(self, "_auto_pause_monitor", None)
+        if getattr(monitor, "paused", False) is True or (
+            monitor is None and getattr(self.speech_engine, "is_auto_paused", False) is True
+        ):
             logger.info("Skipping resume reinit: auto-pause still active")
         else:
-            GLib.timeout_add_seconds(2, self._reinit_speech_after_resume)
+            # Own recovery during the hardware-settle delay too, so a failed
+            # settings change can inherit it while superseding this timer.
+            prepare = getattr(self.speech_engine, "prepare_auto_resume", None)
+            request = prepare() if callable(prepare) else None
+            GLib.timeout_add_seconds(2, self._reinit_speech_after_resume, request)
 
         # External-activation mode never started the /dev/input listener in
         # the first place; watching it here on every resume would open the
@@ -1683,15 +1737,21 @@ class TrayIndicator:
         else:
             GLib.timeout_add_seconds(2, self._start_input_device_monitor)
 
-    def _reinit_speech_after_resume(self):
+    def _reinit_speech_after_resume(self, request: Optional[object] = None) -> bool:
+        """Recover only while this wake still owns the model lifecycle."""
+        monitor = getattr(self, "_auto_pause_monitor", None)
+        if getattr(self, "_system_suspended", False) or getattr(monitor, "paused", False) is True:
+            return False
         try:
-            self.speech_engine.reinitialize_after_resume()
+            reinit = getattr(self.speech_engine, "reinitialize_after_resume", None)
+            if callable(reinit):
+                reinit(auto_resume=True, expected_request=request)
         except Exception:
             logger.error("Failed to reinitialize after resume", exc_info=True)
         keepalive = getattr(self, "_model_keepalive", None)
         if keepalive is not None:
             keepalive.bump()
-        return GLib.SOURCE_REMOVE
+        return False
 
     def _start_input_device_monitor(self):
         """Watch /dev/input for changes; restart keyboard when devices settle."""

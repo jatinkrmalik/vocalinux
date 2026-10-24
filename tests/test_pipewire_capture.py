@@ -517,7 +517,7 @@ class TestManagerPipeWireIntegration(unittest.TestCase):
         fake_source.stream = MagicMock()
         fake_source.audio = None
 
-        def _read_once() -> bytes:
+        def _read_once(**_kwargs: Any) -> bytes:
             manager.should_record = False
             return b"\x00" * 2048
 

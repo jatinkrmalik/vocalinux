@@ -138,10 +138,11 @@ def _scripted_stream(probs_per_chunk, manager, max_iters=None, chunk_bytes=None)
 
     def _read(*args, **kwargs):
         counter["n"] += 1
-        if counter["n"] >= limit:
+        if counter["n"] > limit:
             manager.should_record = False
         return payload
 
+    stream.get_read_available.return_value = 1024
     stream.read.side_effect = _read
     return stream
 
@@ -296,20 +297,21 @@ class TestRecordAudioSileroPath(unittest.TestCase):
         self.assertEqual(len(self.mgr.audio_buffer), 26)
         self.assertTrue(self.mgr._recording_segment_has_speech)
 
-    def test_reload_buffer_limit_reports_error_without_trimming_speech(self) -> None:
-        """A stalled load must not silently discard the start of an utterance."""
+    def test_reload_buffer_limit_fails_instead_of_continuing_partial_capture(self) -> None:
+        """A full reload buffer must fail the session instead of trimming speech."""
         self.mgr._reload_pending = True
         self.mgr._buffered_reload_session = True
         self.mgr._max_buffer_size = 4
         self._drive(probs=[0.95] * 20)
-        self.assertEqual(len(self.mgr.audio_buffer), 4)
+        self.assertEqual(self.mgr.audio_buffer, [])
         self.assertTrue(self.mgr._buffered_capture_failed)
-        self.assertEqual(self.mgr.state, RecognitionState.ERROR)
+        self.assertEqual(self.mgr.state, RecognitionState.IDLE)
 
     def test_reload_reconnection_failure_marks_capture_failed(self) -> None:
         """Losing the microphone during reload must fail instead of dropping audio."""
         self.mgr._buffered_reload_session = True
         stream = MagicMock()
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = OSError("microphone disconnected")
         pyaudio_mod, _audio = _make_pyaudio_module(stream)
 
@@ -324,13 +326,14 @@ class TestRecordAudioSileroPath(unittest.TestCase):
             self.mgr._record_audio()
 
         self.assertTrue(self.mgr._buffered_capture_failed)
-        self.assertEqual(self.mgr.state, RecognitionState.ERROR)
+        self.assertEqual(self.mgr.state, RecognitionState.IDLE)
 
     def test_reload_rapid_audio_error_marks_capture_failed(self) -> None:
         """A repeated microphone error during reload must fail the capture."""
         self.mgr._buffered_reload_session = True
         self.mgr._last_audio_error_time = time.time()
         stream = MagicMock()
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = OSError("microphone still disconnected")
         pyaudio_mod, _audio = _make_pyaudio_module(stream)
 
@@ -346,7 +349,7 @@ class TestRecordAudioSileroPath(unittest.TestCase):
 
         reconnect.assert_not_called()
         self.assertTrue(self.mgr._buffered_capture_failed)
-        self.assertEqual(self.mgr.state, RecognitionState.ERROR)
+        self.assertEqual(self.mgr.state, RecognitionState.IDLE)
 
     def test_sensitivity_lowest_blocks_borderline_speech(self):
         """At sensitivity=1 (threshold 0.8), prob=0.6 is silence."""
@@ -449,6 +452,7 @@ class TestRecordAudioAmplitudeFallback(unittest.TestCase):
                 self.mgr.should_record = False
             return payload
 
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = _read
         pyaudio_mod, _ = _make_pyaudio_module(stream)
         with (
@@ -509,6 +513,7 @@ class TestAudioLevelCallback(unittest.TestCase):
                 mgr.should_record = False
             return b"\x00" * (1024 * 2)
 
+        stream.get_read_available.return_value = 1024
         stream.read.side_effect = _read
         pyaudio_mod, _ = _make_pyaudio_module(stream)
         with (

@@ -432,6 +432,103 @@ def test_late_worker_handoff_keeps_processing_until_transcription_finishes() -> 
     assert not worker_thread.is_alive()
 
 
+def test_worker_finishing_during_stop_handoff_returns_to_idle() -> None:
+    """Completion between stop's final check and handoff cannot strand PROCESSING."""
+    manager = _make_manager()
+    worker_finishing = threading.Event()
+    release_worker = threading.Event()
+    release_held = manager._release_held_transcripts
+
+    def finish_worker(
+        gate: Optional[_ReleaseGate],
+        force: bool = False,
+        cancel: Optional[threading.Event] = None,
+    ) -> None:
+        release_held(gate, force=force, cancel=cancel)
+        if force:
+            worker_finishing.set()
+            assert release_worker.wait(timeout=3.0)
+
+    manager._release_held_transcripts = finish_worker
+    _start_session(manager, _no_audio_capture)
+    worker = manager.recognition_thread
+    worker_exited = manager._worker_exited
+    assert worker is not None and worker_exited is not None
+    is_set = worker_exited.is_set
+    stopper = threading.current_thread()
+    handoff_checked = threading.Event()
+
+    def finish_during_check() -> bool:
+        finished = is_set()
+        if threading.current_thread() is stopper and not finished:
+            assert worker_finishing.is_set()
+            handoff_checked.set()
+            release_worker.set()
+            # A synchronized handoff blocks completion until stop releases it.
+            worker.join(timeout=0.2)
+        return finished
+
+    try:
+        with patch.object(worker_exited, "is_set", side_effect=finish_during_check):
+            _stop_with_short_worker_joins(manager)
+    finally:
+        release_worker.set()
+        worker.join(timeout=1.0)
+    assert handoff_checked.is_set()
+    assert not worker.is_alive()
+    assert manager.state is RecognitionState.IDLE
+    assert not manager.is_transcribing()
+
+
+def test_late_worker_idle_callback_does_not_hold_up_another_stop() -> None:
+    """An arbitrary state callback runs outside the lifecycle critical section."""
+    manager = _make_manager()
+    transcribing = threading.Event()
+    release_transcriber = threading.Event()
+    callback_entered = threading.Event()
+    release_callback = threading.Event()
+    stopped = threading.Event()
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        transcribing.set()
+        assert release_transcriber.wait(3)
+        return "final text"
+
+    def state_changed(state: RecognitionState) -> None:
+        if state is RecognitionState.IDLE:
+            callback_entered.set()
+            assert release_callback.wait(3)
+
+    def stop_again() -> None:
+        manager.stop_recognition()
+        stopped.set()
+
+    manager._transcribe_with_whispercpp = transcribe
+    manager._voice_commands_enabled = False
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"slow audio"])
+    assert transcribing.wait(1)
+    _stop_with_short_worker_joins(manager)
+    manager.register_state_callback(state_changed)
+    worker = manager.recognition_thread
+    assert worker is not None
+    stopper = threading.Thread(target=stop_again)
+    try:
+        release_transcriber.set()
+        assert callback_entered.wait(1)
+        stopper.start()
+        assert stopped.wait(0.5)
+        assert not release_callback.is_set()
+    finally:
+        release_transcriber.set()
+        release_callback.set()
+        worker.join(1)
+        if stopper.ident is not None:
+            stopper.join(1)
+    assert not worker.is_alive()
+    assert not stopper.is_alive()
+
+
 def test_cancel_late_worker_discards_text_and_next_session_succeeds() -> None:
     manager = _make_manager()
     transcriber_started = threading.Event()
@@ -643,11 +740,12 @@ def test_stale_capture_reconnection_does_not_touch_new_session_device() -> None:
     manager._capture_source = new_source
     manager._capture_source_for_session = MagicMock(return_value=new_source)
 
-    def new_session_starts(_delay: float) -> None:
+    def new_session_starts(_delay: float) -> bool:
         old_session.set()
         manager._session_cancel = threading.Event()
+        return False
 
-    with patch.object(recognition_module.time, "sleep", side_effect=new_session_starts):
+    with patch.object(manager._session.cancel, "wait", side_effect=new_session_starts):
         assert manager._attempt_audio_reconnection(MagicMock(), old_session) is False
 
     manager._capture_source_for_session.assert_not_called()
@@ -665,8 +763,9 @@ def test_cancelled_capture_thread_does_not_write_into_new_session_buffer() -> No
     source.requires_pyaudio = False
     source.sample_rate = 16000
 
-    def read_chunk() -> bytes:
+    def read_chunk(should_continue: Callable[[], bool]) -> bytes:
         nonlocal reads
+        assert should_continue()
         reads += 1
         if reads == 1:
             old_session.set()
@@ -683,3 +782,164 @@ def test_cancelled_capture_thread_does_not_write_into_new_session_buffer() -> No
     assert manager.audio_buffer == [b"new-session"]
     assert manager.state is not RecognitionState.ERROR
     source.close.assert_called_once()
+
+
+def test_cancel_idle_callback_can_start_a_listening_session() -> None:
+    """A callback's explicit start owns its state while the old stopper stays stale."""
+    manager = _make_manager()
+    manager._perform_recognition = lambda: None
+    restarted: list[bool] = []
+
+    def restart(state: RecognitionState) -> None:
+        if state is RecognitionState.IDLE and not restarted:
+            restarted.append(manager.start_recognition(mode="push_to_talk"))
+
+    manager.register_state_callback(restart)
+    _start_session(manager, _no_audio_capture)
+    try:
+        assert manager.cancel_transcription()
+        assert restarted == [True]
+        assert manager.should_record
+        assert manager.state is RecognitionState.LISTENING
+    finally:
+        manager.should_record = False
+        manager._session.cancel.set()
+        manager._session_cancel.set()
+        manager._signal_recognition_stop()
+        for worker in (manager.audio_thread, manager.recognition_thread):
+            if worker is not None:
+                worker.join(timeout=1.0)
+
+
+def test_old_cancel_drain_cannot_stop_a_new_session() -> None:
+    """Finishing an old cancellation cannot stop a recording started during its drain."""
+    manager = _make_manager()
+    manager._voice_commands_enabled = False
+    transcribing = threading.Event()
+    release_transcriber = threading.Event()
+    draining = threading.Event()
+    release_cancel = threading.Event()
+    cancel_results: list[bool] = []
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        transcribing.set()
+        assert release_transcriber.wait(3)
+        return "old text"
+
+    manager._transcribe_with_whispercpp = transcribe
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"old audio"])
+    assert transcribing.wait(1)
+    old_queue = manager._segment_queue
+    get_nowait = old_queue.get_nowait
+    gated = False
+
+    def pause_cancel_drain() -> object:
+        nonlocal gated
+        if not gated:
+            gated = True
+            draining.set()
+            assert release_cancel.wait(3)
+        return get_nowait()
+
+    stopper = threading.Thread(target=_stop_session, args=(manager,))
+    canceller = threading.Thread(
+        target=lambda: cancel_results.append(manager.cancel_transcription())
+    )
+    try:
+        stopper.start()
+        assert manager._session.capture_finished.wait(1)
+        with patch.object(old_queue, "get_nowait", side_effect=pause_cancel_drain):
+            canceller.start()
+            assert draining.wait(1)
+            release_transcriber.set()
+            stopper.join(1)
+            assert not stopper.is_alive()
+            assert manager.state is RecognitionState.IDLE
+            _start_session(manager, _no_audio_capture)
+            new_session = manager._session
+            release_cancel.set()
+            canceller.join(2)
+        assert not canceller.is_alive()
+        assert cancel_results == [True]
+        assert manager._session is new_session
+        assert not new_session.cancel.is_set()
+        assert manager.should_record
+        assert manager.state is RecognitionState.LISTENING
+    finally:
+        release_cancel.set()
+        release_transcriber.set()
+        if canceller.ident is not None:
+            canceller.join(2)
+        if stopper.ident is not None:
+            stopper.join(2)
+        manager._session_cancel.set()
+        if manager.should_record:
+            _stop_session(manager)
+        for worker in (manager.audio_thread, manager.recognition_thread):
+            if worker is not None:
+                worker.join(1)
+
+
+def test_old_stopper_signals_only_its_original_queue() -> None:
+    """A delayed old stop sentinel cannot terminate the next session's consumer."""
+    manager = _make_manager()
+    manager._voice_commands_enabled = False
+    transcribing = threading.Event()
+    release_transcriber = threading.Event()
+    stop_signalling = threading.Event()
+    release_signal = threading.Event()
+    stop_calls = 0
+    stopper: threading.Thread
+
+    def transcribe(_audio: list[bytes], _language: Optional[str] = None) -> str:
+        transcribing.set()
+        assert release_transcriber.wait(3)
+        return "old text"
+
+    manager._transcribe_with_whispercpp = transcribe
+    _start_session(manager, _no_audio_capture)
+    manager._enqueue_audio_segment([b"old audio"])
+    assert transcribing.wait(1)
+    signal = manager._signal_recognition_stop
+
+    def pause_late_signal(segments: Optional[queue.Queue] = None) -> None:
+        nonlocal stop_calls
+        if threading.current_thread() is stopper:
+            stop_calls += 1
+            if stop_calls == 2:
+                stop_signalling.set()
+                assert release_signal.wait(3)
+        if segments is None:
+            signal()
+        else:
+            signal(segments)
+
+    stopper = threading.Thread(target=_stop_with_short_worker_joins, args=(manager,))
+    new_worker: Optional[threading.Thread] = None
+    try:
+        with patch.object(manager, "_signal_recognition_stop", side_effect=pause_late_signal):
+            stopper.start()
+            assert stop_signalling.wait(1)
+            assert manager.cancel_transcription()
+            _start_session(manager, _no_audio_capture)
+            new_worker = manager.recognition_thread
+            assert new_worker is not None
+            release_signal.set()
+            stopper.join(1)
+            assert not stopper.is_alive()
+            new_worker.join(0.2)
+        assert manager.should_record
+        assert manager.state is RecognitionState.LISTENING
+        assert new_worker.is_alive()
+    finally:
+        release_signal.set()
+        release_transcriber.set()
+        if stopper.ident is not None:
+            stopper.join(2)
+        manager._session_cancel.set()
+        if manager.should_record:
+            _stop_session(manager)
+        for worker in (manager.audio_thread, manager.recognition_thread):
+            if worker is not None:
+                worker.join(1)

@@ -286,6 +286,117 @@ class TestDownloadFunctions(unittest.TestCase):
             "dialog-information",
         )
 
+    def test_resume_during_prefetch_still_loads_the_selected_model(self) -> None:
+        """Wake must not supersede the Settings worker that will load the model."""
+        manager = self._create_manager(engine="whisper")
+        previous_model = object()
+        selected_model = object()
+        manager.model = previous_model
+        manager._model_initialized = True
+
+        def prefetch() -> None:
+            assert manager._prefetching_model
+            manager.reinitialize_after_resume(auto_resume=True)
+            assert manager.is_auto_paused
+
+        def initialize() -> None:
+            manager.model = selected_model
+            manager._model_initialized = True
+
+        with (
+            patch.object(manager, "_download_selected_model_if_missing", side_effect=prefetch),
+            patch.object(manager, "_init_selected_engine", side_effect=initialize) as init,
+        ):
+            manager.reconfigure(engine="whisper_cpp", model_size="medium", force_download=True)
+
+        init.assert_called_once_with()
+        assert manager.model is selected_model
+        assert manager.engine == "whisper_cpp"
+        assert manager.model_size == "medium"
+        assert not manager.is_auto_paused
+        assert not manager._auto_resume_pending
+
+    def test_failed_prefetch_completes_inherited_resume_with_previous_model(self) -> None:
+        """Rejected Settings must not abandon a wake request that they superseded."""
+        manager = self._create_manager(engine="whisper")
+        previous_model = object()
+        manager.model = previous_model
+        manager._model_initialized = True
+        manager._auto_paused = True
+        manager._auto_resume_pending = True
+
+        with (
+            patch.object(
+                manager,
+                "_download_selected_model_if_missing",
+                side_effect=RuntimeError("Download cancelled"),
+            ),
+            patch.object(manager, "_init_selected_engine") as init,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Download cancelled"):
+                manager.reconfigure(engine="whisper_cpp", model_size="medium", force_download=True)
+
+        init.assert_not_called()
+        assert manager.model is previous_model
+        assert manager.engine == "whisper"
+        assert not manager.is_auto_paused
+        assert not manager._auto_resume_pending
+
+    def test_failed_prefetch_reloads_previous_engine_for_inherited_resume(self) -> None:
+        """An already unloaded model is recovered after the new download fails."""
+        manager = self._create_manager(engine="whisper")
+        previous_model = object()
+        manager.model = None
+        manager._model_initialized = False
+        manager._auto_paused = True
+        manager._auto_resume_pending = True
+
+        def initialize() -> None:
+            manager.model = previous_model
+            manager._model_initialized = True
+
+        with (
+            patch.object(
+                manager,
+                "_download_selected_model_if_missing",
+                side_effect=RuntimeError("Download cancelled"),
+            ),
+            patch.object(manager, "_init_whisper", side_effect=initialize) as init,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Download cancelled"):
+                manager.reconfigure(engine="whisper_cpp", model_size="medium", force_download=True)
+
+        init.assert_called_once_with()
+        assert manager.model is previous_model
+        assert manager.engine == "whisper"
+        assert manager.model_ready
+        assert not manager.is_auto_paused
+        assert not manager._auto_resume_pending
+
+    def test_cancelled_model_lock_wait_completes_inherited_resume(self) -> None:
+        """Cancelling behind a busy engine preserves the usable previous model."""
+        manager = self._create_manager(engine="whisper")
+        previous_model = object()
+        manager.model = previous_model
+        manager._model_initialized = True
+        manager._auto_paused = True
+        manager._auto_resume_pending = True
+        manager._model_lock.acquire()
+        assert manager.try_begin_download()
+        manager.cancel_download()
+        try:
+            with self.assertRaisesRegex(RuntimeError, "Download cancelled"):
+                manager.reconfigure(engine="whisper_cpp", model_size="medium", force_download=False)
+            assert manager._model_lock.locked()
+        finally:
+            manager._model_lock.release()
+            manager.end_download()
+
+        assert manager.model is previous_model
+        assert manager.engine == "whisper"
+        assert not manager.is_auto_paused
+        assert not manager._auto_resume_pending
+
     def test_reconfigure_without_download_permission_skips_prefetch(self) -> None:
         manager = self._create_manager()
         manager.engine = "whisper"
@@ -1010,6 +1121,7 @@ class TestAudioDeviceReconnection(unittest.TestCase):
         mock_audio = MagicMock()
         mock_stream = MagicMock()
         mock_audio.open.return_value = mock_stream
+        mock_stream.get_read_available.return_value = 1024
         mock_stream.read.return_value = b"audio_data"
 
         result = manager._attempt_audio_reconnection(mock_audio)

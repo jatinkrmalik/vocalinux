@@ -155,6 +155,12 @@ class SpeechRecognitionManagerProtocol(Protocol):
         """Reconfigure the engine on the fly."""
         ...
 
+    def update_live_settings(
+        self, *, vad_sensitivity: Optional[int] = None, silence_timeout: Optional[float] = None
+    ) -> None:
+        """Apply VAD controls without stopping capture or replacing pending model work."""
+        ...
+
     def try_begin_download(self) -> bool:
         """Claim the engine for a model download. False if one is running."""
         ...
@@ -209,11 +215,13 @@ class CaptureSource(Protocol):
         """Resolve the input device and open the capture stream."""
         ...
 
-    def read_chunk(self) -> bytes:
-        """Return one chunk of mono 16 kHz int16 PCM audio."""
+    def read_chunk(self, should_continue: Optional[Callable[[], bool]] = None) -> Optional[bytes]:
+        """Return mono 16 kHz int16 PCM, or None when cancelled."""
         ...
 
-    def reopen(self, audio_instance: Any) -> bool:
+    def reopen(
+        self, audio_instance: Any, should_continue: Optional[Callable[[], bool]] = None
+    ) -> bool:
         """Re-open the stream after a device failure. True on success."""
         ...
 

@@ -184,6 +184,9 @@ logger = logging.getLogger(__name__)
 # a reopened dialog shares the same engine and config manager, so both sides
 # must agree on whose snapshot is newest.
 _apply_settings_lock = threading.Lock()
+# Live edits can arrive on GTK while a model applies on a worker. Hold this
+# only around their short update/save boundary, never around a model load.
+_live_settings_lock = threading.RLock()
 _apply_settings_generation = 0
 # Generation of the apply that last wrote each advanced key. A deferred
 # persist uses it to tell "a newer apply rewrote this key" apart from "the
@@ -2522,6 +2525,8 @@ class SettingsDialog(AboutSectionMixin):
         self._recording_shortcut_target: Optional[tuple[Any, Callable[[str], None], Any, Any]] = (
             None
         )
+        self._audio_test_cancel: Optional[threading.Event] = None
+        self.connect("destroy", self._cancel_audio_test)
         self._test_active = False
         self._test_token = 0
         self._test_cancelled = False
@@ -7137,6 +7142,7 @@ class SettingsDialog(AboutSectionMixin):
     def _on_settings_dialog_response(self, dialog, response_id):
         """Persist deferred text edits before the settings dialog closes."""
         if response_id in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
+            self._cancel_audio_test()
             self._flush_advanced_prompt_if_dirty()
             self._resync_engine_ui_if_unapplied()
 
@@ -8847,13 +8853,15 @@ class SettingsDialog(AboutSectionMixin):
                 # not dropped while a download is staged. Not reconfigure() —
                 # it cancels a buffered recording and waits on its worker
                 # here on the GTK thread, and every whispercpp_* kwarg forces
-                # a model reload. Live-set only what actually changed; the
+                # a model reload. Apply live values through the
+                # manager so an overlapping model rollback cannot discard them;
                 # load-time params stay saved-only until the Download apply
                 # or the next start.
                 non_model_settings = {
                     key: value for key, value in settings.items() if key not in _MODEL_SPEC_KEYS
                 }
                 applied = True
+                live_settings: dict[str, Any] = {}
                 for key, clamp in _LIVE_ENGINE_SETTINGS.items():
                     if key not in non_model_settings:
                         continue
@@ -8863,11 +8871,12 @@ class SettingsDialog(AboutSectionMixin):
                         logger.error(f"Invalid {key} while staging: {e}")
                         applied = False
                         continue
-                    if getattr(self.speech_engine, key, None) == live_value:
-                        continue
-                    setattr(self.speech_engine, key, live_value)
-                if non_model_settings and applied:
-                    self._save_selected_settings(non_model_settings)
+                    live_settings[key] = live_value
+                with _live_settings_lock:
+                    if live_settings:
+                        self.speech_engine.update_live_settings(**live_settings)
+                    if non_model_settings and applied:
+                        self._save_selected_settings(non_model_settings)
                 self._update_model_info()
                 return
 
@@ -9748,7 +9757,15 @@ For now, the engine has been reverted to VOSK."""
                     time.sleep(0.5)
 
                 self.speech_engine.reconfigure(force_reinit=force_reinit, **settings)
-                self._save_selected_settings(settings)
+                # A second dialog may have accepted live VAD edits while this
+                # model was loading. Its queued values are now active; save
+                # those instead of overwriting them with this older snapshot.
+                with _live_settings_lock:
+                    accepted_settings = dict(settings)
+                    for key, clamp in _LIVE_ENGINE_SETTINGS.items():
+                        if key in accepted_settings:
+                            accepted_settings[key] = clamp(getattr(self.speech_engine, key))
+                    self._save_selected_settings(accepted_settings)
                 written_gen = (
                     apply_generation if apply_generation is not None else _apply_settings_generation
                 )
@@ -9866,8 +9883,26 @@ For now, the engine has been reverted to VOSK."""
         logger.info(f"Audio device changed to: [{device_index}] {device_name}")
         self.audio_test_status.set_markup(f"<i>Selected: {device_label}</i>")
 
+    def _cancel_audio_test(self, *_args: object) -> None:
+        """Cancel capture and invalidate any queued result when Settings closes."""
+        cancel = getattr(self, "_audio_test_cancel", None)
+        if cancel is not None:
+            cancel.set()
+        self._audio_test_cancel = None
+
+    def _complete_audio_test(self, result: dict, cancel: threading.Event) -> bool:
+        """Deliver only the current test's result on the GTK main thread."""
+        if cancel.is_set() or self._audio_test_cancel is not cancel:
+            return False
+        self._audio_test_cancel = None
+        self._handle_audio_test_result(result)
+        return False
+
     def _on_test_audio_clicked(self, widget):
         """Handle test audio button click."""
+        self._cancel_audio_test()
+        cancel = threading.Event()
+        self._audio_test_cancel = cancel
         self.test_audio_btn.set_sensitive(False)
         self.test_audio_btn.set_label("Testing...")
         self.audio_test_status.set_markup("<i>Recording... speak into your microphone</i>")
@@ -9876,11 +9911,13 @@ For now, the engine has been reverted to VOSK."""
         device_id = self.audio_device_combo.get_active_id()
         device_index = None if device_id == "-1" else int(device_id)
 
-        def run_test():
+        def run_test() -> None:
             from ..speech_recognition.recognition_manager import test_audio_input
 
-            result = test_audio_input(device_index=device_index, duration=2.0)
-            GLib.idle_add(self._handle_audio_test_result, result)
+            result = test_audio_input(
+                device_index=device_index, duration=2.0, should_continue=lambda: not cancel.is_set()
+            )
+            GLib.idle_add(self._complete_audio_test, result, cancel)
 
         threading.Thread(target=run_test, daemon=True).start()
 
